@@ -147,17 +147,29 @@ async function addInvoice(){
 }
 
 async function loadInvoices(){
-  const { data } = await db()
+  const res = await db()
     .from("invoices")
-    .select("invoice_number,total,tva,created_at, clients(company,last_name)")
+    .select("invoice_number,total,tva,created_at,client_id")
     .order("created_at",{ascending:false});
 
-  const tbody = $("tblInvoices");
+  if(res.error){
+    console.log("loadInvoices error:", res.error);
+    alert("Erreur factures (voir Console F12)");
+    return;
+  }
+
+  const invoices = res.data || [];
+
+  // Charger les clients une fois
+  const cl = await db().from("clients").select("id,company,last_name");
+  const map = new Map((cl.data||[]).map(c => [c.id, (c.company || c.last_name || "")]));
+
+  const tbody = document.getElementById("tblInvoices");
   tbody.innerHTML = "";
 
-  (data||[]).forEach(i=>{
+  invoices.forEach(i=>{
     const d = new Date(i.created_at);
-    const client = i.clients?.company || i.clients?.last_name || "";
+    const client = map.get(i.client_id) || "";
     tbody.innerHTML += `<tr>
       <td>${i.invoice_number||""}</td>
       <td>${d.toLocaleDateString("fr-CH")}</td>
