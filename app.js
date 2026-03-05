@@ -8,7 +8,7 @@ function db() {
 }
 console.log("SwissBill démarré");
 
-);
+
 
 
 
@@ -69,24 +69,23 @@ async function loadDashboard(){
 
 
 
+// sécurité: vérifier que Supabase est chargé
+if(!window.supabaseClient){
+  alert("Supabase non chargé (vérifie supabase.js dans index.html)");
+  return;
+}
 
-  // sécurité: vérifier que Supabase est chargé
-  if(!window.supabaseClient){
-    alert("Supabase non chargé (vérifie supabase.js dans index.html)");
-    return;
-  }
+document.querySelectorAll(".nav").forEach(b=>{
+  b.addEventListener("click", ()=> show(b.dataset.page));
+});
 
-  document.querySelectorAll(".nav").forEach(b=>{
-    b.addEventListener("click", ()=> show(b.dataset.page));
-  });
+$("btnAddClient")?.addEventListener("click", addClient);
+$("btnAddProduct")?.addEventListener("click", addProduct);
+$("btnAddInvoice")?.addEventListener("click", addInvoice);
 
-  $("btnAddClient")?.addEventListener("click", addClient);
-  $("btnAddProduct")?.addEventListener("click", addProduct);
-  $("btnAddInvoice")?.addEventListener("click", addInvoice);
+show("dashboard");
 
-  show("dashboard");
-
-  await refreshAll();
+await refreshAll();
 
 });
 
@@ -168,37 +167,36 @@ sel.appendChild(opt)
 
 
 async function addInvoice(){
-  const res = await db()
-    .from("invoices")
-    .select("invoice_number,total,tva,created_at,client_id")
-    .order("created_at",{ascending:false});
 
-  if(res.error){
-    console.log("loadInvoices error:", res.error);
-    alert("Erreur factures (voir Console F12)");
-    return;
+  const client_id = $("i_client").value;
+  const ht = Number(($("i_total").value||"0").replace(",","."));
+
+  const lastRes = await db()
+    .from("invoices")
+    .select("invoice_number")
+    .order("created_at",{ascending:false})
+    .limit(1);
+
+  let next = 1;
+
+  if(lastRes.data && lastRes.data.length){
+    const last = lastRes.data[0].invoice_number.split("-").pop();
+    const n = parseInt(last,10);
+    if(!isNaN(n)) next = n + 1;
   }
 
-  const invoices = res.data || [];
+  const year = new Date().getFullYear();
+  const invoice_number = `${year}-${String(next).padStart(4,"0")}`;
 
-  // Charger les clients une fois
-  const cl = await db().from("clients").select("id,company,last_name");
-  const map = new Map((cl.data||[]).map(c => [c.id, (c.company || c.last_name || "")]));
+  const tva = ht * 0.081;
+  const total = ht + tva;
 
-  const tbody = document.getElementById("tblInvoices");
-  tbody.innerHTML = "";
+  await db().from("invoices").insert([
+    { client_id, invoice_number, tva, total }
+  ]);
 
-  invoices.forEach(i=>{
-    const d = new Date(i.created_at);
-    const client = map.get(i.client_id) || "";
-    tbody.innerHTML += `<tr>
-      <td>${i.invoice_number||""}</td>
-      <td>${d.toLocaleDateString("fr-CH")}</td>
-      <td>${client}</td>
-      <td>${Number(i.total||0).toFixed(2)} CHF</td>
-      <td><button onclick="generatePDF('${i.invoice_number}')">PDF</button></td>
-    </tr>`;
-  });
+  await refreshAll();
+
 }
 
 // ========= QR-FACTURE (SPC) + PDF =========
