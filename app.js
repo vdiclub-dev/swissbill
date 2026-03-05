@@ -170,7 +170,7 @@ sel.appendChild(opt)
 
 
 
-async function loadInvoices(){
+async function addInvoice(){
   const res = await db()
     .from("invoices")
     .select("invoice_number,total,tva,created_at,client_id")
