@@ -19,6 +19,21 @@ row.innerHTML=`
 container.appendChild(row)
 
 }
+function generatePDF(invoice){
+
+const { jsPDF } = window.jspdf
+
+const doc = new jsPDF()
+
+doc.text("SwissBill",20,20)
+doc.text("Facture N° "+invoice.invoice_number,20,40)
+
+doc.text("Montant HT : "+invoice.total+" CHF",20,60)
+doc.text("TVA : "+invoice.tva+" CHF",20,70)
+
+doc.save("facture_"+invoice.invoice_number+".pdf")
+
+}
 
 async function addInvoice(){
 
