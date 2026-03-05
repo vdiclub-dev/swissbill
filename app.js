@@ -5,12 +5,16 @@ const db = () => window.supabaseClient;
 function show(page){
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(b=>b.classList.remove("active"));
-  $("page-"+page).classList.add("active");
-  document.querySelector(`.nav[data-page="${page}"]`).classList.add("active");
+
+  const section = $("page-"+page);
+  const btn = document.querySelector(`.nav[data-page="${page}"]`);
+
+  if(section) section.classList.add("active");
+  if(btn) btn.classList.add("active");
 }
 
 async function refreshAll(){
-  await Promise.all([
+  await Promise.allSettled([
     loadClients(),
     loadProducts(),
     loadInvoices(),
@@ -21,18 +25,231 @@ async function refreshAll(){
 
 // ========= dashboard =========
 async function loadDashboard(){
-  const { data: inv, error: e1 } = await db().from("invoices").select("total");
-  const { data: cli, error: e2 } = await db().from("clients").select("id");
+  const invRes = await db().from("invoices").select("total");
+  const cliRes = await db().from("clients").select("id");
 
-  if(e1) console.log("Dashboard invoices error:", e1);
-  if(e2) console.log("Dashboard clients error:", e2);
+  if(invRes.error) console.log("Dashboard invoices error:", invRes.error);
+  if(cliRes.error) console.log("Dashboard clients error:", cliRes.error);
 
-  const ca = (inv||[]).reduce((s,i)=> s + Number(i.total||0), 0);
+  const inv = invRes.data || [];
+  const cli = cliRes.data || [];
 
-  document.getElementById("kpi-ca").textContent = ca.toFixed(2) + " CHF";
-  document.getElementById("kpi-invoices").textContent = (inv||[]).length;
-  document.getElementById("kpi-clients").textContent = (cli||[]).length;
+  const ca = inv.reduce((s,i)=> s + Number(i.total||0), 0);
+
+  const caEl = $("kpi-ca");
+  const invEl = $("kpi-invoices");
+  const cliEl = $("kpi-clients");
+
+  if(caEl) caEl.textContent = ca.toFixed(2) + " CHF";
+  if(invEl) invEl.textContent = inv.length;
+  if(cliEl) cliEl.textContent = cli.length;
 }
+
+// ========= clients =========
+async function loadClients(){
+  const res = await db().from("clients").select("*").order("created_at",{ascending:false});
+  if(res.error){ console.log("loadClients error:", res.error); return; }
+
+  const tbody = $("tblClients");
+  if(!tbody) return;
+
+  tbody.innerHTML = "";
+  (res.data||[]).forEach(c=>{
+    tbody.innerHTML += `<tr>
+      <td>${c.company||""}</td>
+      <td>${c.last_name||""}</td>
+      <td>${c.email||""}</td>
+    </tr>`;
+  });
+}
+
+async function addClient(){
+  const company = ($("c_company")?.value||"").trim();
+  const last_name = ($("c_lastname")?.value||"").trim();
+  const email = ($("c_email")?.value||"").trim();
+
+  const res = await db().from("clients").insert([{ company, last_name, email }]);
+  if(res.error){ console.log("addClient error:", res.error); alert("Erreur création client"); return; }
+
+  if($("c_company")) $("c_company").value="";
+  if($("c_lastname")) $("c_lastname").value="";
+  if($("c_email")) $("c_email").value="";
+
+  await refreshAll();
+}
+
+// ========= products =========
+async function loadProducts(){
+  const res = await db().from("products").select("*").order("created_at",{ascending:false});
+  if(res.error){ console.log("loadProducts error:", res.error); return; }
+
+  const tbody = $("tblProducts");
+  if(!tbody) return;
+
+  tbody.innerHTML = "";
+  (res.data||[]).forEach(p=>{
+    tbody.innerHTML += `<tr>
+      <td>${p.name||""}</td>
+      <td>${Number(p.price||0).toFixed(2)} CHF</td>
+    </tr>`;
+  });
+}
+
+async function addProduct(){
+  const name = ($("p_name")?.value||"").trim();
+  const price = Number((($("p_price")?.value||"0")).replace(",", "."));
+  if(!name) return alert("Nom du produit manquant");
+
+  const res = await db().from("products").insert([{ name, price }]);
+  if(res.error){ console.log("addProduct error:", res.error); alert("Erreur création produit"); return; }
+
+  if($("p_name")) $("p_name").value="";
+  if($("p_price")) $("p_price").value="";
+
+  await refreshAll();
+}
+
+// ========= invoices =========
+async function loadInvoiceClientSelect(){
+  const res = await db().from("clients").select("id,company,last_name").order("created_at",{ascending:false});
+  if(res.error){ console.log("loadInvoiceClientSelect error:", res.error); return; }
+
+  const sel = $("i_client");
+  if(!sel) return;
+
+  sel.innerHTML = "";
+  (res.data||[]).forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = (c.company || c.last_name || "").trim(); // pas d'UUID affiché
+    if(opt.textContent) sel.appendChild(opt);
+  });
+}
+
+async function addInvoice(){
+  const client_id = $("i_client")?.value;
+  const ht = Number((($("i_total")?.value||"0")).replace(",", "."));
+
+  if(!client_id) return alert("Choisis un client");
+  if(!ht) return alert("Montant invalide");
+
+  // dernier numéro
+  const lastRes = await db()
+    .from("invoices")
+    .select("invoice_number,created_at")
+    .order("created_at",{ascending:false})
+    .limit(1);
+
+  if(lastRes.error){
+    console.log("last invoice error:", lastRes.error);
+    alert("Erreur lecture factures (F12 Console)");
+    return;
+  }
+
+  let next = 1;
+  if(lastRes.data && lastRes.data.length && lastRes.data[0].invoice_number){
+    const last = String(lastRes.data[0].invoice_number).split("-").pop();
+    const n = parseInt(last, 10);
+    if(!isNaN(n)) next = n + 1;
+  }
+
+  const year = new Date().getFullYear();
+  const invoice_number = `${year}-${String(next).padStart(4,"0")}`;
+
+  const tva = ht * 0.081;
+  const total = ht + tva;
+
+  const insRes = await db().from("invoices").insert([{ client_id, invoice_number, tva, total }]);
+  if(insRes.error){
+    console.log("addInvoice error:", insRes.error);
+    alert("Facture NON créée (F12 Console)");
+    return;
+  }
+
+  if($("i_total")) $("i_total").value="";
+  await refreshAll();
+  alert("Facture " + invoice_number + " créée ✅");
+}
+
+async function loadInvoices(){
+  const res = await db()
+    .from("invoices")
+    .select("invoice_number,total,tva,created_at,client_id")
+    .order("created_at",{ascending:false});
+
+  if(res.error){ console.log("loadInvoices error:", res.error); return; }
+
+  // map clients
+  const cl = await db().from("clients").select("id,company,last_name");
+  const map = new Map((cl.data||[]).map(c => [c.id, (c.company || c.last_name || "")]));
+
+  const tbody = $("tblInvoices");
+  if(!tbody) return;
+
+  tbody.innerHTML = "";
+  (res.data||[]).forEach(i=>{
+    const d = new Date(i.created_at);
+    const client = map.get(i.client_id) || "";
+    tbody.innerHTML += `<tr>
+      <td>${i.invoice_number||""}</td>
+      <td>${d.toLocaleDateString("fr-CH")}</td>
+      <td>${client}</td>
+      <td>${Number(i.total||0).toFixed(2)} CHF</td>
+      <td><button onclick="alert('PDF étape suivante')">PDF</button></td>
+    </tr>`;
+  });
+}
+
+// ========= invoice items UI (ne casse jamais) =========
+function addInvoiceRow(){
+  const tbody = document.querySelector("#invoiceItems tbody");
+  if(!tbody) return;
+
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input class="prod" placeholder="Produit"></td>
+    <td><input class="qty" type="number" value="1" min="0"></td>
+    <td>
+      <select class="unit">
+        <option>h</option><option>m2</option><option>m3</option>
+        <option>kg</option><option>pièce</option><option>forfait</option><option>km</option>
+      </select>
+    </td>
+    <td><input class="price" type="number" value="0" min="0"></td>
+    <td class="total">0.00</td>
+  `;
+  tbody.appendChild(tr);
+
+  const recalc = () => {
+    const qty = Number(tr.querySelector(".qty").value || 0);
+    const price = Number(tr.querySelector(".price").value || 0);
+    tr.querySelector(".total").textContent = (qty * price).toFixed(2);
+  };
+
+  tr.querySelector(".qty").addEventListener("input", recalc);
+  tr.querySelector(".price").addEventListener("input", recalc);
+  recalc();
+}
+
+// ========= boot =========
+document.addEventListener("DOMContentLoaded", async ()=>{
+  // sécurité: si supabaseClient n'existe pas, on affiche une alerte claire
+  if(!window.supabaseClient){
+    alert("Supabase non chargé (vérifie supabase.js dans index.html)");
+    return;
+  }
+
+  document.querySelectorAll(".nav").forEach(b=>{
+    b.addEventListener("click", ()=> show(b.dataset.page));
+  });
+
+  $("btnAddClient")?.addEventListener("click", addClient);
+  $("btnAddProduct")?.addEventListener("click", addProduct);
+  $("btnAddInvoice")?.addEventListener("click", addInvoice);
+
+  show("dashboard");
+  await refreshAll();
+});
 
 // ========= clients =========
 async function loadClients(){
