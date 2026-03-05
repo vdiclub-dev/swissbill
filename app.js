@@ -1,4 +1,4 @@
-const { createClient } = supabase;
+
 
 window.supabaseClient = createClient(
   "https://iubbsnntcreneakbdkmv.supabase.co",
