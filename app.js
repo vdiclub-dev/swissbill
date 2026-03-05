@@ -10,6 +10,17 @@ function show(page){
 
 async function refreshAll(){
   await Promise.all([loadClients(), loadProducts(), loadInvoices(), loadInvoiceClientSelect(), loadDashboard()]);
+async function refreshAll(){
+
+await Promise.all([
+loadClients(),
+loadProducts(),
+loadInvoices(),
+loadInvoiceClientSelect(),
+loadDashboard()
+])
+
+}
 }
 
 /* ---------- DASHBOARD ---------- */
