@@ -138,41 +138,44 @@ table.innerHTML+=row
 })
 
 }
-
 async function createInvoice(){
 
-const client=document.getElementById("clientSelect").value
-const amount=document.getElementById("amount").value
+const client = document.getElementById("clientSelect").value
+const amount = Number(document.getElementById("amount").value)
+
+let { data } = await supabaseClient
+.from("invoices")
+.select("invoice_number")
+.order("invoice_number",{ascending:false})
+.limit(1)
+
+let nextNumber = 1
+
+if(data && data.length>0){
+nextNumber = parseInt(data[0].invoice_number)+1
+}
+
+const invoiceNumber = String(nextNumber).padStart(5,"0")
+
+const tva = amount * 0.081
+const total = amount + tva
 
 await supabaseClient
 .from("invoices")
-.insert([{client_id:client,total:amount,date:new Date()}])
+.insert([{
+invoice_number: invoiceNumber,
+client_id: client,
+total: total,
+tva: tva,
+date: new Date()
+}])
+
+alert("Facture "+invoiceNumber+" créée")
 
 loadInvoices()
 loadDashboard()
 
 }
-
-async function loadClientSelect(){
-
-const { data } = await supabaseClient
-.from("clients")
-.select("*")
-
-const select=document.getElementById("clientSelect")
-
-select.innerHTML=""
-
-data.forEach(c=>{
-
-let option=document.createElement("option")
-
-option.value=c.id
-option.text=c.company||c.last_name
-
-select.appendChild(option)
-
-})
 
 }
 
