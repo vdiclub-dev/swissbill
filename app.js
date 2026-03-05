@@ -69,11 +69,7 @@ async function loadDashboard(){
 
 
 
-// sécurité: vérifier que Supabase est chargé
-if(!window.supabaseClient){
-  alert("Supabase non chargé (vérifie supabase.js dans index.html)");
-  return;
-}
+
 
 document.querySelectorAll(".nav").forEach(b=>{
   b.addEventListener("click", ()=> show(b.dataset.page));
