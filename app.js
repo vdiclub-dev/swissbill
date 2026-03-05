@@ -63,25 +63,7 @@ async function loadDashboard(){
 
 
 
-async function addInvoice(){
-  const client_id = $("i_client")?.value;
-  const ht = Number((($("i_total")?.value||"0")).replace(",", "."));
 
-  if(!client_id) return alert("Choisis un client");
-  if(!ht) return alert("Montant invalide");
-
-  // dernier numéro
-  const lastRes = await db()
-    .from("invoices")
-    .select("invoice_number,created_at")
-    .order("created_at",{ascending:false})
-    .limit(1);
-
-  if(lastRes.error){
-    console.log("last invoice error:", lastRes.error);
-    alert("Erreur lecture factures (F12 Console)");
-    return;
-  }
 
   let next = 1;
   if(lastRes.data && lastRes.data.length && lastRes.data[0].invoice_number){
