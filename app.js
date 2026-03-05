@@ -59,27 +59,6 @@ async function loadDashboard(){
   if(cliEl) cliEl.textContent = cli.length;
 }
 
-
-
-
-
-// ========= products =========
-async function loadProducts(){
-  const res = await db().from("products").select("*").order("created_at",{ascending:false});
-  if(res.error){ console.log("loadProducts error:", res.error); return; }
-
-  const tbody = $("tblProducts");
-  if(!tbody) return;
-
-  tbody.innerHTML = "";
-  (res.data||[]).forEach(p=>{
-    tbody.innerHTML += `<tr>
-      <td>${p.name||""}</td>
-      <td>${Number(p.price||0).toFixed(2)} CHF</td>
-    </tr>`;
-  });
-}
-
 async function addProduct(){
   const name = ($("p_name")?.value||"").trim();
   const price = Number((($("p_price")?.value||"0")).replace(",", "."));
