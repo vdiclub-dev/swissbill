@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase.js"></script>
+
 <meta charset="UTF-8">
 <title>SwissBill</title>
 
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:,">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 <style>
 
 body{
@@ -26,6 +30,8 @@ font-size:20px;
 
 .container{
 padding:30px;
+max-width:900px;
+margin:auto;
 }
 
 .card{
@@ -36,14 +42,32 @@ border-radius:8px;
 box-shadow:0 2px 5px rgba(0,0,0,0.1);
 }
 
-.button{
-display:inline-block;
-padding:12px 20px;
+input, select{
+padding:10px;
+margin:5px 0;
+width:100%;
+box-sizing:border-box;
+}
+
+button{
+padding:10px;
 background:#2563eb;
 color:white;
-text-decoration:none;
-border-radius:6px;
+border:none;
+border-radius:5px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
 margin-top:10px;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid #ddd;
+text-align:left;
 }
 
 </style>
@@ -58,28 +82,26 @@ SwissBill – Logiciel de facturation
 
 <div class="container">
 
+<!-- CLIENTS -->
+
 <div class="card">
-  <h2>Ajouter produit</h2>
 
-<input id="productName" placeholder="Produit">
-<input id="productPrice" placeholder="Prix">
+<h2>Ajouter un client</h2>
 
-<button onclick="addProduct()">Ajouter</button>
+<input id="company" placeholder="Entreprise">
+<input id="lastname" placeholder="Nom">
+<input id="email" placeholder="Email">
 
-<h2>Facturation</h2>
-
-<p>Créer et gérer vos factures.</p>
-
-<a class="button" href="invoice.html">
-Créer une facture
-</a>
+<button onclick="addClient()">Ajouter</button>
 
 </div>
 
 <div class="card">
-<h2>Clients</h2>
+
+<h2>Liste des clients</h2>
 
 <table id="clientsTable">
+
 <thead>
 <tr>
 <th>Entreprise</th>
@@ -87,86 +109,154 @@ Créer une facture
 <th>Email</th>
 </tr>
 </thead>
-<h2>Ajouter un client</h2>
 
-<input id="company" placeholder="Entreprise">
-<input id="lastname" placeholder="Nom">
-<input id="email" placeholder="Email">
-
-<button onclick="addClient()">Ajouter</button>
 <tbody></tbody>
+
 </table>
-<h2>Clients</h2>
-
-<p>Gestion des clients.</p>
-
-<a class="button" href="#">
-Voir les clients
-</a>
 
 </div>
+
+<!-- PRODUITS -->
 
 <div class="card">
 
-<h2>Produits</h2>
+<h2>Ajouter produit</h2>
 
-<p>Gestion des produits et services.</p>
+<input id="productName" placeholder="Produit">
+<input id="productPrice" placeholder="Prix">
 
-<a class="button" href="#">
-Voir les produits
-</a>
+<button onclick="addProduct()">Ajouter</button>
+
+</div>
+
+<!-- FACTURES -->
+
+<div class="card">
+
+<h2>Créer facture</h2>
+
+<select id="clientSelect"></select>
+
+<input id="amount" placeholder="Montant">
+
+<button onclick="createInvoice()">Créer facture</button>
+
+<button onclick="generatePDF()">Télécharger PDF</button>
 
 </div>
 
 </div>
 
-</body>
-</html>
 <script>
+
 async function loadClients(){
 
-const { data, error } = await supabaseClient
+const { data } = await supabaseClient
 .from("clients")
 .select("*")
 
 const table = document.querySelector("#clientsTable tbody")
 
-table.innerHTML = ""
+table.innerHTML=""
 
-data.forEach(c => {
+data.forEach(c=>{
 
-let row = `
+let row=`
 <tr>
-<td>${c.company || ""}</td>
-<td>${c.last_name || ""}</td>
-<td>${c.email || ""}</td>
+<td>${c.company||""}</td>
+<td>${c.last_name||""}</td>
+<td>${c.email||""}</td>
 </tr>
 `
 
-table.innerHTML += row
+table.innerHTML+=row
 
 })
 
 }
 
-loadClients()
-async function test(){
+async function loadClientSelect(){
 
-const { data, error } = await supabaseClient
+const { data } = await supabaseClient
 .from("clients")
 .select("*")
 
-console.log("data:", data)
-console.log("error:", error)
+const select=document.getElementById("clientSelect")
+
+select.innerHTML=""
+
+data.forEach(c=>{
+
+let option=document.createElement("option")
+
+option.value=c.id
+option.text=c.company||c.last_name
+
+select.appendChild(option)
+
+})
 
 }
 
-test()
-<h2>Ajouter un client</h2>
+async function addClient(){
 
-<input id="company" placeholder="Entreprise">
-<input id="lastname" placeholder="Nom">
-<input id="email" placeholder="Email">
+const company=document.getElementById("company").value
+const lastname=document.getElementById("lastname").value
+const email=document.getElementById("email").value
 
-<button onclick="addClient()">Ajouter</button>
+await supabaseClient
+.from("clients")
+.insert([{company:company,last_name:lastname,email:email}])
+
+loadClients()
+loadClientSelect()
+
+}
+
+async function addProduct(){
+
+const name=document.getElementById("productName").value
+const price=document.getElementById("productPrice").value
+
+await supabaseClient
+.from("products")
+.insert([{name:name,price:price}])
+
+alert("Produit ajouté")
+
+}
+
+async function createInvoice(){
+
+const client=document.getElementById("clientSelect").value
+const amount=document.getElementById("amount").value
+
+await supabaseClient
+.from("invoices")
+.insert([{client_id:client,total:amount,date:new Date()}])
+
+alert("Facture créée")
+
+}
+
+function generatePDF(){
+
+const { jsPDF } = window.jspdf
+
+const doc=new jsPDF()
+
+doc.text("Facture SwissBill",20,20)
+
+doc.text("Montant facture",20,40)
+
+doc.save("facture.pdf")
+
+}
+
+loadClients()
+loadClientSelect()
+
 </script>
+
+</body>
+</html>
