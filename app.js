@@ -205,3 +205,22 @@ tbody.innerHTML += row
 })
 
 }
+function generatePDF(number,client,total){
+
+const { jsPDF } = window.jspdf
+
+const doc = new jsPDF()
+
+doc.setFontSize(20)
+doc.text("SwissBill",20,20)
+
+doc.setFontSize(12)
+
+doc.text("Facture : "+number,20,50)
+doc.text("Client : "+client,20,60)
+
+doc.text("Montant : "+Number(total).toFixed(2)+" CHF",20,80)
+
+doc.save("facture_"+number+".pdf")
+
+}
