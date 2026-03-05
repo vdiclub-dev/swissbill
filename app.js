@@ -61,20 +61,7 @@ async function loadDashboard(){
 
 
 
-async function addClient(){
-  const company = ($("c_company")?.value||"").trim();
-  const last_name = ($("c_lastname")?.value||"").trim();
-  const email = ($("c_email")?.value||"").trim();
 
-  const res = await db().from("clients").insert([{ company, last_name, email }]);
-  if(res.error){ console.log("addClient error:", res.error); alert("Erreur création client"); return; }
-
-  if($("c_company")) $("c_company").value="";
-  if($("c_lastname")) $("c_lastname").value="";
-  if($("c_email")) $("c_email").value="";
-
-  await refreshAll();
-}
 
 // ========= products =========
 async function loadProducts(){
