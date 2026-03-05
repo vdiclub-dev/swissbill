@@ -2,7 +2,7 @@ function db() {
   return window.supabaseClient;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+
 
   console.log("SwissBill démarré");
 
@@ -66,7 +66,7 @@ async function loadDashboard(){
 
 
 
-document.addEventListener("DOMContentLoaded", async ()=>{
+
 
   // sécurité: vérifier que Supabase est chargé
   if(!window.supabaseClient){
