@@ -186,7 +186,17 @@ let row = `
 <td>${i.invoice_number}</td>
 <td>${date.toLocaleDateString("fr-CH")}</td>
 <td>${client}</td>
+let row = `
+<tr>
+<td>${i.invoice_number}</td>
+<td>${date.toLocaleDateString("fr-CH")}</td>
+<td>${client}</td>
 <td>${Number(i.total).toFixed(2)} CHF</td>
+<td>
+<button onclick="generatePDF('${i.invoice_number}','${client}','${i.total}')">
+PDF
+</button>
+</td>
 </tr>
 `
 
