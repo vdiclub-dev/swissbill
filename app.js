@@ -8,10 +8,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 });
 
-window.supabaseClient = createClient(
-  "https://iubbsnntcreneakbdkmv.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y"
-);
 
 
 
@@ -65,36 +61,14 @@ async function loadDashboard(){
 
 
 
-  let next = 1;
-  if(lastRes.data && lastRes.data.length && lastRes.data[0].invoice_number){
-    const last = String(lastRes.data[0].invoice_number).split("-").pop();
-    const n = parseInt(last, 10);
-    if(!isNaN(n)) next = n + 1;
-  }
-
-  const year = new Date().getFullYear();
-  const invoice_number = `${year}-${String(next).padStart(4,"0")}`;
-
-  const tva = ht * 0.081;
-  const total = ht + tva;
-
-  const insRes = await db().from("invoices").insert([{ client_id, invoice_number, tva, total }]);
-  if(insRes.error){
-    console.log("addInvoice error:", insRes.error);
-    alert("Facture NON créée (F12 Console)");
-    return;
-  }
-
-  if($("i_total")) $("i_total").value="";
-  await refreshAll();
-  alert("Facture " + invoice_number + " créée ✅");
-}
+  
 
 
 
-// ========= boot =========
+
 document.addEventListener("DOMContentLoaded", async ()=>{
-  // sécurité: si supabaseClient n'existe pas, on affiche une alerte claire
+
+  // sécurité: vérifier que Supabase est chargé
   if(!window.supabaseClient){
     alert("Supabase non chargé (vérifie supabase.js dans index.html)");
     return;
@@ -109,7 +83,9 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("btnAddInvoice")?.addEventListener("click", addInvoice);
 
   show("dashboard");
+
   await refreshAll();
+
 });
 
 // ========= clients =========
