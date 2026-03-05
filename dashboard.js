@@ -1,63 +1,119 @@
-async function loadDashboard(){
+<!DOCTYPE html>
+<html>
 
-const container=document.querySelector(".container")
+<head>
 
-container.innerHTML=`
+<meta charset="UTF-8">
+<title>SwissBill</title>
 
-<h3>Factures</h3>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:,">
 
-<table id="invoiceTable">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="js/supabase.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/clients.js"></script>
+<script src="js/products.js"></script>
+<script src="js/invoices.js"></script>
+
+</head>
+
+<body>
+
+<div class="app">
+
+<div class="sidebar">
+
+<h2>SwissBill</h2>
+
+<button onclick="showPage('dashboard')">Dashboard</button>
+<button onclick="showPage('clients')">Clients</button>
+<button onclick="showPage('products')">Produits</button>
+<button onclick="showPage('invoices')">Factures</button>
+
+</div>
+
+<div class="main">
+
+<div id="dashboard" class="page">
+
+<h1>Dashboard</h1>
+
+<p>Bienvenue dans SwissBill</p>
+
+<div id="stats"></div>
+
+</div>
+
+<div id="clients" class="page">
+
+<h1>Clients</h1>
+
+<input id="company" placeholder="Entreprise">
+<input id="lastname" placeholder="Nom">
+<input id="email" placeholder="Email">
+
+<button onclick="addClient()">Ajouter</button>
+
+<table id="clientsTable">
 
 <thead>
 <tr>
-<th>Client</th>
-<th>Montant</th>
-<th>Status</th>
-<th>Date</th>
+<th>Entreprise</th>
+<th>Nom</th>
+<th>Email</th>
 </tr>
 </thead>
 
 <tbody></tbody>
 
 </table>
-`
 
-const { data } = await supabaseClient
-.from("invoices")
-.select("*")
+</div>
 
-const tbody=document.querySelector("#invoiceTable tbody")
+<div id="products" class="page">
 
-data.forEach(inv=>{
+<h1>Produits</h1>
 
-const row=`
-<tr>
-<td>${inv.client}</td>
-<td>${inv.amount} CHF</td>
-<td>${inv.status}</td>
-<td>${new Date(inv.date).toLocaleDateString()}</td>
-</tr>
-`
-renderTable(data)
-tbody.innerHTML+=row
+<input id="productName" placeholder="Produit">
+<input id="productPrice" placeholder="Prix">
 
+<button onclick="addProduct()">Ajouter</button>
+
+</div>
+
+<div id="invoices" class="page">
+
+<h1>Factures</h1>
+
+<select id="clientSelect"></select>
+
+<input id="amount" placeholder="Montant">
+
+<button onclick="createInvoice()">Créer facture</button>
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+function showPage(page){
+
+document.querySelectorAll(".page").forEach(p=>{
+p.style.display="none"
 })
+
+document.getElementById(page).style.display="block"
 
 }
-let total=0
-let paid=0
-let pending=0
 
-data.forEach(inv=>{
+showPage("dashboard")
 
-const amount=Number(inv.amount)||0
+</script>
 
-total+=amount
-
-if(inv.status==="paid") paid+=amount
-else pending+=amount
-
-})
-document.getElementById("total").innerText=total+" CHF"
-document.getElementById("paid").innerText=paid+" CHF"
-document.getElementById("pending").innerText=pending+" CHF"
+</body>
+</html>
