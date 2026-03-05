@@ -114,7 +114,7 @@ async function addClient(){
   $("c_lastname").value=""
   $("c_email").value=""
 
-  await refreshAll()
+  
 
 }
 
