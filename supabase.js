@@ -1,8 +1,9 @@
-const supabaseUrl = "https://iubbsnntcreneakbdkmv.supabase.co"
+const SUPABASE_URL = "https://iubbsnntcreneakbdkmv.supabase.co"
+const SUPABASE_KEY = "sb_publishable_AkBuF7AiMVxXuvTF1Mx3Zw_8AuW3gGb"
 
-const supabaseKey = "sb_publishable_AkBuF7AiMVxXuvTF1Mx3Zw_8AuW3gGb"
+const { createClient } = supabase
 
-const supabaseClient = supabase.createClient(
-  supabaseUrl,
-  supabaseKey
+const supabaseClient = createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
 )
