@@ -6,12 +6,9 @@ function $(id){
 function db() {
   return window.supabaseClient;
 }
+console.log("SwissBill démarré");
 
-
-
-  console.log("SwissBill démarré");
-
-});
+);
 
 
 
