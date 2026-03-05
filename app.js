@@ -84,15 +84,27 @@ async function addProduct(){
 
 // ========= invoices (TVA + numéro 2026-0001) =========
 async function loadInvoiceClientSelect(){
-  const { data } = await db().from("clients").select("id,company,last_name").order("created_at",{ascending:false});
-  const sel = $("i_client");
-  sel.innerHTML = "";
-  (data||[]).forEach(c=>{
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = c.company || c.last_name || c.id;
-    sel.appendChild(opt);
-  });
+
+const { data } = await db()
+.from("clients")
+.select("id,company,last_name")
+.order("created_at",{ascending:false})
+
+const sel = document.getElementById("i_client")
+
+sel.innerHTML = ""
+
+data.forEach(c=>{
+
+const opt = document.createElement("option")
+
+opt.value = c.id
+opt.textContent = c.company || c.last_name
+
+sel.appendChild(opt)
+
+})
+
 }
 
 async function addInvoice(){
