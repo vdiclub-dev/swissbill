@@ -1,360 +1,320 @@
+// =============================
+// OUTILS
+// =============================
+
 function $(id){
   return document.getElementById(id);
 }
 
-
-function db() {
+function db(){
   return window.supabaseClient;
 }
+
 console.log("SwissBill démarré");
 
 
-
-
-
-
+// =============================
+// NAVIGATION
+// =============================
 
 function show(page){
-  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
-  document.querySelectorAll(".nav").forEach(b=>b.classList.remove("active"));
 
-  const section = $("page-"+page);
-  const btn = document.querySelector(`.nav[data-page="${page}"]`);
+  document.querySelectorAll(".page")
+  .forEach(p=>p.classList.remove("active"))
 
-  if(section) section.classList.add("active");
-  if(btn) btn.classList.add("active");
+  document.querySelectorAll(".nav")
+  .forEach(b=>b.classList.remove("active"))
+
+  const section = $("page-"+page)
+  const btn = document.querySelector(`.nav[data-page="${page}"]`)
+
+  if(section) section.classList.add("active")
+  if(btn) btn.classList.add("active")
+
 }
 
+
+// =============================
+// REFRESH GLOBAL
+// =============================
+
 async function refreshAll(){
+
   await Promise.allSettled([
     loadClients(),
     loadProducts(),
     loadInvoices(),
     loadInvoiceClientSelect(),
     loadDashboard()
-  ]);
+  ])
+
 }
 
-// ========= dashboard =========
+
+// =============================
+// DASHBOARD
+// =============================
+
 async function loadDashboard(){
-  const invRes = await db().from("invoices").select("total");
-  const cliRes = await db().from("clients").select("id");
 
-  if(invRes.error) console.log("Dashboard invoices error:", invRes.error);
-  if(cliRes.error) console.log("Dashboard clients error:", cliRes.error);
+  const invRes = await db().from("invoices").select("total")
+  const cliRes = await db().from("clients").select("id")
 
-  const inv = invRes.data || [];
-  const cli = cliRes.data || [];
+  const inv = invRes.data || []
+  const cli = cliRes.data || []
 
-  const ca = inv.reduce((s,i)=> s + Number(i.total||0), 0);
+  const ca = inv.reduce((s,i)=> s + Number(i.total||0),0)
 
-  const caEl = $("kpi-ca");
-  const invEl = $("kpi-invoices");
-  const cliEl = $("kpi-clients");
+  $("kpi-ca").textContent = ca.toFixed(2)+" CHF"
+  $("kpi-invoices").textContent = inv.length
+  $("kpi-clients").textContent = cli.length
 
-  if(caEl) caEl.textContent = ca.toFixed(2) + " CHF";
-  if(invEl) invEl.textContent = inv.length;
-  if(cliEl) cliEl.textContent = cli.length;
 }
 
 
+// =============================
+// CLIENTS
+// =============================
 
-
-
-
-
-  
-
-
-
-
-
-
-
-document.querySelectorAll(".nav").forEach(b=>{
-  b.addEventListener("click", ()=> show(b.dataset.page));
-});
-
-$("btnAddClient")?.addEventListener("click", addClient);
-$("btnAddProduct")?.addEventListener("click", addProduct);
-$("btnAddInvoice")?.addEventListener("click", addInvoice);
-
-show("dashboard");
-
-await refreshAll();
-
-});
-
-// ========= clients =========
 async function loadClients(){
-  const { data } = await db().from("clients").select("*").order("created_at",{ascending:false});
-  const tbody = $("tblClients");
-  tbody.innerHTML = "";
-  (data||[]).forEach(c=>{
-    tbody.innerHTML += `<tr>
+
+  const {data} = await db()
+  .from("clients")
+  .select("*")
+  .order("created_at",{ascending:false})
+
+  const tbody = $("tblClients")
+  tbody.innerHTML=""
+
+  ;(data||[]).forEach(c=>{
+
+    tbody.innerHTML += `
+    <tr>
       <td>${c.company||""}</td>
       <td>${c.last_name||""}</td>
       <td>${c.email||""}</td>
-    </tr>`;
-  });
+    </tr>
+    `
+
+  })
+
 }
 
 async function addClient(){
-  const company = $("c_company").value.trim();
-  const last_name = $("c_lastname").value.trim();
-  const email = $("c_email").value.trim();
 
-  await db().from("clients").insert([{ company, last_name, email }]);
+  const company = $("c_company").value.trim()
+  const last_name = $("c_lastname").value.trim()
+  const email = $("c_email").value.trim()
 
-  $("c_company").value=""; $("c_lastname").value=""; $("c_email").value="";
-  await refreshAll();
+  await db().from("clients").insert([
+    {company,last_name,email}
+  ])
+
+  $("c_company").value=""
+  $("c_lastname").value=""
+  $("c_email").value=""
+
+  await refreshAll()
+
 }
 
-// ========= products =========
+
+// =============================
+// PRODUITS
+// =============================
+
 async function loadProducts(){
-  const { data } = await db().from("products").select("*").order("created_at",{ascending:false});
-  const tbody = $("tblProducts");
-  tbody.innerHTML = "";
-  (data||[]).forEach(p=>{
-    tbody.innerHTML += `<tr>
-      <td>${p.name||""}</td>
+
+  const {data} = await db()
+  .from("products")
+  .select("*")
+  .order("created_at",{ascending:false})
+
+  const tbody = $("tblProducts")
+  tbody.innerHTML=""
+
+  ;(data||[]).forEach(p=>{
+
+    tbody.innerHTML += `
+    <tr>
+      <td>${p.name}</td>
       <td>${Number(p.price||0).toFixed(2)} CHF</td>
-    </tr>`;
-  });
+    </tr>
+    `
+
+  })
+
 }
 
 async function addProduct(){
-  const name = $("p_name").value.trim();
-  const price = Number(($("p_price").value||"0").replace(",", "."));
-  if(!name) return alert("Nom du produit manquant");
 
-  await db().from("products").insert([{ name, price }]);
-  $("p_name").value=""; $("p_price").value="";
-  await refreshAll();
+  const name = $("p_name").value.trim()
+  const price = Number(($("p_price").value||"0").replace(",","."))
+
+  await db().from("products").insert([
+    {name,price}
+  ])
+
+  $("p_name").value=""
+  $("p_price").value=""
+
+  await refreshAll()
+
 }
 
-// ========= invoices (TVA + numéro 2026-0001) =========
+
+// =============================
+// SELECT CLIENT FACTURE
+// =============================
+
 async function loadInvoiceClientSelect(){
 
-const { data } = await db()
-.from("clients")
-.select("id,company,last_name")
-.order("created_at",{ascending:false})
+  const {data} = await db()
+  .from("clients")
+  .select("id,company,last_name")
+  .order("created_at",{ascending:false})
 
-const sel = document.getElementById("i_client")
+  const sel = $("i_client")
 
-sel.innerHTML = ""
+  sel.innerHTML=""
 
-data.forEach(c=>{
+  ;(data||[]).forEach(c=>{
 
-const opt = document.createElement("option")
+    const opt = document.createElement("option")
 
-opt.value = c.id
-opt.textContent = c.company || c.last_name
+    opt.value = c.id
+    opt.textContent = c.company || c.last_name
 
-sel.appendChild(opt)
+    sel.appendChild(opt)
 
-})
+  })
 
 }
 
 
-
-
+// =============================
+// CREATION FACTURE
+// =============================
 
 async function addInvoice(){
 
-  const client_id = $("i_client").value;
-  const ht = Number(($("i_total").value||"0").replace(",","."));
+  const client_id = $("i_client").value
+  const ht = Number(($("i_total").value||"0").replace(",","."))
 
   const lastRes = await db()
-    .from("invoices")
-    .select("invoice_number")
-    .order("created_at",{ascending:false})
-    .limit(1);
+  .from("invoices")
+  .select("invoice_number")
+  .order("created_at",{ascending:false})
+  .limit(1)
 
-  let next = 1;
+  let next = 1
 
   if(lastRes.data && lastRes.data.length){
-    const last = lastRes.data[0].invoice_number.split("-").pop();
-    const n = parseInt(last,10);
-    if(!isNaN(n)) next = n + 1;
+
+    const last = lastRes.data[0].invoice_number.split("-").pop()
+    const n = parseInt(last,10)
+
+    if(!isNaN(n)) next = n + 1
+
   }
 
-  const year = new Date().getFullYear();
-  const invoice_number = `${year}-${String(next).padStart(4,"0")}`;
+  const year = new Date().getFullYear()
 
-  const tva = ht * 0.081;
-  const total = ht + tva;
+  const invoice_number =
+  `${year}-${String(next).padStart(4,"0")}`
+
+  const tva = ht * 0.081
+  const total = ht + tva
 
   await db().from("invoices").insert([
-    { client_id, invoice_number, tva, total }
-  ]);
+    {client_id,invoice_number,tva,total}
+  ])
 
-  await refreshAll();
+  $("i_total").value=""
+
+  await refreshAll()
 
 }
 
-// ========= QR-FACTURE (SPC) + PDF =========
-// Mets TON IBAN ici (obligatoire)
-const QR_CREDITOR = {
-  iban: "CH773000520427805601Y",          // <-- REMPLACE
-  name: "Brimot Nettoyage",
-  street: "Impasse des Griottes",
-  building: "3",
-  postal: "1462",
-  city: "Yvonand",
-  country: "CH",
-};
 
-function buildSwissQRPayload({ invoice_number, amountCHF, message }) {
-  const amt = Number(amountCHF||0).toFixed(2);
-  const L = [
-    "SPC","0200","1",
-    QR_CREDITOR.iban,
-    "S",
-    QR_CREDITOR.name,
-    QR_CREDITOR.street,
-    QR_CREDITOR.building,
-    QR_CREDITOR.postal,
-    QR_CREDITOR.city,
-    QR_CREDITOR.country,
-    "","","","","","","",
-    amt,"CHF",
-    "","","","","","","",
-    "NON","",
-    message || `Facture ${invoice_number}`,
-    "EPD",
-    "",
-    "",
-    ""
-  ];
-  return L.join("\n");
+// =============================
+// LISTE FACTURES
+// =============================
+
+async function loadInvoices(){
+
+  const res = await db()
+  .from("invoices")
+  .select("*")
+  .order("created_at",{ascending:false})
+
+  const invoices = res.data || []
+
+  const cl = await db()
+  .from("clients")
+  .select("id,company,last_name")
+
+  const map = new Map(
+    (cl.data||[])
+    .map(c=>[c.id,(c.company||c.last_name||"")])
+  )
+
+  const tbody = $("tblInvoices")
+
+  tbody.innerHTML=""
+
+  invoices.forEach(i=>{
+
+    const d = new Date(i.created_at)
+
+    tbody.innerHTML += `
+    <tr>
+      <td>${i.invoice_number}</td>
+      <td>${d.toLocaleDateString("fr-CH")}</td>
+      <td>${map.get(i.client_id)||""}</td>
+      <td>${Number(i.total||0).toFixed(2)} CHF</td>
+      <td>
+      <button onclick="generatePDF('${i.invoice_number}')">
+      PDF
+      </button>
+      </td>
+    </tr>
+    `
+
+  })
+
 }
 
-function qrToDataURL(text){
-  return new Promise((resolve)=>{
-    const tmp = document.createElement("div");
-    tmp.style.position="fixed";
-    tmp.style.left="-9999px";
-    tmp.style.top="-9999px";
-    document.body.appendChild(tmp);
 
-    new QRCode(tmp, { text, width:240, height:240, correctLevel:QRCode.CorrectLevel.M });
+// =============================
+// BOOT
+// =============================
 
-    setTimeout(()=>{
-      const img = tmp.querySelector("img");
-      if(img && img.src) resolve(img.src);
-      else{
-        const canvas = tmp.querySelector("canvas");
-        resolve(canvas ? canvas.toDataURL("image/png") : null);
-      }
-      tmp.remove();
-    }, 80);
-  });
-}
-
-async function generatePDF(invoice_number){
-  const { data, error } = await db()
-    .from("invoices")
-    .select("invoice_number,total,tva,created_at, clients(company,last_name)")
-    .eq("invoice_number", invoice_number)
-    .single();
-
-  if(error || !data) return alert("Impossible de charger la facture");
-
-  const inv = data;
-  const clientName = inv.clients?.company || inv.clients?.last_name || "";
-  const ttc = Number(inv.total||0);
-  const tva = Number(inv.tva||0);
-  const ht = ttc - tva;
-
-  const payload = buildSwissQRPayload({
-    invoice_number: inv.invoice_number,
-    amountCHF: ttc,
-    message: `Facture ${inv.invoice_number} - ${clientName}`,
-  });
-
-  const qrDataUrl = await qrToDataURL(payload);
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  doc.setFontSize(18);
-  doc.text("SwissBill", 20, 20);
-  doc.setFontSize(12);
-
-  doc.text(`Facture : ${inv.invoice_number}`, 20, 40);
-  doc.text(`Date : ${new Date(inv.created_at).toLocaleDateString("fr-CH")}`, 20, 48);
-  doc.text(`Client : ${clientName}`, 20, 56);
-
-  doc.text(`Total HT : ${ht.toFixed(2)} CHF`, 20, 74);
-  doc.text(`TVA 8.1% : ${tva.toFixed(2)} CHF`, 20, 82);
-  doc.text(`Total TTC : ${ttc.toFixed(2)} CHF`, 20, 90);
-
-  doc.text("QR-facture (paiement)", 20, 115);
-  if(qrDataUrl) doc.addImage(qrDataUrl, "PNG", 20, 125, 60, 60);
-
-  doc.save(`facture_${inv.invoice_number}.pdf`);
-}
-
-// ========= boot =========
 document.addEventListener("DOMContentLoaded", async ()=>{
-  document.querySelectorAll(".nav").forEach(b=>{
-    b.addEventListener("click", ()=> show(b.dataset.page));
-  });
 
-  $("btnAddClient").addEventListener("click", addClient);
-  $("btnAddProduct").addEventListener("click", addProduct);
-  $("btnAddInvoice").addEventListener("click", addInvoice);
+  if(!window.supabaseClient){
 
-  show("dashboard");
-  await refreshAll();
-});
-function addInvoiceRow(){
+    alert("Supabase non chargé")
+    return
 
-const tbody = document.querySelector("#invoiceItems tbody")
+  }
 
-let row = document.createElement("tr")
+  document.querySelectorAll(".nav")
+  .forEach(b=>{
 
-row.innerHTML = `
+    b.addEventListener(
+      "click",
+      ()=>show(b.dataset.page)
+    )
 
-<td><input class="prod"></td>
+  })
 
-<td><input class="qty" type="number" value="1"></td>
+  $("btnAddClient").addEventListener("click",addClient)
+  $("btnAddProduct").addEventListener("click",addProduct)
+  $("btnAddInvoice").addEventListener("click",addInvoice)
 
-<td>
-<select class="unit">
-<option>h</option>
-<option>m2</option>
-<option>m3</option>
-<option>kg</option>
-<option>pièce</option>
-<option>forfait</option>
-<option>km</option>
-</select>
-</td>
+  show("dashboard")
 
-<td><input class="price" type="number"></td>
-
-<td class="total">0</td>
-
-`
-
-tbody.appendChild(row)
-
-row.querySelectorAll(".qty,.price").forEach(el=>{
-
-el.addEventListener("input",()=>{
-
-const qty = row.querySelector(".qty").value
-const price = row.querySelector(".price").value
-
-row.querySelector(".total").textContent =
-(qty*price).toFixed(2)
+  await refreshAll()
 
 })
-
-})
-
-}
