@@ -108,35 +108,6 @@ async function addInvoice(){
   alert("Facture " + invoice_number + " créée ✅");
 }
 
-async function loadInvoices(){
-  const res = await db()
-    .from("invoices")
-    .select("invoice_number,total,tva,created_at,client_id")
-    .order("created_at",{ascending:false});
-
-  if(res.error){ console.log("loadInvoices error:", res.error); return; }
-
-  // map clients
-  const cl = await db().from("clients").select("id,company,last_name");
-  const map = new Map((cl.data||[]).map(c => [c.id, (c.company || c.last_name || "")]));
-
-  const tbody = $("tblInvoices");
-  if(!tbody) return;
-
-  tbody.innerHTML = "";
-  (res.data||[]).forEach(i=>{
-    const d = new Date(i.created_at);
-    const client = map.get(i.client_id) || "";
-    tbody.innerHTML += `<tr>
-      <td>${i.invoice_number||""}</td>
-      <td>${d.toLocaleDateString("fr-CH")}</td>
-      <td>${client}</td>
-      <td>${Number(i.total||0).toFixed(2)} CHF</td>
-      <td><button onclick="alert('PDF étape suivante')">PDF</button></td>
-    </tr>`;
-  });
-}
-
 
 
 // ========= boot =========
