@@ -1,4 +1,12 @@
+function db() {
+  return window.supabaseClient;
+}
 
+document.addEventListener("DOMContentLoaded", () => {
+
+  console.log("SwissBill démarré");
+
+});
 
 window.supabaseClient = createClient(
   "https://iubbsnntcreneakbdkmv.supabase.co",
