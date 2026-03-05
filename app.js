@@ -1,186 +1,128 @@
-function showPage(page){
+const $ = (id) => document.getElementById(id);
+const db = () => window.supabaseClient;
 
-document.querySelectorAll(".page").forEach(p=>{
-p.style.display="none"
-})
-
-document.getElementById(page).style.display="block"
-
+function show(page){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".nav").forEach(b=>b.classList.remove("active"));
+  $("page-"+page).classList.add("active");
+  document.querySelector(`.nav[data-page="${page}"]`).classList.add("active");
 }
 
-showPage("dashboard")
+async function refreshAll(){
+  await Promise.all([loadClients(), loadProducts(), loadInvoices(), loadInvoiceClientSelect(), loadDashboard()]);
+}
 
+/* ---------- DASHBOARD ---------- */
 async function loadDashboard(){
+  const { data: inv } = await db().from("invoices").select("total");
+  const { data: cli } = await db().from("clients").select("id");
 
-let { data: invoices } = await supabaseClient
-.from("invoices")
-.select("*")
-
-let { data: clients } = await supabaseClient
-.from("clients")
-.select("*")
-
-let total=0
-
-invoices.forEach(i=>{
-total+=Number(i.total)
-})
-
-document.getElementById("ca").innerText=total+" CHF"
-document.getElementById("invoiceCount").innerText=invoices.length
-document.getElementById("clientCount").innerText=clients.length
-
+  const ca = (inv||[]).reduce((s,i)=>s + Number(i.total||0), 0);
+  $("kpi-ca").textContent = ca.toFixed(2) + " CHF";
+  $("kpi-invoices").textContent = (inv||[]).length;
+  $("kpi-clients").textContent = (cli||[]).length;
 }
 
+/* ---------- CLIENTS ---------- */
 async function loadClients(){
-
-const { data } = await supabaseClient
-.from("clients")
-.select("*")
-
-const table=document.querySelector("#clientsTable tbody")
-
-table.innerHTML=""
-
-data.forEach(c=>{
-
-let row=`
-<tr>
-<td>${c.company||""}</td>
-<td>${c.last_name||""}</td>
-<td>${c.email||""}</td>
-</tr>
-`
-
-table.innerHTML+=row
-
-})
-
+  const { data } = await db().from("clients").select("*").order("created_at",{ascending:false});
+  const tbody = $("tblClients");
+  tbody.innerHTML = "";
+  (data||[]).forEach(c=>{
+    tbody.innerHTML += `<tr>
+      <td>${c.company||""}</td>
+      <td>${c.last_name||""}</td>
+      <td>${c.email||""}</td>
+    </tr>`;
+  });
 }
 
 async function addClient(){
+  const company = $("c_company").value.trim();
+  const last_name = $("c_lastname").value.trim();
+  const email = $("c_email").value.trim();
 
-const company=document.getElementById("company").value
-const lastname=document.getElementById("lastname").value
-const email=document.getElementById("email").value
-
-await supabaseClient
-.from("clients")
-.insert([{company,last_name:lastname,email}])
-
-loadClients()
-loadDashboard()
-
+  await db().from("clients").insert([{ company, last_name, email }]);
+  $("c_company").value=""; $("c_lastname").value=""; $("c_email").value="";
+  await refreshAll();
 }
 
+/* ---------- PRODUCTS ---------- */
 async function loadProducts(){
-
-const { data } = await supabaseClient
-.from("products")
-.select("*")
-
-const table=document.querySelector("#productsTable tbody")
-
-table.innerHTML=""
-
-data.forEach(p=>{
-
-let row=`
-<tr>
-<td>${p.name}</td>
-<td>${p.price} CHF</td>
-</tr>
-`
-
-table.innerHTML+=row
-
-})
-
+  const { data } = await db().from("products").select("*").order("created_at",{ascending:false});
+  const tbody = $("tblProducts");
+  tbody.innerHTML = "";
+  (data||[]).forEach(p=>{
+    tbody.innerHTML += `<tr>
+      <td>${p.name||""}</td>
+      <td>${Number(p.price||0).toFixed(2)} CHF</td>
+    </tr>`;
+  });
 }
 
 async function addProduct(){
+  const name = $("p_name").value.trim();
+  const price = Number(($("p_price").value||"0").replace(",", "."));
 
-const name=document.getElementById("productName").value
-const price=document.getElementById("productPrice").value
+  if(!name) return alert("Nom du produit manquant");
+  await db().from("products").insert([{ name, price }]);
+  $("p_name").value=""; $("p_price").value="";
+  await refreshAll();
+}
 
-await supabaseClient
-.from("products")
-.insert([{name,price}])
-
-loadProducts()
-
+/* ---------- INVOICES ---------- */
+async function loadInvoiceClientSelect(){
+  const { data } = await db().from("clients").select("id,company,last_name").order("created_at",{ascending:false});
+  const sel = $("i_client");
+  sel.innerHTML = "";
+  (data||[]).forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.company || c.last_name || c.id;
+    sel.appendChild(opt);
+  });
 }
 
 async function loadInvoices(){
+  const { data } = await db()
+    .from("invoices")
+    .select("id,total,created_at, clients(company,last_name)")
+    .order("created_at",{ascending:false});
 
-const { data } = await supabaseClient
-.from("invoices")
-.select("*, clients(company,last_name)")
-
-const table=document.querySelector("#invoiceTable tbody")
-
-table.innerHTML=""
-
-data.forEach(i=>{
-
-let client=i.clients?.company||i.clients?.last_name||""
-
-let row=`
-<tr>
-<td>${i.date}</td>
-<td>${client}</td>
-<td>${i.total} CHF</td>
-</tr>
-`
-
-table.innerHTML+=row
-
-})
-
-}
-async function createInvoice(){
-
-const client = document.getElementById("clientSelect").value
-const amount = Number(document.getElementById("amount").value)
-
-let { data } = await supabaseClient
-.from("invoices")
-.select("invoice_number")
-.order("invoice_number",{ascending:false})
-.limit(1)
-
-let nextNumber = 1
-
-if(data && data.length>0){
-nextNumber = parseInt(data[0].invoice_number)+1
+  const tbody = $("tblInvoices");
+  tbody.innerHTML = "";
+  (data||[]).forEach(i=>{
+    const d = new Date(i.created_at);
+    const client = i.clients?.company || i.clients?.last_name || "";
+    tbody.innerHTML += `<tr>
+      <td>${d.toLocaleDateString("fr-CH")}</td>
+      <td>${client}</td>
+      <td>${Number(i.total||0).toFixed(2)} CHF</td>
+    </tr>`;
+  });
 }
 
-const invoiceNumber = String(nextNumber).padStart(5,"0")
+async function addInvoice(){
+  const client_id = $("i_client").value;
+  const total = Number(($("i_total").value||"0").replace(",", "."));
+  if(!client_id) return alert("Choisis un client");
+  if(!total) return alert("Montant invalide");
 
-const tva = amount * 0.081
-const total = amount + tva
-
-await supabaseClient
-.from("invoices")
-.insert([{
-invoice_number: invoiceNumber,
-client_id: client,
-total: total,
-tva: tva,
-date: new Date()
-}])
-
-alert("Facture "+invoiceNumber+" créée")
-
-loadInvoices()
-loadDashboard()
-
+  await db().from("invoices").insert([{ client_id, total }]);
+  $("i_total").value="";
+  await refreshAll();
 }
 
-}
+/* ---------- BOOT ---------- */
+document.addEventListener("DOMContentLoaded", async ()=>{
+  document.querySelectorAll(".nav").forEach(b=>{
+    b.addEventListener("click", ()=> show(b.dataset.page));
+  });
 
-loadDashboard()
-loadClients()
-loadProducts()
-loadInvoices()
-loadClientSelect()
+  $("btnAddClient").addEventListener("click", addClient);
+  $("btnAddProduct").addEventListener("click", addProduct);
+  $("btnAddInvoice").addEventListener("click", addInvoice);
+
+  show("dashboard");
+  await refreshAll();
+});
