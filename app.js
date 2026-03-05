@@ -59,23 +59,7 @@ async function loadDashboard(){
   if(cliEl) cliEl.textContent = cli.length;
 }
 
-// ========= clients =========
-async function loadClients(){
-  const res = await db().from("clients").select("*").order("created_at",{ascending:false});
-  if(res.error){ console.log("loadClients error:", res.error); return; }
 
-  const tbody = $("tblClients");
-  if(!tbody) return;
-
-  tbody.innerHTML = "";
-  (res.data||[]).forEach(c=>{
-    tbody.innerHTML += `<tr>
-      <td>${c.company||""}</td>
-      <td>${c.last_name||""}</td>
-      <td>${c.email||""}</td>
-    </tr>`;
-  });
-}
 
 async function addClient(){
   const company = ($("c_company")?.value||"").trim();
