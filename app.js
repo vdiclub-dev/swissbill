@@ -1,3 +1,8 @@
+function $(id){
+  return document.getElementById(id);
+}
+
+
 function db() {
   return window.supabaseClient;
 }
