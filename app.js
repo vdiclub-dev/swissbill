@@ -137,36 +137,7 @@ async function loadInvoices(){
   });
 }
 
-// ========= invoice items UI (ne casse jamais) =========
-function addInvoiceRow(){
-  const tbody = document.querySelector("#invoiceItems tbody");
-  if(!tbody) return;
 
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td><input class="prod" placeholder="Produit"></td>
-    <td><input class="qty" type="number" value="1" min="0"></td>
-    <td>
-      <select class="unit">
-        <option>h</option><option>m2</option><option>m3</option>
-        <option>kg</option><option>pièce</option><option>forfait</option><option>km</option>
-      </select>
-    </td>
-    <td><input class="price" type="number" value="0" min="0"></td>
-    <td class="total">0.00</td>
-  `;
-  tbody.appendChild(tr);
-
-  const recalc = () => {
-    const qty = Number(tr.querySelector(".qty").value || 0);
-    const price = Number(tr.querySelector(".price").value || 0);
-    tr.querySelector(".total").textContent = (qty * price).toFixed(2);
-  };
-
-  tr.querySelector(".qty").addEventListener("input", recalc);
-  tr.querySelector(".price").addEventListener("input", recalc);
-  recalc();
-}
 
 // ========= boot =========
 document.addEventListener("DOMContentLoaded", async ()=>{
