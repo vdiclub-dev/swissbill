@@ -103,26 +103,50 @@ async function loadInvoices(){
 }
 
 async function addInvoice(){
-  const client_id = $("i_client").value;
-  const total = Number(($("i_total").value||"0").replace(",", "."));
-  if(!client_id) return alert("Choisis un client");
-  if(!total) return alert("Montant invalide");
 
-  await db().from("invoices").insert([{ client_id, total }]);
-  $("i_total").value="";
-  await refreshAll();
+const client_id = document.getElementById("i_client").value
+const amount = Number(document.getElementById("i_total").value)
+
+if(!client_id) return alert("Choisir un client")
+if(!amount) return alert("Montant invalide")
+
+/* récupérer dernière facture */
+
+let { data } = await db()
+.from("invoices")
+.select("invoice_number")
+.order("invoice_number",{ascending:false})
+.limit(1)
+
+/* numéro suivant */
+
+let nextNumber = 1
+
+if(data && data.length>0){
+nextNumber = parseInt(data[0].invoice_number)+1
 }
 
-/* ---------- BOOT ---------- */
-document.addEventListener("DOMContentLoaded", async ()=>{
-  document.querySelectorAll(".nav").forEach(b=>{
-    b.addEventListener("click", ()=> show(b.dataset.page));
-  });
+/* format 2026-0001 */
 
-  $("btnAddClient").addEventListener("click", addClient);
-  $("btnAddProduct").addEventListener("click", addProduct);
-  $("btnAddInvoice").addEventListener("click", addInvoice);
+const year = new Date().getFullYear()
+const invoice_number = year + "-" + String(nextNumber).padStart(4,"0")
 
-  show("dashboard");
-  await refreshAll();
-});
+/* TVA suisse */
+
+const tva = amount * 0.081
+const total = amount + tva
+
+await db().from("invoices").insert([{
+client_id,
+invoice_number,
+total,
+tva
+}])
+
+document.getElementById("i_total").value=""
+
+await refreshAll()
+
+alert("Facture "+invoice_number+" créée")
+
+}
