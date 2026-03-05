@@ -163,33 +163,7 @@ sel.appendChild(opt)
 
 async function addInvoice(){
 
-  let next = 1;
 
-  if(lastRes.data && lastRes.data.length && lastRes.data[0].invoice_number){
-    const last = String(lastRes.data[0].invoice_number).split("-").pop();
-    const n = parseInt(last, 10);
-    if(!isNaN(n)) next = n + 1;
-  }
-
-  const year = new Date().getFullYear();
-  const invoice_number = `${year}-${String(next).padStart(4,"0")}`;
-
-  const tva = ht * 0.081;
-  const total = ht + tva;
-
-  const insRes = await db().from("invoices").insert([{ client_id, invoice_number, tva, total }]);
-
-  if(insRes.error){
-    console.log("addInvoice error:", insRes.error);
-    alert("Facture NON créée");
-    return;
-  }
-
-  await refreshAll();
-
-  alert("Facture " + invoice_number + " créée ✅");
-
-}
 
 async function loadInvoices(){
   const res = await db()
