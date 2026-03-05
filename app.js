@@ -21,13 +21,17 @@ async function refreshAll(){
 
 // ========= dashboard =========
 async function loadDashboard(){
-  const { data: inv } = await db().from("invoices").select("total");
-  const { data: cli } = await db().from("clients").select("id");
+  const { data: inv, error: e1 } = await db().from("invoices").select("total");
+  const { data: cli, error: e2 } = await db().from("clients").select("id");
 
-  const ca = (inv||[]).reduce((s,i)=>s + Number(i.total||0), 0);
-  $("kpi-ca").textContent = ca.toFixed(2) + " CHF";
-  $("kpi-invoices").textContent = (inv||[]).length;
-  $("kpi-clients").textContent = (cli||[]).length;
+  if(e1) console.log("Dashboard invoices error:", e1);
+  if(e2) console.log("Dashboard clients error:", e2);
+
+  const ca = (inv||[]).reduce((s,i)=> s + Number(i.total||0), 0);
+
+  document.getElementById("kpi-ca").textContent = ca.toFixed(2) + " CHF";
+  document.getElementById("kpi-invoices").textContent = (inv||[]).length;
+  document.getElementById("kpi-clients").textContent = (cli||[]).length;
 }
 
 // ========= clients =========
