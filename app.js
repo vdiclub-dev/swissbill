@@ -107,22 +107,7 @@ async function addProduct(){
   await refreshAll();
 }
 
-// ========= invoices =========
-async function loadInvoiceClientSelect(){
-  const res = await db().from("clients").select("id,company,last_name").order("created_at",{ascending:false});
-  if(res.error){ console.log("loadInvoiceClientSelect error:", res.error); return; }
 
-  const sel = $("i_client");
-  if(!sel) return;
-
-  sel.innerHTML = "";
-  (res.data||[]).forEach(c=>{
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = (c.company || c.last_name || "").trim(); // pas d'UUID affiché
-    if(opt.textContent) sel.appendChild(opt);
-  });
-}
 
 async function addInvoice(){
   const client_id = $("i_client")?.value;
