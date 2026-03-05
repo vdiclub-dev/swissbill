@@ -186,26 +186,9 @@ sel.appendChild(opt)
 }
 
 async function addInvoice(){
-  const client_id = $("i_client").value;
-  const ht = Number(($("i_total").value||"0").replace(",", "."));
-
-  if(!client_id) return alert("Choisis un client");
-  if(!ht) return alert("Montant invalide");
-
-  // dernier numéro
-  const lastRes = await db()
-    .from("invoices")
-    .select("invoice_number,created_at")
-    .order("created_at",{ascending:false})
-    .limit(1);
-
-  if(lastRes.error){
-    console.log("Erreur lecture dernière facture:", lastRes.error);
-    alert("Erreur Supabase (lecture factures). Voir Console F12.");
-    return;
-  }
 
   let next = 1;
+
   if(lastRes.data && lastRes.data.length && lastRes.data[0].invoice_number){
     const last = String(lastRes.data[0].invoice_number).split("-").pop();
     const n = parseInt(last, 10);
@@ -218,22 +201,18 @@ async function addInvoice(){
   const tva = ht * 0.081;
   const total = ht + tva;
 
-  const insRes = await db().from("invoices").insert([{
-    client_id,
-    invoice_number,
-    tva,
-    total
-  }]);
+  const insRes = await db().from("invoices").insert([{ client_id, invoice_number, tva, total }]);
 
   if(insRes.error){
-    console.log("Erreur création facture:", insRes.error);
-    alert("Facture NON créée (voir Console F12).");
+    console.log("addInvoice error:", insRes.error);
+    alert("Facture NON créée");
     return;
   }
 
-  $("i_total").value = "";
   await refreshAll();
+
   alert("Facture " + invoice_number + " créée ✅");
+
 }
 
 async function loadInvoices(){
