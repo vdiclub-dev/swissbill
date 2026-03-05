@@ -59,19 +59,7 @@ async function loadDashboard(){
   if(cliEl) cliEl.textContent = cli.length;
 }
 
-async function addProduct(){
-  const name = ($("p_name")?.value||"").trim();
-  const price = Number((($("p_price")?.value||"0")).replace(",", "."));
-  if(!name) return alert("Nom du produit manquant");
 
-  const res = await db().from("products").insert([{ name, price }]);
-  if(res.error){ console.log("addProduct error:", res.error); alert("Erreur création produit"); return; }
-
-  if($("p_name")) $("p_name").value="";
-  if($("p_price")) $("p_price").value="";
-
-  await refreshAll();
-}
 
 
 
