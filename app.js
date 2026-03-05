@@ -33,7 +33,7 @@ function show(page){
 
 }
 
-
+<button onclick="generatePDF('${i.invoice_number}')">PDF</button>
 // =============================
 // REFRESH GLOBAL
 // =============================
@@ -318,3 +318,33 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   await refreshAll()
 
 })
+async function generatePDF(invoice_number){
+
+  const { data, error } = await db()
+    .from("invoices")
+    .select("invoice_number,total,tva,created_at, clients(company,last_name)")
+    .eq("invoice_number", invoice_number)
+    .single();
+
+  if(error || !data){
+    alert("Impossible de charger la facture");
+    return;
+  }
+
+  const inv = data;
+  const clientName = inv.clients?.company || inv.clients?.last_name || "";
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFontSize(18);
+  doc.text("SwissBill", 20, 20);
+
+  doc.setFontSize(12);
+  doc.text("Facture : " + inv.invoice_number, 20, 40);
+  doc.text("Client : " + clientName, 20, 50);
+  doc.text("Total : " + inv.total + " CHF", 20, 60);
+
+  doc.save("facture_" + inv.invoice_number + ".pdf");
+
+}
