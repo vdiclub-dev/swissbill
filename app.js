@@ -150,3 +150,37 @@ await refreshAll()
 alert("Facture "+invoice_number+" créée")
 
 }
+async function loadInvoices(){
+
+const { data } = await db()
+.from("invoices")
+.select("invoice_number,total,created_at, clients(company,last_name)")
+.order("created_at",{ascending:false})
+
+const tbody = document.getElementById("tblInvoices")
+
+tbody.innerHTML = ""
+
+data.forEach(i => {
+
+const date = new Date(i.created_at)
+
+const client =
+i.clients?.company ||
+i.clients?.last_name ||
+""
+
+let row = `
+<tr>
+<td>${i.invoice_number}</td>
+<td>${date.toLocaleDateString("fr-CH")}</td>
+<td>${client}</td>
+<td>${Number(i.total).toFixed(2)} CHF</td>
+</tr>
+`
+
+tbody.innerHTML += row
+
+})
+
+}
