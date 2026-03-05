@@ -5,12 +5,8 @@ window.supabaseClient = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y"
 );
 
-function db() {
-  return window.supabaseClient;
-}
-// ========= helpers =========
-const $ = (id) => document.getElementById(id);
-const db = () => window.supabaseClient;
+
+
 
 function show(page){
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
