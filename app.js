@@ -193,7 +193,7 @@ let row = `
 <td>${client}</td>
 <td>${Number(i.total).toFixed(2)} CHF</td>
 <td>
-<button onclick="generatePDF('${i.invoice_number}','${client}','${i.total}')">
+<button onclick="generatePDF('${i.invoice_number}')">PDF</button>
 PDF
 </button>
 </td>
@@ -231,7 +231,7 @@ doc.save("facture_"+number+".pdf")
 // Après 21.11.2025, les adresses structurées sont requises. :contentReference[oaicite:0]{index=0}
 
 const QR_CREDITOR = {
-  iban: "CH00....",                 // <-- TON IBAN (pas QR-IBAN si tu n'utilises pas de référence QRR)
+  iban: "CH773000520427805601Y",                 // <-- TON IBAN (pas QR-IBAN si tu n'utilises pas de référence QRR)
   name: "Brimot Nettoyage",         // ou "Didier Gysling"
   street: "Impasse des Griottes",
   building: "3",
