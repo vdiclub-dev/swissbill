@@ -509,36 +509,3 @@ row.querySelector(".total").textContent =
 })
 
 }
-function addInvoiceRow(){
-
-const tbody = document.querySelector("#invoiceItems tbody")
-
-if(!tbody) return
-
-let row = document.createElement("tr")
-
-row.innerHTML = `
-<td><input class="prod"></td>
-
-<td><input class="qty" type="number" value="1"></td>
-
-<td>
-<select class="unit">
-<option>h</option>
-<option>m2</option>
-<option>m3</option>
-<option>kg</option>
-<option>pièce</option>
-<option>forfait</option>
-<option>km</option>
-</select>
-</td>
-
-<td><input class="price" type="number"></td>
-
-<td class="total">0</td>
-`
-
-tbody.appendChild(row)
-
-}
