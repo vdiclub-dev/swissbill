@@ -124,3 +124,32 @@ if(!client){
 alert("Choisir un client")
 return
 }
+async function loadClientSelect(){
+
+const {data,error} = await window.supabaseClient
+.from("clients")
+.select("id,company,last_name")
+
+if(error){
+console.log(error)
+return
+}
+
+const select=document.getElementById("clientSelect")
+select.innerHTML=""
+
+data.forEach(c=>{
+
+const opt=document.createElement("option")
+
+opt.value=c.id
+opt.textContent=c.company || c.last_name
+
+select.appendChild(opt)
+
+})
+
+}
+loadClients()
+loadClientSelect()
+loadDashboard()
