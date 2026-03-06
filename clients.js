@@ -49,3 +49,12 @@ select.appendChild(option)
 })
 
 }
+document.addEventListener("DOMContentLoaded", () => {
+
+const btn = document.getElementById("btnAddClient")
+
+if(btn){
+btn.addEventListener("click", addClient)
+}
+
+})
