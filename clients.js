@@ -1,12 +1,23 @@
 async function addClient(){
 
-const company = document.getElementById("c_company").value
-const last_name = document.getElementById("c_lastname").value
-const email = document.getElementById("c_email").value
+const companyInput = document.getElementById("c_company")
+const nameInput = document.getElementById("c_lastname")
+const emailInput = document.getElementById("c_email")
+
+if(!companyInput || !nameInput || !emailInput){
+alert("Formulaire client introuvable")
+return
+}
+
+const company = companyInput.value
+const last_name = nameInput.value
+const email = emailInput.value
 
 await window.supabaseClient
 .from("clients")
 .insert([{company,last_name,email}])
+
+alert("Client ajouté")
 
 }
 async function loadClients(){
