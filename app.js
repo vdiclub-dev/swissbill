@@ -1,4 +1,4 @@
-async function loadClients(){
+async function loadClientSelect(){
 
 const {data,error} = await window.db
 .from("clients")
@@ -9,18 +9,18 @@ console.log(error)
 return
 }
 
-const table=document.getElementById("clientsTable")
-table.innerHTML=""
+const select=document.getElementById("clientSelect")
+
+select.innerHTML=""
 
 data.forEach(c=>{
 
-table.innerHTML += `
-<tr>
-<td>${c.company||""}</td>
-<td>${c.last_name||""}</td>
-<td>${c.email||""}</td>
-</tr>
-`
+let option=document.createElement("option")
+
+option.value=c.id
+option.textContent=c.company || c.last_name
+
+select.appendChild(option)
 
 })
 
