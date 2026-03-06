@@ -101,3 +101,38 @@ loadProductSelect()
 loadInvoices()
 
 })
+function generateQR(amount){
+
+const payload = `
+SPC
+0200
+1
+CH773000520427805601Y
+S
+SwissBill
+Rue Exemple
+1
+1000
+Lausanne
+CH
+
+
+
+${amount}
+CHF
+
+
+
+Facture SwissBill
+EPD
+`
+
+QRCode.toCanvas(
+document.getElementById("qrCanvas"),
+payload,
+function(error){
+if(error) console.error(error)
+console.log("QR généré")
+})
+
+}
