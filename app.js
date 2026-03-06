@@ -77,13 +77,17 @@ select.appendChild(option)
 async function createInvoice(){
 
 const client=document.getElementById("clientSelect").value
-const amount=document.getElementById("amount").value
+const amount=parseFloat(document.getElementById("amount").value)
+
+const tva=amount*0.081
+const total=amount+tva
 
 const {error}=await window.db
 .from("invoices")
 .insert([{
 client_id:client,
-total:amount
+total:total,
+tva:tva
 }])
 
 if(error){
