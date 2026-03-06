@@ -136,3 +136,33 @@ console.log("QR généré")
 })
 
 }
+function generatePDF(amount){
+
+const { jsPDF } = window.jspdf
+
+const doc = new jsPDF()
+
+doc.setFontSize(18)
+doc.text("SwissBill",20,20)
+
+doc.setFontSize(12)
+
+doc.text("Facture",20,40)
+doc.text("Montant : " + amount + " CHF",20,50)
+doc.text("TVA 8.1%",20,60)
+
+doc.text("QR facture ci-dessous",20,80)
+
+const canvas = document.getElementById("qrCanvas")
+
+if(canvas){
+
+const img = canvas.toDataURL("image/png")
+
+doc.addImage(img,"PNG",20,90,60,60)
+
+}
+
+doc.save("facture.pdf")
+
+}
