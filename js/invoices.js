@@ -54,14 +54,40 @@ const {data:prod} = await db
 
 const total = prod.price * quantity
 
+
+// récupérer la dernière facture
+
+const {data:last} = await db
+.from("invoices")
+.select("invoice_number")
+.order("id",{ascending:false})
+.limit(1)
+
+let number = 1
+
+if(last.length > 0){
+
+const lastNumber = last[0].invoice_number.split("-")[1]
+
+number = parseInt(lastNumber) + 1
+
+}
+
+const year = new Date().getFullYear()
+
+const invoiceNumber = year + "-" + String(number).padStart(4,"0")
+
+
 await db
 .from("invoices")
 .insert([{
 client_id:client,
 product_id:product,
 quantity:quantity,
-total:total
+total:total,
+invoice_number:invoiceNumber
 }])
+
 
 loadInvoices()
 
