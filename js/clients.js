@@ -1,11 +1,12 @@
 async function loadClients(){
 
-const {data,error} = await db
+const { data, error } = await db
 .from("clients")
 .select("*")
+.order("id",{ascending:false})
 
 if(error){
-console.log(error)
+console.log("Erreur clients:",error)
 return
 }
 
@@ -13,7 +14,7 @@ const tbody = document.getElementById("clientsTable")
 
 if(!tbody) return
 
-tbody.innerHTML = ""
+tbody.innerHTML=""
 
 data.forEach(c=>{
 
