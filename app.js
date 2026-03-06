@@ -73,8 +73,7 @@ select.appendChild(option)
 })
 
 }
-loadClients()
-loadClientSelect()
+
 async function createInvoice(){
 
 const client=document.getElementById("clientSelect").value
@@ -96,3 +95,5 @@ return
 alert("Facture créée")
 
 }
+loadClients()
+loadClientSelect()
