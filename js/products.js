@@ -35,14 +35,10 @@ async function addProduct(){
 const name = document.getElementById("productName").value
 const price = document.getElementById("productPrice").value
 
-const { error } = await db
+await db
 .from("products")
 .insert([{name,price}])
-
-if(error){
-console.log("Erreur insertion:",error)
-return
-}
+.select()
 
 document.getElementById("productName").value=""
 document.getElementById("productPrice").value=""
@@ -50,10 +46,3 @@ document.getElementById("productPrice").value=""
 loadProducts()
 
 }
-
-
-document.addEventListener("DOMContentLoaded",()=>{
-
-loadProducts()
-
-})
