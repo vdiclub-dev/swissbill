@@ -101,6 +101,8 @@ return
 alert("Facture créée")
 
 }
+document.addEventListener("DOMContentLoaded",()=>{
+
 loadClients()
 loadClientSelect()
 loadDashboard()
