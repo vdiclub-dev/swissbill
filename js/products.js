@@ -1,8 +1,13 @@
 async function loadProducts(){
 
-const res = await db
+const { data, error } = await db
 .from("products")
 .select("*")
+
+if(error){
+console.log("Erreur:",error)
+return
+}
 
 const tbody = document.getElementById("productsTable")
 
@@ -10,7 +15,7 @@ if(!tbody) return
 
 tbody.innerHTML=""
 
-res.data.forEach(p=>{
+data.forEach(p=>{
 
 tbody.innerHTML += `
 <tr>
@@ -23,6 +28,34 @@ tbody.innerHTML += `
 
 }
 
+
+async function addProduct(){
+
+const name = document.getElementById("productName").value
+const price = document.getElementById("productPrice").value
+
+const { error } = await db
+.from("products")
+.insert([{name:name,price:price}])
+
+if(error){
+console.log(error)
+return
+}
+
+document.getElementById("productName").value=""
+document.getElementById("productPrice").value=""
+
+loadProducts()
+
+}
+
+
+document.addEventListener("DOMContentLoaded",()=>{
+
+loadProducts()
+
+})
 
 async function addProduct(){
 
