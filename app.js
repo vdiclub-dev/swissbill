@@ -2,23 +2,27 @@ async function loadClientSelect(){
 
 const {data,error} = await window.db
 .from("clients")
-.select("*")
+.select("id,company,last_name")
 
 if(error){
-console.log(error)
+console.log("loadClientSelect error:", error)
 return
 }
 
-const select=document.getElementById("clientSelect")
+const select = document.getElementById("clientSelect")
 
-select.innerHTML=""
+if(!select){
+console.log("clientSelect introuvable")
+return
+}
+
+select.innerHTML = ""
 
 data.forEach(c=>{
 
-let option=document.createElement("option")
-
-option.value=c.id
-option.textContent=c.company || c.last_name
+const option = document.createElement("option")
+option.value = c.id
+option.textContent = c.company || c.last_name || c.id
 
 select.appendChild(option)
 
