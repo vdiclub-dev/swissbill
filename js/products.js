@@ -1,27 +1,21 @@
 async function loadProducts(){
 
-const { data, error } = await db
+const res = await db
 .from("products")
 .select("*")
-.order("id",{ascending:false})
-
-if(error){
-console.log("Erreur:",error)
-return
-}
 
 const tbody = document.getElementById("productsTable")
 
 if(!tbody) return
 
-tbody.innerHTML = ""
+tbody.innerHTML=""
 
-data.forEach(p=>{
+res.data.forEach(p=>{
 
 tbody.innerHTML += `
 <tr>
 <td>${p.name}</td>
-<td>${p.price} CHF</td>
+<td>${p.price}</td>
 </tr>
 `
 
@@ -35,14 +29,19 @@ async function addProduct(){
 const name = document.getElementById("productName").value
 const price = document.getElementById("productPrice").value
 
-await db
+const res = await db
 .from("products")
-.insert([{name,price}])
-.select()
+.insert([{name:name,price:price}])
 
-document.getElementById("productName").value=""
-document.getElementById("productPrice").value=""
+console.log(res)
 
 loadProducts()
 
 }
+
+
+document.addEventListener("DOMContentLoaded",()=>{
+
+loadProducts()
+
+})
