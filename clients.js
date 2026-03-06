@@ -1,30 +1,16 @@
 async function addClient(){
 
-const company=document.getElementById("company").value
-const email=document.getElementById("email").value
-const phone=document.getElementById("phone").value
+const company = document.getElementById("c_company").value
+const last_name = document.getElementById("c_lastname").value
+const email = document.getElementById("c_email").value
 
-const { error } = await supabaseClient
+await window.supabaseClient
 .from("clients")
-.insert([{
-company:company,
-email:email,
-phone:phone
-}])
-
-if(error){
-alert(error.message)
-return
-}
-
-alert("Client enregistré")
-
-closeClientModal()
+.insert([{company,last_name,email}])
 
 loadClients()
 
 }
-
 async function loadClients(){
 
 const { data, error } = await supabaseClient
