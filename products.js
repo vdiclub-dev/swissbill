@@ -35,3 +35,13 @@ return
 window.products=data
 
 }
+async function addProduct(){
+
+const name = document.getElementById("p_name").value
+const price = document.getElementById("p_price").value
+
+await window.supabaseClient
+.from("products")
+.insert([{name,price}])
+
+}
