@@ -46,4 +46,32 @@ loadClients()
 
 }
 
+async function loadClientSelect(){
 
+const {data,error} = await window.db
+.from("clients")
+.select("*")
+
+if(error){
+console.log(error)
+return
+}
+
+const select=document.getElementById("clientSelect")
+
+select.innerHTML=""
+
+data.forEach(c=>{
+
+let option=document.createElement("option")
+
+option.value=c.id
+option.textContent=c.company || c.last_name
+
+select.appendChild(option)
+
+})
+
+}
+loadClients()
+loadClientSelect()
