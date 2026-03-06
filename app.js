@@ -120,3 +120,7 @@ document.getElementById("kpi-clients").textContent=cli.data.length
 
 loadClients()
 loadDashboard()
+if(!client){
+alert("Choisir un client")
+return
+}
