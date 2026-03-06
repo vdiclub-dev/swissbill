@@ -75,3 +75,24 @@ select.appendChild(option)
 }
 loadClients()
 loadClientSelect()
+async function createInvoice(){
+
+const client=document.getElementById("clientSelect").value
+const amount=document.getElementById("amount").value
+
+const {error}=await window.db
+.from("invoices")
+.insert([{
+client_id:client,
+total:amount
+}])
+
+if(error){
+console.log(error)
+alert("Erreur facture")
+return
+}
+
+alert("Facture créée")
+
+}
