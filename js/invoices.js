@@ -114,7 +114,7 @@ tbody.innerHTML += `
 <td>${i.total}</td>
 </tr>
 `
-
+<td>${i.invoice_number}</td>
 })
 
 }
