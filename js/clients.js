@@ -29,3 +29,47 @@ tbody.innerHTML += `
 })
 
 }
+async function loadProducts(){
+
+const { data, error } = await db
+.from("products")
+.select("*")
+.order("id",{ascending:false})
+
+if(error){
+console.log(error)
+return
+}
+
+const tbody = document.getElementById("productsTable")
+
+tbody.innerHTML=""
+
+data.forEach(p=>{
+
+tbody.innerHTML += `
+<tr>
+<td>${p.name}</td>
+<td>${p.price} CHF</td>
+</tr>
+`
+
+})
+
+}
+
+async function addProduct(){
+
+const name = document.getElementById("productName").value
+const price = document.getElementById("productPrice").value
+
+await db
+.from("products")
+.insert([{name,price}])
+
+document.getElementById("productName").value=""
+document.getElementById("productPrice").value=""
+
+loadProducts()
+
+}
