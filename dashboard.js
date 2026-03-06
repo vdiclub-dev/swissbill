@@ -1,20 +1,24 @@
-<!DOCTYPE html>
-<html>
+async function loadDashboard(){
 
-<head>
+  const invRes = await window.supabaseClient
+    .from("invoices")
+    .select("total");
 
-<meta charset="UTF-8">
-<title>SwissBill</title>
+  const cliRes = await window.supabaseClient
+    .from("clients")
+    .select("id");
 
-<link rel="stylesheet" href="css/style.css">
-<link rel="icon" href="data:,">
+  const inv = invRes.data || [];
+  const cli = cliRes.data || [];
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  const ca = inv.reduce((s,i)=> s + Number(i.total || 0),0);
 
-<script src="js/supabase.js"></script>
-<script src="js/dashboard.js"></script>
-<script src="js/clients.js"></script>
-<script src="js/products.js"></script>
-<script src="js/invoices.js"></script>
+  document.getElementById("kpi-ca").textContent =
+    ca.toFixed(2) + " CHF";
 
-</head>
+  document.getElementById("kpi-invoices").textContent =
+    inv.length;
+
+  document.getElementById("kpi-clients").textContent =
+    cli.length;
+}
