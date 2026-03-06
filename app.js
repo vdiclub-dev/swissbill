@@ -105,3 +105,4 @@ alert("Facture créée")
 }
 loadClients()
 loadClientSelect()
+loadDashboard()
