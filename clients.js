@@ -8,8 +8,6 @@ await window.supabaseClient
 .from("clients")
 .insert([{company,last_name,email}])
 
-loadClients()
-
 }
 async function loadClients(){
 
