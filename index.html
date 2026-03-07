@@ -1,435 +1,1588 @@
 <!DOCTYPE html>
 <html lang="fr">
-
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwissBill</title>
+  <link rel="icon" href="data:," />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<meta charset="UTF-8">
-<title>SwissBill</title>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#111827;
+      --card:#ffffff;
+      --soft:#f8fafc;
+      --line:#e5e7eb;
+      --text:#0f172a;
+      --muted:#64748b;
+      --primary:#2563eb;
+      --primary-dark:#1d4ed8;
+      --success:#16a34a;
+      --danger:#dc2626;
+      --warning:#d97706;
+      --shadow:0 8px 24px rgba(15,23,42,.08);
+      --radius:16px;
+    }
 
-<link rel="stylesheet" href="css/style.css">
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter,Arial,sans-serif;
+      background:#eef2f7;
+      color:var(--text);
+    }
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    .app{
+      display:grid;
+      grid-template-columns:260px 1fr;
+      min-height:100vh;
+    }
 
-<script>
+    .sidebar{
+      background:linear-gradient(180deg,#0f172a,#1e293b);
+      color:#fff;
+      padding:22px 16px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
 
-const SUPABASE_URL = "https://iubbsnntcreneakbdkmv.supabase.co"
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y"
+    .sidebar h2{
+      margin:0 0 10px;
+      font-size:26px;
+      font-weight:800;
+    }
 
-window.db = supabase.createClient(SUPABASE_URL,SUPABASE_KEY)
+    .sidebar button{
+      background:rgba(255,255,255,.08);
+      color:#fff;
+      border:none;
+      padding:12px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+      text-align:left;
+      transition:.2s;
+    }
 
-</script>
+    .sidebar button:hover,
+    .sidebar button.active{
+      background:#2563eb;
+    }
 
+    .main{
+      padding:22px;
+      overflow:auto;
+    }
+
+    .page{display:none}
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:18px;
+      flex-wrap:wrap;
+    }
+
+    .topbar h1{
+      margin:0;
+      font-size:30px;
+    }
+
+    .sub{
+      color:var(--muted);
+      font-size:14px;
+    }
+
+    .cards{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:16px;
+      margin-bottom:18px;
+    }
+
+    .card{
+      background:var(--card);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:18px;
+    }
+
+    .card h3{
+      margin:0 0 10px;
+      font-size:14px;
+      color:var(--muted);
+    }
+
+    .card p{
+      margin:0;
+      font-size:28px;
+      font-weight:800;
+    }
+
+    .grid{
+      display:grid;
+      gap:16px;
+    }
+
+    .grid-2{grid-template-columns:1fr 1fr}
+    .grid-3{grid-template-columns:repeat(3,1fr)}
+    .grid-4{grid-template-columns:repeat(4,1fr)}
+
+    .panel{
+      background:#fff;
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:18px;
+      margin-bottom:18px;
+    }
+
+    .panel h2,.panel h3{
+      margin:0 0 14px;
+    }
+
+    .form-grid{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:12px;
+      align-items:end;
+    }
+
+    label{
+      display:block;
+      font-size:13px;
+      font-weight:700;
+      margin-bottom:6px;
+      color:#334155;
+    }
+
+    input,select,button,textarea{
+      font:inherit;
+    }
+
+    input,select,textarea{
+      width:100%;
+      padding:11px 12px;
+      border:1px solid #cbd5e1;
+      border-radius:12px;
+      background:#fff;
+      color:#111827;
+    }
+
+    input:focus,select:focus,textarea:focus{
+      outline:none;
+      border-color:#2563eb;
+      box-shadow:0 0 0 3px rgba(37,99,235,.12);
+    }
+
+    button.btn{
+      border:none;
+      background:var(--primary);
+      color:#fff;
+      padding:12px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    button.btn:hover{
+      background:var(--primary-dark);
+    }
+
+    button.btn-soft{
+      border:none;
+      background:#e0edff;
+      color:#1d4ed8;
+      padding:11px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    button.btn-danger{
+      border:none;
+      background:#fee2e2;
+      color:#991b1b;
+      padding:8px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      background:#fff;
+      border-radius:12px;
+      overflow:hidden;
+    }
+
+    th,td{
+      padding:12px 10px;
+      border-bottom:1px solid #e5e7eb;
+      text-align:left;
+      font-size:14px;
+      vertical-align:top;
+    }
+
+    th{
+      background:#f8fafc;
+      color:#475569;
+      font-weight:700;
+    }
+
+    .table-wrap{
+      overflow:auto;
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      border-radius:999px;
+      padding:4px 10px;
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .p-ex{background:#fee2e2;color:#991b1b}
+    .p-j0{background:#ffedd5;color:#9a3412}
+    .p-j1{background:#dbeafe;color:#1d4ed8}
+    .p-j2{background:#dcfce7;color:#166534}
+    .p-j5{background:#e5e7eb;color:#374151}
+
+    .vehicle-box{
+      border:1px solid #dbe2ea;
+      border-radius:14px;
+      padding:14px;
+      background:#fbfdff;
+    }
+
+    .vehicle-title{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      margin-bottom:10px;
+      flex-wrap:wrap;
+    }
+
+    .muted{color:var(--muted)}
+    .ok{color:var(--success);font-weight:800}
+    .warn{color:var(--warning);font-weight:800}
+    .bad{color:var(--danger);font-weight:800}
+
+    .autocomplete{
+      position:relative;
+    }
+
+    .results{
+      position:absolute;
+      left:0;
+      right:0;
+      top:100%;
+      background:#fff;
+      border:1px solid #cbd5e1;
+      border-radius:12px;
+      box-shadow:var(--shadow);
+      max-height:240px;
+      overflow:auto;
+      z-index:50;
+      display:none;
+      margin-top:6px;
+    }
+
+    .results .item{
+      padding:10px 12px;
+      cursor:pointer;
+      border-bottom:1px solid #eef2f7;
+    }
+
+    .results .item:hover{
+      background:#eff6ff;
+    }
+
+    .small{
+      font-size:12px;
+    }
+
+    .right{
+      text-align:right;
+    }
+
+    .inline{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .checkbox-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding-top:30px;
+    }
+
+    @media (max-width:1200px){
+      .cards,.grid-4,.grid-3,.grid-2,.form-grid{
+        grid-template-columns:1fr 1fr;
+      }
+    }
+
+    @media (max-width:900px){
+      .app{grid-template-columns:1fr}
+      .cards,.grid-4,.grid-3,.grid-2,.form-grid{
+        grid-template-columns:1fr;
+      }
+    }
+  </style>
+
+  <script>
+    const SUPABASE_URL = "https://iubbsnntcreneakbdkmv.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y";
+    window.db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  </script>
 </head>
-
 <body>
-
-<div class="app">
-
-<div class="sidebar">
-
-<h2>SwissBill</h2>
-
-<button onclick="showPage('dashboard')">Dashboard</button>
-<button onclick="showPage('clients')">Clients</button>
-<button onclick="showPage('products')">Produits</button>
-<button onclick="showPage('tournees')">🚚 Tournées</button>
-
-</div>
-
-<div class="main">
-
-<!-- DASHBOARD -->
-
-<div id="dashboard" class="page">
-
-<h1>Dashboard</h1>
-
-<div class="cards">
-
-<div class="card">
-<h3>Clients</h3>
-<p id="clientCount">0</p>
-</div>
-
-<div class="card">
-<h3>Produits</h3>
-<p id="productCount">0</p>
-</div>
-
-<div class="card">
-<h3>Tournées</h3>
-<p id="tourneeCount">0</p>
-</div>
-
-</div>
-
-</div>
-
-<!-- CLIENTS -->
-
-<div id="clients" class="page">
-
-<h1>Clients</h1>
-
-<input id="company" placeholder="Entreprise">
-<input id="lastname" placeholder="Nom">
-<input id="email" placeholder="Email">
-
-<button onclick="addClient()">Ajouter</button>
-
-<table>
-
-<thead>
-
-<tr>
-<th>Entreprise</th>
-<th>Nom</th>
-<th>Email</th>
-</tr>
-
-</thead>
-
-<tbody id="clientsTable"></tbody>
-
-</table>
-
-</div>
-
-<!-- PRODUITS -->
-
-<div id="products" class="page">
-
-<h1>Produits</h1>
-
-<input id="productName" placeholder="Produit">
-<input id="productPrice" placeholder="Prix CHF">
-
-<button onclick="addProduct()">Ajouter</button>
-
-<table>
-
-<thead>
-
-<tr>
-<th>Produit</th>
-<th>Prix</th>
-</tr>
-
-</thead>
-
-<tbody id="productsTable"></tbody>
-
-</table>
-
-</div>
-
-<!-- TOURNEES -->
-
-<div id="tournees" class="page">
-
-<h1>Planification tournée</h1>
-
-<h3>Ajouter un stop</h3>
-
-<div class="autocomplete">
-
-<input id="clientSearch" placeholder="Rechercher un client...">
-
-<div id="clientResults" class="results"></div>
-
-</div>
-
-<input id="stop-ville" placeholder="Ville">
-
-<input id="stop-adresse" placeholder="Adresse">
-
-<input id="stop-ville" placeholder="Ville">
-
-<input id="stop-adresse" placeholder="Adresse">
-
-<input id="stop-colis" type="number" placeholder="Colis">
-
-<input id="stop-poids" type="number" placeholder="Poids kg">
-
-<select id="stop-delai">
-
-<option value="EX">6h</option>
-<option value="J0">12h</option>
-<option value="J1">24h</option>
-<option value="J2">48h</option>
-
-</select>
-
-<label>
-<input type="checkbox" id="stop-nuit">
-Livraison nuit
-</label>
-
-<button onclick="addStop()">Ajouter</button>
-
-<hr>
-
-<h3>Stops de la tournée</h3>
-
-<table>
-
-<thead>
-
-<tr>
-<th>Client</th>
-<th>Ville</th>
-<th>Adresse</th>
-<th>Colis</th>
-<th>Poids</th>
-<th>Délai</th>
-<th>Nuit</th>
-</tr>
-
-</thead>
-
-<tbody id="tourneesTable"></tbody>
-
-</table>
-
-<hr>
-
-<h3>Analyse logistique</h3>
-
-<table>
-
-<tr>
-<td>Stops</td>
-<td id="analyseStops">0</td>
-</tr>
-
-<tr>
-<td>Colis</td>
-<td id="analyseColis">0</td>
-</tr>
-
-<tr>
-<td>Kilomètres estimés</td>
-<td id="analyseKm">0 km</td>
-</tr>
-
-<tr>
-<td>Temps tournée</td>
-<td id="analyseTemps">0 h</td>
-</tr>
-
-<tr>
-<td>Véhicules nécessaires</td>
-<td id="analyseVehicules">0</td>
-</tr>
-
-<tr>
-<td>Chauffeurs nécessaires</td>
-<td id="analyseChauffeurs">0</td>
-</tr>
-
-<tr>
-<td>CA tournée</td>
-<td id="analyseCA">0 CHF</td>
-</tr>
-
-<tr>
-<td>Marge tournée</td>
-<td id="analyseMarge">0 CHF</td>
-</tr>
-
-</table>
-
-<hr>
-
-<h3>Paramètres économiques</h3>
-
-<label>Prix moyen colis</label>
-<input id="prixColis" value="7">
-
-<label>Coût km</label>
-<input id="coutKm" value="0.65">
-
-<label>Frais fixe / véhicule / jour</label>
-<input id="fraisFixe" value="350">
-
-</div>
-
-</div>
-
-</div>
-
-<script
-  function selectClient(client){
-
-document.getElementById("clientSearch").value = client.company
-
-document.getElementById("stop-adresse").value = client.address || ""
-
-document.getElementById("stop-ville").value = client.city || ""
-
-document.getElementById("clientResults").style.display = "none"
-
-}
-  function selectClient(client){
-
-document.getElementById("clientSearch").value = client.company
-
-document.getElementById("stop-adresse").value = client.address || ""
-
-document.getElementById("stop-ville").value = client.city || ""
-
-document.getElementById("clientResults").style.display = "none"
-
-}
-  async function loadClients(){
-
-const select = document.getElementById("stop-client")
-
-const { data, error } = await db
-.from("clients")
-.select("*")
-
-if(error){
-
-console.log(error)
-
-select.innerHTML = "<option>Erreur chargement</option>"
-
-return
-
-}
-
-select.innerHTML = "<option>Choisir un client</option>"
-
-data.forEach((c,i)=>{
-
-select.innerHTML += `
-<option value="${i}">
-${c.company} - ${c.lastname}
-</option>
-`
-
-})
-
-clientsData = data
-
-}
-
-function showPage(page){
-
-document.querySelectorAll(".page").forEach(p=>p.style.display="none")
-
-document.getElementById(page).style.display="block"
-
-}
-
-let tournees=[]
-
-function addStop(){
-
-const stop={
-
-client:document.getElementById("stop-client").value,
-
-ville:document.getElementById("stop-ville").value,
-
-adresse:document.getElementById("stop-adresse").value,
-
-colis:parseInt(document.getElementById("stop-colis").value),
-
-poids:parseFloat(document.getElementById("stop-poids").value),
-
-delai:document.getElementById("stop-delai").value,
-
-nuit:document.getElementById("stop-nuit").checked
-
-}
-
-tournees.push(stop)
-
-renderTournees()
-
-analyseTournee()
-
-}
-
-function renderTournees(){
-
-const table=document.getElementById("tourneesTable")
-
-table.innerHTML=""
-
-tournees.forEach(s=>{
-
-table.innerHTML+=`
-<tr>
-<td>${s.client}</td>
-<td>${s.ville}</td>
-<td>${s.adresse}</td>
-<td>${s.colis}</td>
-<td>${s.poids}</td>
-<td>${s.delai}</td>
-<td>${s.nuit?"Oui":"Non"}</td>
-</tr>
-`
-
-})
-
-}
-
-function analyseTournee(){
-
-let stops=tournees.length
-
-let colis=0
-
-tournees.forEach(s=>colis+=s.colis)
-
-let km=stops*5
-
-let temps=km/60
-
-let vehicules=Math.ceil(temps/9)
-
-let chauffeurs=vehicules
-
-let prixColis=parseFloat(document.getElementById("prixColis").value)
-
-let coutKm=parseFloat(document.getElementById("coutKm").value)
-
-let fraisFixe=parseFloat(document.getElementById("fraisFixe").value)
-
-let ca=colis*prixColis
-
-let coutVariable=km*coutKm
-
-let coutTotal=coutVariable+(vehicules*fraisFixe)
-
-let marge=ca-coutTotal
-
-document.getElementById("analyseStops").innerText=stops
-
-document.getElementById("analyseColis").innerText=colis
-
-document.getElementById("analyseKm").innerText=km+" km"
-
-document.getElementById("analyseTemps").innerText=temps.toFixed(2)+" h"
-
-document.getElementById("analyseVehicules").innerText=vehicules
-
-document.getElementById("analyseChauffeurs").innerText=chauffeurs
-
-document.getElementById("analyseCA").innerText=ca+" CHF"
-
-document.getElementById("analyseMarge").innerText=marge.toFixed(2)+" CHF"
-
-}
-
-showPage("dashboard")
-  loadClients()
-
-</script>
-
+  <div class="app">
+    <aside class="sidebar">
+      <h2>SwissBill</h2>
+      <button class="active" onclick="showPage('dashboard', this)">Dashboard</button>
+      <button onclick="showPage('clients', this)">Clients</button>
+      <button onclick="showPage('products', this)">Produits</button>
+      <button onclick="showPage('tournees', this)">🚚 Tournées</button>
+    </aside>
+
+    <main class="main">
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="page">
+        <div class="topbar">
+          <div>
+            <h1>Dashboard</h1>
+            <div class="sub">Vue globale de SwissBill</div>
+          </div>
+        </div>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Clients</h3>
+            <p id="clientCount">0</p>
+          </div>
+          <div class="card">
+            <h3>Produits</h3>
+            <p id="productCount">0</p>
+          </div>
+          <div class="card">
+            <h3>Stops tournées</h3>
+            <p id="dashboardStops">0</p>
+          </div>
+          <div class="card">
+            <h3>Colis planifiés</h3>
+            <p id="dashboardParcels">0</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Revenus mensuels</h2>
+          <canvas id="revenueChart" height="90"></canvas>
+        </div>
+      </section>
+
+      <!-- CLIENTS -->
+      <section id="clients" class="page">
+        <div class="topbar">
+          <div>
+            <h1>Clients</h1>
+            <div class="sub">Base clients SwissBill</div>
+          </div>
+          <button class="btn" onclick="addClient()">Ajouter</button>
+        </div>
+
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Entreprise</label>
+              <input id="company" placeholder="Entreprise">
+            </div>
+            <div>
+              <label>Nom</label>
+              <input id="lastname" placeholder="Nom">
+            </div>
+            <div>
+              <label>Email</label>
+              <input id="email" placeholder="Email">
+            </div>
+            <div>
+              <label>Ville</label>
+              <input id="city" placeholder="Ville">
+            </div>
+            <div>
+              <label>Adresse</label>
+              <input id="address" placeholder="Adresse">
+            </div>
+            <div>
+              <label>Téléphone</label>
+              <input id="phone" placeholder="Téléphone">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Entreprise</th>
+                  <th>Nom</th>
+                  <th>Email</th>
+                  <th>Ville</th>
+                  <th>Adresse</th>
+                  <th>Téléphone</th>
+                </tr>
+              </thead>
+              <tbody id="clientsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRODUITS -->
+      <section id="products" class="page">
+        <div class="topbar">
+          <div>
+            <h1>Produits</h1>
+            <div class="sub">Catalogue SwissBill</div>
+          </div>
+          <button class="btn" onclick="addProduct()">Ajouter</button>
+        </div>
+
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Produit</label>
+              <input id="productName" placeholder="Produit">
+            </div>
+            <div>
+              <label>Prix CHF</label>
+              <input id="productPrice" type="number" step="0.01" placeholder="Prix CHF">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Produit</th>
+                  <th>Prix</th>
+                </tr>
+              </thead>
+              <tbody id="productsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TOURNEES -->
+      <section id="tournees" class="page">
+        <div class="topbar">
+          <div>
+            <h1>Planification des tournées</h1>
+            <div class="sub">Répartition automatique, temps chauffeur, coût km, marge</div>
+          </div>
+          <div class="inline">
+            <button class="btn-soft" onclick="optimiseTournees()">Optimiser</button>
+            <button class="btn-soft" onclick="clearStops()">Vider les stops</button>
+          </div>
+        </div>
+
+        <!-- FORMULAIRE STOP -->
+        <div class="panel">
+          <h2>Ajouter un stop</h2>
+          <div class="form-grid">
+            <div class="autocomplete">
+              <label>Recherche client</label>
+              <input id="clientSearch" placeholder="Rechercher un client..." autocomplete="off">
+              <div id="clientResults" class="results"></div>
+            </div>
+
+            <div>
+              <label>Client sélectionné</label>
+              <input id="stop-client" placeholder="Client" readonly>
+            </div>
+
+            <div>
+              <label>Ville</label>
+              <input id="stop-ville" placeholder="Ville">
+            </div>
+
+            <div>
+              <label>Adresse</label>
+              <input id="stop-adresse" placeholder="Adresse">
+            </div>
+
+            <div>
+              <label>Nombre colis</label>
+              <input id="stop-colis" type="number" min="1" value="1">
+            </div>
+
+            <div>
+              <label>Poids total kg</label>
+              <input id="stop-poids" type="number" min="0" step="0.1" value="1">
+            </div>
+
+            <div>
+              <label>Délai</label>
+              <select id="stop-delai">
+                <option value="EX">Urgent 6h</option>
+                <option value="J0">12h</option>
+                <option value="J1" selected>24h</option>
+                <option value="J2">48h</option>
+                <option value="J5">Semaine</option>
+              </select>
+            </div>
+
+            <div class="checkbox-row">
+              <input id="stop-nuit" type="checkbox">
+              <label for="stop-nuit" style="margin:0">Autorisation nuit</label>
+            </div>
+
+            <div>
+              <label>Zone</label>
+              <input id="stop-zone" placeholder="Auto" readonly>
+            </div>
+
+            <div>
+              <label>Temps moyen stop (min)</label>
+              <input id="stop-minutes" type="number" min="1" value="4">
+            </div>
+
+            <div>
+              <label>Priorité</label>
+              <select id="stop-priority">
+                <option value="1">Haute</option>
+                <option value="2" selected>Normale</option>
+                <option value="3">Basse</option>
+              </select>
+            </div>
+
+            <div style="align-self:end">
+              <button class="btn" onclick="addStop()">Ajouter stop</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PARAMETRES -->
+        <div class="panel">
+          <h2>Paramètres logistiques et économiques</h2>
+          <div class="form-grid">
+            <div>
+              <label>Dépôt de départ</label>
+              <input id="depotCity" value="Cernier">
+            </div>
+
+            <div>
+              <label>Max véhicules disponibles</label>
+              <input id="maxVehicles" type="number" min="1" max="10" value="5">
+            </div>
+
+            <div>
+              <label>Temps max chauffeur / jour (h)</label>
+              <input id="maxDriverHours" type="number" min="1" step="0.5" value="12">
+            </div>
+
+            <div>
+              <label>Vitesse moyenne (km/h)</label>
+              <input id="avgSpeed" type="number" min="10" value="55">
+            </div>
+
+            <div>
+              <label>Coût km (CHF)</label>
+              <input id="costPerKm" type="number" step="0.01" value="0.65">
+            </div>
+
+            <div>
+              <label>Frais fixes / véhicule / jour (CHF)</label>
+              <input id="fixedPerVehiclePerDay" type="number" step="0.01" value="350">
+            </div>
+
+            <div>
+              <label>Prix moyen / colis (CHF)</label>
+              <input id="pricePerParcel" type="number" step="0.01" value="7">
+            </div>
+
+            <div>
+              <label>Chargement dépôt (min)</label>
+              <input id="loadingMinutes" type="number" min="0" value="20">
+            </div>
+
+            <div>
+              <label>Max stops / véhicule</label>
+              <input id="maxStopsPerVehicle" type="number" min="1" value="45">
+            </div>
+
+            <div>
+              <label>Max colis / véhicule</label>
+              <input id="maxParcelsPerVehicle" type="number" min="1" value="120">
+            </div>
+
+            <div>
+              <label>Max poids / véhicule (kg)</label>
+              <input id="maxWeightPerVehicle" type="number" min="1" value="1200">
+            </div>
+
+            <div>
+              <label>Filtre véhicule</label>
+              <select id="vehicleFilter" onchange="renderAnalysis(currentPlan)">
+                <option value="all">Tous</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI TOURNEES -->
+        <div class="cards">
+          <div class="card">
+            <h3>Total stops</h3>
+            <p id="kpiStops">0</p>
+          </div>
+          <div class="card">
+            <h3>Total colis</h3>
+            <p id="kpiParcels">0</p>
+          </div>
+          <div class="card">
+            <h3>Km estimés</h3>
+            <p id="kpiKm">0</p>
+          </div>
+          <div class="card">
+            <h3>Temps total</h3>
+            <p id="kpiHours">0</p>
+          </div>
+        </div>
+
+        <!-- TABLE STOPS -->
+        <div class="panel">
+          <h2>Stops à planifier</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Client</th>
+                  <th>Ville</th>
+                  <th>Adresse</th>
+                  <th>Zone</th>
+                  <th>Colis</th>
+                  <th>Poids</th>
+                  <th>Délai</th>
+                  <th>Nuit</th>
+                  <th>Min/stop</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="stopsTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ANALYSE -->
+        <div class="grid grid-2">
+          <div class="panel">
+            <h2>Analyse rentabilité</h2>
+            <div class="table-wrap">
+              <table>
+                <tbody>
+                  <tr><th>Véhicules nécessaires</th><td id="analysisVehicles">0</td></tr>
+                  <tr><th>Chauffeurs nécessaires</th><td id="analysisDrivers">0</td></tr>
+                  <tr><th>Stops</th><td id="analysisStops">0</td></tr>
+                  <tr><th>Colis</th><td id="analysisParcels">0</td></tr>
+                  <tr><th>Poids total</th><td id="analysisWeight">0 kg</td></tr>
+                  <tr><th>Kilomètres estimés</th><td id="analysisKm">0 km</td></tr>
+                  <tr><th>Temps conduite</th><td id="analysisDriveHours">0 h</td></tr>
+                  <tr><th>Temps stops</th><td id="analysisStopHours">0 h</td></tr>
+                  <tr><th>Temps pauses</th><td id="analysisPauseHours">0 h</td></tr>
+                  <tr><th>Temps total</th><td id="analysisTotalHours">0 h</td></tr>
+                  <tr><th>CA jour</th><td id="analysisRevenueDay">0 CHF</td></tr>
+                  <tr><th>Coût variable jour</th><td id="analysisVariableDay">0 CHF</td></tr>
+                  <tr><th>Coût fixe jour</th><td id="analysisFixedDay">0 CHF</td></tr>
+                  <tr><th>Coût total jour</th><td id="analysisTotalCostDay">0 CHF</td></tr>
+                  <tr><th>Marge jour</th><td id="analysisMarginDay">0 CHF</td></tr>
+                  <tr><th>Marge mois</th><td id="analysisMarginMonth">0 CHF</td></tr>
+                  <tr><th>Marge année</th><td id="analysisMarginYear">0 CHF</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Répartition des véhicules</h2>
+            <div id="vehiclesContainer" class="grid"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // =========================
+    // DONNÉES
+    // =========================
+    let clientsData = [];
+    let products = [];
+    let stops = [];
+    let currentPlan = null;
+    let selectedClient = null;
+    let revenueChart = null;
+
+    const swissCityCoords = {
+      cernier:{lat:47.060,lng:6.900,zone:"NE"},
+      neuchatel:{lat:46.991,lng:6.931,zone:"NE"},
+      yverdon:{lat:46.778,lng:6.641,zone:"VD"},
+      lausanne:{lat:46.519,lng:6.633,zone:"VD"},
+      vevey:{lat:46.462,lng:6.843,zone:"VD"},
+      montreux:{lat:46.433,lng:6.911,zone:"VD"},
+      aigle:{lat:46.318,lng:6.969,zone:"VD"},
+      nyon:{lat:46.383,lng:6.239,zone:"VD"},
+      geneve:{lat:46.204,lng:6.143,zone:"GE"},
+      meyrin:{lat:46.231,lng:6.081,zone:"GE"},
+      fribourg:{lat:46.806,lng:7.161,zone:"FR"},
+      bulle:{lat:46.617,lng:7.056,zone:"FR"},
+      berne:{lat:46.948,lng:7.447,zone:"BE"},
+      bienne:{lat:47.137,lng:7.246,zone:"BE"},
+      biel:{lat:47.137,lng:7.246,zone:"BE"},
+      delémont:{lat:47.364,lng:7.344,zone:"JU"},
+      delemont:{lat:47.364,lng:7.344,zone:"JU"},
+      sion:{lat:46.233,lng:7.360,zone:"VS"},
+      sierre:{lat:46.292,lng:7.535,zone:"VS"},
+      martigny:{lat:46.103,lng:7.072,zone:"VS"},
+      verbier:{lat:46.096,lng:7.228,zone:"VS"},
+      nendaz:{lat:46.181,lng:7.296,zone:"VS"},
+      crans-montana:{lat:46.308,lng:7.479,zone:"VS"},
+      zurich:{lat:47.376,lng:8.541,zone:"ZH"},
+      basel:{lat:47.559,lng:7.588,zone:"BS"},
+      bale:{lat:47.559,lng:7.588,zone:"BS"}
+    };
+
+    const zoneCenters = {
+      NE:{lat:47.00,lng:6.93},
+      VD:{lat:46.52,lng:6.63},
+      GE:{lat:46.20,lng:6.14},
+      FR:{lat:46.80,lng:7.16},
+      BE:{lat:46.95,lng:7.44},
+      JU:{lat:47.36,lng:7.34},
+      VS:{lat:46.23,lng:7.36},
+      ZH:{lat:47.37,lng:8.54},
+      BS:{lat:47.56,lng:7.58},
+      CH:{lat:46.80,lng:7.20}
+    };
+
+    const delayOrder = {EX:1, J0:2, J1:3, J2:4, J5:5};
+    const delayClass = {EX:"p-ex", J0:"p-j0", J1:"p-j1", J2:"p-j2", J5:"p-j5"};
+
+    // =========================
+    // UTIL
+    // =========================
+    function norm(str=""){
+      return str.toString().trim().toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function showPage(pageId, btn){
+      document.querySelectorAll(".page").forEach(p => p.style.display = "none");
+      const page = document.getElementById(pageId);
+      if(page) page.style.display = "block";
+
+      document.querySelectorAll(".sidebar button").forEach(b => b.classList.remove("active"));
+      if(btn) btn.classList.add("active");
+    }
+
+    function formatMoney(v){
+      return `${Number(v || 0).toFixed(2)} CHF`;
+    }
+
+    function formatHours(v){
+      return `${Number(v || 0).toFixed(2)} h`;
+    }
+
+    function haversineKm(a,b){
+      const R = 6371;
+      const dLat = (b.lat - a.lat) * Math.PI / 180;
+      const dLng = (b.lng - a.lng) * Math.PI / 180;
+      const lat1 = a.lat * Math.PI / 180;
+      const lat2 = b.lat * Math.PI / 180;
+      const x = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.sin(dLng/2) * Math.sin(dLng/2) * Math.cos(lat1) * Math.cos(lat2);
+      const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+      return R * c;
+    }
+
+    function inferCoordsFromCity(city, zone){
+      const key = norm(city);
+      if (swissCityCoords[key]) {
+        return {
+          lat: swissCityCoords[key].lat,
+          lng: swissCityCoords[key].lng,
+          zone: swissCityCoords[key].zone
+        };
+      }
+
+      const z = zone || "CH";
+      const center = zoneCenters[z] || zoneCenters.CH;
+      return { lat:center.lat, lng:center.lng, zone:z };
+    }
+
+    function inferZone(city){
+      const key = norm(city);
+      if (swissCityCoords[key]) return swissCityCoords[key].zone;
+      if (key.includes("lausanne") || key.includes("vevey") || key.includes("nyon") || key.includes("yverdon")) return "VD";
+      if (key.includes("geneve") || key.includes("meyrin")) return "GE";
+      if (key.includes("sion") || key.includes("martigny") || key.includes("sierre") || key.includes("verbier")) return "VS";
+      if (key.includes("fribourg") || key.includes("bulle")) return "FR";
+      if (key.includes("berne") || key.includes("bienne") || key.includes("biel")) return "BE";
+      if (key.includes("delemont") || key.includes("delémont")) return "JU";
+      if (key.includes("zurich")) return "ZH";
+      if (key.includes("neuchatel") || key.includes("neuchâtel") || key.includes("cernier")) return "NE";
+      return "CH";
+    }
+
+    function estimateRouteKm(route, depotCoords){
+      if(!route.length) return 0;
+      let km = 0;
+      let current = depotCoords;
+
+      for (const stop of route){
+        km += haversineKm(current, {lat:stop.lat, lng:stop.lng});
+        current = {lat:stop.lat, lng:stop.lng};
+      }
+
+      km += haversineKm(current, depotCoords);
+      return km * 1.18; // correction route réelle
+    }
+
+    function nearestNeighbor(depotCoords, routeStops){
+      const remaining = [...routeStops];
+      const ordered = [];
+      let current = depotCoords;
+
+      while(remaining.length){
+        let bestIndex = 0;
+        let bestDist = haversineKm(current, {lat:remaining[0].lat, lng:remaining[0].lng});
+
+        for(let i=1;i<remaining.length;i++){
+          const dist = haversineKm(current, {lat:remaining[i].lat, lng:remaining[i].lng});
+          if(dist < bestDist){
+            bestDist = dist;
+            bestIndex = i;
+          }
+        }
+
+        const next = remaining.splice(bestIndex,1)[0];
+        ordered.push(next);
+        current = {lat:next.lat, lng:next.lng};
+      }
+
+      return ordered;
+    }
+
+    function stopPriorityWeight(stop){
+      return (delayOrder[stop.delai] || 99) * 10 + Number(stop.priority || 2);
+    }
+
+    // =========================
+    // DASHBOARD
+    // =========================
+    function renderDashboard(){
+      document.getElementById("clientCount").innerText = clientsData.length;
+      document.getElementById("productCount").innerText = products.length;
+      document.getElementById("dashboardStops").innerText = stops.length;
+      document.getElementById("dashboardParcels").innerText = stops.reduce((s,x)=>s+Number(x.colis||0),0);
+
+      const ctx = document.getElementById("revenueChart");
+      if(!ctx) return;
+
+      const labels = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"];
+      const values = [1200,1800,2200,2600,2400,2900,3100,2800,3400,3600,3900,4200];
+
+      if(revenueChart) revenueChart.destroy();
+      revenueChart = new Chart(ctx, {
+        type:"line",
+        data:{
+          labels,
+          datasets:[{
+            label:"CA estimé",
+            data:values,
+            tension:.35
+          }]
+        },
+        options:{
+          responsive:true,
+          plugins:{legend:{display:false}}
+        }
+      });
+    }
+
+    // =========================
+    // CLIENTS
+    // =========================
+    async function loadClients(){
+      try{
+        const { data, error } = await db.from("clients").select("*");
+        if(error) throw error;
+        clientsData = data || [];
+      }catch(err){
+        console.error("Erreur chargement clients:", err);
+        clientsData = [];
+      }
+
+      renderClients();
+      renderDashboard();
+    }
+
+    function renderClients(){
+      const tbody = document.getElementById("clientsTable");
+      tbody.innerHTML = "";
+
+      clientsData.forEach(c => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${c.company || ""}</td>
+            <td>${c.lastname || ""}</td>
+            <td>${c.email || ""}</td>
+            <td>${c.city || ""}</td>
+            <td>${c.address || ""}</td>
+            <td>${c.phone || ""}</td>
+          </tr>
+        `;
+      });
+    }
+
+    async function addClient(){
+      const payload = {
+        company: document.getElementById("company").value.trim(),
+        lastname: document.getElementById("lastname").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        city: document.getElementById("city").value.trim(),
+        address: document.getElementById("address").value.trim(),
+        phone: document.getElementById("phone").value.trim()
+      };
+
+      if(!payload.company){
+        alert("Merci de saisir au moins l'entreprise.");
+        return;
+      }
+
+      try{
+        const { error } = await db.from("clients").insert(payload);
+        if(error) throw error;
+        await loadClients();
+
+        document.getElementById("company").value = "";
+        document.getElementById("lastname").value = "";
+        document.getElementById("email").value = "";
+        document.getElementById("city").value = "";
+        document.getElementById("address").value = "";
+        document.getElementById("phone").value = "";
+      }catch(err){
+        console.error(err);
+        alert("Impossible d'ajouter le client.");
+      }
+    }
+
+    // =========================
+    // RECHERCHE CLIENT
+    // =========================
+    function setupClientSearch(){
+      const input = document.getElementById("clientSearch");
+      const results = document.getElementById("clientResults");
+
+      input.addEventListener("input", () => {
+        const q = norm(input.value);
+        results.innerHTML = "";
+
+        if(q.length < 2){
+          results.style.display = "none";
+          return;
+        }
+
+        const filtered = clientsData.filter(c =>
+          norm(c.company).includes(q) ||
+          norm(c.lastname).includes(q) ||
+          norm(c.city).includes(q) ||
+          norm(c.address).includes(q)
+        ).slice(0, 12);
+
+        if(!filtered.length){
+          results.style.display = "none";
+          return;
+        }
+
+        filtered.forEach(client => {
+          const div = document.createElement("div");
+          div.className = "item";
+          div.innerHTML = `
+            <strong>${client.company || ""}</strong>
+            <div class="small muted">${client.lastname || ""} — ${client.city || ""}</div>
+          `;
+          div.onclick = () => selectClient(client);
+          results.appendChild(div);
+        });
+
+        results.style.display = "block";
+      });
+
+      document.addEventListener("click", (e) => {
+        if(!e.target.closest(".autocomplete")){
+          results.style.display = "none";
+        }
+      });
+    }
+
+    function selectClient(client){
+      selectedClient = client;
+      document.getElementById("clientSearch").value = client.company || "";
+      document.getElementById("stop-client").value = client.company || "";
+      document.getElementById("stop-ville").value = client.city || "";
+      document.getElementById("stop-adresse").value = client.address || "";
+      document.getElementById("stop-zone").value = inferZone(client.city || "");
+      document.getElementById("clientResults").style.display = "none";
+    }
+
+    // =========================
+    // PRODUITS
+    // =========================
+    function addProduct(){
+      const name = document.getElementById("productName").value.trim();
+      const price = Number(document.getElementById("productPrice").value || 0);
+
+      if(!name){
+        alert("Merci de saisir un produit.");
+        return;
+      }
+
+      products.push({name, price});
+      renderProducts();
+      renderDashboard();
+
+      document.getElementById("productName").value = "";
+      document.getElementById("productPrice").value = "";
+    }
+
+    function renderProducts(){
+      const tbody = document.getElementById("productsTable");
+      tbody.innerHTML = "";
+
+      products.forEach(p => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${p.name}</td>
+            <td>${formatMoney(p.price)}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // =========================
+    // STOPS
+    // =========================
+    function updateZoneFromCity(){
+      const city = document.getElementById("stop-ville").value.trim();
+      document.getElementById("stop-zone").value = inferZone(city);
+    }
+
+    function addStop(){
+      const clientName = document.getElementById("stop-client").value.trim();
+      const city = document.getElementById("stop-ville").value.trim();
+      const address = document.getElementById("stop-adresse").value.trim();
+      const parcels = Number(document.getElementById("stop-colis").value || 0);
+      const weight = Number(document.getElementById("stop-poids").value || 0);
+      const delai = document.getElementById("stop-delai").value;
+      const nuit = document.getElementById("stop-nuit").checked;
+      const stopMinutes = Number(document.getElementById("stop-minutes").value || 4);
+      const priority = Number(document.getElementById("stop-priority").value || 2);
+
+      if(!clientName || !city || !address || parcels <= 0){
+        alert("Merci de remplir client, ville, adresse et colis.");
+        return;
+      }
+
+      const zone = inferZone(city);
+      const coords = inferCoordsFromCity(city, zone);
+
+      stops.push({
+        id: crypto.randomUUID(),
+        client: clientName,
+        ville: city,
+        adresse: address,
+        zone,
+        colis: parcels,
+        poids: weight,
+        delai,
+        nuit,
+        stopMinutes,
+        priority,
+        lat: coords.lat,
+        lng: coords.lng
+      });
+
+      renderStops();
+      optimiseTournees();
+      renderDashboard();
+
+      document.getElementById("stop-colis").value = "1";
+      document.getElementById("stop-poids").value = "1";
+      document.getElementById("stop-nuit").checked = false;
+      document.getElementById("stop-minutes").value = "4";
+      document.getElementById("stop-priority").value = "2";
+    }
+
+    function removeStop(id){
+      stops = stops.filter(s => s.id !== id);
+      renderStops();
+      optimiseTournees();
+      renderDashboard();
+    }
+
+    function clearStops(){
+      if(!confirm("Supprimer tous les stops ?")) return;
+      stops = [];
+      renderStops();
+      optimiseTournees();
+      renderDashboard();
+    }
+
+    function renderStops(){
+      const tbody = document.getElementById("stopsTable");
+      tbody.innerHTML = "";
+
+      stops.forEach((s, index) => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${s.client}</td>
+            <td>${s.ville}</td>
+            <td>${s.adresse}</td>
+            <td>${s.zone}</td>
+            <td>${s.colis}</td>
+            <td>${s.poids} kg</td>
+            <td><span class="pill ${delayClass[s.delai] || ""}">${s.delai}</span></td>
+            <td>${s.nuit ? "Oui" : "Non"}</td>
+            <td>${s.stopMinutes}</td>
+            <td><button class="btn-danger" onclick="removeStop('${s.id}')">X</button></td>
+          </tr>
+        `;
+      });
+
+      document.getElementById("kpiStops").innerText = stops.length;
+      document.getElementById("kpiParcels").innerText = stops.reduce((sum,s)=>sum+Number(s.colis||0),0);
+    }
+
+    // =========================
+    // OPTIMISATION
+    // =========================
+    function optimiseTournees(){
+      const maxVehicles = Number(document.getElementById("maxVehicles").value || 5);
+      const maxDriverHours = Number(document.getElementById("maxDriverHours").value || 12);
+      const avgSpeed = Number(document.getElementById("avgSpeed").value || 55);
+      const maxStops = Number(document.getElementById("maxStopsPerVehicle").value || 45);
+      const maxParcels = Number(document.getElementById("maxParcelsPerVehicle").value || 120);
+      const maxWeight = Number(document.getElementById("maxWeightPerVehicle").value || 1200);
+      const loadingMinutes = Number(document.getElementById("loadingMinutes").value || 20);
+
+      const depotCity = document.getElementById("depotCity").value.trim() || "Cernier";
+      const depot = inferCoordsFromCity(depotCity, inferZone(depotCity));
+
+      if(!stops.length){
+        currentPlan = {
+          depot,
+          routes:[],
+          totals:{
+            stops:0, parcels:0, weight:0, km:0, driveHours:0, stopHours:0, pauseHours:0, totalHours:0,
+            vehicles:0, drivers:0, revenueDay:0, variableDay:0, fixedDay:0, totalCostDay:0, marginDay:0, marginMonth:0, marginYear:0
+          }
+        };
+        renderAnalysis(currentPlan);
+        return;
+      }
+
+      // 1) tri initial priorité / délai / zone
+      let pool = [...stops].sort((a,b) => {
+        const pa = stopPriorityWeight(a);
+        const pb = stopPriorityWeight(b);
+        if(pa !== pb) return pa - pb;
+        if(a.zone !== b.zone) return a.zone.localeCompare(b.zone);
+        return a.ville.localeCompare(b.ville);
+      });
+
+      // 2) construction véhicules
+      const routes = [];
+      while(pool.length && routes.length < maxVehicles){
+        let route = [];
+        let routeParcels = 0;
+        let routeWeight = 0;
+
+        // prendre le premier stop de la pile
+        const first = pool.shift();
+        route.push(first);
+        routeParcels += Number(first.colis || 0);
+        routeWeight += Number(first.poids || 0);
+
+        // privilégier même zone
+        const sameZone = pool.filter(s => s.zone === first.zone);
+        const otherZone = pool.filter(s => s.zone !== first.zone);
+        let orderedCandidates = nearestNeighbor(depot, sameZone).concat(nearestNeighbor(depot, otherZone));
+
+        // on reconstruit pool plus proprement
+        const candidateIds = new Set(orderedCandidates.map(s => s.id));
+        let rest = pool.filter(s => candidateIds.has(s.id));
+
+        let added = true;
+        while(added){
+          added = false;
+          for(let i=0; i<rest.length; i++){
+            const candidate = rest[i];
+            const testRoute = [...route, candidate];
+            const optimized = nearestNeighbor(depot, testRoute);
+
+            const km = estimateRouteKm(optimized, depot);
+            const driveHours = km / avgSpeed;
+            const stopHours = optimized.reduce((sum,s)=>sum + Number(s.stopMinutes || 4),0) / 60;
+            const pauseHours = Math.floor(driveHours / 4.5) * 0.75;
+            const totalHours = driveHours + stopHours + pauseHours + (loadingMinutes / 60);
+
+            const testParcels = routeParcels + Number(candidate.colis || 0);
+            const testWeight = routeWeight + Number(candidate.poids || 0);
+
+            if(
+              optimized.length <= maxStops &&
+              testParcels <= maxParcels &&
+              testWeight <= maxWeight &&
+              totalHours <= maxDriverHours
+            ){
+              route = optimized;
+              routeParcels = testParcels;
+              routeWeight = testWeight;
+              rest.splice(i,1);
+              pool = pool.filter(s => s.id !== candidate.id);
+              added = true;
+              break;
+            }
+          }
+        }
+
+        routes.push(route);
+      }
+
+      // Si reste des stops non placés, on les ajoute dans les véhicules existants selon la meilleure place possible
+      if(pool.length){
+        for(const candidate of [...pool]){
+          let bestRouteIndex = -1;
+          let bestScore = Infinity;
+
+          for(let r=0; r<routes.length; r++){
+            const testRoute = [...routes[r], candidate];
+            const parcels = testRoute.reduce((s,x)=>s+Number(x.colis||0),0);
+            const weight = testRoute.reduce((s,x)=>s+Number(x.poids||0),0);
+            const km = estimateRouteKm(nearestNeighbor(depot, testRoute), depot);
+            const driveHours = km / avgSpeed;
+            const stopHours = testRoute.reduce((sum,s)=>sum + Number(s.stopMinutes || 4),0) / 60;
+            const pauseHours = Math.floor(driveHours / 4.5) * 0.75;
+            const totalHours = driveHours + stopHours + pauseHours + (loadingMinutes / 60);
+
+            if(
+              testRoute.length <= maxStops &&
+              parcels <= maxParcels &&
+              weight <= maxWeight
+            ){
+              const overflow = Math.max(0, totalHours - maxDriverHours);
+              const score = overflow * 1000 + km;
+              if(score < bestScore){
+                bestScore = score;
+                bestRouteIndex = r;
+              }
+            }
+          }
+
+          if(bestRouteIndex >= 0){
+            routes[bestRouteIndex] = nearestNeighbor(depot, [...routes[bestRouteIndex], candidate]);
+            pool = pool.filter(s => s.id !== candidate.id);
+          }
+        }
+      }
+
+      // 3) métriques véhicule
+      const vehiclePlans = routes.map((route, idx) => {
+        const km = estimateRouteKm(route, depot);
+        const driveHours = km / avgSpeed;
+        const stopHours = route.reduce((sum,s)=>sum + Number(s.stopMinutes || 4),0) / 60;
+        const pauseHours = Math.floor(driveHours / 4.5) * 0.75;
+        const totalHours = driveHours + stopHours + pauseHours + (loadingMinutes / 60);
+        const parcels = route.reduce((sum,s)=>sum + Number(s.colis || 0),0);
+        const weight = route.reduce((sum,s)=>sum + Number(s.poids || 0),0);
+
+        return {
+          vehicleId: idx + 1,
+          route,
+          stops: route.length,
+          parcels,
+          weight,
+          km,
+          driveHours,
+          stopHours,
+          pauseHours,
+          totalHours
+        };
+      });
+
+      // 4) coûts
+      const pricePerParcel = Number(document.getElementById("pricePerParcel").value || 7);
+      const costPerKm = Number(document.getElementById("costPerKm").value || 0.65);
+      const fixedPerVehicle = Number(document.getElementById("fixedPerVehiclePerDay").value || 350);
+
+      const totalStops = vehiclePlans.reduce((s,v)=>s+v.stops,0);
+      const totalParcels = vehiclePlans.reduce((s,v)=>s+v.parcels,0);
+      const totalWeight = vehiclePlans.reduce((s,v)=>s+v.weight,0);
+      const totalKm = vehiclePlans.reduce((s,v)=>s+v.km,0);
+      const totalDriveHours = vehiclePlans.reduce((s,v)=>s+v.driveHours,0);
+      const totalStopHours = vehiclePlans.reduce((s,v)=>s+v.stopHours,0);
+      const totalPauseHours = vehiclePlans.reduce((s,v)=>s+v.pauseHours,0);
+      const totalHours = vehiclePlans.reduce((s,v)=>s+v.totalHours,0);
+
+      const vehiclesCount = vehiclePlans.length;
+      const revenueDay = totalParcels * pricePerParcel;
+      const variableDay = totalKm * costPerKm;
+      const fixedDay = vehiclesCount * fixedPerVehicle;
+      const totalCostDay = variableDay + fixedDay;
+      const marginDay = revenueDay - totalCostDay;
+      const marginMonth = marginDay * 22;
+      const marginYear = marginDay * 220;
+
+      currentPlan = {
+        depot,
+        routes: vehiclePlans,
+        unassigned: pool,
+        totals:{
+          stops: totalStops,
+          parcels: totalParcels,
+          weight: totalWeight,
+          km: totalKm,
+          driveHours: totalDriveHours,
+          stopHours: totalStopHours,
+          pauseHours: totalPauseHours,
+          totalHours,
+          vehicles: vehiclesCount,
+          drivers: vehiclesCount,
+          revenueDay,
+          variableDay,
+          fixedDay,
+          totalCostDay,
+          marginDay,
+          marginMonth,
+          marginYear
+        }
+      };
+
+      renderAnalysis(currentPlan);
+    }
+
+    // =========================
+    // RENDU ANALYSE
+    // =========================
+    function renderAnalysis(plan){
+      const filter = document.getElementById("vehicleFilter").value || "all";
+      updateVehicleFilter(plan);
+
+      let scopeRoutes = plan.routes || [];
+      let scope;
+
+      if(filter !== "all"){
+        const vehicleId = Number(filter);
+        const found = scopeRoutes.find(v => v.vehicleId === vehicleId);
+        scope = found ? {
+          routes:[found],
+          totals:{
+            stops: found.stops,
+            parcels: found.parcels,
+            weight: found.weight,
+            km: found.km,
+            driveHours: found.driveHours,
+            stopHours: found.stopHours,
+            pauseHours: found.pauseHours,
+            totalHours: found.totalHours,
+            vehicles: 1,
+            drivers: 1,
+            revenueDay: Number(document.getElementById("pricePerParcel").value || 7) * found.parcels,
+            variableDay: Number(document.getElementById("costPerKm").value || 0.65) * found.km,
+            fixedDay: Number(document.getElementById("fixedPerVehiclePerDay").value || 350),
+            totalCostDay:
+              (Number(document.getElementById("costPerKm").value || 0.65) * found.km) +
+              Number(document.getElementById("fixedPerVehiclePerDay").value || 350),
+            marginDay:
+              (Number(document.getElementById("pricePerParcel").value || 7) * found.parcels) -
+              ((Number(document.getElementById("costPerKm").value || 0.65) * found.km) +
+              Number(document.getElementById("fixedPerVehiclePerDay").value || 350)),
+            marginMonth: 0,
+            marginYear: 0
+          }
+        } : plan;
+
+        scope.totals.marginMonth = scope.totals.marginDay * 22;
+        scope.totals.marginYear = scope.totals.marginDay * 220;
+      } else {
+        scope = plan;
+      }
+
+      document.getElementById("kpiKm").innerText = `${scope.totals.km.toFixed(0)} km`;
+      document.getElementById("kpiHours").innerText = `${scope.totals.totalHours.toFixed(1)} h`;
+
+      document.getElementById("analysisVehicles").innerText = scope.totals.vehicles;
+      document.getElementById("analysisDrivers").innerText = scope.totals.drivers;
+      document.getElementById("analysisStops").innerText = scope.totals.stops;
+      document.getElementById("analysisParcels").innerText = scope.totals.parcels;
+      document.getElementById("analysisWeight").innerText = `${scope.totals.weight.toFixed(1)} kg`;
+      document.getElementById("analysisKm").innerText = `${scope.totals.km.toFixed(1)} km`;
+      document.getElementById("analysisDriveHours").innerText = formatHours(scope.totals.driveHours);
+      document.getElementById("analysisStopHours").innerText = formatHours(scope.totals.stopHours);
+      document.getElementById("analysisPauseHours").innerText = formatHours(scope.totals.pauseHours);
+      document.getElementById("analysisTotalHours").innerText = formatHours(scope.totals.totalHours);
+      document.getElementById("analysisRevenueDay").innerText = formatMoney(scope.totals.revenueDay);
+      document.getElementById("analysisVariableDay").innerText = formatMoney(scope.totals.variableDay);
+      document.getElementById("analysisFixedDay").innerText = formatMoney(scope.totals.fixedDay);
+      document.getElementById("analysisTotalCostDay").innerText = formatMoney(scope.totals.totalCostDay);
+
+      const marginDayEl = document.getElementById("analysisMarginDay");
+      const marginMonthEl = document.getElementById("analysisMarginMonth");
+      const marginYearEl = document.getElementById("analysisMarginYear");
+
+      marginDayEl.innerText = formatMoney(scope.totals.marginDay);
+      marginMonthEl.innerText = formatMoney(scope.totals.marginMonth);
+      marginYearEl.innerText = formatMoney(scope.totals.marginYear);
+
+      marginDayEl.className = scope.totals.marginDay >= 0 ? "ok" : "bad";
+      marginMonthEl.className = scope.totals.marginMonth >= 0 ? "ok" : "bad";
+      marginYearEl.className = scope.totals.marginYear >= 0 ? "ok" : "bad";
+
+      renderVehicles(scope.routes || []);
+    }
+
+    function updateVehicleFilter(plan){
+      const select = document.getElementById("vehicleFilter");
+      const current = select.value;
+      select.innerHTML = `<option value="all">Tous</option>`;
+
+      (plan.routes || []).forEach(v => {
+        select.innerHTML += `<option value="${v.vehicleId}">Véhicule ${v.vehicleId}</option>`;
+      });
+
+      if([...select.options].some(o => o.value === current)){
+        select.value = current;
+      }
+    }
+
+    function renderVehicles(routes){
+      const container = document.getElementById("vehiclesContainer");
+      container.innerHTML = "";
+
+      if(!routes.length){
+        container.innerHTML = `<div class="muted">Aucune tournée calculée.</div>`;
+        return;
+      }
+
+      const maxDriverHours = Number(document.getElementById("maxDriverHours").value || 12);
+      const pricePerParcel = Number(document.getElementById("pricePerParcel").value || 7);
+      const costPerKm = Number(document.getElementById("costPerKm").value || 0.65);
+      const fixedPerVehicle = Number(document.getElementById("fixedPerVehiclePerDay").value || 350);
+
+      routes.forEach(v => {
+        const revenue = v.parcels * pricePerParcel;
+        const variable = v.km * costPerKm;
+        const totalCost = variable + fixedPerVehicle;
+        const margin = revenue - totalCost;
+        const stateClass = v.totalHours <= maxDriverHours ? "ok" : "bad";
+        const stateText = v.totalHours <= maxDriverHours ? "OK" : "Dépassement";
+
+        const routeHtml = v.route.map((s, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${s.client}</td>
+            <td>${s.ville}</td>
+            <td>${s.colis}</td>
+            <td>${s.poids} kg</td>
+            <td><span class="pill ${delayClass[s.delai] || ""}">${s.delai}</span></td>
+          </tr>
+        `).join("");
+
+        container.innerHTML += `
+          <div class="vehicle-box">
+            <div class="vehicle-title">
+              <div>
+                <strong>Véhicule ${v.vehicleId}</strong>
+                <div class="small muted">${v.stops} stops • ${v.parcels} colis • ${v.weight.toFixed(1)} kg</div>
+              </div>
+              <div class="${stateClass}">${stateText}</div>
+            </div>
+
+            <div class="grid grid-4" style="margin-bottom:12px">
+              <div class="card"><h3>Km</h3><p style="font-size:20px">${v.km.toFixed(1)}</p></div>
+              <div class="card"><h3>Temps</h3><p style="font-size:20px">${v.totalHours.toFixed(2)} h</p></div>
+              <div class="card"><h3>CA jour</h3><p style="font-size:20px">${revenue.toFixed(2)}</p></div>
+              <div class="card"><h3>Marge</h3><p style="font-size:20px" class="${margin>=0?'ok':'bad'}">${margin.toFixed(2)}</p></div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Client</th>
+                    <th>Ville</th>
+                    <th>Colis</th>
+                    <th>Poids</th>
+                    <th>Délai</th>
+                  </tr>
+                </thead>
+                <tbody>${routeHtml}</tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // =========================
+    // EVENTS
+    // =========================
+    document.addEventListener("input", (e) => {
+      if([
+        "stop-ville","maxVehicles","maxDriverHours","avgSpeed","costPerKm","fixedPerVehiclePerDay",
+        "pricePerParcel","loadingMinutes","maxStopsPerVehicle","maxParcelsPerVehicle","maxWeightPerVehicle"
+      ].includes(e.target.id)){
+        if(e.target.id === "stop-ville") updateZoneFromCity();
+        optimiseTournees();
+      }
+    });
+
+    // =========================
+    // INIT
+    // =========================
+    async function init(){
+      showPage("dashboard", document.querySelector(".sidebar button"));
+      setupClientSearch();
+      renderProducts();
+      renderStops();
+      renderDashboard();
+      await loadClients();
+      optimiseTournees();
+    }
+
+    init();
+  </script>
 </body>
 </html>
