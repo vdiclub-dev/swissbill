@@ -60,3 +60,34 @@ drawStops()
 renderDashboard()
 
 }
+async function loadColis(){
+
+const {data,error}=await db.from("colis").select("*")
+
+if(error){
+
+alert("Erreur chargement")
+
+return
+
+}
+
+const table=document.getElementById("colisTable")
+
+table.innerHTML=""
+
+data.forEach(c=>{
+
+table.innerHTML+=`
+<tr>
+<td>${c.client}</td>
+<td>${c.ville}</td>
+<td>${c.adresse}</td>
+<td>${c.colis}</td>
+<td>${c.poids}</td>
+</tr>
+`
+
+})
+
+}
