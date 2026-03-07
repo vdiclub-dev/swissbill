@@ -197,33 +197,8 @@ window.location.href="login.html"
 
 document.addEventListener("DOMContentLoaded",loadOrders)
 document.addEventListener("DOMContentLoaded",loadOrders)
-async function checkLogin(){
 
-const {data} = await db.auth.getSession()
 
-if(!data.session){
-
-window.location.href="login.html"
-
-}
-
-}
-
-document.addEventListener("DOMContentLoaded",checkLogin)
-async function checkLogin(){
-
-const { data } = await db.auth.getSession()
-
-if(!data.session){
-    
-    window.location.href="login.html"
-
-}
-
-}
-
-document.addEventListener("DOMContentLoaded",checkLogin)
-let inactivityTimer
 
 function resetTimer(){
 
