@@ -18,7 +18,7 @@
 
   <!-- Supabase -->
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root{
       --bg:#0f172a;
@@ -371,6 +371,7 @@
 <button onclick="showPage('products')">Produits</button>
   <button onclick="showPage('tournees', this)">🚚 Tournées</button
   <button onclick="saveTournee()">Sauvegarder tournée</button>
+      <button onclick="exportTourneePDF()">Exporter tournée PDF</button>
     </aside>
 
     <main class="main">
@@ -407,7 +408,17 @@
           <canvas id="revenueChart" height="90"></canvas>
         </div>
       </section>
-
+      create table tournees (
+id uuid primary key default uuid_generate_v4(),
+date date,
+depot text,
+vehicules integer,
+km_total numeric,
+colis_total integer,
+marge numeric,
+data jsonb,
+created_at timestamp default now()
+);
       <!-- CLIENTS -->
       <section id="clients" class="page">
         <div class="topbar">
@@ -757,9 +768,83 @@ let routeLines = []
 let mapBoundsSet = false
 
 
+function exportTourneePDF(){
 
+const { jsPDF } = window.jspdf
 
+const doc = new jsPDF()
 
+doc.text("SwissBill - Tournée",20,20)
+
+let y = 40
+
+currentPlan.routes.forEach(vehicle=>{
+
+doc.text("Véhicule "+vehicle.vehicleId,20,y)
+y+=10
+
+vehicle.route.forEach((stop,i)=>{
+
+doc.text(
+(i+1)+" - "+stop.client+" "+stop.ville+" "+stop.colis+" colis",
+20,y
+)
+
+y+=8
+
+})
+
+y+=10
+
+})
+
+doc.save("tournee.pdf")
+
+}
+async function loadColis(){
+
+const {data} = await db
+.from("colis")
+.select("*")
+.eq("statut","a_planifier")
+
+data.forEach(c=>{
+
+stops.push({
+client:c.client_id,
+ville:c.ville,
+adresse:c.adresse,
+colis:c.colis,
+poids:c.poids,
+delai:c.delai
+})
+
+})
+
+renderStops()
+
+}
+async function addParcel(){
+
+const payload = {
+client_id: CLIENT_ID,
+date_livraison: new Date().toISOString().slice(0,10),
+ville: document.getElementById("ville").value,
+adresse: document.getElementById("adresse").value,
+colis: Number(document.getElementById("colis").value),
+poids: Number(document.getElementById("poids").value),
+delai: document.getElementById("delai").value
+}
+
+const {error} = await db.from("colis").insert(payload)
+
+if(error){
+alert("Erreur")
+}else{
+alert("Colis enregistré")
+}
+
+}
  async function routeDistance(coords){
 
 const res = await fetch(
