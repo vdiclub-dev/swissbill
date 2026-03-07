@@ -1,402 +1,349 @@
 <!DOCTYPE html>
 <html lang="fr">
-
 <head>
+  <meta charset="UTF-8">
+  <title>SwissBill</title>
 
-<meta charset="UTF-8">
-<title>SwissBill</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
 
-<link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://iubbsnntcreneakbdkmv.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y";
 
-<script>
+    window.db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  </script>
 
-const SUPABASE_URL = "https://iubbsnntcreneakbdkmv.supabase.co"
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y"
-
-window.db = supabase.createClient(SUPABASE_URL,SUPABASE_KEY)
-
-</script>
-
-<script defer src="js/dashboard.js"></script>
-<script defer src="js/clients.js"></script>
-<script defer src="js/products.js"></script>
-
+  <script defer src="js/dashboard.js"></script>
+  <script defer src="js/clients.js"></script>
+  <script defer src="js/products.js"></script>
 </head>
 
 <body>
-
-<div class="app">
-
-<div class="sidebar">
-
-<h2>SwissBill</h2>
-
-<button onclick="showPage('dashboard')">Dashboard</button>
-<button onclick="showPage('clients')">Clients</button>
-<button onclick="showPage('products')">Produits</button>
-<button onclick="showPage('tournees')">🚚 Tournées</button>
-<button onclick="optimiseTournee()">Optimiser tournée</button>
-</div>
-
-<div class="main">
-
-<!-- DASHBOARD -->
-
-<div id="dashboard" class="page">
-
-<h1>Dashboard</h1>
-
-<div class="cards">
-
-<div class="card">
-<h3>Clients</h3>
-<p id="clientCount">0</p>
-</div>
-
-<div class="card">
-<h3>Produits</h3>
-<p id="productCount">0</p>
-</div>
-
-<div class="card">
-<h3>Factures</h3>
-<p id="invoiceCount">0</p>
-</div>
-
-<div class="card">
-<h3>Revenus</h3>
-<p id="revenueTotal">0 CHF</p>
-</div>
-
-</div>
-
-<h2>Revenus mensuels</h2>
-<canvas id="revenueChart"></canvas>
-
-</div>
-
-<!-- CLIENTS -->
-
-<div id="clients" class="page">
-
-<h1>Clients</h1>
-
-<div class="form">
-
-<input id="company" placeholder="Entreprise">
-<input id="lastname" placeholder="Nom">
-<input id="email" placeholder="Email">
-
-<button onclick="addClient()">Ajouter</button>
-
-</div>
-
-<table>
-
-<thead>
-<tr>
-<th>Entreprise</th>
-<th>Nom</th>
-<th>Email</th>
-</tr>
-</thead>
-
-<tbody id="clientsTable"></tbody>
-
-</table>
-
-</div>
-
-<!-- PRODUITS -->
-
-<div id="products" class="page">
-
-<h1>Produits</h1>
-
-<div class="form">
-
-<input id="productName" placeholder="Produit">
-<input id="productPrice" placeholder="Prix CHF">
-
-<button onclick="addProduct()">Ajouter</button>
-
-</div>
-
-<table>
-
-<thead>
-<tr>
-<th>Produit</th>
-<th>Prix</th>
-</tr>
-</thead>
-
-<tbody id="productsTable"></tbody>
-
-</table>
-
-</div>
-
-<!-- TOURNEES -->
-
-<div class="form">
-
-<select id="stop-client" onchange="fillClientData()">
-<option value="">Choisir un client</option>
-</select>
-
-<input id="stop-ville" placeholder="Ville">
-
-<input id="stop-adresse" placeholder="Adresse">
-
-<input id="stop-colis" type="number" placeholder="Nombre colis">
-
-<input id="stop-poids" type="number" placeholder="Poids total kg">
-
-<select id="stop-delai">
-
-<option value="EX">Urgent 6h</option>
-<option value="J0">12h</option>
-<option value="J1">24h</option>
-<option value="J2">48h</option>
-<option value="J5">Semaine</option>
-
-</select>
-
-<label>
-<input type="checkbox" id="stop-nuit">
-Autorisation livraison de nuit
-</label>
-
-<button onclick="addStop()">Ajouter stop</button>
-
-</div>
-
-</div>
-
-<hr>
-
-<table class="pro-table">
-
-<thead>
-
-<tr>
-<th>Client</th>
-<th>Ville</th>
-<th>Adresse</th>
-<th>Colis</th>
-  <th>Poids</th>
-<th>Nuit</th>
-<th>Délai</th>
-<th></th>
-
-</tr>
-<td>${s.poids} kg</td>
-<td>${s.nuit ? "Oui" : "Non"}</td>
-</thead>
-
-<tbody id="tournees-table"></tbody>
-
-</table>
-
-</div>
-
-</div>
-
-</div>
-
-<script>
-function fillClientData(){
-
-const index = document.getElementById("stop-client").value
-
-if(index==="") return
-
-const client = clientsData[index]
-
-document.getElementById("stop-adresse").value = client.address || ""
-document.getElementById("stop-ville").value = client.city || ""
-
-}
-  
-let clientsData = []
-
-async function loadClients(){
-
-const { data, error } = await db
-.from("clients")
-.select("*")
-
-if(error){
-console.error(error)
-return
-}
-
-clientsData = data
-
-const select = document.getElementById("stop-client")
-
-select.innerHTML = "<option value=''>Choisir un client</option>"
-
-data.forEach((c,i)=>{
-
-select.innerHTML += `
-<option value="${i}">
-${c.company} - ${c.lastname}
-</option>
-`
-
-})
-
-}
-
-function showPage(page){
-
-document.querySelectorAll(".page").forEach(p=>{
-p.style.display="none"
-})
-
-document.getElementById(page).style.display="block"
-
-}
-
-
-let tournees = []
-
-function addStop(){
-
-const stop = {
-
-client:clientsData[document.getElementById("stop-client").value].company,
-
-ville:document.getElementById("stop-ville").value,
-
-adresse:document.getElementById("stop-adresse").value,
-
-colis:parseInt(document.getElementById("stop-colis").value),
-
-poids:parseFloat(document.getElementById("stop-poids").value),
-
-delai:document.getElementById("stop-delai").value,
-
-nuit:document.getElementById("stop-nuit").checked
-
-}
-
-tournees.push(stop)
-
-renderTournees()
-calculateStats()
-
-}
-
-function renderTournees(){
-
-const table = document.getElementById("tournees-table")
-
-table.innerHTML=""
-
-tournees.forEach((s,i)=>{
-
-table.innerHTML += `
-<tr>
-<td>${s.client}</td>
-<td>${s.ville}</td>
-<td>${s.adresse}</td>
-<td>${s.colis}</td>
-<td>${s.delai}</td>
-<td><button onclick="deleteStop(${i})">X</button></td>
-</tr>
-`
-
-})
-
-}
-
-function deleteStop(i){
-
-tournees.splice(i,1)
-
-renderTournees()
-calculateStats()
-
-}
-
-function calculateStats(){
-
-let stops = tournees.length
-let colis = 0
-
-tournees.forEach(s=>{
-colis += s.colis
-})
-
-document.getElementById("totalStops").innerText = stops
-document.getElementById("totalColis").innerText = colis
-
-splitVehicles()
-
-}
-
-function splitVehicles(){
-
-let v1 = []
-let v2 = []
-
-tournees.forEach((s,i)=>{
-
-if(i % 2 === 0){
-v1.push(s)
-}else{
-v2.push(s)
-}
-
-})
-
-document.getElementById("vehicule1").innerText = v1.length
-document.getElementById("vehicule2").innerText = v2.length
-
-}
-
-
-function renderTournees(){
-
-const table = document.getElementById("tournees-table")
-
-table.innerHTML=""
-
-tournees.forEach((s,i)=>{
-
-table.innerHTML += `
-<tr>
-<td>${s.client}</td>
-<td>${s.ville}</td>
-<td>${s.adresse}</td>
-<td>${s.colis}</td>
-<td>${s.delai}</td>
-<td><button onclick="deleteStop(${i})">X</button></td>
-</tr>
-`
-
-})
-
-}
-
-function deleteStop(i){
-
-tournees.splice(i,1)
-
-renderTournees()
-
-}
-
-showPage("dashboard")
-loadClients()
-</script>
-
+  <div class="app">
+
+    <div class="sidebar">
+      <h2>SwissBill</h2>
+
+      <button onclick="showPage('dashboard')">Dashboard</button>
+      <button onclick="showPage('clients')">Clients</button>
+      <button onclick="showPage('products')">Produits</button>
+      <button onclick="showPage('tournees')">🚚 Tournées</button>
+      <button onclick="optimiseTournee()">Optimiser tournée</button>
+    </div>
+
+    <div class="main">
+
+      <!-- DASHBOARD -->
+      <div id="dashboard" class="page">
+        <h1>Dashboard</h1>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Clients</h3>
+            <p id="clientCount">0</p>
+          </div>
+
+          <div class="card">
+            <h3>Produits</h3>
+            <p id="productCount">0</p>
+          </div>
+
+          <div class="card">
+            <h3>Factures</h3>
+            <p id="invoiceCount">0</p>
+          </div>
+
+          <div class="card">
+            <h3>Revenus</h3>
+            <p id="revenueTotal">0 CHF</p>
+          </div>
+        </div>
+
+        <h2>Revenus mensuels</h2>
+        <canvas id="revenueChart"></canvas>
+      </div>
+
+      <!-- CLIENTS -->
+      <div id="clients" class="page">
+        <h1>Clients</h1>
+
+        <div class="form">
+          <input id="company" placeholder="Entreprise">
+          <input id="lastname" placeholder="Nom">
+          <input id="email" placeholder="Email">
+          <button onclick="addClient()">Ajouter</button>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Entreprise</th>
+              <th>Nom</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody id="clientsTable"></tbody>
+        </table>
+      </div>
+
+      <!-- PRODUITS -->
+      <div id="products" class="page">
+        <h1>Produits</h1>
+
+        <div class="form">
+          <input id="productName" placeholder="Produit">
+          <input id="productPrice" placeholder="Prix CHF">
+          <button onclick="addProduct()">Ajouter</button>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Produit</th>
+              <th>Prix</th>
+            </tr>
+          </thead>
+          <tbody id="productsTable"></tbody>
+        </table>
+      </div>
+
+      <!-- TOURNEES -->
+      <div id="tournees" class="page">
+        <h1>Gestion des tournées</h1>
+
+        <div class="form">
+          <select id="stop-client" onchange="fillClientData()">
+            <option value="">Choisir un client</option>
+          </select>
+
+          <input id="stop-ville" placeholder="Ville">
+          <input id="stop-adresse" placeholder="Adresse">
+          <input id="stop-colis" type="number" min="1" placeholder="Nombre colis">
+          <input id="stop-poids" type="number" min="0" step="0.1" placeholder="Poids total kg">
+
+          <select id="stop-delai">
+            <option value="EX">Urgent 6h</option>
+            <option value="J0">12h</option>
+            <option value="J1">24h</option>
+            <option value="J2">48h</option>
+            <option value="J5">Semaine</option>
+          </select>
+
+          <label>
+            <input type="checkbox" id="stop-nuit">
+            Autorisation livraison de nuit
+          </label>
+
+          <button onclick="addStop()">Ajouter stop</button>
+        </div>
+
+        <hr>
+
+        <div class="cards">
+          <div class="card">
+            <h3>Total stops</h3>
+            <p id="totalStops">0</p>
+          </div>
+
+          <div class="card">
+            <h3>Total colis</h3>
+            <p id="totalColis">0</p>
+          </div>
+
+          <div class="card">
+            <h3>Véhicule 1</h3>
+            <p id="vehicule1">0</p>
+          </div>
+
+          <div class="card">
+            <h3>Véhicule 2</h3>
+            <p id="vehicule2">0</p>
+          </div>
+        </div>
+
+        <table class="pro-table">
+          <thead>
+            <tr>
+              <th>Client</th>
+              <th>Ville</th>
+              <th>Adresse</th>
+              <th>Colis</th>
+              <th>Poids</th>
+              <th>Nuit</th>
+              <th>Délai</th>
+              <th></th>
+            </tr>
+          </thead>
+
+          <tbody id="tournees-table"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let clientsData = [];
+    let tournees = [];
+
+    function showPage(page) {
+      document.querySelectorAll(".page").forEach(p => {
+        p.style.display = "none";
+      });
+
+      const el = document.getElementById(page);
+      if (el) el.style.display = "block";
+    }
+
+    async function loadClients() {
+      const { data, error } = await db
+        .from("clients")
+        .select("*");
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      clientsData = data || [];
+
+      const select = document.getElementById("stop-client");
+      select.innerHTML = `<option value="">Choisir un client</option>`;
+
+      clientsData.forEach((c, i) => {
+        select.innerHTML += `
+          <option value="${i}">
+            ${c.company || ""} - ${c.lastname || ""}
+          </option>
+        `;
+      });
+    }
+
+    function fillClientData() {
+      const index = document.getElementById("stop-client").value;
+      if (index === "") return;
+
+      const client = clientsData[index];
+      if (!client) return;
+
+      document.getElementById("stop-adresse").value = client.address || "";
+      document.getElementById("stop-ville").value = client.city || "";
+    }
+
+    function addStop() {
+      const clientIndex = document.getElementById("stop-client").value;
+      const ville = document.getElementById("stop-ville").value.trim();
+      const adresse = document.getElementById("stop-adresse").value.trim();
+      const colis = parseInt(document.getElementById("stop-colis").value, 10);
+      const poids = parseFloat(document.getElementById("stop-poids").value);
+      const delai = document.getElementById("stop-delai").value;
+      const nuit = document.getElementById("stop-nuit").checked;
+
+      if (clientIndex === "") {
+        alert("Choisis un client.");
+        return;
+      }
+
+      if (!ville || !adresse || !colis) {
+        alert("Merci de remplir ville, adresse et nombre de colis.");
+        return;
+      }
+
+      const client = clientsData[clientIndex];
+
+      const stop = {
+        client: client?.company || "Client",
+        ville,
+        adresse,
+        colis: isNaN(colis) ? 0 : colis,
+        poids: isNaN(poids) ? 0 : poids,
+        delai,
+        nuit
+      };
+
+      tournees.push(stop);
+
+      renderTournees();
+      calculateStats();
+
+      document.getElementById("stop-colis").value = "";
+      document.getElementById("stop-poids").value = "";
+      document.getElementById("stop-nuit").checked = false;
+    }
+
+    function renderTournees() {
+      const table = document.getElementById("tournees-table");
+      table.innerHTML = "";
+
+      tournees.forEach((s, i) => {
+        table.innerHTML += `
+          <tr>
+            <td>${s.client}</td>
+            <td>${s.ville}</td>
+            <td>${s.adresse}</td>
+            <td>${s.colis}</td>
+            <td>${s.poids} kg</td>
+            <td>${s.nuit ? "Oui" : "Non"}</td>
+            <td>${s.delai}</td>
+            <td><button onclick="deleteStop(${i})">X</button></td>
+          </tr>
+        `;
+      });
+    }
+
+    function deleteStop(i) {
+      tournees.splice(i, 1);
+      renderTournees();
+      calculateStats();
+    }
+
+    function calculateStats() {
+      const stops = tournees.length;
+      let colis = 0;
+
+      tournees.forEach(s => {
+        colis += Number(s.colis || 0);
+      });
+
+      document.getElementById("totalStops").innerText = stops;
+      document.getElementById("totalColis").innerText = colis;
+
+      splitVehicles();
+    }
+
+    function splitVehicles() {
+      let v1 = [];
+      let v2 = [];
+
+      tournees.forEach((s, i) => {
+        if (i % 2 === 0) {
+          v1.push(s);
+        } else {
+          v2.push(s);
+        }
+      });
+
+      document.getElementById("vehicule1").innerText = v1.length + " stops";
+      document.getElementById("vehicule2").innerText = v2.length + " stops";
+    }
+
+    function optimiseTournee() {
+      tournees.sort((a, b) => {
+        if (a.ville < b.ville) return -1;
+        if (a.ville > b.ville) return 1;
+        return 0;
+      });
+
+      renderTournees();
+      calculateStats();
+    }
+
+    showPage("dashboard");
+    loadClients();
+  </script>
 </body>
 </html>
