@@ -81,4 +81,54 @@ return
 alert("Compte créé")
 
 }
+async function createOrder(){
+
+const { data: { user } } = await db.auth.getUser()
+
+const pickup = document.getElementById("pickup").value
+const delivery = document.getElementById("delivery").value
+const speed = document.getElementById("speed").value
+const weight = document.getElementById("weight").value
+
+await db
+.from("orders")
+.insert([{
+user_id:user.id,
+pickup,
+delivery,
+speed,
+weight,
+status:"nouveau"
+}])
+
+loadOrders()
+
+}
+async function loadOrders(){
+
+const { data: { user } } = await db.auth.getUser()
+
+const {data} = await db
+.from("orders")
+.select("*")
+.eq("user_id",user.id)
+
+const tbody = document.getElementById("ordersTable")
+
+tbody.innerHTML=""
+
+data.forEach(o=>{
+
+tbody.innerHTML += `
+<tr>
+<td>${o.id}</td>
+<td>${o.pickup}</td>
+<td>${o.delivery}</td>
+<td>${o.status}</td>
+</tr>
+`
+
+})
+
+}
 document.addEventListener("DOMContentLoaded",loadOrders)
