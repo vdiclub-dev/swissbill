@@ -15,3 +15,18 @@ document.addEventListener("DOMContentLoaded", () => {
 initMap()
 
 })
+async function sendParcel(){
+
+const payload = {
+client:document.getElementById("client").value,
+ville:document.getElementById("ville").value,
+adresse:document.getElementById("adresse").value,
+colis:Number(document.getElementById("colis").value),
+poids:Number(document.getElementById("poids").value)
+}
+
+await db.from("colis").insert(payload)
+
+alert("Colis envoyé")
+
+}
