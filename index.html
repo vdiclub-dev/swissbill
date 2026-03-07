@@ -369,7 +369,8 @@
       <button onclick="showPage('dashboard')">Dashboard</button>
 <button onclick="showPage('clients')">Clients</button>
 <button onclick="showPage('products')">Produits</button>
-      <button onclick="showPage('tournees', this)">🚚 Tournées</button>
+  <button onclick="showPage('tournees', this)">🚚 Tournées</button
+  <button onclick="saveTournee()">Sauvegarder tournée</button>
     </aside>
 
     <main class="main">
@@ -757,6 +758,61 @@ let mapBoundsSet = false
 
 
 
+
+
+ async function routeDistance(coords){
+
+const res = await fetch(
+"https://api.openrouteservice.org/v2/directions/driving-car",
+{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"Authorization":"API_KEY"
+},
+body: JSON.stringify({
+coordinates: coords
+})
+}
+)
+
+const data = await res.json()
+
+return data.routes[0].summary.distance / 1000
+}   
+
+async function loadTournees(){
+
+const {data} = await db
+.from("tournees")
+.select("*")
+.order("date",{ascending:false})
+
+console.log(data)
+
+}
+async function saveTournee(){
+
+const payload = {
+date: new Date().toISOString().slice(0,10),
+depot: document.getElementById("depotCity").value,
+vehicules: currentPlan.routes.length,
+km_total: currentPlan.totals.km,
+colis_total: currentPlan.totals.parcels,
+marge: currentPlan.totals.marginDay,
+data: currentPlan
+}
+
+const {error} = await db.from("tournees").insert(payload)
+
+if(error){
+console.error(error)
+alert("Erreur sauvegarde tournée")
+}else{
+alert("Tournée sauvegardée")
+}
+
+}
 
 function drawRoutesOnMap(plan){
 
