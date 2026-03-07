@@ -247,3 +247,16 @@ document.addEventListener("mousemove",resetTimer)
 document.addEventListener("keydown",resetTimer)
 
 resetTimer()
+async function checkLogin(){
+
+const { data } = await db.auth.getSession()
+
+if(!data.session){
+
+window.location.href="login.html"
+
+}
+
+}
+
+document.addEventListener("DOMContentLoaded",checkLogin)
