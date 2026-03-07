@@ -1,11 +1,6 @@
 async function logout(){
 
-const { error } = await db.auth.signOut()
-
-if(error){
-alert("Erreur déconnexion")
-return
-}
+await db.auth.signOut()
 
 window.location.href="login.html"
 
