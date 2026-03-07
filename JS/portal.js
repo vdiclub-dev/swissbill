@@ -18,12 +18,19 @@ window.location.href="login.html"
 
 async function loadOrders(){
 
-const { data: { user } } = await db.auth.getUser()
+const { data: userData } = await db.auth.getUser()
 
-const { data } = await db
+if(!userData.user) return
+
+const { data, error } = await db
 .from("orders")
 .select("*")
-.eq("user_id",user.id)
+.eq("user_id", userData.user.id)
+
+if(error){
+console.log("Erreur chargement orders", error)
+return
+}
 
 const table=document.getElementById("ordersTable")
 
@@ -46,9 +53,9 @@ table.innerHTML+=`
 
 }
 
-document.addEventListener("DOMContentLoaded",()=>{
+document.addEventListener("DOMContentLoaded", async ()=>{
 
-checkLogin()
-loadOrders()
+await checkLogin()
+await loadOrders()
 
 })
