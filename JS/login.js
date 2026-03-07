@@ -8,8 +8,8 @@ document.getElementById("loginModal").style.display="none"
 }
 async function login(){
 
-const email = document.getElementById("email").value
-const password = document.getElementById("password").value
+const email = document.getElementById("loginEmail").value
+const password = document.getElementById("loginPassword").value
 
 const {data,error} = await db.auth.signInWithPassword({
 email:email,
