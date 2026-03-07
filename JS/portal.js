@@ -210,3 +210,40 @@ window.location.href="login.html"
 }
 
 document.addEventListener("DOMContentLoaded",checkLogin)
+async function checkLogin(){
+
+const { data } = await db.auth.getSession()
+
+if(!data.session){
+    
+    window.location.href="login.html"
+
+}
+
+}
+
+document.addEventListener("DOMContentLoaded",checkLogin)
+let inactivityTimer
+
+function resetTimer(){
+
+clearTimeout(inactivityTimer)
+
+inactivityTimer=setTimeout(logout,1800000)
+
+}
+
+function logout(){
+
+db.auth.signOut()
+
+alert("Session expirée")
+
+window.location.href="login.html"
+
+}
+
+document.addEventListener("mousemove",resetTimer)
+document.addEventListener("keydown",resetTimer)
+
+resetTimer()
