@@ -36,4 +36,4 @@ window.location.href="login.html"
 
 }
 
-document.addEventListener("DOMContentLoaded",checkLogin)
+
