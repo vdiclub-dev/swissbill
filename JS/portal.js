@@ -131,4 +131,69 @@ tbody.innerHTML += `
 })
 
 }
+async function createOrder(){
+
+const pickup=document.getElementById("pickup").value
+const delivery=document.getElementById("delivery").value
+const speed=document.getElementById("speed").value
+
+const user=await db.auth.getUser()
+
+await db.from("orders").insert([{
+
+user_id:user.data.user.id,
+pickup:pickup,
+delivery:delivery,
+speed:speed,
+status:"nouveau"
+
+}])
+
+alert("Transport créé")
+
+loadOrders()
+
+}
+
+async function loadOrders(){
+
+const user=await db.auth.getUser()
+
+const {data}=await db
+.from("orders")
+.select("*")
+.eq("user_id",user.data.user.id)
+
+const table=document.getElementById("ordersTable")
+
+table.innerHTML=""
+
+data.forEach(o=>{
+
+table.innerHTML+=`
+
+<tr>
+
+<td>${o.id}</td>
+<td>${o.pickup}</td>
+<td>${o.delivery}</td>
+<td>${o.status}</td>
+
+</tr>
+
+`
+
+})
+
+}
+
+async function logout(){
+
+await db.auth.signOut()
+
+window.location.href="login.html"
+
+}
+
+document.addEventListener("DOMContentLoaded",loadOrders)
 document.addEventListener("DOMContentLoaded",loadOrders)
