@@ -1,7 +1,7 @@
 // vérifier si utilisateur connecté
 async function checkLogin(){
 
-const {data} = await db.auth.getSession()
+const {data}=await db.auth.getSession()
 
 if(!data.session){
 window.location.href="login.html"
@@ -9,6 +9,7 @@ window.location.href="login.html"
 
 }
 
+document.addEventListener("DOMContentLoaded",checkLogin)
 
 
 // créer transport
