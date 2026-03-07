@@ -1,4 +1,11 @@
 
+function openLogin(){
+document.getElementById("loginModal").style.display="block"
+}
+
+function closeLogin(){
+document.getElementById("loginModal").style.display="none"
+}
 async function login(){
 
 const email = document.getElementById("email").value
