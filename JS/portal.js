@@ -1,27 +1,3 @@
-async function logout(){
-
-await db.auth.signOut()
-
-window.location.href="login.html"
-
-}
-const { data: { user } } = await db.auth.getUser()
-
-const { data } = await db
-.from("orders")
-.select("*")
-.eq("user_id",user.id)
-const { data: { user } } = await db.auth.getUser()
-
-await db.from("orders").insert([{
-user_id:user.id,
-pickup,
-delivery,
-speed,
-weight,
-status:"nouveau"
-}])
-// vérifier si utilisateur connecté
 async function checkLogin(){
 
 const { data } = await db.auth.getSession()
@@ -32,41 +8,14 @@ window.location.href="login.html"
 
 }
 
-document.addEventListener("DOMContentLoaded",checkLogin)
+async function logout(){
 
+await db.auth.signOut()
 
-// créer transport
-async function createOrder(){
-
-async function createOrder(){
-
-const { data, error } = await db.auth.getUser()
-
-if(!data.user
-
-const pickup = document.getElementById("pickup").value
-const delivery = document.getElementById("delivery").value
-const speed = document.getElementById("speed").value
-const weight = document.getElementById("weight").value
-
-await db
-.from("orders")
-.insert([{
-user_id:user.id,
-pickup,
-delivery,
-speed,
-weight,
-status:"nouveau"
-}])
-
-alert("Transport créé")
-
-loadOrders()
+window.location.href="login.html"
 
 }
 
-// charger transports
 async function loadOrders(){
 
 const { data: { user } } = await db.auth.getUser()
@@ -76,15 +25,15 @@ const { data } = await db
 .select("*")
 .eq("user_id",user.id)
 
-const tbody = document.getElementById("ordersTable")
+const table=document.getElementById("ordersTable")
 
-if(!tbody) return
+if(!table) return
 
-tbody.innerHTML=""
+table.innerHTML=""
 
 data.forEach(o=>{
 
-tbody.innerHTML += `
+table.innerHTML+=`
 <tr>
 <td>${o.id}</td>
 <td>${o.pickup}</td>
@@ -97,34 +46,9 @@ tbody.innerHTML += `
 
 }
 
-// déconnexion
-async function logout(){
-
-await db.auth.signOut()
-
-window.location.href="login.html"
-
-}
-
-// session inactive 30 min
-let inactivityTimer
-
-function resetTimer(){
-
-clearTimeout(inactivityTimer)
-
-inactivityTimer=setTimeout(logout,1800000)
-
-}
-
-document.addEventListener("mousemove",resetTimer)
-document.addEventListener("keydown",resetTimer)
-
-// lancement page
 document.addEventListener("DOMContentLoaded",()=>{
 
 checkLogin()
 loadOrders()
-resetTimer()
 
 })
