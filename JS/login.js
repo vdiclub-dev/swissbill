@@ -1,39 +1,54 @@
+let map
+let stops=[]
 
-function openLogin(){
-document.getElementById("loginModal").style.display="block"
+function initMap(){
+
+if(!document.getElementById("map")) return
+
+map = L.map('map').setView([46.8,7.2],8)
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+maxZoom:19
+}).addTo(map)
+
 }
 
-function closeLogin(){
-document.getElementById("loginModal").style.display="none"
-}
-async function login(){
+document.addEventListener("DOMContentLoaded", () => {
 
-const email = document.getElementById("loginEmail").value
-const password = document.getElementById("loginPassword").value
+initMap()
+loadColis()
 
-const {data,error} = await db.auth.signInWithPassword({
-email:email,
-password:password
 })
 
+async function sendParcel(){
+
+const payload={
+
+client:document.getElementById("client").value,
+ville:document.getElementById("ville").value,
+adresse:document.getElementById("adresse").value,
+
+colis:Number(document.getElementById("colis").value),
+poids:Number(document.getElementById("poids").value),
+
+delai:document.getElementById("delai").value,
+nuit:document.getElementById("nuit").value,
+note:document.getElementById("note").value
+
+}
+
+const {error}=await db.from("colis").insert([payload])
+
 if(error){
-alert("Email ou mot de passe incorrect")
-return
-}
 
-window.location.href="portal.html"
+alert("Erreur : "+error.message)
 
-}
-async function checkLogin(){
+}else{
 
-const {data} = await db.auth.getSession()
+alert("Demande envoyée")
 
-if(!data.session){
-
-window.location.href="login.html"
+loadColis()
 
 }
 
 }
-document.addEventListener("DOMContentLoaded",checkLogin)
-
