@@ -14,7 +14,11 @@ window.location.href="login.html"
 // créer transport
 async function createOrder(){
 
-const { data: { user } } = await db.auth.getUser()
+async function createOrder(){
+
+const { data, error } = await db.auth.getUser()
+
+if(!data.user
 
 const pickup = document.getElementById("pickup").value
 const delivery = document.getElementById("delivery").value
