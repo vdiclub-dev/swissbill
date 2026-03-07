@@ -30,3 +30,33 @@ await db.from("colis").insert(payload)
 alert("Colis envoyé")
 
 }
+async function loadColis(){
+
+const {data,error}=await db
+.from("colis")
+.select("*")
+.eq("statut","a_planifier")
+
+if(error){
+
+console.log(error)
+return
+
+}
+
+data.forEach(c=>{
+
+stops.push({
+client:c.client,
+ville:c.ville,
+adresse:c.adresse,
+colis:c.colis,
+poids:c.poids
+})
+
+})
+
+drawStops()
+renderDashboard()
+
+}
