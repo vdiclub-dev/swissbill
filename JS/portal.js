@@ -9,7 +9,7 @@ window.location.href="login.html"
 
 }
 
-document.addEventListener("DOMContentLoaded",checkLogin)
+
 
 // créer transport
 async function createOrder(){
