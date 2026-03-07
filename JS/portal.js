@@ -43,5 +43,42 @@ status:"nouveau"
 loadOrders()
 
 }
+async function login(){
 
+const email = document.getElementById("loginEmail").value
+const password = document.getElementById("loginPassword").value
+
+const {data,error} = await db.auth.signInWithPassword({
+email:email,
+password:password
+})
+
+if(error){
+alert("Erreur connexion")
+return
+}
+
+alert("Connexion réussie")
+
+loadOrders()
+
+}
+async function signup(){
+
+const email = document.getElementById("signupEmail").value
+const password = document.getElementById("signupPassword").value
+
+const {data,error} = await db.auth.signUp({
+email:email,
+password:password
+})
+
+if(error){
+alert("Erreur inscription")
+return
+}
+
+alert("Compte créé")
+
+}
 document.addEventListener("DOMContentLoaded",loadOrders)
