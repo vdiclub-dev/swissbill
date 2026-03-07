@@ -106,3 +106,44 @@ table.innerHTML+=`
 })
 
 }
+async function signup(){
+
+const company=document.getElementById("company").value
+const lastname=document.getElementById("lastname").value
+const firstname=document.getElementById("firstname").value
+const address=document.getElementById("address").value
+const zip=document.getElementById("zip").value
+const city=document.getElementById("city").value
+const phone=document.getElementById("phone").value
+const email=document.getElementById("email").value
+const password=document.getElementById("password").value
+
+const {data,error}=await db.auth.signUp({
+email:email,
+password:password
+})
+
+if(error){
+alert(error.message)
+return
+}
+
+await db.from("clients").insert([{
+
+auth_id:data.user.id,
+company:company,
+lastname:lastname,
+firstname:firstname,
+address:address,
+zip:zip,
+city:city,
+phone:phone,
+email:email
+
+}])
+
+alert("Compte client créé")
+
+window.location.href="login.html"
+
+}
