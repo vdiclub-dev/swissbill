@@ -17,17 +17,32 @@ initMap()
 })
 async function sendParcel(){
 
-const payload = {
+const payload={
+
 client:document.getElementById("client").value,
 ville:document.getElementById("ville").value,
 adresse:document.getElementById("adresse").value,
+
 colis:Number(document.getElementById("colis").value),
-poids:Number(document.getElementById("poids").value)
+poids:Number(document.getElementById("poids").value),
+
+delai:document.getElementById("delai").value,
+nuit:document.getElementById("nuit").value,
+note:document.getElementById("note").value
+
 }
 
-await db.from("colis").insert(payload)
+const {error}=await db.from("colis").insert(payload)
 
-alert("Colis envoyé")
+if(error){
+
+alert("Erreur : "+error.message)
+
+}else{
+
+alert("Demande envoyée")
+
+}
 
 }
 async function loadColis(){
