@@ -52,3 +52,21 @@ loadColis()
 }
 
 }
+async function login(){
+
+const email=document.getElementById("loginEmail").value
+const password=document.getElementById("loginPassword").value
+
+const {data,error}=await db.auth.signInWithPassword({
+email:email,
+password:password
+})
+
+if(error){
+alert("Email ou mot de passe incorrect")
+return
+}
+
+window.location.href="portal.html"
+
+}
