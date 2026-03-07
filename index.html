@@ -1,776 +1,228 @@
-<!DOCTYPE html>
-<html lang="fr">
-
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SwissBill</title>
-
-  <link rel="icon" href="data:," />
-
-  <!-- Leaflet carte -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- Graphique -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Supabase -->
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <style>
-    :root{
-      --bg:#0f172a;
-      --panel:#111827;
-      --card:#ffffff;
-      --soft:#f8fafc;
-      --line:#e5e7eb;
-      --text:#0f172a;
-      --muted:#64748b;
-      --primary:#2563eb;
-      --primary-dark:#1d4ed8;
-      --success:#16a34a;
-      --danger:#dc2626;
-      --warning:#d97706;
-      --shadow:0 8px 24px rgba(15,23,42,.08);
-      --radius:16px;
-    }
-
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family:Inter,Arial,sans-serif;
-      background:#eef2f7;
-      color:var(--text);
-    }
-
-    .app{
-      display:grid;
-      grid-template-columns:260px 1fr;
-      min-height:100vh;
-    }
-
-    .sidebar{
-      background:linear-gradient(180deg,#0f172a,#1e293b);
-      color:#fff;
-      padding:22px 16px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-
-    .sidebar h2{
-      margin:0 0 10px;
-      font-size:26px;
-      font-weight:800;
-    }
-
-    .sidebar button{
-      background:rgba(255,255,255,.08);
-      color:#fff;
-      border:none;
-      padding:12px 14px;
-      border-radius:12px;
-      cursor:pointer;
-      font-weight:700;
-      text-align:left;
-      transition:.2s;
-    }
-
-    .sidebar button:hover,
-    .sidebar button.active{
-      background:#2563eb;
-    }
-
-    .main{
-      padding:22px;
-      overflow:auto;
-    }
-
-    .page{display:none}
-
-    .topbar{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:12px;
-      margin-bottom:18px;
-      flex-wrap:wrap;
-    }
-
-    .topbar h1{
-      margin:0;
-      font-size:30px;
-    }
-
-    .sub{
-      color:var(--muted);
-      font-size:14px;
-    }
-
-    .cards{
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:16px;
-      margin-bottom:18px;
-    }
-
-    .card{
-      background:var(--card);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      padding:18px;
-    }
-
-    .card h3{
-      margin:0 0 10px;
-      font-size:14px;
-      color:var(--muted);
-    }
-
-    .card p{
-      margin:0;
-      font-size:28px;
-      font-weight:800;
-    }
-
-    .grid{
-      display:grid;
-      gap:16px;
-    }
-
-    .grid-2{grid-template-columns:1fr 1fr}
-    .grid-3{grid-template-columns:repeat(3,1fr)}
-    .grid-4{grid-template-columns:repeat(4,1fr)}
-
-    .panel{
-      background:#fff;
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      padding:18px;
-      margin-bottom:18px;
-    }
-
-    .panel h2,.panel h3{
-      margin:0 0 14px;
-    }
-
-    .form-grid{
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:12px;
-      align-items:end;
-    }
-
-    label{
-      display:block;
-      font-size:13px;
-      font-weight:700;
-      margin-bottom:6px;
-      color:#334155;
-    }
-
-    input,select,button,textarea{
-      font:inherit;
-    }
-
-    input,select,textarea{
-      width:100%;
-      padding:11px 12px;
-      border:1px solid #cbd5e1;
-      border-radius:12px;
-      background:#fff;
-      color:#111827;
-    }
-
-    input:focus,select:focus,textarea:focus{
-      outline:none;
-      border-color:#2563eb;
-      box-shadow:0 0 0 3px rgba(37,99,235,.12);
-    }
-
-    button.btn{
-      border:none;
-      background:var(--primary);
-      color:#fff;
-      padding:12px 14px;
-      border-radius:12px;
-      cursor:pointer;
-      font-weight:700;
-    }
-
-    button.btn:hover{
-      background:var(--primary-dark);
-    }
-
-    button.btn-soft{
-      border:none;
-      background:#e0edff;
-      color:#1d4ed8;
-      padding:11px 14px;
-      border-radius:12px;
-      cursor:pointer;
-      font-weight:700;
-    }
-
-    button.btn-danger{
-      border:none;
-      background:#fee2e2;
-      color:#991b1b;
-      padding:8px 10px;
-      border-radius:10px;
-      cursor:pointer;
-      font-weight:700;
-    }
-
-    table{
-      width:100%;
-      border-collapse:collapse;
-      background:#fff;
-      border-radius:12px;
-      overflow:hidden;
-    }
-
-    th,td{
-      padding:12px 10px;
-      border-bottom:1px solid #e5e7eb;
-      text-align:left;
-      font-size:14px;
-      vertical-align:top;
-    }
-
-    th{
-      background:#f8fafc;
-      color:#475569;
-      font-weight:700;
-    }
-
-    .table-wrap{
-      overflow:auto;
-      border:1px solid #e5e7eb;
-      border-radius:12px;
-    }
-
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      border-radius:999px;
-      padding:4px 10px;
-      font-size:12px;
-      font-weight:700;
-    }
-
-    .p-ex{background:#fee2e2;color:#991b1b}
-    .p-j0{background:#ffedd5;color:#9a3412}
-    .p-j1{background:#dbeafe;color:#1d4ed8}
-    .p-j2{background:#dcfce7;color:#166534}
-    .p-j5{background:#e5e7eb;color:#374151}
-
-    .vehicle-box{
-      border:1px solid #dbe2ea;
-      border-radius:14px;
-      padding:14px;
-      background:#fbfdff;
-    }
-
-    .vehicle-title{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:10px;
-      margin-bottom:10px;
-      flex-wrap:wrap;
-    }
-
-    .muted{color:var(--muted)}
-    .ok{color:var(--success);font-weight:800}
-    .warn{color:var(--warning);font-weight:800}
-    .bad{color:var(--danger);font-weight:800}
-
-    .autocomplete{
-      position:relative;
-    }
-
-    .results{
-      position:absolute;
-      left:0;
-      right:0;
-      top:100%;
-      background:#fff;
-      border:1px solid #cbd5e1;
-      border-radius:12px;
-      box-shadow:var(--shadow);
-      max-height:240px;
-      overflow:auto;
-      z-index:50;
-      display:none;
-      margin-top:6px;
-    }
-
-    .results .item{
-      padding:10px 12px;
-      cursor:pointer;
-      border-bottom:1px solid #eef2f7;
-    }
-
-    .results .item:hover{
-      background:#eff6ff;
-    }
-
-    .small{
-      font-size:12px;
-    }
-
-    .right{
-      text-align:right;
-    }
-
-    .inline{
-      display:flex;
-      gap:12px;
-      flex-wrap:wrap;
-      align-items:center;
-    }
-
-    .checkbox-row{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      padding-top:30px;
-    }
-
-    @media (max-width:1200px){
-      .cards,.grid-4,.grid-3,.grid-2,.form-grid{
-        grid-template-columns:1fr 1fr;
-      }
-    }
-
-    @media (max-width:900px){
-      .app{grid-template-columns:1fr}
-      .cards,.grid-4,.grid-3,.grid-2,.form-grid{
-        grid-template-columns:1fr;
-      }
-    }
-  </style>
-
-  <script>
-    const SUPABASE_URL = "https://iubbsnntcreneakbdkmv.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y";
-   
-  </script>
-  
-</head>
-<body>
-  <div class="app">
-    <aside class="sidebar">
-      <h2>SwissBill</h2>
-  <button onclick="showPage('dashboard')">
-<i class="fa-solid fa-chart-line"></i> Dashboard
-</button>
-
-<button onclick="showPage('clients')">
-<i class="fa-solid fa-users"></i> Clients
-</button>
-
-<button onclick="showPage('products')">
-<i class="fa-solid fa-box"></i> Produits
-</button>
-
-<button onclick="showPage('tournees', this)">
-<i class="fa-solid fa-truck"></i> Tournées
-</button>
-    </aside>
-
-    <main class="main">
-      <!-- DASHBOARD -->
-      <section id="dashboard" class="page">
-        <div class="topbar">
-          <div>
-            <h1>Dashboard</h1>
-            <div class="sub">Vue globale de SwissBill</div>
-          </div>
-        </div>
-
-        <div class="cards">
-          <div class="card">
-            <h3>Clients</h3>
-            <p id="clientCount">0</p>
-          </div>
-          <div class="card">
-            <h3>Produits</h3>
-            <p id="productCount">0</p>
-          </div>
-          <div class="card">
-            <h3>Stops tournées</h3>
-            <p id="dashboardStops">0</p>
-          </div>
-          <div class="card">
-            <h3>Colis planifiés</h3>
-            <p id="dashboardParcels">0</p>
-          </div>
-        </div>
-
-        <div class="panel">
-          <h2>Revenus mensuels</h2>
-          <canvas id="revenueChart" height="90"></canvas>
-        </div>
-      </section>
-      create table tournees (
-id uuid primary key default uuid_generate_v4(),
-date date,
-depot text,
-vehicules integer,
-km_total numeric,
-colis_total integer,
-marge numeric,
-data jsonb,
-created_at timestamp default now()
-);
-      <!-- CLIENTS -->
-      <section id="clients" class="page">
-        <div class="topbar">
-          <div>
-            <h1>Clients</h1>
-            <div class="sub">Base clients SwissBill</div>
-          </div>
-          <button class="btn" onclick="addClient()">Ajouter</button>
-        </div>
-
-        <div class="panel">
-          <div class="form-grid">
-            <div>
-              <label>Entreprise</label>
-              <input id="company" placeholder="Entreprise">
-            </div>
-            <div>
-              <label>Nom</label>
-              <input id="lastname" placeholder="Nom">
-            </div>
-            <div>
-              <label>Email</label>
-              <input id="email" placeholder="Email">
-            </div>
-            <div>
-              <label>Ville</label>
-              <input id="city" placeholder="Ville">
-            </div>
-            <div>
-              <label>Adresse</label>
-              <input id="address" placeholder="Adresse">
-            </div>
-            <div>
-              <label>Téléphone</label>
-              <input id="phone" placeholder="Téléphone">
-            </div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Entreprise</th>
-                  <th>Nom</th>
-                  <th>Email</th>
-                  <th>Ville</th>
-                  <th>Adresse</th>
-                  <th>Téléphone</th>
-                </tr>
-              </thead>
-              <tbody id="clientsTable"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- PRODUITS -->
-      <section id="products" class="page">
-        <div class="topbar">
-          <div>
-            <h1>Produits</h1>
-            <div class="sub">Catalogue SwissBill</div>
-          </div>
-          <button class="btn" onclick="addProduct()">Ajouter</button>
-        </div>
-
-        <div class="panel">
-          <div class="form-grid">
-            <div>
-              <label>Produit</label>
-              <input id="productName" placeholder="Produit">
-            </div>
-            <div>
-              <label>Prix CHF</label>
-              <input id="productPrice" type="number" step="0.01" placeholder="Prix CHF">
-            </div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Produit</th>
-                  <th>Prix</th>
-                </tr>
-              </thead>
-              <tbody id="productsTable"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- TOURNEES -->
-      <section id="tournees" class="page">
-        <div class="topbar">
-          <div>
-            <h1>Planification des tournées</h1>
-            <div class="sub">Répartition automatique, temps chauffeur, coût km, marge</div>
-          </div>
-          <div class="inline">
-            <button class="btn-soft" onclick="optimiseTournees()">Optimiser</button>
-            <button class="btn-soft" onclick="clearStops()">Vider les stops</button>
-          </div>
-        </div>
-         <div class="panel">
-
+<section id="tournees" class="page">
+
+<div class="topbar">
+  <div>
+    <h1>Planification des tournées</h1>
+    <div class="sub">Répartition automatique, temps chauffeur, coût km, marge</div>
+  </div>
+
+  <div class="inline">
+    <button class="btn-soft" onclick="optimiseTournees()">
+      <i class="fa-solid fa-route"></i> Optimiser
+    </button>
+
+    <button class="btn-soft" onclick="clearStops()">
+      <i class="fa-solid fa-trash"></i> Vider les stops
+    </button>
+
+    <button class="btn-soft" onclick="saveTournee()">
+      <i class="fa-solid fa-save"></i> Sauvegarder tournée
+    </button>
+
+    <button class="btn-soft" onclick="exportTourneePDF()">
+      <i class="fa-solid fa-file-pdf"></i> PDF tournée
+    </button>
+  </div>
+</div>
+
+
+<div class="panel">
 <h2>Carte des tournées</h2>
-
 <div id="map" style="height:500px;"></div>
+</div>
+
+
+<!-- FORMULAIRE STOP -->
+
+<div class="panel">
+
+<h2>Ajouter un stop</h2>
+
+<div class="form-grid">
+
+<div class="autocomplete">
+<label>Recherche client</label>
+<input id="clientSearch" placeholder="Rechercher un client..." autocomplete="off">
+<div id="clientResults" class="results"></div>
+</div>
+
+<div>
+<label>Client sélectionné</label>
+<input id="stop-client" placeholder="Client" readonly>
+</div>
+
+<div>
+<label>Ville</label>
+<input id="stop-ville" placeholder="Ville">
+</div>
+
+<div>
+<label>Adresse</label>
+<input id="stop-adresse" placeholder="Adresse">
+</div>
+
+<div>
+<label>Nombre colis</label>
+<input id="stop-colis" type="number" min="1" value="1">
+</div>
+
+<div>
+<label>Poids total kg</label>
+<input id="stop-poids" type="number" min="0" step="0.1" value="1">
+</div>
+
+<div>
+<label>Délai</label>
+<select id="stop-delai">
+<option value="EX">Urgent 6h</option>
+<option value="J0">12h</option>
+<option value="J1" selected>24h</option>
+<option value="J2">48h</option>
+<option value="J5">Semaine</option>
+</select>
+</div>
+
+<div class="checkbox-row">
+<input id="stop-nuit" type="checkbox">
+<label for="stop-nuit" style="margin:0">Autorisation nuit</label>
+</div>
+
+<div>
+<label>Zone</label>
+<input id="stop-zone" placeholder="Auto" readonly>
+</div>
+
+<div>
+<label>Temps moyen stop (min)</label>
+<input id="stop-minutes" type="number" min="1" value="4">
+</div>
+
+<div>
+<label>Priorité</label>
+<select id="stop-priority">
+<option value="1">Haute</option>
+<option value="2" selected>Normale</option>
+<option value="3">Basse</option>
+</select>
+</div>
+
+<div style="align-self:end">
+<button class="btn" onclick="addStop()">
+<i class="fa-solid fa-plus"></i> Ajouter stop
+</button>
+</div>
 
 </div>
-  </section>
-        <!-- FORMULAIRE STOP -->
-        <div class="panel">
-          <h2>Ajouter un stop</h2>
-          <div class="form-grid">
-            <div class="autocomplete">
-              <label>Recherche client</label>
-              <input id="clientSearch" placeholder="Rechercher un client..." autocomplete="off">
-              <div id="clientResults" class="results"></div>
-            </div>
 
-            <div>
-              <label>Client sélectionné</label>
-              <input id="stop-client" placeholder="Client" readonly>
-            </div>
+</div>
 
-            <div>
-              <label>Ville</label>
-              <input id="stop-ville" placeholder="Ville">
-            </div>
 
-            <div>
-              <label>Adresse</label>
-              <input id="stop-adresse" placeholder="Adresse">
-            </div>
+<!-- KPI -->
 
-            <div>
-              <label>Nombre colis</label>
-              <input id="stop-colis" type="number" min="1" value="1">
-            </div>
+<div class="cards">
 
-            <div>
-              <label>Poids total kg</label>
-              <input id="stop-poids" type="number" min="0" step="0.1" value="1">
-            </div>
+<div class="card">
+<h3>Total stops</h3>
+<p id="kpiStops">0</p>
+</div>
 
-            <div>
-              <label>Délai</label>
-              <select id="stop-delai">
-                <option value="EX">Urgent 6h</option>
-                <option value="J0">12h</option>
-                <option value="J1" selected>24h</option>
-                <option value="J2">48h</option>
-                <option value="J5">Semaine</option>
-              </select>
-            </div>
+<div class="card">
+<h3>Total colis</h3>
+<p id="kpiParcels">0</p>
+</div>
 
-            <div class="checkbox-row">
-              <input id="stop-nuit" type="checkbox">
-              <label for="stop-nuit" style="margin:0">Autorisation nuit</label>
-            </div>
+<div class="card">
+<h3>Km estimés</h3>
+<p id="kpiKm">0</p>
+</div>
 
-            <div>
-              <label>Zone</label>
-              <input id="stop-zone" placeholder="Auto" readonly>
-            </div>
+<div class="card">
+<h3>Temps total</h3>
+<p id="kpiHours">0</p>
+</div>
 
-            <div>
-              <label>Temps moyen stop (min)</label>
-              <input id="stop-minutes" type="number" min="1" value="4">
-            </div>
+</div>
 
-            <div>
-              <label>Priorité</label>
-              <select id="stop-priority">
-                <option value="1">Haute</option>
-                <option value="2" selected>Normale</option>
-                <option value="3">Basse</option>
-              </select>
-            </div>
 
-            <div style="align-self:end">
-              <button class="btn" onclick="addStop()">Ajouter stop</button>
-            </div>
-          </div>
-        </div>
+<!-- TABLE STOPS -->
 
-        <!-- PARAMETRES -->
-        <div class="panel">
-          <h2>Paramètres logistiques et économiques</h2>
-          <div class="form-grid">
-            <div>
-              <label>Dépôt de départ</label>
-              <input id="depotCity" value="Cernier">
-            </div>
+<div class="panel">
 
-            <div>
-              <label>Max véhicules disponibles</label>
-              <input id="maxVehicles" type="number" min="1" max="10" value="5">
-            </div>
+<h2>Stops à planifier</h2>
 
-            <div>
-              <label>Temps max chauffeur / jour (h)</label>
-              <input id="maxDriverHours" type="number" min="1" step="0.5" value="12">
-            </div>
+<div class="table-wrap">
 
-            <div>
-              <label>Vitesse moyenne (km/h)</label>
-              <input id="avgSpeed" type="number" min="10" value="55">
-            </div>
+<table>
 
-            <div>
-              <label>Coût km (CHF)</label>
-              <input id="costPerKm" type="number" step="0.01" value="0.65">
-            </div>
+<thead>
+<tr>
+<th>#</th>
+<th>Client</th>
+<th>Ville</th>
+<th>Adresse</th>
+<th>Zone</th>
+<th>Colis</th>
+<th>Poids</th>
+<th>Délai</th>
+<th>Nuit</th>
+<th>Min/stop</th>
+<th></th>
+</tr>
+</thead>
 
-            <div>
-              <label>Frais fixes / véhicule / jour (CHF)</label>
-              <input id="fixedPerVehiclePerDay" type="number" step="0.01" value="350">
-            </div>
+<tbody id="stopsTable"></tbody>
 
-            <div>
-              <label>Prix moyen / colis (CHF)</label>
-              <input id="pricePerParcel" type="number" step="0.01" value="7">
-            </div>
+</table>
 
-            <div>
-              <label>Chargement dépôt (min)</label>
-              <input id="loadingMinutes" type="number" min="0" value="20">
-            </div>
+</div>
 
-            <div>
-              <label>Max stops / véhicule</label>
-              <input id="maxStopsPerVehicle" type="number" min="1" value="45">
-            </div>
+</div>
 
-            <div>
-              <label>Max colis / véhicule</label>
-              <input id="maxParcelsPerVehicle" type="number" min="1" value="120">
-            </div>
 
-            <div>
-              <label>Max poids / véhicule (kg)</label>
-              <input id="maxWeightPerVehicle" type="number" min="1" value="1200">
-            </div>
+<!-- ANALYSE -->
 
-            <div>
-              <label>Filtre véhicule</label>
-              <select id="vehicleFilter" onchange="renderAnalysis(currentPlan)">
-                <option value="all">Tous</option>
-              </select>
-            </div>
-          </div>
-        </div>
+<div class="grid grid-2">
 
-        <!-- KPI TOURNEES -->
-        <div class="cards">
-          <div class="card">
-            <h3>Total stops</h3>
-            <p id="kpiStops">0</p>
-          </div>
-          <div class="card">
-            <h3>Total colis</h3>
-            <p id="kpiParcels">0</p>
-          </div>
-          <div class="card">
-            <h3>Km estimés</h3>
-            <p id="kpiKm">0</p>
-          </div>
-          <div class="card">
-            <h3>Temps total</h3>
-            <p id="kpiHours">0</p>
-          </div>
-        </div>
+<div class="panel">
 
-        <!-- TABLE STOPS -->
-        <div class="panel">
-          <h2>Stops à planifier</h2>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Client</th>
-                  <th>Ville</th>
-                  <th>Adresse</th>
-                  <th>Zone</th>
-                  <th>Colis</th>
-                  <th>Poids</th>
-                  <th>Délai</th>
-                  <th>Nuit</th>
-                  <th>Min/stop</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="stopsTable"></tbody>
-            </table>
-          </div>
-        </div>
+<h2>Analyse rentabilité</h2>
 
-        <!-- ANALYSE -->
-        <div class="grid grid-2">
-          <div class="panel">
-            <h2>Analyse rentabilité</h2>
-            <div class="table-wrap">
-              <table>
-                <tbody>
-                  <tr><th>Véhicules nécessaires</th><td id="analysisVehicles">0</td></tr>
-                  <tr><th>Chauffeurs nécessaires</th><td id="analysisDrivers">0</td></tr>
-                  <tr><th>Stops</th><td id="analysisStops">0</td></tr>
-                  <tr><th>Colis</th><td id="analysisParcels">0</td></tr>
-                  <tr><th>Poids total</th><td id="analysisWeight">0 kg</td></tr>
-                  <tr><th>Kilomètres estimés</th><td id="analysisKm">0 km</td></tr>
-                  <tr><th>Temps conduite</th><td id="analysisDriveHours">0 h</td></tr>
-                  <tr><th>Temps stops</th><td id="analysisStopHours">0 h</td></tr>
-                  <tr><th>Temps pauses</th><td id="analysisPauseHours">0 h</td></tr>
-                  <tr><th>Temps total</th><td id="analysisTotalHours">0 h</td></tr>
-                  <tr><th>CA jour</th><td id="analysisRevenueDay">0 CHF</td></tr>
-                  <tr><th>Coût variable jour</th><td id="analysisVariableDay">0 CHF</td></tr>
-                  <tr><th>Coût fixe jour</th><td id="analysisFixedDay">0 CHF</td></tr>
-                  <tr><th>Coût total jour</th><td id="analysisTotalCostDay">0 CHF</td></tr>
-                  <tr><th>Marge jour</th><td id="analysisMarginDay">0 CHF</td></tr>
-                  <tr><th>Marge mois</th><td id="analysisMarginMonth">0 CHF</td></tr>
-                  <tr><th>Marge année</th><td id="analysisMarginYear">0 CHF</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+<div class="table-wrap">
 
-          <div class="panel">
-            <h2>Répartition des véhicules</h2>
-            <div id="vehiclesContainer" class="grid"></div>
-          </div>
-        </div>
-      </section>
-    </main>
-  </div>
+<table>
+
+<tbody>
+
+<tr><th>Véhicules nécessaires</th><td id="analysisVehicles">0</td></tr>
+<tr><th>Chauffeurs nécessaires</th><td id="analysisDrivers">0</td></tr>
+<tr><th>Stops</th><td id="analysisStops">0</td></tr>
+<tr><th>Colis</th><td id="analysisParcels">0</td></tr>
+<tr><th>Kilomètres estimés</th><td id="analysisKm">0 km</td></tr>
+<tr><th>Temps total</th><td id="analysisTotalHours">0 h</td></tr>
+<tr><th>CA jour</th><td id="analysisRevenueDay">0 CHF</td></tr>
+<tr><th>Coût total jour</th><td id="analysisTotalCostDay">0 CHF</td></tr>
+<tr><th>Marge jour</th><td id="analysisMarginDay">0 CHF</td></tr>
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+
+<div class="panel">
+
+<h2>Répartition des véhicules</h2>
+
+<div id="vehiclesContainer" class="grid"></div>
+
+</div>
+
+</div>
+
+</section>
 
   <script>
 let map
