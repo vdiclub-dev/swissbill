@@ -1,7 +1,30 @@
+async function logout(){
+
+await db.auth.signOut()
+
+window.location.href="login.html"
+
+}
+const { data: { user } } = await db.auth.getUser()
+
+const { data } = await db
+.from("orders")
+.select("*")
+.eq("user_id",user.id)
+const { data: { user } } = await db.auth.getUser()
+
+await db.from("orders").insert([{
+user_id:user.id,
+pickup,
+delivery,
+speed,
+weight,
+status:"nouveau"
+}])
 // vérifier si utilisateur connecté
 async function checkLogin(){
 
-const {data}=await db.auth.getSession()
+const { data } = await db.auth.getSession()
 
 if(!data.session){
 window.location.href="login.html"
