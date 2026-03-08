@@ -1,115 +1,77 @@
-async function loadOrders(){
+const sbPortal = window.supabaseClient;
 
-const { data: { user } } = await db.auth.getUser()
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const session = await requireAuth();
+    if (!session) return;
 
-const { data } = await db
-.from("orders")
-.select("*")
-.eq("user_id", user.id)
+    const profile = await getClientProfile();
+    if (!profile) throw new Error("Profil introuvable.");
 
-const table = document.getElementById("ordersTable")
+    const welcome = document.getElementById("welcomeName");
+    if (welcome) {
+      welcome.textContent = profile.entreprise || profile.nom || "Client";
+    }
 
-table.innerHTML = ""
+    const clientInfo = document.getElementById("clientInfo");
+    if (clientInfo) {
+      clientInfo.innerHTML = `
+        <strong>${profile.entreprise || ""}</strong><br>
+        ${profile.nom || ""}<br>
+        ${profile.email || ""}<br>
+        ${profile.telephone || ""}<br>
+        N° client : ${profile.client_number || "-"}
+      `;
+    }
 
-data.forEach(o => {
+    const { data: orders, error } = await sbPortal
+      .from("orders")
+      .select("*")
+      .eq("client_id", profile.id)
+      .order("created_at", { ascending: false });
 
-table.innerHTML += `
-<tr>
-<td>${o.id}</td>
-<td>${o.pickup}</td>
-<td>${o.delivery}</td>
-<td>${o.status}</td>
-</tr>
-`
+    if (error) throw error;
 
-})
+    const currentCount = (orders || []).filter(o => !["livré", "annulé"].includes((o.status || "").toLowerCase())).length;
+    const deliveredCount = (orders || []).filter(o => (o.status || "").toLowerCase() === "livré").length;
 
-}
-async function createOrder(){
+    const activeEl = document.getElementById("activeOrders");
+    const deliveredEl = document.getElementById("deliveredOrders");
+    const listEl = document.getElementById("ordersList");
 
-const { data: { user } } = await db.auth.getUser()
+    if (activeEl) activeEl.textContent = currentCount;
+    if (deliveredEl) deliveredEl.textContent = deliveredCount;
 
-const pickup = document.getElementById("pickup").value
-const delivery = document.getElementById("delivery").value
-const speed = document.getElementById("speed").value
-const weight = document.getElementById("weight").value
+    if (listEl) {
+      if (!orders || orders.length === 0) {
+        listEl.innerHTML = `<div class="empty-box">Aucun transport enregistré pour le moment.</div>`;
+      } else {
+        listEl.innerHTML = orders.map(order => `
+          <div class="order-card">
+            <div class="order-top">
+              <div>
+                <strong>${order.order_number}</strong><br>
+                ${order.pickup_city || "-"} → ${order.delivery_city || "-"}
+              </div>
+              <div class="status-badge">${order.status || "nouveau"}</div>
+            </div>
 
-await db
-.from("orders")
-.insert([{
-user_id:user.id,
-pickup,
-delivery,
-speed,
-weight,
-status:"nouveau"
-}])
+            <div class="order-grid">
+              <div><strong>Type :</strong> ${order.package_type || "-"}</div>
+              <div><strong>Vitesse :</strong> ${order.speed || "-"}</div>
+              <div><strong>Prix estimé :</strong> ${UI.money(order.estimated_price)}</div>
+              <div><strong>Date :</strong> ${UI.formatDate(order.created_at)}</div>
+            </div>
+          </div>
+        `).join("");
+      }
+    }
 
-alert("Transport créé")
-
-loadOrders()
-
-}
-async function checkLogin(){
-
-const { data } = await db.auth.getSession()
-
-if(!data.session){
-window.location.href="login.html"
-}
-
-}
-
-async function logout(){
-
-await db.auth.signOut()
-
-window.location.href="login.html"
-
-}
-
-async function loadOrders(){
-
-const { data: userData } = await db.auth.getUser()
-
-if(!userData.user) return
-
-const { data, error } = await db
-.from("orders")
-.select("*")
-.eq("user_id", userData.user.id)
-
-if(error){
-console.log("Erreur chargement orders", error)
-return
-}
-
-const table=document.getElementById("ordersTable")
-
-if(!table) return
-
-table.innerHTML=""
-
-data.forEach(o=>{
-
-table.innerHTML+=`
-<tr>
-<td>${o.id}</td>
-<td>${o.pickup}</td>
-<td>${o.delivery}</td>
-<td>${o.status}</td>
-</tr>
-`
-
-})
-
-}
-
-document.addEventListener("DOMContentLoaded", async ()=>{
-
-await checkLogin()
-await loadOrders()
-
-})
-document.addEventListener("DOMContentLoaded",()=>{
-  loadDashboard()
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", logout);
+    }
+  } catch (err) {
+    UI.toast(err.message || "Erreur portail", "error");
+  }
+});
