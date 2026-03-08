@@ -1,3 +1,26 @@
+async function loadDashboard(){
+
+const { data } = await db
+.from("transport_orders")
+.select("*")
+
+let enCours = 0
+let livres = 0
+
+data.forEach(o => {
+
+if(o.Statut === "livré"){
+livres++
+}else{
+enCours++
+}
+
+})
+
+document.getElementById("ordersCount").innerText = enCours
+document.getElementById("deliveredCount").innerText = livres
+
+}
 async function createOrder(){
 
 const client = document.getElementById("Client").value
