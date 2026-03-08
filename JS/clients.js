@@ -12,14 +12,22 @@ async function searchClient(){
 const term =
 document.getElementById("clientSearch").value
 
-if(term.length < 2) return
+if(term.length < 2){
+document.getElementById("clientResults").innerHTML=""
+return
+}
 
 const sb = window.supabaseClient
 
-const {data} = await sb
+const {data,error} = await sb
 .from("clients")
-.select("*")
-.ilike("nom","%"+term+"%")
+.select("id,company,first_name,last_name")
+.ilike("company","%"+term+"%")
+
+if(error){
+console.error(error)
+return
+}
 
 const results =
 document.getElementById("clientResults")
@@ -28,9 +36,17 @@ results.innerHTML=""
 
 data.forEach(c=>{
 
+let name = ""
+
+if(c.company){
+name = c.company
+}else{
+name = c.first_name + " " + c.last_name
+}
+
 results.innerHTML += `
-<div onclick="selectClient('${c.id}','${c.nom}')">
-${c.nom}
+<div onclick="selectClient('${c.id}','${name}')">
+${name}
 </div>
 `
 
