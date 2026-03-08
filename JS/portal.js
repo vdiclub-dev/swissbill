@@ -111,3 +111,5 @@ await checkLogin()
 await loadOrders()
 
 })
+document.addEventListener("DOMContentLoaded",()=>{
+  loadDashboard()
