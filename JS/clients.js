@@ -1,3 +1,12 @@
+function selectClient(id,nom){
+
+document.getElementById("clientSearch").value = nom
+
+document.getElementById("clientResults").innerHTML=""
+
+window.selectedClient = id
+
+}
 async function searchClient(){
 
 const term =
