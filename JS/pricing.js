@@ -1,23 +1,23 @@
-function calculatePrice(pricing, data){
+function calculatePrice(p,data){
 
-let price = pricing.base_fee
+let price = p.base_fee
 
-price += data.km * pricing.price_per_km
+price += data.km * p.price_per_km
 
-if(data.type === "carton")
-price += pricing.package_carton
+if(data.type==="carton")
+price += p.package_carton
 
-if(data.type === "palette")
-price += pricing.package_palette
+if(data.type==="palette")
+price += p.package_palette
 
 if(data.volume)
-price += data.volume * pricing.price_m3
+price += data.volume * p.price_m3
 
-if(data.weight > 10)
-price += pricing.weight_10
+if(data.weight>10)
+price += p.weight_10
 
 if(data.urgent)
-price *= pricing.urgent_multiplier
+price *= p.urgent_multiplier
 
 return Math.round(price*100)/100
 }
