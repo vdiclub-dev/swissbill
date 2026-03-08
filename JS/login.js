@@ -13,10 +13,7 @@ maxZoom:19
 
 }
 
-document.addEventListener("DOMContentLoaded", () => {
 
-initMap()
-loadColis()
 
 })
 
