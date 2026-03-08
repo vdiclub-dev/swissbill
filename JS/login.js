@@ -15,7 +15,7 @@ maxZoom:19
 
 
 
-})
+
 
 async function sendParcel(){
 
