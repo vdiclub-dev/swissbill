@@ -1,3 +1,12 @@
+function showPage(page){
+
+document.querySelectorAll(".page")
+.forEach(p => p.style.display="none")
+
+document.getElementById(page).style.display="block"
+
+}
+
 const sbPortal = window.supabaseClient;
 
 document.addEventListener("DOMContentLoaded", async () => {
