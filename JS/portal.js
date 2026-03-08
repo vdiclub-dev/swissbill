@@ -75,3 +75,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     UI.toast(err.message || "Erreur portail", "error");
   }
 });
+function showPage(page){
+
+document.querySelectorAll(".page")
+.forEach(p=>p.style.display="none")
+
+document.getElementById(page).style.display="block"
+
+}
