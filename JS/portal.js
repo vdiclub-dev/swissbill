@@ -83,3 +83,54 @@ document.querySelectorAll(".page")
 document.getElementById(page).style.display="block"
 
 }
+async function loadCockpit(){
+
+const sb = window.supabaseClient
+
+// transports aujourd'hui
+
+const today = new Date().toISOString().slice(0,10)
+
+const {data:todayOrders} = await sb
+.from("orders")
+.select("*")
+.gte("created_at", today)
+
+document.getElementById("stat_today").innerText =
+todayOrders?.length || 0
+
+
+// en cours
+
+const {data:running} = await sb
+.from("orders")
+.select("*")
+.eq("status","en_route")
+
+document.getElementById("stat_running").innerText =
+running?.length || 0
+
+
+// livrés
+
+const {data:done} = await sb
+.from("orders")
+.select("*")
+.eq("status","livre")
+
+document.getElementById("stat_done").innerText =
+done?.length || 0
+
+
+// clients
+
+const {data:clients} = await sb
+.from("clients")
+.select("*")
+
+document.getElementById("stat_clients").innerText =
+clients?.length || 0
+
+}
+
+loadCockpit()
