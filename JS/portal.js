@@ -1,3 +1,55 @@
+async function loadOrders(){
+
+const { data: { user } } = await db.auth.getUser()
+
+const { data } = await db
+.from("orders")
+.select("*")
+.eq("user_id", user.id)
+
+const table = document.getElementById("ordersTable")
+
+table.innerHTML = ""
+
+data.forEach(o => {
+
+table.innerHTML += `
+<tr>
+<td>${o.id}</td>
+<td>${o.pickup}</td>
+<td>${o.delivery}</td>
+<td>${o.status}</td>
+</tr>
+`
+
+})
+
+}
+async function createOrder(){
+
+const { data: { user } } = await db.auth.getUser()
+
+const pickup = document.getElementById("pickup").value
+const delivery = document.getElementById("delivery").value
+const speed = document.getElementById("speed").value
+const weight = document.getElementById("weight").value
+
+await db
+.from("orders")
+.insert([{
+user_id:user.id,
+pickup,
+delivery,
+speed,
+weight,
+status:"nouveau"
+}])
+
+alert("Transport créé")
+
+loadOrders()
+
+}
 async function checkLogin(){
 
 const { data } = await db.auth.getSession()
