@@ -1,4 +1,3 @@
-
 async function getDistance(start, end){
 
 const key = "TA_CLE_OPENROUTESERVICE"
@@ -27,3 +26,4 @@ const km = data.routes[0].summary.distance / 1000
 
 return km
 }
+
