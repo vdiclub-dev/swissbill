@@ -1,3 +1,33 @@
+async function searchClient(){
+
+const term =
+document.getElementById("clientSearch").value
+
+if(term.length < 2) return
+
+const sb = window.supabaseClient
+
+const {data} = await sb
+.from("clients")
+.select("*")
+.ilike("nom","%"+term+"%")
+
+const results =
+document.getElementById("clientResults")
+
+results.innerHTML=""
+
+data.forEach(c=>{
+
+results.innerHTML += `
+<div onclick="selectClient('${c.id}','${c.nom}')">
+${c.nom}
+</div>
+`
+
+})
+
+}
 const sb = window.supabaseClient
 
 async function loadClients(){
