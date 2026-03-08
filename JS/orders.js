@@ -22,3 +22,29 @@ alert("Transport créé")
 loadOrders()
 
 }
+async function loadOrders(){
+
+const {data} = await db
+.from("transport_orders")
+.select("*")
+
+const table = document.getElementById("ordersTable")
+
+table.innerHTML=""
+
+data.forEach(o=>{
+
+table.innerHTML+=`
+<tr>
+<td>${o.Client}</td>
+<td>${o.pickup_address}</td>
+<td>${o.delivery_address}</td>
+<td>${o.Distance}</td>
+<td>${o.Prix}</td>
+<td>${o.Statut}</td>
+</tr>
+`
+
+})
+
+}
