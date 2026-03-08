@@ -1,8 +1,8 @@
-async function updateStatus(orderId,status){
+async function updateStatus(id,status){
 
-await supabase
+await supabaseClient
 .from("orders")
 .update({status:status})
-.eq("id",orderId)
+.eq("id",id)
 
 }
