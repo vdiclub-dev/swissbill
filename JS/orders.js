@@ -264,13 +264,10 @@ table.innerHTML+=`
 }
 function calculateTransport(){
 
-const km = Math.floor(Math.random()*80)+10
+let km = Math.floor(Math.random()*80)+10
 
 document.getElementById("distance").innerText = km
 
-const price = km * 1.2
-
-document.getElementById("price").innerText =
-"CHF " + price.toFixed(2)
+calculatePrice()
 
 }
