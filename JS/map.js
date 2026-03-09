@@ -1,3 +1,21 @@
+let startMarker
+let endMarker
+
+function drawRoute(coords){
+
+const latlngs = coords.map(c => [c[1],c[0]])
+
+L.polyline(latlngs,{
+color:"red",
+weight:4
+}).addTo(map)
+
+startMarker = L.marker(latlngs[0]).addTo(map)
+endMarker = L.marker(latlngs[latlngs.length-1]).addTo(map)
+
+map.fitBounds(latlngs)
+
+}
 console.log("map.js chargé");
 
 let map;
