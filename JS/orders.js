@@ -1,90 +1,102 @@
 console.log("orders.js chargé");
 
 async function calculateDistance() {
-  const start = document.getElementById("pickup_address").value.trim();
-  const end = document.getElementById("delivery_address").value.trim();
 
-  if (!start || !end) return;
+const start = document.getElementById("pickup_address").value.trim();
+const end = document.getElementById("delivery_address").value.trim();
 
-  try {
-    const geo = async (addr) => {
-      const r = await fetch(
-        "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" +
-          encodeURIComponent(addr)
-      );
-      const d = await r.json();
+if(!start || !end) return;
 
-      if (!d || !d.length) {
-        throw new Error("Adresse introuvable : " + addr);
-      }
+try{
 
-      return [Number(d[0].lon), Number(d[0].lat)];
-    };
+const geo = async(addr)=>{
 
-    const startCoord = await geo(start);
-    const endCoord = await geo(end);
+const r = await fetch(
+"https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
++ encodeURIComponent(addr)
+);
 
-    const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI4OTQwOGJlOTE1MDQzNjc5NmQ3NzkzOWQ0YjZjODg4IiwiaCI6Im11cm11cjY0In0=";
+const d = await r.json();
 
-    const route = await fetch(
-      "https://api.openrouteservice.org/v2/directions/driving-car",
-      {
-        method: "POST",
-        headers: {
-          Authorization: key,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          coordinates: [startCoord, endCoord]
-        })
-      }
-    );
+if(!d || !d.length){
+throw new Error("Adresse introuvable : "+addr);
+}
 
-    const data = await route.json();
-    console.log("ORS:", data);
+return [Number(d[0].lon), Number(d[0].lat)];
+};
 
-    if (!data.routes || !data.routes.length) {
-      throw new Error("Aucune route trouvée");
-    }
+const startCoord = await geo(start);
+const endCoord = await geo(end);
 
-const distance = data.routes[0].summary.distance
-const duration = data.routes[0].summary.duration
+const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI4OTQwOGJlOTE1MDQzNjc5NmQ3NzkzOWQ0YjZjODg4IiwiaCI6Im11cm11cjY0In0=";
 
-const coords = data.routes[0].geometry.coordinates
+const route = await fetch(
+"https://api.openrouteservice.org/v2/directions/driving-car",
+{
+method:"POST",
+headers:{
+Authorization:key,
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+coordinates:[startCoord,endCoord]
+})
+}
+);
+
+const data = await route.json();
+
+console.log("ORS:",data);
+
+if(!data.routes || !data.routes.length){
+throw new Error("Aucune route trouvée");
+}
+
+const routeData = data.routes[0];
+
+const distance = routeData.summary.distance;
+const duration = routeData.summary.duration;
+
+const coords = routeData.geometry.coordinates;
 
 if(coords && coords.length && window.drawRoute){
-drawRoute(coords)
+drawRoute(coords);
 }
 
-    const km = distance / 1000;
-    const minutes = duration / 60;
+const km = distance / 1000;
+const minutes = duration / 60;
 
-    document.getElementById("distance").innerText = km.toFixed(1);
-    document.getElementById("duration").innerText = minutes.toFixed(0);
+document.getElementById("distance").innerText = km.toFixed(1);
+document.getElementById("duration").innerText = minutes.toFixed(0);
 
-  
+calculatePrice();
 
-    calculatePrice();
-  } catch (e) {
-    console.error("Erreur calcul distance :", e);
-    alert("Erreur de calcul de distance");
-  }
+}catch(e){
+
+console.error("Erreur calcul distance :",e);
+alert("Erreur de calcul de distance");
+
 }
 
-function calculatePrice() {
-  const km = Number(document.getElementById("distance").innerText || 0);
-  const type = document.getElementById("package_type").value;
-
-  let price = km * 1.2;
-
-  if (type === "box") price += 10;
-  if (type === "palette") price += 20;
-
-  document.getElementById("price").innerText = "CHF " + price.toFixed(2);
 }
 
-function calculateTransport() {
-  calculateDistance();
+function calculatePrice(){
+
+const km = Number(document.getElementById("distance").innerText || 0);
+
+const type = document.getElementById("package_type").value;
+
+let price = km * 1.2;
+
+if(type==="box") price += 10;
+if(type==="palette") price += 20;
+
+document.getElementById("price").innerText = "CHF "+price.toFixed(2);
+
+}
+
+function calculateTransport(){
+calculateDistance();
 }
 
 window.calculateDistance = calculateDistance;
