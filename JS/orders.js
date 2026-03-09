@@ -1,61 +1,55 @@
-async function calculateDistance() {
-  const start = document.getElementById("pickup_address").value.trim();
-  const end = document.getElementById("delivery_address").value.trim();
+async function calculateDistance(){
 
-  if (!start || !end) return;
+const start = document.getElementById("pickup_address").value
+const end = document.getElementById("delivery_address").value
 
-  const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI4OTQwOGJlOTE1MDQzNjc5NmQ3NzkzOWQ0YjZjODg4IiwiaCI6Im11cm11cjY0In0=";
+if(!start || !end) return
 
-  try {
-    // 1) Géocodage des adresses avec Nominatim
-    const geo = async (addr) => {
-      const r = await fetch(
-        "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" +
-        encodeURIComponent(addr)
-      );
-      const d = await r.json();
+try{
 
-      if (!d || !d.length) {
-        throw new Error("Adresse introuvable : " + addr);
-      }
+const geo = async (addr)=>{
 
-      // OpenRouteService attend [longitude, latitude]
-      return [parseFloat(d[0].lon), parseFloat(d[0].lat)];
-    };
+const r = await fetch(
+"https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
++ encodeURIComponent(addr)
+)
 
-    const startCoord = await geo(start);
-    const endCoord = await geo(end);
+const d = await r.json()
 
-    console.log("Départ coord :", startCoord);
-    console.log("Arrivée coord :", endCoord);
+return [d[0].lon,d[0].lat]
 
-    // 2) Calcul ROUTIER avec OpenRouteService
-    const routeRes = await fetch(
-      "https://api.openrouteservice.org/v2/directions/driving-car",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": ORS_API_KEY,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          coordinates: [startCoord, endCoord]
-        })
-      }
-    );
+}
 
-    const routeData = await routeRes.json();
-    console.log("Réponse ORS :", routeData);
+const startCoord = await geo(start)
+const endCoord = await geo(end)
 
-    if (!routeData.routes || !routeData.routes.length) {
-      throw new Error("Aucune route retournée par OpenRouteService");
-    }
+const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI4OTQwOGJlOTE1MDQzNjc5NmQ3NzkzOWQ0YjZjODg4IiwiaCI6Im11cm11cjY0In0="
 
-    const meters = routeData.routes[0].summary.distance;
-    const km = meters / 1000;
+const url =
+"https://api.openrouteservice.org/v2/directions/driving-car?api_key="
++ key +
+"&start=" + startCoord[0] + "," + startCoord[1] +
+"&end=" + endCoord[0] + "," + endCoord[1]
 
-    document.getElementById("distance").innerText = km.toFixed(1);
+const route = await fetch(url)
 
+const data = await route.json()
+
+const km = data.features[0].properties.summary.distance / 1000
+
+document.getElementById("distance").innerText =
+km.toFixed(1)
+
+calculatePrice()
+
+}catch(e){
+
+console.error(e)
+alert("Impossible de calculer la distance")
+
+}
+
+}
     calculatePrice();
   } catch (e) {
     console.error("Erreur calcul distance :", e);
