@@ -1,3 +1,12 @@
+function generateParcelCode(){
+
+const prefix = "LC"
+
+const number = Date.now()
+
+return prefix + number
+
+}
 async function searchAddress(term){
 
 if(term.length < 3) return
