@@ -1,3 +1,31 @@
+async function scanParcel(code){
+
+const {data} = await supabaseClient
+.from("orders")
+.select("*")
+.eq("order_number",code)
+.single()
+
+if(!data){
+
+alert("Colis inconnu")
+return
+
+}
+
+await supabaseClient
+.from("orders")
+.update({
+
+status:"loaded",
+loaded_at:new Date()
+
+})
+.eq("id",data.id)
+
+alert("Colis chargé")
+
+}
 async function setStatus(status){
 
 await supabaseClient
