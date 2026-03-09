@@ -1,3 +1,17 @@
+function createBarcode(){
+
+const code = generateParcelCode()
+
+JsBarcode("#barcode", code, {
+
+format:"CODE128",
+width:2,
+height:80,
+displayValue:true
+
+})
+
+}
 function generateParcelCode(){
 
 const prefix = "LC"
