@@ -1,3 +1,25 @@
+function calculatePrice(){
+
+let km =
+Number(document.getElementById("distance").innerText)
+
+let packageType =
+document.getElementById("package_type").value
+
+let price = km * 1.20
+
+if(packageType === "palette"){
+price += 20
+}
+
+if(packageType === "box"){
+price += 10
+}
+
+document.getElementById("price").innerText =
+"CHF " + price.toFixed(2)
+
+}
 async function calculateDistance(){
 
 let start = document.getElementById("pickup_address").value
