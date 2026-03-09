@@ -27,7 +27,7 @@ return [d[0].lon,d[0].lat]
 const startCoord = await geo(start)
 const endCoord = await geo(end)
 
-const key = "TA_CLE_OPENROUTE_ICI"
+const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI4OTQwOGJlOTE1MDQzNjc5NmQ3NzkzOWQ0YjZjODg4IiwiaCI6Im11cm11cjY0In0="
 
 const url =
 "https://api.openrouteservice.org/v2/directions/driving-car?api_key="
