@@ -1,26 +1,66 @@
-console.log("orders.js chargé");
-
-function calculateDistance(){
-
-console.log("calcul distance lancé");
+async function calculateDistance(){
 
 const start =
-document.getElementById("pickup_address").value;
+document.getElementById("pickup_address").value
 
 const end =
-document.getElementById("delivery_address").value;
+document.getElementById("delivery_address").value
 
-if(!start || !end){
-alert("Entrer deux adresses");
-return;
+if(!start || !end) return
+
+try{
+
+const geo = async (addr)=>{
+const r = await fetch(
+"https://nominatim.openstreetmap.org/search?format=json&q="
++ encodeURIComponent(addr)
+)
+const d = await r.json()
+return [d[0].lon, d[0].lat]
 }
 
-// distance fixe test
-const km = 42;
+const startCoord = await geo(start)
+const endCoord = await geo(end)
 
-document.getElementById("distance").innerText = km;
+const route = await fetch(
+"https://api.openrouteservice.org/v2/directions/driving-car",
+{
+method:"POST",
+headers:{
+"Authorization":"TA_CLE_OPENROUTE",
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+coordinates:[startCoord,endCoord]
+})
+}
+)
 
-calculatePrice();
+const data = await route.json()
+
+const meters = data.routes[0].summary.distance
+const seconds = data.routes[0].summary.duration
+
+const km = meters / 1000
+const minutes = seconds / 60
+
+document.getElementById("distance").innerText =
+km.toFixed(1)
+
+document.getElementById("duration").innerText =
+minutes.toFixed(0)
+
+drawRoute(data.routes[0].geometry.coordinates)
+
+calculatePrice()
+
+}catch(e){
+
+console.error(e)
+alert("Impossible de calculer la route")
+
+}
+
 }
 
 function calculatePrice(){
