@@ -1,78 +1,93 @@
-document.getElementById("clientSelect")
-.addEventListener("change", function(){
+console.log("clients.js chargé");
 
-const option =
-this.options[this.selectedIndex]
+async function searchClient() {
+  const input = document.getElementById("clientSearch");
+  const results = document.getElementById("clientResults");
 
-const adresse =
-option.dataset.address
+  if (!input || !results) return;
 
-const ville =
-option.dataset.city
+  const term = input.value.trim();
 
-document.getElementById("pickup_address").value =
-adresse + " " + ville
+  if (term.length < 2) {
+    results.innerHTML = "";
+    return;
+  }
 
-calculateDistance()
+  try {
+    const { data, error } = await supabaseClient
+      .from("clients")
+      .select("id, company, first_name, last_name, address, city")
+      .or(
+        `company.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`
+      )
+      .limit(10);
 
-})
+    if (error) {
+      console.error("Erreur recherche client :", error);
+      results.innerHTML = "";
+      return;
+    }
 
-console.log("clients.js chargé")
+    if (!data || data.length === 0) {
+      results.innerHTML = '<div class="client-item">Aucun client trouvé</div>';
+      return;
+    }
 
-function selectClient(client){
+    let html = "";
 
-document.getElementById("pickup_address").value =
-client.adresse + " " + client.ville
+    data.forEach((c) => {
+      const label =
+        c.company && c.company.trim() !== ""
+          ? c.company
+          : `${c.first_name || ""} ${c.last_name || ""}`.trim();
 
-calculateDistance()
+      const fullAddress = [c.address || "", c.city || ""].join(", ").trim();
 
+      html += `
+        <div class="client-item"
+             onclick="selectClient(
+               '${escapeQuotes(label)}',
+               '${escapeQuotes(c.address || "")}',
+               '${escapeQuotes(c.city || "")}'
+             )">
+          <strong>${label}</strong><br>
+          <small>${fullAddress}</small>
+        </div>
+      `;
+    });
+
+    results.innerHTML = html;
+  } catch (e) {
+    console.error("Erreur clients.js :", e);
+    results.innerHTML = "";
+  }
 }
 
-async function loadClients(){
+function selectClient(name, address, city) {
+  const input = document.getElementById("clientSearch");
+  const pickup = document.getElementById("pickup_address");
+  const results = document.getElementById("clientResults");
 
-const {data,error} =
-await supabaseClient
-.from("clients")
-.select("*")
+  if (input) input.value = name;
 
-console.log(data)
+  const fullAddress = [address || "", city || ""].join(", ").trim();
 
-const select =
-document.getElementById("clientSelect")
+  if (pickup) {
+    pickup.value = fullAddress;
+  }
 
-select.innerHTML =
-'<option value="">Choisir un client</option>'
+  if (results) {
+    results.innerHTML = "";
+  }
 
-data.forEach(client=>{
-
-const option =
-document.createElement("option")
-
-option.value = client.id
-option.textContent = client.company
-
-option.dataset.address = client.address
-option.dataset.city = client.city
-
-select.appendChild(option)
-
-})
-
+  if (typeof calculateDistance === "function") {
+    calculateDistance();
+  }
 }
 
-function selectClient(){
-
-const select =
-document.getElementById("clientSelect")
-
-const option =
-select.options[select.selectedIndex]
-
-document.getElementById("pickup_address").value =
-option.dataset.address + ", " + option.dataset.city
-
+function escapeQuotes(str) {
+  return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");
 }
 
-document.addEventListener("DOMContentLoaded",loadClients)
-
-window.selectClient = selectClient
+window.searchClient = searchClient;
+window.selectClient = selectClient;
