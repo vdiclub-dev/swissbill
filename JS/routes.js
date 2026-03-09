@@ -1,3 +1,40 @@
+function generateLabels(){
+
+const count = document.getElementById("parcel_count").value
+
+const order = "LC"+Date.now()
+
+const container = document.getElementById("labels")
+
+container.innerHTML=""
+
+for(let i=1;i<=count;i++){
+
+const code = order+"-"+i
+
+const div = document.createElement("div")
+
+div.className="label"
+
+div.innerHTML = `
+<div class="label-title">Léman-Courses</div>
+
+<svg id="barcode${i}"></svg>
+
+<div class="parcel-number">${code}</div>
+`
+
+container.appendChild(div)
+
+JsBarcode(`#barcode${i}`,code,{
+format:"CODE128",
+width:2,
+height:60
+})
+
+}
+
+}
 const sb = window.supabaseClient
 
 async function loadRoutes(){
