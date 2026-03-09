@@ -1,3 +1,52 @@
+async function searchAddress(term){
+
+if(term.length < 3) return
+
+const results = document.getElementById("addressResults")
+
+try{
+
+const r = await fetch(
+"https://nominatim.openstreetmap.org/search?format=json&limit=5&q="
++ encodeURIComponent(term)
+)
+
+const data = await r.json()
+
+results.innerHTML=""
+
+data.forEach(a=>{
+
+const div = document.createElement("div")
+
+div.className="address-item"
+
+div.innerText = a.display_name
+
+div.onclick = ()=>{
+
+document.getElementById("delivery_address").value =
+a.display_name
+
+results.innerHTML=""
+
+calculateDistance()
+
+}
+
+results.appendChild(div)
+
+})
+
+}catch(e){
+
+console.error("Adresse search erreur",e)
+
+}
+
+}
+
+window.searchAddress = searchAddress
 async function loadClientAddress(){
 
 const user = await supabaseClient.auth.getUser()
