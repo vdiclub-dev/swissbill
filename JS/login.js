@@ -4,41 +4,39 @@ const sb = window.supabaseClient
 
 document.addEventListener("DOMContentLoaded", () => {
 
-const form = document.getElementById("loginForm")
+  const form = document.getElementById("loginForm")
 
-if(!form){
-console.error("loginForm introuvable")
-return
-}
+  if(!form){
+    console.error("loginForm introuvable")
+    return
+  }
 
-form.addEventListener("submit", async (e)=>{
+  form.addEventListener("submit", async (e)=>{
 
-e.preventDefault()
+    e.preventDefault()
 
-const email = document.getElementById("email").value.trim()
-const password = document.getElementById("password").value.trim()
+    const email = document.getElementById("email").value.trim()
+    const password = document.getElementById("password").value.trim()
 
-try{
+    try{
 
-const { data, error } = await sb.auth.signInWithPassword({
+      const { data, error } = await sb.auth.signInWithPassword({
+        email,
+        password
+      })
 
-email : email,
-password : password
+      if(error) throw error
 
-})
+      console.log("connecté", data)
 
-if(error) throw error
+      window.location.href = "portal.html"
 
-console.log("connecté", data)
+    }catch(err){
 
-window.location.href = "portal.html"
+      alert(err.message)
 
-}catch(err){
+    }
 
-alert(err.message)
-
-}
-
-})
+  })
 
 })
