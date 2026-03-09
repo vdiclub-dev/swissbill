@@ -49,7 +49,7 @@ async function calculateDistance() {
 
     const distance = data.routes[0].summary.distance;
 const duration = data.routes[0].summary.duration;
-
+const coords = data.routes[0].geometry.coordinates
 const coords = data.routes[0].geometry.coordinates;
 
 if(coords && coords.length && window.drawRoute){
