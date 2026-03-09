@@ -1,7 +1,12 @@
+console.log("orders.js chargé")
+
 async function calculateDistance(){
 
-const start = document.getElementById("pickup_address").value
-const end = document.getElementById("delivery_address").value
+const start =
+document.getElementById("pickup_address").value
+
+const end =
+document.getElementById("delivery_address").value
 
 if(!start || !end) return
 
@@ -10,8 +15,7 @@ try{
 const geo = async (addr)=>{
 
 const r = await fetch(
-"https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
-+ encodeURIComponent(addr)
+"https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(addr)
 )
 
 const d = await r.json()
@@ -23,7 +27,7 @@ return [d[0].lon,d[0].lat]
 const startCoord = await geo(start)
 const endCoord = await geo(end)
 
-const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI4OTQwOGJlOTE1MDQzNjc5NmQ3NzkzOWQ0YjZjODg4IiwiaCI6Im11cm11cjY0In0="
+const key = "TA_CLE_OPENROUTE_ICI"
 
 const url =
 "https://api.openrouteservice.org/v2/directions/driving-car?api_key="
@@ -49,12 +53,6 @@ alert("Impossible de calculer la distance")
 
 }
 
-}
-    calculatePrice();
-  } catch (e) {
-    console.error("Erreur calcul distance :", e);
-    alert("Impossible de calculer la distance routière");
-  }
 }
 
 function calculatePrice(){
