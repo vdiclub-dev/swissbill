@@ -1,21 +1,3 @@
-let startMarker
-let endMarker
-
-function drawRoute(coords){
-
-const latlngs = coords.map(c => [c[1],c[0]])
-
-L.polyline(latlngs,{
-color:"red",
-weight:4
-}).addTo(map)
-
-startMarker = L.marker(latlngs[0]).addTo(map)
-endMarker = L.marker(latlngs[latlngs.length-1]).addTo(map)
-
-map.fitBounds(latlngs)
-
-}
 console.log("map.js chargé");
 
 let map;
@@ -24,6 +6,7 @@ let startMarker = null;
 let endMarker = null;
 
 document.addEventListener("DOMContentLoaded", () => {
+
   const mapDiv = document.getElementById("map");
   if (!mapDiv) return;
 
@@ -33,26 +16,30 @@ document.addEventListener("DOMContentLoaded", () => {
     maxZoom: 19,
     attribution: "© OpenStreetMap"
   }).addTo(map);
+
 });
 
-function drawRoute(coords) {
-  if (!map) return;
 
-  if (routeLayer) map.removeLayer(routeLayer);
-  if (startMarker) map.removeLayer(startMarker);
-  if (endMarker) map.removeLayer(endMarker);
+function drawRoute(coords){
 
-  const latlngs = coords.map(c => [c[1], c[0]]);
+if(!map) return;
 
-  routeLayer = L.polyline(latlngs, {
-    color: "red",
-    weight: 4
-  }).addTo(map);
+if(routeLayer) map.removeLayer(routeLayer);
+if(startMarker) map.removeLayer(startMarker);
+if(endMarker) map.removeLayer(endMarker);
 
-  startMarker = L.marker(latlngs[0]).addTo(map);
-  endMarker = L.marker(latlngs[latlngs.length - 1]).addTo(map);
+const latlngs = coords.map(c => [c[1],c[0]]);
 
-  map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+routeLayer = L.polyline(latlngs,{
+color:"red",
+weight:4
+}).addTo(map);
+
+startMarker = L.marker(latlngs[0]).addTo(map);
+endMarker = L.marker(latlngs[latlngs.length-1]).addTo(map);
+
+map.fitBounds(routeLayer.getBounds(),{padding:[30,30]});
+
 }
 
 window.drawRoute = drawRoute;
