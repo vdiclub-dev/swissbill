@@ -23,6 +23,20 @@ calculatePrice()
 
 }
 
+function calculateDistance(){
+
+let start = document.getElementById("pickup_address").value
+let end = document.getElementById("delivery_address").value
+
+if(!start || !end) return
+
+let km = Math.floor(Math.random()*80)+10
+
+document.getElementById("distance").innerText = km
+
+calculatePrice()
+
+}
 
 function calculatePrice(){
 
