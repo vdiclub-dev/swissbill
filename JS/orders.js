@@ -1,3 +1,19 @@
+async function loadClientAddress(){
+
+const user = await supabaseClient.auth.getUser()
+
+const email = user.data.user.email
+
+const {data} = await supabaseClient
+.from("clients")
+.select("*")
+.eq("email",email)
+.single()
+
+document.getElementById("pickup_address").value =
+data.address + ", " + data.city
+
+}
 async function loadOrders(){
 
 const {data,error} = await supabaseClient
