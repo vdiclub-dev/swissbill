@@ -1,3 +1,33 @@
+async function loadOrders(){
+
+const {data,error} = await supabaseClient
+.from("orders")
+.select("*")
+.order("created_at",{ascending:false})
+
+const table = document.querySelector("#ordersTable tbody")
+
+table.innerHTML=""
+
+data.forEach(o=>{
+
+const row = document.createElement("tr")
+
+row.innerHTML = `
+<td>${new Date(o.created_at).toLocaleDateString()}</td>
+<td>${o.pickup_address}</td>
+<td>${o.delivery_address}</td>
+<td>${o.distance_km} km</td>
+<td>${o.status}</td>
+`
+
+table.appendChild(row)
+
+})
+
+}
+
+document.addEventListener("DOMContentLoaded",loadOrders)
 async function createOrder(){
 
 const clientId = document.getElementById("clientSelect").value
