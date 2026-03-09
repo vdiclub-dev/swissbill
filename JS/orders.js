@@ -57,3 +57,6 @@ document.getElementById("price").innerText =
 "CHF " + price.toFixed(2)
 
 }
+window.calculateDistance = calculateDistance;
+window.calculatePrice = calculatePrice;
+window.calculateTransport = calculateTransport;
