@@ -1,17 +1,51 @@
-console.log("orders.js chargé");
+function getDistance(lat1,lon1,lat2,lon2){
 
-function calculateDistance() {
-  const start = document.getElementById("pickup_address").value.trim();
-  const end = document.getElementById("delivery_address").value.trim();
+const R = 6371
+const dLat = (lat2-lat1)*Math.PI/180
+const dLon = (lon2-lon1)*Math.PI/180
 
-  if (!start || !end) {
-    return;
-  }
+const a =
+Math.sin(dLat/2)*Math.sin(dLat/2)+
+Math.cos(lat1*Math.PI/180)*
+Math.cos(lat2*Math.PI/180)*
+Math.sin(dLon/2)*Math.sin(dLon/2)
 
-  const km = 25;
-  document.getElementById("distance").innerText = km.toString();
+const c = 2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))
 
-  calculatePrice();
+return R*c
+}
+async function calculateDistance(){
+
+const start =
+document.getElementById("pickup_address").value
+
+const end =
+document.getElementById("delivery_address").value
+
+if(!start || !end) return
+
+const geo = async (addr)=>{
+const r = await fetch(
+"https://nominatim.openstreetmap.org/search?format=json&q="
++ encodeURIComponent(addr)
+)
+const d = await r.json()
+return [d[0].lat,d[0].lon]
+}
+
+const startCoord = await geo(start)
+const endCoord = await geo(end)
+
+const km = getDistance(
+startCoord[0],startCoord[1],
+endCoord[0],endCoord[1]
+)
+
+document.getElementById("distance").innerText =
+km.toFixed(1)
+
+calculatePrice()
+
 }
 
 function calculatePrice() {
