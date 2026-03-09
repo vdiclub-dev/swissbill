@@ -44,49 +44,37 @@ coordinates:[startCoord,endCoord]
 }
 );
 
-const data = await route.json();
-
-console.log("ORS:",data);
-
-if(!data.routes || !data.routes.length){
-throw new Error("Aucune route trouvée");
-}
-
-const routeData = data.routes[0];
-
 const routeData = data.routes[0];
 
 const distance = routeData.summary.distance;
 const duration = routeData.summary.duration;
-
 const coords = routeData.geometry.coordinates;
 
-if(coords && coords.length && window.drawRoute){
-drawRoute(coords);
+// afficher la route sur la carte
+if (coords && coords.length && window.drawRoute) {
+  drawRoute(coords);
 }
 
+// distance
 const km = distance / 1000;
-const minutes = duration / 60;
-
 document.getElementById("distance").innerText = km.toFixed(1);
 
-// format temps
-const h = Math.floor(minutes / 60);
-const m = Math.round(minutes % 60);
+// durée
+const minutes = Math.round(duration / 60);
 
 let timeText = "";
 
-if(h > 0){
-timeText = h + "h " + m + " min";
-}else{
-timeText = m + " min";
+if (minutes >= 60) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  timeText = h + "h " + m + " min";
+} else {
+  timeText = minutes + " min";
 }
 
 document.getElementById("duration").innerText = timeText;
 
 calculatePrice();
-
-}catch(e){
 
 console.error("Erreur calcul distance :",e);
 alert("Erreur de calcul de distance");
