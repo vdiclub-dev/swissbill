@@ -2,56 +2,56 @@ console.log("clients.js chargé")
 
 const sb = window.supabaseClient
 
-async function searchClient(){
-
-const term =
-document.getElementById("clientSearch").value
-
-if(term.length < 2){
-document.getElementById("clientResults").innerHTML=""
-return
-}
+async function loadClients(){
 
 const {data,error} = await sb
 .from("clients")
 .select("*")
-.ilike("nom","%"+term+"%")
-.limit(10)
+.order("company")
 
 if(error){
 console.error(error)
 return
 }
 
-let html = ""
+const select =
+document.getElementById("clientSelect")
+
+select.innerHTML =
+'<option value="">Choisir un client</option>'
 
 data.forEach(c=>{
 
-html += `
-<div onclick="selectClient('${c.nom}','${c.adresse}','${c.ville}')">
+const option =
+document.createElement("option")
 
-<strong>${c.nom}</strong><br>
-${c.adresse} ${c.ville}
+option.value = c.id
+option.textContent = c.company
 
-</div>
-`
+option.dataset.address = c.address
+option.dataset.city = c.city
+
+select.appendChild(option)
 
 })
 
-document.getElementById("clientResults").innerHTML = html
-
 }
 
-function selectClient(nom,adresse,ville){
+function selectClient(){
 
-document.getElementById("clientSearch").value = nom
+const select =
+document.getElementById("clientSelect")
+
+const option =
+select.options[select.selectedIndex]
+
+if(!option.dataset.address) return
 
 document.getElementById("pickup_address").value =
-adresse + ", " + ville
-
-document.getElementById("clientResults").innerHTML=""
+option.dataset.address + ", " + option.dataset.city
 
 }
 
-window.searchClient = searchClient
 window.selectClient = selectClient
+
+document.addEventListener("DOMContentLoaded",loadClients)
