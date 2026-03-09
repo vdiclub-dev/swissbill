@@ -1,5 +1,14 @@
 console.log("clients.js chargé")
 
+function selectClient(client){
+
+document.getElementById("pickup_address").value =
+client.adresse + " " + client.ville
+
+calculateDistance()
+
+}
+
 async function loadClients(){
 
 const {data,error} =
