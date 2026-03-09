@@ -9,10 +9,12 @@ if(!start || !end) return;
 
 try{
 
+// -------- géocodage adresse --------
 const geo = async(addr)=>{
 
 const r = await fetch(
-"https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(addr)
+"https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
++ encodeURIComponent(addr)
 );
 
 const d = await r.json();
@@ -25,46 +27,44 @@ return [Number(d[0].lon),Number(d[0].lat)];
 
 };
 
+// coordonnées
 const startCoord = await geo(start);
 const endCoord = await geo(end);
 
-const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0==";
+// -------- appel OpenRouteService --------
+const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=";
 
-const route = await fetch(
-"https://api.openrouteservice.org/v2/directions/driving-car",
-{
-method:"POST",
-headers:{
-Authorization:key,
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-coordinates:[startCoord,endCoord]
-})
-}
-);
+const url =
+"https://api.openrouteservice.org/v2/directions/driving-car?api_key="
++ key +
+"&start=" + startCoord[0] + "," + startCoord[1] +
+"&end=" + endCoord[0] + "," + endCoord[1];
 
+const route = await fetch(url);
 const data = await route.json();
 
 console.log("ORS:",data);
 
-if(!data.routes || !data.routes.length){
+if(!data.features || !data.features.length){
 throw new Error("Aucune route trouvée");
 }
 
-const routeData = data.routes[0];
+const routeData = data.features[0];
 
-const distance = routeData.summary.distance;
-const duration = routeData.summary.duration;
+const distance = routeData.properties.summary.distance;
+const duration = routeData.properties.summary.duration;
 const coords = routeData.geometry.coordinates;
 
+// -------- carte --------
 if(coords && coords.length && window.drawRoute){
 drawRoute(coords);
 }
 
+// -------- distance --------
 const km = distance / 1000;
 document.getElementById("distance").innerText = km.toFixed(1);
 
+// -------- durée --------
 const minutes = Math.round(duration/60);
 
 let timeText="";
@@ -84,6 +84,7 @@ timeText=minutes+" min";
 
 document.getElementById("duration").innerText=timeText;
 
+// -------- prix --------
 calculatePrice();
 
 }catch(e){
@@ -95,24 +96,31 @@ alert("Erreur de calcul de distance");
 
 }
 
+
+// -------- calcul prix --------
 function calculatePrice(){
 
-const km=Number(document.getElementById("distance").innerText||0);
-const type=document.getElementById("package_type").value;
+const km = Number(document.getElementById("distance").innerText || 0);
+const type = document.getElementById("package_type").value;
 
-let price=km*1.2;
+let price = km * 1.2;
 
-if(type==="box") price+=10;
-if(type==="palette") price+=20;
+if(type==="box") price += 10;
+if(type==="palette") price += 20;
 
-document.getElementById("price").innerText="CHF "+price.toFixed(2);
+document.getElementById("price").innerText =
+"CHF "+price.toFixed(2);
 
 }
 
+
+// -------- appel manuel --------
 function calculateTransport(){
 calculateDistance();
 }
 
-window.calculateDistance=calculateDistance;
-window.calculatePrice=calculatePrice;
-window.calculateTransport=calculateTransport;
+
+// -------- rendre fonctions globales --------
+window.calculateDistance = calculateDistance;
+window.calculatePrice = calculatePrice;
+window.calculateTransport = calculateTransport;
