@@ -15,7 +15,8 @@ return
 const {data,error} = await sb
 .from("clients")
 .select("*")
-.ilike("company","%"+term+"%")
+.ilike("nom","%"+term+"%")
+.limit(10)
 
 if(error){
 console.error(error)
@@ -27,9 +28,11 @@ let html = ""
 data.forEach(c=>{
 
 html += `
-<div onclick="selectClient('${c.company}','${c.address}','${c.city}')">
-<strong>${c.company}</strong><br>
-${c.address} ${c.city}
+<div onclick="selectClient('${c.nom}','${c.adresse}','${c.ville}')">
+
+<strong>${c.nom}</strong><br>
+${c.adresse} ${c.ville}
+
 </div>
 `
 
@@ -39,12 +42,12 @@ document.getElementById("clientResults").innerHTML = html
 
 }
 
-function selectClient(name,address,city){
+function selectClient(nom,adresse,ville){
 
-document.getElementById("clientSearch").value = name
+document.getElementById("clientSearch").value = nom
 
 document.getElementById("pickup_address").value =
-address + ", " + city
+adresse + ", " + ville
 
 document.getElementById("clientResults").innerHTML=""
 
