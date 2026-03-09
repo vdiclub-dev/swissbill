@@ -45,21 +45,46 @@ coordinates:[
 
 const data = await route.json()
 
-console.log("Réponse ORS :", data)
+console.log("ORS response:", data)
 
-if(!data.routes || data.routes.length === 0){
-  alert("Impossible de trouver un trajet")
-  return
+let distance
+let duration
+
+if(data.features && data.features.length > 0){
+
+distance =
+data.features[0].properties.summary.distance
+
+duration =
+data.features[0].properties.summary.duration
+
 }
 
-const distance = data.routes[0].summary.distance
-const duration = data.routes[0].summary.duration
+else if(data.routes && data.routes.length > 0){
+
+distance =
+data.routes[0].summary.distance
+
+duration =
+data.routes[0].summary.duration
+
+}
+
+else{
+
+alert("Impossible de trouver un trajet")
+return
+
+}
 
 const km = distance / 1000
 const minutes = duration / 60
 
-document.getElementById("distance").innerText = km.toFixed(1)
-document.getElementById("duration").innerText = minutes.toFixed(0)
+document.getElementById("distance").innerText =
+km.toFixed(1)
+
+document.getElementById("duration").innerText =
+minutes.toFixed(0)
 
 calculatePrice()
 }
