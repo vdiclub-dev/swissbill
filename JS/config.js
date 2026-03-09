@@ -5,3 +5,9 @@ window.supabaseClient = supabase.createClient(
 window.SUPABASE_URL,
 window.SUPABASE_KEY
 )
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="JS/config.js"></script>
+<script src="JS/clients.js"></script>
+<script src="JS/map.js"></script>
+<script src="JS/orders.js"></script>
