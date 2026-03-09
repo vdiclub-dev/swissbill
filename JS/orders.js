@@ -14,7 +14,49 @@ const c = 2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))
 
 return R*c
 }
+async function calculateDistance(){
 
+const start =
+document.getElementById("pickup_address").value
+
+const end =
+document.getElementById("delivery_address").value
+
+if(!start || !end) return
+
+try{
+
+const geo = async (addr)=>{
+const r = await fetch(
+"https://nominatim.openstreetmap.org/search?format=json&q="+encodeURIComponent(addr)
+)
+const d = await r.json()
+return [d[0].lat,d[0].lon]
+}
+
+const startCoord = await geo(start)
+const endCoord = await geo(end)
+
+const km = getDistance(
+startCoord[0],
+startCoord[1],
+endCoord[0],
+endCoord[1]
+)
+
+document.getElementById("distance").innerText =
+km.toFixed(1)
+
+calculatePrice()
+
+}catch(e){
+
+console.error(e)
+alert("Impossible de calculer la distance")
+
+}
+
+}
 function calculatePrice() {
   const km = Number(document.getElementById("distance").innerText || 0);
   const type = document.getElementById("package_type").value;
