@@ -1,5 +1,4 @@
-
-function selectClient(id,name){
+function selectClient(id,name,address){
 
 document.getElementById("clientSearch").value = name
 
@@ -7,11 +6,13 @@ document.getElementById("clientResults").innerHTML=""
 
 window.selectedClient = id
 
+// remplir adresse enlèvement
+document.getElementById("pickup_address").value = address
+
 }
 async function searchClient(){
 
-const term =
-document.getElementById("clientSearch").value
+const term = document.getElementById("clientSearch").value
 
 if(term.length < 2){
 document.getElementById("clientResults").innerHTML=""
@@ -22,7 +23,7 @@ const sb = window.supabaseClient
 
 const {data,error} = await sb
 .from("clients")
-.select("id,company,first_name,last_name")
+.select("id,company,first_name,last_name,address,city")
 .or(`company.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`)
 .limit(10)
 
@@ -31,24 +32,21 @@ console.error(error)
 return
 }
 
-const results =
-document.getElementById("clientResults")
+const results = document.getElementById("clientResults")
 
 results.innerHTML=""
 
 data.forEach(c=>{
 
-let name=""
+let name = c.company
+? c.company
+: (c.first_name||"") + " " + (c.last_name||"")
 
-if(c.company){
-name = c.company
-}else{
-name = (c.first_name||"") + " " + (c.last_name||"")
-}
+let address = (c.address||"") + " " + (c.city||"")
 
 results.innerHTML += `
 <div class="client-item"
-onclick="selectClient('${c.id}','${name}')">
+onclick="selectClient('${c.id}','${name}','${address}')">
 ${name}
 </div>
 `
