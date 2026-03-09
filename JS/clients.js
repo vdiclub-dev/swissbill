@@ -10,8 +10,7 @@ window.selectedClient = id
 }
 async function searchClient(){
 
-const term =
-document.getElementById("clientSearch").value
+const term = document.getElementById("clientSearch").value
 
 if(term.length < 2){
 document.getElementById("clientResults").innerHTML=""
@@ -20,29 +19,33 @@ return
 
 const sb = window.supabaseClient
 
-const {data,error} = await sb
+const { data, error } = await sb
 .from("clients")
 .select("id,company,first_name,last_name")
-.ilike("company","%"+term+"%")
+.or(`company.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`)
 
 if(error){
 console.error(error)
 return
 }
 
-const results =
-document.getElementById("clientResults")
+const results = document.getElementById("clientResults")
 
-results.innerHTML=""
+results.innerHTML = ""
+
+if(!data || data.length === 0){
+results.innerHTML = "<div>Aucun client trouvé</div>"
+return
+}
 
 data.forEach(c=>{
 
 let name = ""
 
-if(c.company){
+if(c.company && c.company !== ""){
 name = c.company
 }else{
-name = c.first_name + " " + c.last_name
+name = (c.first_name || "") + " " + (c.last_name || "")
 }
 
 results.innerHTML += `
