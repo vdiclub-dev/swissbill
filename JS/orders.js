@@ -54,6 +54,8 @@ throw new Error("Aucune route trouvée");
 
 const routeData = data.routes[0];
 
+const routeData = data.routes[0];
+
 const distance = routeData.summary.distance;
 const duration = routeData.summary.duration;
 
@@ -67,11 +69,20 @@ const km = distance / 1000;
 const minutes = duration / 60;
 
 document.getElementById("distance").innerText = km.toFixed(1);
-const h = Math.floor(minutes / 60)
-const m = Math.round(minutes % 60)
 
-document.getElementById("duration").innerText =
-h + "h " + m + " min"
+// format temps
+const h = Math.floor(minutes / 60);
+const m = Math.round(minutes % 60);
+
+let timeText = "";
+
+if(h > 0){
+timeText = h + "h " + m + " min";
+}else{
+timeText = m + " min";
+}
+
+document.getElementById("duration").innerText = timeText;
 
 calculatePrice();
 
