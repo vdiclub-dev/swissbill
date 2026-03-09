@@ -67,7 +67,11 @@ const km = distance / 1000;
 const minutes = duration / 60;
 
 document.getElementById("distance").innerText = km.toFixed(1);
-document.getElementById("duration").innerText = minutes.toFixed(0);
+const h = Math.floor(minutes / 60)
+const m = Math.round(minutes % 60)
+
+document.getElementById("duration").innerText =
+h + "h " + m + " min"
 
 calculatePrice();
 
