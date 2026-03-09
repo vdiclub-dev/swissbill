@@ -9,7 +9,6 @@ calculatePrice()
 }
 
 
-
 function calculatePrice(){
 
 let km =
@@ -20,40 +19,10 @@ document.getElementById("package_type").value
 
 let price = km * 1.20
 
-
 if(packageType === "palette"){
 price += 20
 }
 
-document.getElementById("price").innerText =
-"CHF " + price.toFixed(2)
-
-}
-
-// type colis
-let packageType =
-document.getElementById("package_type").value
-
-// vitesse (si tu ajoutes un champ express plus tard)
-let speed = "normal"
-
-
-let price = km * 1.20
-
-
-// supplément palette
-if(packageType === "palette"){
-price += 20
-}
-
-
-// supplément express
-if(speed === "express"){
-price *= 1.3
-}
-
-
-// afficher prix
 document.getElementById("price").innerText =
 "CHF " + price.toFixed(2)
 
@@ -289,4 +258,4 @@ table.innerHTML+=`
 })
 
 }
-f
+
