@@ -1,3 +1,22 @@
+document.getElementById("clientSelect")
+.addEventListener("change", function(){
+
+const option =
+this.options[this.selectedIndex]
+
+const adresse =
+option.dataset.address
+
+const ville =
+option.dataset.city
+
+document.getElementById("pickup_address").value =
+adresse + " " + ville
+
+calculateDistance()
+
+})
+
 console.log("clients.js chargé")
 
 function selectClient(client){
