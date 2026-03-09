@@ -53,7 +53,16 @@ coordinates:[
 })
 
 const data = await route.json()
+const coords =
+data.routes[0].geometry.coordinates
 
+const latlngs =
+coords.map(c => [c[1],c[0]])
+
+L.polyline(latlngs,{
+color:"red",
+weight:4
+}).addTo(map)
 console.log(data)
 
 if(!data.routes){
