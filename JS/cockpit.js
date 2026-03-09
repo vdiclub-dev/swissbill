@@ -1,3 +1,23 @@
+async function sendRoute(driverId,route){
+
+for(let i=0;i<route.length;i++){
+
+await supabaseClient
+.from("driver_routes")
+.insert({
+
+driver_id:driverId,
+order_id:route[i].id,
+stop_order:i+1,
+date:new Date()
+
+})
+
+}
+
+alert("Tournée envoyée au chauffeur")
+
+}
 console.log("cockpit chargé")
 
 let map
