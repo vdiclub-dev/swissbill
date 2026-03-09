@@ -2,7 +2,7 @@ console.log("map.js chargé")
 
 let map
 
-document.addEventListener("DOMContentLoaded",()=>{
+document.addEventListener("DOMContentLoaded",function(){
 
 const mapDiv = document.getElementById("map")
 
@@ -19,5 +19,3 @@ attribution:"© OpenStreetMap"
 ).addTo(map)
 
 })
-
-
