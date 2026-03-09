@@ -1,3 +1,12 @@
+function generateParcelCode(){
+
+const prefix = "LC"
+
+const number = Date.now()
+
+return prefix + number
+
+}
 function showPage(page){
 
 document.querySelectorAll(".page")
