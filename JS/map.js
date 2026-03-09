@@ -19,3 +19,4 @@ attribution:"© OpenStreetMap"
 ).addTo(map)
 
 })
+map.setView([startCoord[1], startCoord[0]], 7)
