@@ -1,89 +1,132 @@
-async function calculateDistance(){
+<!DOCTYPE html>
+<html lang="fr">
 
-const start =
-document.getElementById("pickup_address").value
+<head>
 
-const end =
-document.getElementById("delivery_address").value
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-if(!start || !end) return
+<title>Nouveau transport | Léman-Courses</title>
 
-try{
+<link rel="stylesheet" href="css/style.css">
 
-const geo = async (addr)=>{
-const r = await fetch(
-"https://nominatim.openstreetmap.org/search?format=json&q="
-+ encodeURIComponent(addr)
-)
-const d = await r.json()
-return [d[0].lon, d[0].lat]
-}
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
-const startCoord = await geo(start)
-const endCoord = await geo(end)
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-const route = await fetch(
-"https://api.openrouteservice.org/v2/directions/driving-car",
-{
-method:"POST",
-headers:{
-"Authorization":"TA_CLE_OPENROUTE",
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-coordinates:[startCoord,endCoord]
-})
-}
-)
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-const data = await route.json()
+</head>
 
-const meters = data.routes[0].summary.distance
-const seconds = data.routes[0].summary.duration
+<body>
 
-const km = meters / 1000
-const minutes = seconds / 60
+<header class="topbar">
 
-document.getElementById("distance").innerText =
-km.toFixed(1)
+<h1>Léman-Courses</h1>
+<p>Nouvelle demande de transport</p>
 
-document.getElementById("duration").innerText =
-minutes.toFixed(0)
+</header>
 
-drawRoute(data.routes[0].geometry.coordinates)
+<main class="container">
 
-calculatePrice()
+<section class="card">
 
-}catch(e){
+<h2>Créer un transport</h2>
 
-console.error(e)
-alert("Impossible de calculer la route")
+<!-- CLIENT -->
 
-}
+<label>Client</label>
 
-}
+<div class="client-search">
 
-function calculatePrice(){
+<input
+id="clientSearch"
+placeholder="Rechercher client..."
+oninput="searchClient()"
+autocomplete="off">
 
-const km =
-Number(document.getElementById("distance").innerText);
+<div id="clientResults"></div>
 
-const packageType =
-document.getElementById("package_type").value;
+</div>
 
-let price = km * 1.2;
+<!-- CARTE -->
 
-if(packageType === "palette") price += 20;
-if(packageType === "box") price += 10;
+<div id="map"
+style="height:400px;margin-top:20px;border-radius:10px;">
+</div>
 
-document.getElementById("price").innerText =
-"CHF " + price.toFixed(2);
-}
+<!-- ADRESSES -->
 
-function calculateTransport(){
-calculateDistance();
-}
+<label>Adresse enlèvement</label>
 
-window.calculateDistance = calculateDistance;
-window.calculatePrice = calculatePrice;
-window.calculateTransport = calculateTransport;
+<input
+id="pickup_address"
+placeholder="Adresse enlèvement"
+onchange="calculateDistance()">
+
+<label>Adresse livraison</label>
+
+<input
+id="delivery_address"
+placeholder="Adresse livraison"
+onchange="calculateDistance()">
+
+<!-- TYPE COLIS -->
+
+<label>Type colis</label>
+
+<select id="package_type" onchange="calculatePrice()">
+
+<option value="envelope">Enveloppe</option>
+<option value="carton">Carton</option>
+<option value="box">Caisse</option>
+<option value="palette">Palette</option>
+
+</select>
+
+<!-- BOUTON -->
+
+<button onclick="calculateTransport()" class="btn">
+Calculer transport
+</button>
+
+<!-- RESULTAT -->
+
+<div class="result">
+
+<p>
+Distance :
+<strong id="distance">0</strong> km
+</p>
+
+<p>
+Prix estimé :
+<strong id="price">CHF 0</strong>
+</p>
+
+</div>
+
+</section>
+
+</main>
+
+<footer class="footer">
+
+Léman-Courses<br>
+Impasse des Griottes 3<br>
+1462 Yvonand<br>
++41 79 870 04 88
+
+</footer>
+
+<!-- SCRIPTS -->
+
+<script src="js/config.js"></script>
+<script src="js/clients.js"></script>
+<script src="js/map.js"></script>
+<script src="js/orders.js"></script>
+
+</body>
+
+</html>
