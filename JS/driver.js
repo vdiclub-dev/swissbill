@@ -1,3 +1,19 @@
+async function loadDriverOrders(){
+
+const driverId = "DRIVER_ID"
+
+const {data} = await supabaseClient
+.from("driver_routes")
+.select(`
+stop_order,
+orders(*)
+`)
+.eq("driver_id",driverId)
+.order("stop_order")
+
+displayRoute(data)
+
+}
 async function updateStatus(id,status){
 
 await supabaseClient
