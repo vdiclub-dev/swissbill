@@ -1,3 +1,18 @@
+function calculateDistance(){
+
+let start = document.getElementById("pickup_address").value
+let end = document.getElementById("delivery_address").value
+
+if(!start || !end) return
+
+// simulation distance pour l'instant
+let km = Math.floor(Math.random()*80)+10
+
+document.getElementById("distance").innerText = km
+
+calculatePrice()
+
+}
 function calculateTransport(){
 
 let km = Math.floor(Math.random()*80)+10
@@ -11,11 +26,9 @@ calculatePrice()
 
 function calculatePrice(){
 
-let km =
-Number(document.getElementById("distance").innerText)
+let km = Number(document.getElementById("distance").innerText)
 
-let packageType =
-document.getElementById("package_type").value
+let packageType = document.getElementById("package_type").value
 
 let price = km * 1.20
 
