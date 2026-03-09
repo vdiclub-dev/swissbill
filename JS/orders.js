@@ -57,6 +57,7 @@ document.getElementById("price").innerText =
 "CHF " + price.toFixed(2)
 
 }
+showPoints(startCoord[1], startCoord[0], endCoord[1], endCoord[0])
 window.calculateDistance = calculateDistance;
 window.calculatePrice = calculatePrice;
 window.calculateTransport = calculateTransport;
