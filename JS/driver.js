@@ -1,3 +1,29 @@
+function displayRoute(route){
+
+const div = document.getElementById("driverOrders")
+
+div.innerHTML=""
+
+route.forEach(r=>{
+
+div.innerHTML +=
+`
+<div class="stop">
+
+<b>${r.stop_order}</b>
+
+${r.orders.delivery_address}
+
+<button onclick="navigate('${r.orders.delivery_address}')">
+Naviguer
+</button>
+
+</div>
+`
+
+})
+
+}
 async function loadDriverOrders(){
 
 const driverId = "DRIVER_ID"
