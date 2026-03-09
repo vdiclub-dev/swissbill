@@ -1,21 +1,17 @@
 console.log("map.js chargé")
-let routeLayer = null;
 
-function drawRoute(coords){
+document.addEventListener("DOMContentLoaded", function(){
 
-if(routeLayer){
-map.removeLayer(routeLayer)
+if(!document.getElementById("map")) return
+
+const map = L.map("map").setView([46.8,6.6],8)
+
+L.tileLayer(
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+{
+maxZoom:19,
+attribution:"© OpenStreetMap"
 }
+).addTo(map)
 
-const latlngs = coords.map(c => [c[1], c[0]])
-
-routeLayer = L.polyline(latlngs,{
-color:"red",
-weight:4
-}).addTo(map)
-
-map.fitBounds(routeLayer.getBounds())
-
-}
-drawRoute(data.features[0].geometry.coordinates)
-const minutes = data.features[0].properties.summary.duration / 60
+})
