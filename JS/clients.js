@@ -7,7 +7,6 @@ async function loadClients(){
 const {data,error} = await sb
 .from("clients")
 .select("*")
-.order("company")
 
 if(error){
 console.error(error)
