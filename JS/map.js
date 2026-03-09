@@ -27,3 +27,21 @@ map.fitBounds([
 ])
 
 }
+let routeLayer = null
+
+function drawRoute(coords){
+
+if(routeLayer){
+map.removeLayer(routeLayer)
+}
+
+const latlngs = coords.map(c => [c[1], c[0]])
+
+routeLayer = L.polyline(latlngs,{
+color:"red",
+weight:4
+}).addTo(map)
+
+map.fitBounds(routeLayer.getBounds())
+
+}
