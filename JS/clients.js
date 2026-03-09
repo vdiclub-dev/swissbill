@@ -1,7 +1,7 @@
 
-function selectClient(id,nom){
+function selectClient(id,name){
 
-document.getElementById("clientSearch").value = nom
+document.getElementById("clientSearch").value = name
 
 document.getElementById("clientResults").innerHTML=""
 
@@ -10,7 +10,8 @@ window.selectedClient = id
 }
 async function searchClient(){
 
-const term = document.getElementById("clientSearch").value
+const term =
+document.getElementById("clientSearch").value
 
 if(term.length < 2){
 document.getElementById("clientResults").innerHTML=""
@@ -19,37 +20,35 @@ return
 
 const sb = window.supabaseClient
 
-const { data, error } = await sb
+const {data,error} = await sb
 .from("clients")
 .select("id,company,first_name,last_name")
 .or(`company.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`)
+.limit(10)
 
 if(error){
 console.error(error)
 return
 }
 
-const results = document.getElementById("clientResults")
+const results =
+document.getElementById("clientResults")
 
-results.innerHTML = ""
-
-if(!data || data.length === 0){
-results.innerHTML = "<div>Aucun client trouvé</div>"
-return
-}
+results.innerHTML=""
 
 data.forEach(c=>{
 
-let name = ""
+let name=""
 
-if(c.company && c.company !== ""){
+if(c.company){
 name = c.company
 }else{
-name = (c.first_name || "") + " " + (c.last_name || "")
+name = (c.first_name||"") + " " + (c.last_name||"")
 }
 
 results.innerHTML += `
-<div onclick="selectClient('${c.id}','${name}')">
+<div class="client-item"
+onclick="selectClient('${c.id}','${name}')">
 ${name}
 </div>
 `
