@@ -163,3 +163,12 @@ weight:4
 map.fitBounds(latlngs)
 
 }
+const icon = L.divIcon({
+
+className:"route-number",
+
+html:"<div>"+(index+1)+"</div>"
+
+})
+
+L.marker([lat,lon],{icon}).addTo(map)
