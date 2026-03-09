@@ -45,8 +45,15 @@ coordinates:[
 
 const data = await route.json()
 
-const km =
-data.features[0].properties.summary.distance / 1000
+const distance =
+data.features[0].properties.summary.distance
+
+const duration =
+data.features[0].properties.summary.duration
+
+const km = distance / 1000
+
+const minutes = duration / 60
 
 document.getElementById("distance").innerText =
 km.toFixed(1)
@@ -61,7 +68,8 @@ alert("Impossible de calculer la distance")
 }
 
 }
-
+document.getElementById("duration").innerText =
+minutes.toFixed(0)
 function calculatePrice(){
 
 const km =
