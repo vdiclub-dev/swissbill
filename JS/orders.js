@@ -1,7 +1,20 @@
 function calculatePrice(){
 
-// distance
-let km = Number(document.getElementById("distance").innerText)
+const km =
+Number(document.getElementById("distance").innerText)
+
+let packageType =
+document.getElementById("package_type").value
+
+let price = km * 1.2
+
+if(packageType === "palette")
+price += 20
+
+document.getElementById("price")
+.innerText = "CHF " + price.toFixed(2)
+
+}
 
 // type colis
 let packageType =
