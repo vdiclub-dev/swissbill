@@ -1,3 +1,22 @@
+const codeReader = new ZXing.BrowserMultiFormatReader()
+
+codeReader.decodeFromVideoDevice(
+null,
+"qr-reader",
+(result,err)=>{
+
+if(result){
+
+const code = result.text
+
+console.log("code:",code)
+
+registerParcel(code)
+
+}
+
+}
+)
 function markLoaded(code){
 
 const row = document.getElementById("parcel-"+code)
