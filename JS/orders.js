@@ -95,7 +95,15 @@ document.getElementById("price").innerText =
 function calculateTransport(){
 calculateDistance()
 }
+async function calculateDistance(){
 
+console.log("calcul distance lancé")
+
+const start =
+document.getElementById("pickup_address").value
+
+const end =
+document.getElementById("delivery_address").value
 
 // rendre les fonctions accessibles au HTML
 window.calculateDistance = calculateDistance
