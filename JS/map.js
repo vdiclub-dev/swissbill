@@ -19,7 +19,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 });
 
-
 function drawRoute(coords){
 
 if(!map) return;
