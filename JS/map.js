@@ -19,4 +19,7 @@ attribution:"© OpenStreetMap"
 ).addTo(map)
 
 })
-map.setView([startCoord[1], startCoord[0]], 7)
+map.fitBounds([
+[startCoord[1], startCoord[0]],
+[endCoord[1], endCoord[0]]
+])
