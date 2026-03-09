@@ -1,18 +1,32 @@
+function calculateTransport(){
+
+let km = Math.floor(Math.random()*80)+10
+
+document.getElementById("distance").innerText = km
+
+calculatePrice()
+
+}
+
+
+
 function calculatePrice(){
 
-const km =
+let km =
 Number(document.getElementById("distance").innerText)
 
 let packageType =
 document.getElementById("package_type").value
 
-let price = km * 1.2
+let price = km * 1.20
 
-if(packageType === "palette")
+
+if(packageType === "palette"){
 price += 20
+}
 
-document.getElementById("price")
-.innerText = "CHF " + price.toFixed(2)
+document.getElementById("price").innerText =
+"CHF " + price.toFixed(2)
 
 }
 
@@ -270,17 +284,9 @@ table.innerHTML+=`
 <td>${o.Prix}</td>
 <td>${o.Statut}</td>
 </tr>
-`
+
 
 })
 
 }
-function calculateTransport(){
-
-let km = Math.floor(Math.random()*80)+10
-
-document.getElementById("distance").innerText = km
-
-calculatePrice()
-
-}
+f
