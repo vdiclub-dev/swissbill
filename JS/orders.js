@@ -45,3 +45,6 @@ km.toFixed(1)
 calculatePrice()
 
 }
+window.calculateDistance = calculateDistance;
+window.calculatePrice = calculatePrice;
+window.calculateTransport = calculateTransport;
