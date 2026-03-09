@@ -1,5 +1,3 @@
-console.log("orders.js chargé")
-
 async function calculateDistance(){
 
 const start =
@@ -8,10 +6,7 @@ document.getElementById("pickup_address").value
 const end =
 document.getElementById("delivery_address").value
 
-if(!start || !end){
-alert("Entrer les deux adresses")
-return
-}
+if(!start || !end) return
 
 const geo = async (addr)=>{
 
@@ -21,19 +16,33 @@ const r = await fetch(
 
 const d = await r.json()
 
-return [d[0].lat,d[0].lon]
+return [d[0].lon,d[0].lat]
 
 }
 
 const startCoord = await geo(start)
 const endCoord = await geo(end)
 
-const km = getDistance(
-startCoord[0],
-startCoord[1],
-endCoord[0],
-endCoord[1]
+const route = await fetch(
+"https://api.openrouteservice.org/v2/directions/driving-car",
+{
+method:"POST",
+headers:{
+"Authorization":"TA_CLE_OPENROUTE",
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+coordinates:[startCoord,endCoord]
+})
+}
 )
+
+const data = await route.json()
+
+const meters =
+data.routes[0].summary.distance
+
+const km = meters / 1000
 
 document.getElementById("distance").innerText =
 km.toFixed(1)
