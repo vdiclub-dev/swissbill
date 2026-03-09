@@ -1,3 +1,62 @@
+async function setStatus(status){
+
+await supabaseClient
+.from("drivers")
+.update({status:status})
+.eq("id",driverId)
+
+}
+supabaseClient
+.channel("drivers")
+
+.on(
+"postgres_changes",
+{ event:"UPDATE",schema:"public",table:"drivers" },
+
+payload=>{
+
+updateDriverMarker(payload.new)
+
+}
+
+)
+
+.subscribe()
+async function loadDrivers(){
+
+const {data} = await supabaseClient
+.from("drivers")
+.select("*")
+
+data.forEach(d=>{
+
+const marker = L.marker([d.lat,d.lon])
+.addTo(map)
+
+marker.bindPopup(
+"🚚 "+d.name+"<br>"+d.status
+)
+
+})
+
+}
+navigator.geolocation.watchPosition(async pos=>{
+
+const lat = pos.coords.latitude
+const lon = pos.coords.longitude
+
+await supabaseClient
+.from("drivers")
+.update({
+
+lat:lat,
+lon:lon,
+updated_at:new Date()
+
+})
+.eq("id",driverId)
+
+})
 function navigate(address){
 
 window.open(
