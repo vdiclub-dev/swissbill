@@ -1,5 +1,3 @@
-console.log("orders.js chargé")
-
 async function calculateDistance(){
 
 const start =
@@ -29,20 +27,26 @@ const endCoord = await geo(end)
 
 const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI4OTQwOGJlOTE1MDQzNjc5NmQ3NzkzOWQ0YjZjODg4IiwiaCI6Im11cm11cjY0In0="
 
-const url =
-"https://api.openrouteservice.org/v2/directions/driving-car?start="
-+ startCoord[0] + "," + startCoord[1] +
-"&end=" + endCoord[0] + "," + endCoord[1]
-
-const route = await fetch(url,{
+const route = await fetch(
+"https://api.openrouteservice.org/v2/directions/driving-car",
+{
+method:"POST",
 headers:{
-Authorization:key
-}
+"Authorization":key,
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+coordinates:[
+[startCoord[0],startCoord[1]],
+[endCoord[0],endCoord[1]]
+]
+})
 })
 
 const data = await route.json()
 
-const km = data.features[0].properties.summary.distance / 1000
+const km =
+data.features[0].properties.summary.distance / 1000
 
 document.getElementById("distance").innerText =
 km.toFixed(1)
