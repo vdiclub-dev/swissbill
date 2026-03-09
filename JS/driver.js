@@ -1,3 +1,11 @@
+function navigate(address){
+
+window.open(
+"https://www.google.com/maps/dir/?api=1&destination="+
+encodeURIComponent(address)
+)
+
+}
 function displayRoute(route){
 
 const div = document.getElementById("driverOrders")
