@@ -45,6 +45,11 @@ coordinates:[
 
 const data = await route.json()
 
+if(!data.features || data.features.length === 0){
+alert("Impossible de trouver un trajet")
+return
+}
+
 const distance =
 data.features[0].properties.summary.distance
 
