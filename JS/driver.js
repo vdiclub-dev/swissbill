@@ -1,3 +1,83 @@
+function markLoaded(code){
+
+const row = document.getElementById("parcel-"+code)
+
+if(row){
+
+row.classList.add("loaded")
+
+}
+
+}
+async function registerParcel(code){
+
+const {data} = await supabaseClient
+.from("orders")
+.select("*")
+.eq("order_number",code)
+.single()
+
+if(!data){
+
+alert("Colis inconnu")
+return
+
+}
+
+await supabaseClient
+.from("orders")
+.update({
+
+status:"loaded",
+loaded_at:new Date()
+
+})
+.eq("id",data.id)
+
+markLoaded(code)
+
+}
+function startScanner(){
+
+const scanner = new Html5Qrcode("qr-reader")
+
+scanner.start(
+{ facingMode:"environment" },
+
+{ fps:10, qrbox:250 },
+
+(code)=>{
+
+console.log("scan:",code)
+
+registerParcel(code)
+
+}
+
+)
+
+}
+async function checkLoading(){
+
+const {data} = await supabaseClient
+.from("orders")
+.select("*")
+.eq("driver_id",driverId)
+.eq("status","assigned")
+
+const loaded = await supabaseClient
+.from("orders")
+.select("*")
+.eq("driver_id",driverId)
+.eq("status","loaded")
+
+if(loaded.data.length === data.length){
+
+alert("Tous les colis sont chargés")
+
+}
+
+}
 async function scanParcel(code){
 
 const {data} = await supabaseClient
