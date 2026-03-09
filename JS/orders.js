@@ -13,20 +13,29 @@ if(!start || !end) return
 try{
 
 const geo = async (addr)=>{
+
 const r = await fetch(
-"https://nominatim.openstreetmap.org/search?format=json&q="+encodeURIComponent(addr)
+"https://nominatim.openstreetmap.org/search?format=json&q="
++ encodeURIComponent(addr)
 )
+
 const d = await r.json()
-return [d[0].lat,d[0].lon]
+
+if(!d || d.length === 0){
+throw new Error("Adresse introuvable")
+}
+
+return [parseFloat(d[0].lat), parseFloat(d[0].lon)]
+
 }
 
 const startCoord = await geo(start)
 const endCoord = await geo(end)
 
-// distance approximative
+// distance calculée
 const km = getDistance(
-startCoord[0],startCoord[1],
-endCoord[0],endCoord[1]
+startCoord[0], startCoord[1],
+endCoord[0], endCoord[1]
 )
 
 document.getElementById("distance").innerText =
@@ -35,15 +44,19 @@ km.toFixed(1)
 calculatePrice()
 
 }catch(e){
+
 console.error(e)
-alert("Impossible de calculer distance")
+alert("Impossible de calculer la distance")
+
 }
 
 }
+
 
 function getDistance(lat1,lon1,lat2,lon2){
 
 const R = 6371
+
 const dLat = (lat2-lat1)*Math.PI/180
 const dLon = (lon2-lon1)*Math.PI/180
 
@@ -59,6 +72,7 @@ return R*c
 
 }
 
+
 function calculatePrice(){
 
 const km =
@@ -73,14 +87,17 @@ if(packageType === "palette") price += 20
 if(packageType === "box") price += 10
 
 document.getElementById("price").innerText =
-"CHF "+price.toFixed(2)
+"CHF " + price.toFixed(2)
 
 }
+
 
 function calculateTransport(){
 calculateDistance()
 }
 
+
+// rendre les fonctions accessibles au HTML
 window.calculateDistance = calculateDistance
 window.calculatePrice = calculatePrice
 window.calculateTransport = calculateTransport
