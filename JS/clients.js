@@ -84,25 +84,34 @@ table.innerHTML += `
 
 }
 
-document
-.getElementById("clientForm")
-.addEventListener("submit",async e=>{
+const form = document.getElementById("clientForm")
+
+if(form){
+
+form.addEventListener("submit", async e => {
 
 e.preventDefault()
 
+const nom = document.getElementById("nom").value
+const entreprise = document.getElementById("entreprise").value
+const email = document.getElementById("email").value
+const telephone = document.getElementById("telephone").value
+const adresse = document.getElementById("adresse").value
+const ville = document.getElementById("ville").value
+
 await sb.from("clients").insert({
-
-nom:nom.value,
-entreprise:entreprise.value,
-email:email.value,
-telephone:telephone.value,
-adresse:adresse.value,
-ville:ville.value
-
+nom,
+entreprise,
+email,
+telephone,
+adresse,
+ville
 })
 
 loadClients()
 
 })
+
+}
 
 loadClients()
