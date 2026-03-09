@@ -48,10 +48,13 @@ async function calculateDistance() {
     }
 
     const distance = data.routes[0].summary.distance;
-    const duration = data.routes[0].summary.duration;
-    if(coords.length && window.drawRoute){
-    drawRoute(coords)
-        }
+const duration = data.routes[0].summary.duration;
+
+const coords = data.routes[0].geometry.coordinates;
+
+if(coords && coords.length && window.drawRoute){
+drawRoute(coords);
+}
 
     const km = distance / 1000;
     const minutes = duration / 60;
@@ -59,9 +62,7 @@ async function calculateDistance() {
     document.getElementById("distance").innerText = km.toFixed(1);
     document.getElementById("duration").innerText = minutes.toFixed(0);
 
-    if (window.drawRoute) {
-      window.drawRoute(coords);
-    }
+  
 
     calculatePrice();
   } catch (e) {
