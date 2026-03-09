@@ -1,7 +1,5 @@
 console.log("login.js chargé")
 
-const sb = window.supabaseClient
-
 document.addEventListener("DOMContentLoaded", () => {
 
   const form = document.getElementById("loginForm")
@@ -20,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try{
 
-      const { data, error } = await sb.auth.signInWithPassword({
+      const { data, error } = await window.supabaseClient.auth.signInWithPassword({
         email,
         password
       })
