@@ -49,7 +49,9 @@ async function calculateDistance() {
 
     const distance = data.routes[0].summary.distance;
     const duration = data.routes[0].summary.duration;
-    const coords = data.routes[0].geometry.coordinates;
+    if(coords.length && window.drawRoute){
+    drawRoute(coords)
+        }
 
     const km = distance / 1000;
     const minutes = duration / 60;
