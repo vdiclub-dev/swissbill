@@ -1,132 +1,17 @@
-<!DOCTYPE html>
-<html lang="fr">
+console.log("orders.js chargé")
 
-<head>
+function calculateDistance(){
+console.log("distance")
+}
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+function calculatePrice(){
+console.log("prix")
+}
 
-<title>Nouveau transport | Léman-Courses</title>
+function calculateTransport(){
+console.log("transport")
+}
 
-<link rel="stylesheet" href="css/style.css">
-
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-</head>
-
-<body>
-
-<header class="topbar">
-
-<h1>Léman-Courses</h1>
-<p>Nouvelle demande de transport</p>
-
-</header>
-
-<main class="container">
-
-<section class="card">
-
-<h2>Créer un transport</h2>
-
-<!-- CLIENT -->
-
-<label>Client</label>
-
-<div class="client-search">
-
-<input
-id="clientSearch"
-placeholder="Rechercher client..."
-oninput="searchClient()"
-autocomplete="off">
-
-<div id="clientResults"></div>
-
-</div>
-
-<!-- CARTE -->
-
-<div id="map"
-style="height:400px;margin-top:20px;border-radius:10px;">
-</div>
-
-<!-- ADRESSES -->
-
-<label>Adresse enlèvement</label>
-
-<input
-id="pickup_address"
-placeholder="Adresse enlèvement"
-onchange="calculateDistance()">
-
-<label>Adresse livraison</label>
-
-<input
-id="delivery_address"
-placeholder="Adresse livraison"
-onchange="calculateDistance()">
-
-<!-- TYPE COLIS -->
-
-<label>Type colis</label>
-
-<select id="package_type" onchange="calculatePrice()">
-
-<option value="envelope">Enveloppe</option>
-<option value="carton">Carton</option>
-<option value="box">Caisse</option>
-<option value="palette">Palette</option>
-
-</select>
-
-<!-- BOUTON -->
-
-<button onclick="calculateTransport()" class="btn">
-Calculer transport
-</button>
-
-<!-- RESULTAT -->
-
-<div class="result">
-
-<p>
-Distance :
-<strong id="distance">0</strong> km
-</p>
-
-<p>
-Prix estimé :
-<strong id="price">CHF 0</strong>
-</p>
-
-</div>
-
-</section>
-
-</main>
-
-<footer class="footer">
-
-Léman-Courses<br>
-Impasse des Griottes 3<br>
-1462 Yvonand<br>
-+41 79 870 04 88
-
-</footer>
-
-<!-- SCRIPTS -->
-
-<script src="js/config.js"></script>
-<script src="js/clients.js"></script>
-<script src="js/map.js"></script>
-<script src="js/orders.js"></script>
-
-</body>
-
-</html>
+window.calculateDistance = calculateDistance
+window.calculatePrice = calculatePrice
+window.calculateTransport = calculateTransport
