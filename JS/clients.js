@@ -1,12 +1,4 @@
-function selectClient(id,name){
 
-document.getElementById("clientSearch").value = name
-
-document.getElementById("clientResults").innerHTML=""
-
-window.selectedClient = id
-
-}
 function selectClient(id,nom){
 
 document.getElementById("clientSearch").value = nom
