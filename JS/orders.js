@@ -1,3 +1,42 @@
+async function createOrder(){
+
+const clientId = document.getElementById("clientSelect").value
+const pickup = document.getElementById("pickup_address").value
+const delivery = document.getElementById("delivery_address").value
+const distance = document.getElementById("distance").innerText
+const duration = document.getElementById("duration").innerText
+const price = document.getElementById("price").innerText.replace("CHF ","")
+
+try{
+
+const {data,error} = await supabaseClient
+.from("orders")
+.insert([{
+
+client_id:clientId,
+pickup_address:pickup,
+delivery_address:delivery,
+distance_km:distance,
+duration_min:duration,
+price:price,
+status:"created"
+
+}])
+
+if(error) throw error
+
+alert("Transport créé")
+
+window.location.href="orders.html"
+
+}catch(err){
+
+console.error(err)
+alert("Erreur création transport")
+
+}
+
+}
 console.log("orders.js chargé");
 
 async function calculateDistance(){
