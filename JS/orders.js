@@ -1,4 +1,66 @@
 console.log("orders.js chargé");
+document.addEventListener("DOMContentLoaded",async()=>{
+
+await loadClientAddress()
+await loadDestinations()
+
+})
+async function loadDestinations(){
+
+if(!window.clientId) return
+
+const { data } =
+await window.supabaseClient
+.from("destinations")
+.select("*")
+.eq("client_id",window.clientId)
+
+const select =
+document.getElementById("destination")
+
+select.innerHTML=""
+
+data.forEach(d=>{
+
+const option =
+document.createElement("option")
+
+option.value =
+d.address + ", " + d.city
+
+option.textContent =
+d.name
+
+option.dataset.night =
+d.night_allowed
+
+select.appendChild(option)
+
+})
+
+}
+async function loadClientAddress(){
+
+const { data:{user} } =
+await window.supabaseClient.auth.getUser()
+
+if(!user) return
+
+const { data } =
+await window.supabaseClient
+.from("clients")
+.select("*")
+.eq("auth_user_id",user.id)
+.single()
+
+if(!data) return
+
+document.getElementById("pickup").value =
+data.address + ", " + data.city
+
+window.clientId = data.id
+
+}
 document.addEventListener("DOMContentLoaded",()=>{
 
 loadClientAddress()
