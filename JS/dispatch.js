@@ -142,7 +142,11 @@ L.marker([lat,lng])
 .addTo(map)
 .bindPopup(`
 Transport #${order.id}<br>
-Destination : ${order.delivery_city}
+Destination : ${order.delivery_city}<br><br>
+
+<button onclick="assignDriver(${order.id})">
+Assigner chauffeur
+</button>
 `)
 
 bounds.push([lat,lng])
