@@ -1,5 +1,10 @@
 console.log("orders.js chargé");
+document.addEventListener("DOMContentLoaded",()=>{
 
+loadClientAddress()
+loadDestinations()
+
+})
 
 function checkNightDelivery(){
 
