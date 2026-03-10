@@ -156,3 +156,29 @@ map.fitBounds(bounds,{padding:[50,50]})
 }
 
 loadOrdersMap()
+async function loadDrivers(){
+
+const { data, error } = await supabase
+.from("drivers")
+.select("*")
+
+if(error){
+console.error(error)
+return
+}
+
+data.forEach(driver=>{
+
+L.circleMarker([driver.lat,driver.lng],{
+radius:8,
+color:"green"
+})
+.addTo(map)
+.bindPopup(`
+🚚 Chauffeur : ${driver.name}
+`)
+
+})
+
+}
+loadDrivers()
