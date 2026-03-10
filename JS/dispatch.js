@@ -101,3 +101,34 @@ alert("Transport créé")
 closeModal()
 
 }
+async function loadOrdersMap(){
+
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+
+if(error){
+console.error(error)
+return
+}
+
+data.forEach(order=>{
+
+if(!order.delivery_city) return
+
+// coordonnées simples pour test Lausanne
+let lat = 46.52
+let lng = 6.63
+
+L.marker([lat,lng])
+.addTo(map)
+.bindPopup(`
+Transport #${order.id}
+Destination : ${order.delivery_city}
+`)
+
+})
+
+}
+
+loadOrdersMap()
