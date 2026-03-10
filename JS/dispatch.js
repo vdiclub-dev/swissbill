@@ -1,4 +1,7 @@
 alert("dispatch chargé")
+function newTransport(){
+alert("bouton fonctionne")
+}
 console.log("dispatch chargé")
 
 const map = L.map('map').setView([46.52,6.63],9)
