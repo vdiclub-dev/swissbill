@@ -27,3 +27,19 @@ function closeModal(){
 document.getElementById("modal").style.display="none"
 
 }
+function newTransport(){
+
+openModal(
+"Créer transport",
+
+`
+<input placeholder="Ville destination">
+
+<br><br>
+
+<button class="btn">Créer</button>
+`
+
+)
+
+}
