@@ -43,3 +43,20 @@ openModal(
 )
 
 }
+function newTransport(){
+
+openModal(
+"Créer transport",
+
+`
+<label>Ville destination</label>
+<input type="text" placeholder="Lausanne">
+
+<br><br>
+
+<button class="btn">Créer</button>
+`
+
+)
+
+}
