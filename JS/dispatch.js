@@ -34,3 +34,28 @@ table.appendChild(row)
 }
 
 loadOrders()
+async function loadStats(){
+
+const { data } = await supabase
+.from("orders")
+.select("*")
+
+document.getElementById("totalTransports").innerText = data.length
+
+const urgent = data.filter(o=>o.service=="urgent")
+document.getElementById("urgentTransports").innerText = urgent.length
+
+const delivered = data.filter(o=>o.status=="delivered")
+document.getElementById("deliveredTransports").innerText = delivered.length
+
+}
+async function planOrder(orderId){
+
+await supabase
+.from("orders")
+.update({status:"planned"})
+.eq("id",orderId)
+
+loadOrders()
+
+}
