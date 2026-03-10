@@ -134,7 +134,6 @@ loadOrdersMap()
 /* ---------------------- */
 /* AFFICHER TRANSPORTS */
 /* ---------------------- */
-
 async function loadOrdersMap(){
 
 const { data, error } = await supabase
@@ -146,11 +145,32 @@ console.error(error)
 return
 }
 
-data.forEach(order=>{
+/* enlever anciens marqueurs */
 
-// coordonnées test Lausanne
-const lat = 46.5197
-const lng = 6.6323
+map.eachLayer(layer=>{
+if(layer instanceof L.Marker){
+map.removeLayer(layer)
+}
+})
+
+/* créer marqueurs */
+
+for(const order of data){
+
+const city = order.delivery_city
+
+if(!city) continue
+
+const response = await fetch(
+`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
+)
+
+const result = await response.json()
+
+if(result.length === 0) continue
+
+const lat = parseFloat(result[0].lat)
+const lng = parseFloat(result[0].lon)
 
 L.marker([lat,lng])
 .addTo(map)
@@ -159,9 +179,10 @@ Transport #${order.id}<br>
 Destination : ${order.delivery_city}
 `)
 
-})
+}
 
 }
+
 
 loadOrdersMap()
 map.eachLayer(layer=>{
