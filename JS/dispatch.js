@@ -208,3 +208,38 @@ return
 alert("Chauffeur assigné")
 
 }
+async function loadOrdersList(){
+
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+
+if(error){
+console.error(error)
+return
+}
+
+const list = document.getElementById("orders-list")
+
+list.innerHTML = ""
+
+data.forEach(order=>{
+
+const item = document.createElement("div")
+
+item.className = "order-item"
+
+item.innerHTML = `
+📦 #${order.id}<br>
+${order.delivery_city}
+`
+
+item.onclick = ()=>{
+focusTransport(order.delivery_city)
+}
+
+list.appendChild(item)
+
+})
+
+}
