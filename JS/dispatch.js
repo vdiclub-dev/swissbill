@@ -194,7 +194,7 @@ map.fitBounds(bounds,{padding:[50,50]})
 }
 
 }
-
+}
 loadOrdersMap()
 map.eachLayer(layer=>{
 if(layer instanceof L.Marker){
