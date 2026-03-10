@@ -21,28 +21,29 @@ document.getElementById("modal-content").innerHTML = content
 document.getElementById("modal").style.display="flex"
 
 }
-
-function closeModal(){
-
-document.getElementById("modal").style.display="none"
-
-}
 function newTransport(){
 
 openModal(
 "Créer transport",
 
 `
-<input placeholder="Ville destination">
+<label>Ville destination</label>
+<input id="dest" type="text" placeholder="Lausanne">
 
 <br><br>
 
-<button class="btn">Créer</button>
+<button class="btn" onclick="createTransport()">Créer</button>
 `
 
 )
 
 }
+function closeModal(){
+
+document.getElementById("modal").style.display="none"
+
+}
+
 function newTransport(){
 
 openModal(
@@ -58,5 +59,34 @@ openModal(
 `
 
 )
+
+}
+async function createTransport(){
+
+const city = document.getElementById("dest").value
+
+if(!city){
+alert("Veuillez saisir une destination")
+return
+}
+
+const { data, error } = await supabase
+.from("orders")
+.insert([
+{
+delivery_city: city,
+status:"pending"
+}
+])
+
+if(error){
+console.error(error)
+alert("Erreur création transport")
+return
+}
+
+closeModal()
+
+loadOrders()
 
 }
