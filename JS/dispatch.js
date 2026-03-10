@@ -132,3 +132,6 @@ loadOrders()
 }
 
 }
+window.newTransport = function(){
+alert("clic bouton détecté")
+}
