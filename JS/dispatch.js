@@ -187,3 +187,12 @@ loadOrders()
 }
 
 }
+window.openModal = function(title,content){
+document.getElementById("modal-title").innerText = title
+document.getElementById("modal-content").innerHTML = content
+document.getElementById("modal").style.display = "flex"
+}
+
+window.closeModal = function(){
+document.getElementById("modal").style.display = "none"
+}
