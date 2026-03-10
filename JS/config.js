@@ -10,21 +10,3 @@ SUPABASE_URL,
 SUPABASE_KEY
 )
 
-// paramètres entreprise
-const COMPANY = {
-
-name : "Léman-Courses",
-address : "Impasse des Griottes 3",
-city : "1462 Yvonand",
-phone : "+41 79 870 04 88"
-
-}
-
-// dépôt départ
-const DEPOT = {
-
-lat : 46.807,
-lon : 6.741,
-address : "Impasse des Griottes 3, Yvonand"
-
-}
