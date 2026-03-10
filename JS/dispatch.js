@@ -1,3 +1,7 @@
+// =============================
+// CARTE DISPATCH
+// =============================
+
 const map = L.map('map').setView([46.5200,6.6300],9)
 
 L.tileLayer(
@@ -7,12 +11,20 @@ maxZoom:18
 }).addTo(map)
 
 
+// =============================
+// AFFICHER LES TRANSPORTS SUR LA CARTE
+// =============================
 
 async function loadOrdersMap(){
 
 const { data, error } = await supabase
 .from("orders")
 .select("*")
+
+if(error){
+console.error(error)
+return
+}
 
 data.forEach(order=>{
 
@@ -32,11 +44,12 @@ Service: ${order.service}
 }
 
 loadOrdersMap()
-let map = L.map('map').setView([46.5197, 6.6323], 9)
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-maxZoom: 18
-}).addTo(map)
+
+// =============================
+// TABLEAU TRANSPORTS
+// =============================
+
 async function loadOrders(){
 
 const { data, error } = await supabase
@@ -44,7 +57,7 @@ const { data, error } = await supabase
 .select("*")
 .eq("status","pending")
 
-const table = document.querySelector("#ordersTable tbody")
+const table = document.querySelector("#orders-table tbody")
 
 table.innerHTML = ""
 
@@ -72,6 +85,12 @@ table.appendChild(row)
 
 }
 
+loadOrders()
+
+
+// =============================
+// STATISTIQUES DASHBOARD
+// =============================
 
 async function loadStats(){
 
@@ -79,15 +98,23 @@ const { data } = await supabase
 .from("orders")
 .select("*")
 
-document.getElementById("totalTransports").innerText = data.length
+document.getElementById("stat-transports").innerText = data.length
 
 const urgent = data.filter(o=>o.service=="urgent")
-document.getElementById("urgentTransports").innerText = urgent.length
+document.getElementById("stat-urgent").innerText = urgent.length
 
 const delivered = data.filter(o=>o.status=="delivered")
-document.getElementById("deliveredTransports").innerText = delivered.length
+document.getElementById("stat-delivered").innerText = delivered.length
 
 }
+
+loadStats()
+
+
+// =============================
+// PLANIFIER TRANSPORT
+// =============================
+
 async function planOrder(orderId){
 
 await supabase
