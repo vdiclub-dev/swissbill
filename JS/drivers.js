@@ -21,3 +21,14 @@ Véhicule: ${driver.vehicle}
 }
 
 loadDrivers()
+function drawRoute(lat1,lng1,lat2,lng2){
+
+L.polyline([
+[lat1,lng1],
+[lat2,lng2]
+],{
+color:"blue",
+weight:4
+}).addTo(map)
+
+}
