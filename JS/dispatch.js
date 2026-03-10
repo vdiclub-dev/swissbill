@@ -115,9 +115,7 @@ return
 
 data.forEach(order=>{
 
-// coordonnées Lausanne pour test
-const lat = 46.5197
-const lng = 6.6323
+
 
 L.marker([lat,lng])
 .addTo(map)
