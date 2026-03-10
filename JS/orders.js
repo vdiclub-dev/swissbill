@@ -1,5 +1,87 @@
 console.log("orders.js chargé");
 
+
+function checkNightDelivery(){
+
+const destination =
+document.getElementById("destination")
+
+const nightAllowed =
+destination.selectedOptions[0].dataset.night === "true"
+
+const nightSelect =
+document.getElementById("night")
+
+if(!nightAllowed){
+
+nightSelect.value="non"
+nightSelect.disabled=true
+
+}else{
+
+nightSelect.disabled=false
+
+}
+
+}
+async function loadDestinations(){
+
+const { data:{user} } =
+await supabaseClient.auth.getUser()
+
+const { data:client } =
+await supabaseClient
+.from("clients")
+.select("id")
+.eq("auth_user_id",user.id)
+.single()
+
+const { data } =
+await supabaseClient
+.from("destinations")
+.select("*")
+.eq("client_id",client.id)
+
+const select =
+document.getElementById("destination")
+
+select.innerHTML=""
+
+data.forEach(d=>{
+
+const option = document.createElement("option")
+
+option.value = d.address + ", " + d.city
+option.textContent = d.name
+
+option.dataset.night = d.night_allowed
+
+select.appendChild(option)
+
+})
+
+}
+async function loadClientAddress(){
+
+const { data:{user} } =
+await window.supabaseClient.auth.getUser()
+
+const { data } =
+await window.supabaseClient
+.from("clients")
+.select("*")
+.eq("auth_user_id",user.id)
+.single()
+
+document.getElementById("pickup").value =
+data.address + ", " + data.city
+
+window.clientNightAllowed =
+data.night_delivery_allowed
+
+}
+
+
 /* ---------------------------
    Charger adresse du client
 ---------------------------- */
