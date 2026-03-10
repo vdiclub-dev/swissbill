@@ -1,3 +1,13 @@
+
+
+
+const map = L.map("map").setView([46.5200,6.6300],9)
+
+L.tileLayer(
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+{
+maxZoom:18
+}).addTo(map)
 async function createTours(){
 
 const { data } = await supabase
