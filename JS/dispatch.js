@@ -135,6 +135,7 @@ loadOrdersMap()
 /* ---------------------- */
 /* AFFICHER TRANSPORTS */
 /* ---------------------- */
+
 async function loadOrdersMap(){
 
 const { data, error } = await supabase
@@ -146,7 +147,7 @@ console.error(error)
 return
 }
 
-/* enlever anciens marqueurs */
+/* supprimer anciens marqueurs */
 
 map.eachLayer(layer=>{
 if(layer instanceof L.Marker){
@@ -154,7 +155,7 @@ map.removeLayer(layer)
 }
 })
 
-/* créer marqueurs */
+const bounds = []
 
 for(const order of data){
 
@@ -173,6 +174,8 @@ if(result.length === 0) continue
 const lat = parseFloat(result[0].lat)
 const lng = parseFloat(result[0].lon)
 
+/* créer marqueur */
+
 L.marker([lat,lng])
 .addTo(map)
 .bindPopup(`
@@ -180,10 +183,17 @@ Transport #${order.id}<br>
 Destination : ${order.delivery_city}
 `)
 
-}
+bounds.push([lat,lng])
 
 }
 
+/* ajuster la carte */
+
+if(bounds.length > 0){
+map.fitBounds(bounds,{padding:[50,50]})
+}
+
+}
 
 loadOrdersMap()
 map.eachLayer(layer=>{
