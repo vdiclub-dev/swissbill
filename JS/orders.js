@@ -1,3 +1,67 @@
+document.addEventListener("DOMContentLoaded", () => {
+
+const form = document.getElementById("orderForm")
+
+if(!form) return
+
+form.addEventListener("submit", async (e)=>{
+
+e.preventDefault()
+
+const pickup =
+document.getElementById("pickup").value
+
+const delivery =
+document.getElementById("delivery").value
+
+const weight =
+document.getElementById("weight").value
+
+const service =
+document.getElementById("service").value
+
+const notes =
+document.getElementById("notes").value
+
+const { data: { user } } =
+await window.supabaseClient.auth.getUser()
+
+if(!user){
+
+alert("Vous devez être connecté")
+return
+
+}
+
+const { error } =
+await window.supabaseClient
+.from("orders")
+.insert([{
+
+client_id : user.id,
+pickup_address : pickup,
+delivery_address : delivery,
+weight : weight,
+service_type : service,
+notes : notes,
+status : "nouveau"
+
+}])
+
+if(error){
+
+alert(error.message)
+return
+
+}
+
+alert("Commande envoyée")
+
+form.reset()
+
+})
+
+})
 function createBarcode(){
 
 const code = generateParcelCode()
