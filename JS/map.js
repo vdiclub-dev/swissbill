@@ -1,23 +1,19 @@
-console.log("map.js chargé");
+console.log("map.js chargé")
 
-let map;
-let routeLayer = null;
-let startMarker = null;
-let endMarker = null;
+let map
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded",()=>{
 
-  const mapDiv = document.getElementById("map");
-  if (!mapDiv) return;
+map = L.map("map").setView([46.8,6.6],9)
 
-  map = L.map("map").setView([46.8, 6.6], 8);
+L.tileLayer(
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+{
+maxZoom:19
+}
+).addTo(map)
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "© OpenStreetMap"
-  }).addTo(map);
-
-});
+})
 
 function drawRoute(coords){
 
