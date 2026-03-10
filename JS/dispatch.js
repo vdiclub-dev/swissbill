@@ -5,7 +5,7 @@ L.tileLayer(
 {
 maxZoom:18
 }).addTo(map)
-async function createTours(){
+
 
 
 async function loadOrdersMap(){
@@ -72,7 +72,7 @@ table.appendChild(row)
 
 }
 
-loadOrders()
+
 async function loadStats(){
 
 const { data } = await supabase
