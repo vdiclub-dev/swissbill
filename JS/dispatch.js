@@ -186,3 +186,25 @@ color:"green"
 
 }
 loadDrivers()
+async function assignDriver(orderId){
+
+const driver = prompt("ID du chauffeur")
+
+if(!driver) return
+
+const { error } = await supabase
+.from("orders")
+.update({
+driver_id: driver
+})
+.eq("id",orderId)
+
+if(error){
+console.error(error)
+alert("Erreur assignation")
+return
+}
+
+alert("Chauffeur assigné")
+
+}
