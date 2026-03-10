@@ -127,9 +127,8 @@ alert("Transport créé")
 
 closeModal()
 
-loadOrdersMap()
 
-}
+
 
 
 /* ---------------------- */
