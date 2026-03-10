@@ -1,3 +1,6 @@
+const { data: { user } } = await window.supabaseClient.auth.getUser()
+
+document.getElementById("clientEmail").innerText = user.email
 document.addEventListener("DOMContentLoaded", async () => {
 
 const { data: { session } } = await window.supabaseClient.auth.getSession()
