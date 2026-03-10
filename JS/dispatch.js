@@ -1,4 +1,5 @@
 console.log("dispatch chargé")
+map.setView([lat,lng],10)
 async function loadOrdersMap(){
 
 const { data, error } = await supabase
