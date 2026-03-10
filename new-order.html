@@ -1,159 +1,252 @@
 <!DOCTYPE html>
 <html lang="fr">
-
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portail client | Léman-Courses</title>
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="favicon.ico">
 
-<title>Nouveau transport | Léman-Courses</title>
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<link rel="stylesheet" href="css/style.css">
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- Leaflet carte -->
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    .page { display: none; }
+    .page.active { display: block; }
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    .menu {
+      display: flex;
+      gap: 10px;
+      padding: 15px;
+      background: #f1f5f9;
+      flex-wrap: wrap;
+    }
 
-<!-- Barcode -->
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode"></script>
+    .menu button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
 
+    .order-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .order-form .full {
+      grid-column: 1 / -1;
+    }
+
+    .order-form input,
+    .order-form select,
+    .order-form textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+
+    .order-form textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    #map {
+      height: 380px;
+      border-radius: 12px;
+      margin-top: 20px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .page-title {
+      margin-top: 0;
+    }
+  </style>
 </head>
-
 <body>
 
-<header class="topbar">
+  <header class="topbar">
+    <div class="brand">🚚 Léman-Courses</div>
+  </header>
 
-<div class="brand">
-<h1>Léman-Courses</h1>
-<p>Créer un transport</p>
-</div>
+  <nav class="menu">
+    <button type="button" onclick="showPage('dashboard')">Dashboard</button>
+    <button type="button" onclick="showPage('new')">Nouveau transport</button>
+    <button type="button" onclick="showPage('orders')">Mes transports</button>
+    <button type="button" onclick="showPage('tracking')">Suivi colis</button>
+    <button type="button" onclick="logout()">Déconnexion</button>
+  </nav>
 
-<a href="portal.html" class="btn btn-light">
-Retour portail
-</a>
+  <main class="container">
 
-</header>
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="page">
+      <h2 class="page-title">Dashboard</h2>
 
+      <div class="grid">
+        <div class="card">
+          <h3>Transports</h3>
+          <p id="ordersCount">0</p>
+        </div>
 
-<main class="container">
+        <div class="card">
+          <h3>Livrés</h3>
+          <p id="deliveredCount">0</p>
+        </div>
+      </div>
+    </section>
 
-<section class="card">
+    <!-- NOUVEAU TRANSPORT -->
+    <section id="new" class="page">
+      <div class="card">
+        <h2 class="page-title">Nouvelle commande</h2>
 
-<h2>Créer un transport</h2>
+        <form id="orderForm" class="order-form">
 
-<!-- CLIENT -->
+          <div>
+            <label for="pickup">Adresse de départ</label>
+            <input id="pickup" type="text" readonly placeholder="Adresse client connectée">
+          </div>
 
-<label>Client</label>
+          <div>
+            <label for="delivery">Adresse de livraison</label>
+            <input id="delivery" type="text" placeholder="Adresse complète de livraison" required>
+          </div>
 
-<input
-id="clientSearch"
-placeholder="Rechercher client..."
-oninput="searchClient()"
-autocomplete="off">
+          <div>
+            <label for="weight">Poids (kg)</label>
+            <input id="weight" type="number" min="0" step="0.1" placeholder="Ex. 5" required>
+          </div>
 
-<div id="clientResults"></div>
+          <div>
+            <label for="packageType">Type d'emballage</label>
+            <select id="packageType" required>
+              <option value="colis">Colis</option>
+              <option value="document">Document</option>
+              <option value="caisse">Caisse</option>
+              <option value="palette">Palette</option>
+            </select>
+          </div>
 
+          <div>
+            <label for="service">Service</label>
+            <select id="service" required>
+              <option value="eco">Eco</option>
+              <option value="express">Express</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
 
-<!-- ADRESSES -->
+          <div>
+            <label for="night">Livraison de nuit</label>
+            <select id="night" required>
+              <option value="non">Non</option>
+              <option value="oui">Oui</option>
+            </select>
+          </div>
 
-<label>Adresse enlèvement</label>
-<input id="pickup_address" onchange="calculateDistance()">
+          <div class="full">
+            <label for="notes">Instructions</label>
+            <textarea id="notes" placeholder="Informations utiles pour la livraison"></textarea>
+          </div>
 
+          <div class="full">
+            <div id="map"></div>
+          </div>
 
-<label>Adresse livraison</label>
+          <div class="full">
+            <button class="btn-order" type="submit">Commander transport</button>
+          </div>
 
-<input
-id="delivery_address"
-placeholder="Adresse livraison"
-oninput="searchAddress(this.value)"
-autocomplete="off">
+        </form>
+      </div>
+    </section>
 
-<div id="addressResults"></div>
+    <!-- MES TRANSPORTS -->
+    <section id="orders" class="page">
+      <h2 class="page-title">Mes transports</h2>
 
+      <table id="ordersTable" class="admin-table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Départ</th>
+            <th>Livraison</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
 
-<!-- CARTE -->
+    <!-- TRACKING -->
+    <section id="tracking" class="page">
+      <h2 class="page-title">Suivi colis</h2>
 
-<div id="map" style="height:400px;border-radius:10px;margin-top:20px;"></div>
+      <input id="trackingNumber" type="text" placeholder="Numéro de colis">
+      <button type="button" onclick="searchTracking()">Rechercher</button>
 
+      <div id="trackingResult"></div>
+    </section>
 
-<!-- COLIS -->
+  </main>
 
-<label>Type colis</label>
+  <footer class="footer">
+    Léman-Courses<br>
+    Impasse des Griottes 3<br>
+    1462 Yvonand
+  </footer>
 
-<select id="package_type" onchange="calculatePrice()">
+  <script>
+    function showPage(pageId) {
+      document.querySelectorAll(".page").forEach(page => {
+        page.classList.remove("active");
+      });
 
-<option value="envelope">Enveloppe</option>
-<option value="carton">Carton</option>
-<option value="box">Caisse</option>
-<option value="palette">Palette</option>
+      const target = document.getElementById(pageId);
+      if (target) {
+        target.classList.add("active");
+        localStorage.setItem("leman_active_page", pageId);
+      }
 
-</select>
+      if (pageId === "new" && window.map) {
+        setTimeout(() => {
+          window.map.invalidateSize();
+        }, 250);
+      }
+    }
 
+    document.addEventListener("DOMContentLoaded", () => {
+      const savedPage = localStorage.getItem("leman_active_page") || "dashboard";
+      showPage(savedPage);
+    });
+  </script>
 
-<!-- RESULTATS -->
-
-<div class="result">
-
-<p>Distance : <strong id="distance">0</strong> km</p>
-
-<p>Temps estimé : <strong id="duration">0</strong></p>
-
-<p>Prix estimé : <strong id="price">CHF 0</strong></p>
-
-</div>
-
-
-<button onclick="calculateTransport()" class="btn btn-primary">
-Calculer transport
-</button>
-
-
-<hr>
-
-
-<!-- ETIQUETTES -->
-
-<h3>Étiquettes colis</h3>
-
-<label>Nombre de colis</label>
-
-<input id="parcel_count" type="number" value="1">
-
-<button onclick="generateLabels()">
-Générer étiquettes
-</button>
-
-<button onclick="window.print()">
-Imprimer étiquettes
-</button>
-
-<div id="labels"></div>
-
-</section>
-
-</main>
-
-
-<footer class="footer">
-
-Léman-Courses  
-Impasse des Griottes 3  
-1462 Yvonand  
-+41 79 870 04 88
-
-</footer>
-
-
-<!-- SCRIPTS -->
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script src="JS/config.js"></script>
-<script src="JS/clients.js"></script>
-<script src="JS/map.js"></script>
-<script src="JS/orders.js"></script>
+  <script src="JS/config.js"></script>
+  <script src="JS/auth.js"></script>
+  <script src="JS/clients.js"></script>
+  <script src="JS/map.js"></script>
+  <script src="JS/orders.js"></script>
 
 </body>
 </html>
