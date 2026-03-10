@@ -1,3 +1,24 @@
+document.addEventListener("DOMContentLoaded", async () => {
+
+const { data: { user } } =
+await window.supabaseClient.auth.getUser()
+
+if(!user) return
+
+const { data, error } =
+await window.supabaseClient
+.from("clients")
+.select("address")
+.eq("auth_user_id", user.id)
+.single()
+
+if(data){
+
+document.getElementById("pickup").value = data.address
+
+}
+
+})
 async function logout(){
 
 await window.supabaseClient.auth.signOut()
