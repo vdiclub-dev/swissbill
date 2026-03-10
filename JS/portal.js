@@ -1,3 +1,10 @@
+async function logout(){
+
+await window.supabaseClient.auth.signOut()
+
+window.location.href = "login.html"
+
+}
 const { data: { user } } = await window.supabaseClient.auth.getUser()
 
 document.getElementById("clientEmail").innerText = user.email
