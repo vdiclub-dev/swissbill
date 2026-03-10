@@ -1,3 +1,4 @@
+alert("dispatch chargé")
 console.log("dispatch chargé")
 
 const map = L.map('map').setView([46.52,6.63],9)
@@ -25,7 +26,6 @@ function newTransport(){
 
 openModal(
 "Créer transport",
-
 `
 <label>Ville destination</label>
 <input id="dest" type="text" placeholder="Lausanne">
@@ -34,7 +34,6 @@ openModal(
 
 <button class="btn" onclick="createTransport()">Créer</button>
 `
-
 )
 
 }
