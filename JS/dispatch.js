@@ -1,3 +1,32 @@
+async function loadOrdersMap(){
+
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+
+data.forEach(order=>{
+
+if(!order.lat || !order.lng) return
+
+L.marker([order.lat, order.lng])
+.addTo(map)
+.bindPopup(`
+<b>Transport</b><br>
+N°: ${order.id}<br>
+Destination: ${order.delivery_city}<br>
+Service: ${order.service}
+`)
+
+})
+
+}
+
+loadOrdersMap()
+let map = L.map('map').setView([46.5197, 6.6323], 9)
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+maxZoom: 18
+}).addTo(map)
 async function loadOrders(){
 
 const { data, error } = await supabase
