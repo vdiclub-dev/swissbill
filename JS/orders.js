@@ -1,3 +1,51 @@
+const { data: { user } } =
+await window.supabaseClient.auth.getUser()
+
+const pickup =
+document.getElementById("pickup").value
+
+const delivery =
+document.getElementById("delivery").value
+
+const weight =
+document.getElementById("weight").value
+
+const service =
+document.getElementById("service").value
+
+const notes =
+document.getElementById("notes").value
+
+const packageType =
+document.getElementById("packageType").value
+
+const night =
+document.getElementById("night").value === "oui"
+
+
+const { error } =
+await window.supabaseClient
+.from("transport_orders")
+.insert([{
+
+company_id : user.id,
+
+client : user.email,
+
+pickup_address : pickup,
+
+delivery_address : delivery,
+
+status : "nouveau"
+
+}])
+
+if(error){
+alert(error.message)
+return
+}
+
+alert("Transport enregistré")
 document.addEventListener("DOMContentLoaded", () => {
 
 const form = document.getElementById("orderForm")
