@@ -101,9 +101,7 @@ data.forEach(order=>{
 
 
 
-L.marker([lat,lng])
-.addTo(map)
-.bindPopup(`
+
 Transport #${order.id}
 Destination : ${order.delivery_city}
 `)
