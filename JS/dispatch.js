@@ -59,9 +59,16 @@ openModal(
 )
 
 }
-async function createTransport(){
+window.createTransport = async function(){
 
-const city = document.getElementById("dest").value
+const cityInput = document.getElementById("dest")
+
+if(!cityInput){
+alert("Champ destination introuvable")
+return
+}
+
+const city = cityInput.value.trim()
 
 if(!city){
 alert("Veuillez saisir une destination")
@@ -73,7 +80,11 @@ const { data, error } = await supabase
 .insert([
 {
 delivery_city: city,
-status:"pending"
+pickup: "Yverdon",
+delivery: city,
+speed: "eco",
+weight: 1,
+status: "pending"
 }
 ])
 
@@ -83,9 +94,9 @@ alert("Erreur création transport")
 return
 }
 
-closeModal()
+alert("Transport créé")
 
-loadOrders()
+closeModal()
 
 }
 async function createTransport(){
