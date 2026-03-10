@@ -1,5 +1,4 @@
 console.log("dispatch chargé")
-map.setView([lat,lng],10)
 
 /* ---------------------- */
 /* CARTE */
@@ -92,22 +91,16 @@ alert("Transport créé")
 
 closeModal()
 
+loadOrdersMap()
 
-
+}
 
 
 /* ---------------------- */
 /* AFFICHER TRANSPORTS */
 /* ---------------------- */
 
-
-loadOrdersMap()
-map.eachLayer(layer=>{
-if(layer instanceof L.Marker){
-map.removeLayer(layer)
-}
-})
-  async function loadOrdersMap(){
+async function loadOrdersMap(){
 
 const { data, error } = await supabase
 .from("orders")
@@ -145,8 +138,6 @@ if(result.length === 0) continue
 const lat = parseFloat(result[0].lat)
 const lng = parseFloat(result[0].lon)
 
-/* créer marqueur */
-
 L.marker([lat,lng])
 .addTo(map)
 .bindPopup(`
@@ -158,10 +149,10 @@ bounds.push([lat,lng])
 
 }
 
-/* ajuster la carte */
-
 if(bounds.length > 0){
 map.fitBounds(bounds,{padding:[50,50]})
 }
 
 }
+
+loadOrdersMap()
