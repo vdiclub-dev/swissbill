@@ -133,5 +133,57 @@ loadOrders()
 
 }
 window.newTransport = function(){
-alert("clic bouton détecté")
+
+openModal(
+"Créer transport",
+`
+<label>Ville destination</label>
+<input id="dest" type="text" placeholder="Lausanne">
+
+<br><br>
+
+<button class="btn" onclick="createTransport()">Créer</button>
+`
+)
+
+}
+window.createTransport = async function(){
+
+const cityInput = document.getElementById("dest")
+
+if(!cityInput){
+alert("Champ destination introuvable")
+return
+}
+
+const city = cityInput.value.trim()
+
+if(!city){
+alert("Veuillez saisir une destination")
+return
+}
+
+const { error } = await supabase
+.from("orders")
+.insert([
+{
+delivery_city: city,
+status: "pending"
+}
+])
+
+if(error){
+console.error(error)
+alert("Erreur création transport")
+return
+}
+
+alert("Transport créé")
+
+closeModal()
+
+if(typeof loadOrders === "function"){
+loadOrders()
+}
+
 }
