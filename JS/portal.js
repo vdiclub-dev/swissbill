@@ -1,3 +1,9 @@
+const packageType =
+document.getElementById("packageType").value
+
+const night =
+document.getElementById("night").value === "oui"
+
 document.addEventListener("DOMContentLoaded", async () => {
 
 const { data: { user } } =
