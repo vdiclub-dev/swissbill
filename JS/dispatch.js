@@ -1,5 +1,3 @@
-alert("dispatch chargé")
-
 console.log("dispatch chargé")
 
 const map = L.map('map').setView([46.52,6.63],9)
