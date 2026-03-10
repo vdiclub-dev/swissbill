@@ -11,3 +11,19 @@ maxZoom:18
 L.marker([46.5197,6.6323])
 .addTo(map)
 .bindPopup("Test Lausanne")
+
+function openModal(title,content){
+
+document.getElementById("modal-title").innerText = title
+
+document.getElementById("modal-content").innerHTML = content
+
+document.getElementById("modal").style.display="flex"
+
+}
+
+function closeModal(){
+
+document.getElementById("modal").style.display="none"
+
+}
