@@ -1,3 +1,27 @@
+async function createTours(){
+
+const { data } = await supabase
+.from("orders")
+.select("*")
+.eq("status","pending")
+
+let zones = {}
+
+data.forEach(order=>{
+
+const zone = order.delivery_postcode.slice(0,2)
+
+if(!zones[zone]){
+zones[zone] = []
+}
+
+zones[zone].push(order)
+
+})
+
+console.log(zones)
+
+}
 async function loadOrdersMap(){
 
 const { data, error } = await supabase
