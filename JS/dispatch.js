@@ -1,5 +1,40 @@
 console.log("dispatch chargé")
+async function loadOrdersMap(){
 
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+
+if(error){
+console.error(error)
+return
+}
+
+data.forEach(async order => {
+
+const city = order.delivery_city
+
+const response = await fetch(
+`https://nominatim.openstreetmap.org/search?format=json&q=${city}`
+)
+
+const result = await response.json()
+
+if(result.length === 0) return
+
+const lat = result[0].lat
+const lng = result[0].lon
+
+L.marker([lat,lng])
+.addTo(map)
+.bindPopup(`
+Transport #${order.id}<br>
+Destination : ${order.delivery_city}
+`)
+
+})
+
+}
 /* ---------------------- */
 /* CARTE */
 /* ---------------------- */
@@ -129,3 +164,8 @@ Destination : ${order.delivery_city}
 }
 
 loadOrdersMap()
+map.eachLayer(layer=>{
+if(layer instanceof L.Marker){
+map.removeLayer(layer)
+}
+})
