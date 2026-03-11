@@ -1,48 +1,5 @@
 console.log("dispatch chargé")
 
-async function startDispatch(){
-
-await loadDispatchStats()
-await loadOrdersMap()
-await loadDrivers()
-await loadOrdersList()
-
-}
-
-startDispatch()
-
-const pickupGeo = await geocodeCity(order.pickup_city)
-
-if(pickupGeo){
-
-
-async function optimizeTourAI(orders){
-
-const cities = orders.map(o=>o.delivery_city)
-
-const response = await fetch("/api/ai-dispatch",{
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-start:"Yverdon",
-destinations:cities
-})
-})
-
-const result = await response.json()
-
-return result.order
-
-}
-
-
-const data = await response.json()
-
-return data.choices[0].message.content
-
-}
 /* ---------------------- */
 /* CARTE */
 /* ---------------------- */
@@ -50,7 +7,7 @@ return data.choices[0].message.content
 const map = L.map("map").setView([46.52, 6.63], 9)
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 18
+maxZoom:18
 }).addTo(map)
 
 const markers = L.markerClusterGroup()
@@ -58,6 +15,8 @@ map.addLayer(markers)
 
 let routeLine = null
 const geoCache = {}
+
+const tourColors = ["red","blue","green","orange","purple"]
 
 /* couleurs tournées */
 const tourColors = ["red", "blue", "green", "orange", "purple"]
