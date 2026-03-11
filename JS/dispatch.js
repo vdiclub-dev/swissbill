@@ -1,6 +1,35 @@
 console.log("dispatch chargé")
 
+function groupByRegion(orders){
 
+const regions = {
+romandie:[],
+suisse_centrale:[],
+suisse_alemanique:[],
+tessin:[]
+}
+
+orders.forEach(o=>{
+
+const city = o.delivery_city.toLowerCase()
+
+if(city.includes("genève") || city.includes("lausanne") || city.includes("nyon"))
+regions.romandie.push(o)
+
+else if(city.includes("berne"))
+regions.suisse_centrale.push(o)
+
+else if(city.includes("zurich") || city.includes("bâle"))
+regions.suisse_alemanique.push(o)
+
+else
+regions.romandie.push(o)
+
+})
+
+return regions
+
+}
 
 async function optimizeTour(orders){
 
