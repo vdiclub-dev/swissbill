@@ -260,8 +260,6 @@ console.error(error)
 return
 }
 
-/* couleurs possibles */
-
 const colors = [
 "red",
 "blue",
@@ -269,6 +267,8 @@ const colors = [
 "orange",
 "purple"
 ]
+
+let tourIndex = 1
 
 const bounds = []
 
@@ -285,14 +285,55 @@ if(!geo) continue
 const lat = geo.lat
 const lng = geo.lng
 
-/* couleur selon tournée */
+/* couleur tournée */
 
 let color = "gray"
 
 if(order.tour_id){
-
 const index = order.tour_id % colors.length
 color = colors[index]
+}
+
+/* icône numérotée */
+
+const icon = L.divIcon({
+className:"route-number",
+html:`<div style="
+background:${color};
+color:white;
+width:28px;
+height:28px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:bold;
+border:2px solid white;
+">${tourIndex}</div>`,
+iconSize:[30,30]
+})
+
+const marker = L.marker([lat,lng],{icon})
+
+marker.bindPopup(`
+Transport #${order.id}<br>
+Destination : ${order.delivery_city}<br>
+Tournée : ${order.tour_id || "Aucune"}
+`)
+
+markers.addLayer(marker)
+
+bounds.push([lat,lng])
+
+tourIndex++
+
+}
+
+await loadDrivers()
+
+if(bounds.length > 0){
+map.fitBounds(bounds,{padding:[50,50]})
+}
 
 }
 
