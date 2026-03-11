@@ -157,24 +157,40 @@ window.closeModal = function () {
 
 window.newTransport = async function(){
 
-const { data } = await supabase
+let options = ""
+
+const { data, error } = await supabase
 .from("clients")
 .select("*")
 .order("name")
 
-let options = data.map(c =>
-`<option value="${c.id}">${c.name} - ${c.city}</option>`
+if(error || !data){
+
+options = `<option>Aucun client</option>`
+
+}else{
+
+options = data.map(c =>
+`<option value="${c.id}">
+${c.name} - ${c.city}
+</option>`
 ).join("")
+
+}
 
 openModal(
 "Créer transport",
 `
 <label>Client</label>
-<select id="clientSelect">${options}</select>
+
+<select id="clientSelect">
+${options}
+</select>
 
 <br><br>
 
 <label>Priorité</label>
+
 <select id="priority">
 <option value="normal">Normal</option>
 <option value="urgent">Urgent</option>
@@ -182,19 +198,19 @@ openModal(
 
 <br><br>
 
-<label>Poids colis</label>
+<label>Poids</label>
+
 <input id="weight" type="number" value="1">
 
 <br><br>
 
 <button class="btn" onclick="createTransport()">
-Créer transport
+Créer
 </button>
 `
 )
 
 }
-
 window.createTransport = async function(){
 
 const clientId = document.getElementById("clientSelect").value
