@@ -15,7 +15,7 @@ console.error(error)
 return
 }
 
-let points = []
+const points = []
 
 for(const order of data){
 
@@ -24,6 +24,15 @@ const geo = await geocodeCity(order.delivery_city)
 if(!geo) continue
 
 points.push([geo.lat,geo.lng])
+
+}
+
+if(points.length < 2) return
+
+L.polyline(points,{
+color:"blue",
+weight:4
+}).addTo(map)
 
 }
 
