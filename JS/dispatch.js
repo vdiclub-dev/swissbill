@@ -341,23 +341,38 @@ const colors = [
 ]
 
 let tourIndex = 1
-
 const bounds = []
 
 for(const order of data){
 
 const city = order.delivery_city
-
 if(!city) continue
 
 const geo = await geocodeCity(city)
-
 if(!geo) continue
 
 const lat = geo.lat
 const lng = geo.lng
 
-/* couleur tournée */
+let marker
+
+/* -------- TRANSPORT NON PLANIFIÉ -------- */
+
+if(order.status === "pending"){
+
+const icon = L.divIcon({
+className:"",
+html:`<div class="pulse-marker"></div>`,
+iconSize:[20,20]
+})
+
+marker = L.marker([lat,lng],{icon})
+
+}
+
+/* -------- TRANSPORT PLANIFIÉ -------- */
+
+else{
 
 let color = "gray"
 
@@ -365,8 +380,6 @@ if(order.tour_id){
 const index = order.tour_id % colors.length
 color = colors[index]
 }
-
-/* icône numérotée */
 
 const icon = L.divIcon({
 className:"route-number",
@@ -385,22 +398,23 @@ border:2px solid white;
 iconSize:[30,30]
 })
 
-const marker = L.marker([lat,lng],{icon})
+marker = L.marker([lat,lng],{icon})
+
+tourIndex++
+
+}
+
+/* -------- POPUP -------- */
 
 marker.bindPopup(`
 Transport #${order.id}<br>
 Destination : ${order.delivery_city}<br>
-Tournée : ${order.tour_id || "Aucune"}<br><br>
-<button onclick="drawTour('${order.tour_id}')">
-Voir tournée
-</button>
+Statut : ${order.status}
 `)
 
 markers.addLayer(marker)
 
 bounds.push([lat,lng])
-
-tourIndex++
 
 }
 
@@ -411,7 +425,6 @@ map.fitBounds(bounds,{padding:[50,50]})
 }
 
 }
-
 
 /* ---------------------- */
 /* CHAUFFEURS */
