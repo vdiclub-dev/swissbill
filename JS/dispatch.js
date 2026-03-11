@@ -1,5 +1,4 @@
 console.log("dispatch chargé")
-
 async function generateTour(){
 
 const { data, error } = await supabase
@@ -21,7 +20,7 @@ return
 
 const optimized = await optimizeTour(data)
 
-/* numéro tournée */
+/* numéro de tournée */
 
 const tourId = Date.now()
 
@@ -43,6 +42,7 @@ loadOrdersMap()
 loadOrdersList()
 
 }
+
 function groupByRegion(orders){
 
 const regions = {
@@ -247,65 +247,83 @@ window.createTransport = async function () {
 /* AFFICHER TRANSPORTS CARTE */
 /* ---------------------- */
 
-async function loadOrdersMap() {
-  markers.clearLayers()
+async function loadOrdersMap(){
 
-  if (routeLine) {
-    map.removeLayer(routeLine)
-    routeLine = null
-  }
+markers.clearLayers()
 
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*")
+const { data, error } = await supabase
+.from("orders")
+.select("*")
 
-  if (error) {
-    console.error(error)
-    return
-  }
-
-  const bounds = []
-
-  for (const order of data) {
-    const city = order.delivery_city
-    if (!city) continue
-
-    const point = await geocodeCity(city)
-    if (!point) continue
-
-    const { lat, lng } = point
-
-    let color = "blue"
-    if (order.status === "urgent") color = "red"
-    if (order.status === "in_progress") color = "orange"
-    if (order.status === "delivered") color = "green"
-
-    const marker = L.circleMarker([lat, lng], {
-      radius: 8,
-      color: color,
-      fillColor: color,
-      fillOpacity: 0.9
-    })
-
-    marker.bindPopup(`
-      <strong>Transport #${order.id}</strong><br>
-      Destination : ${order.delivery_city}<br>
-      Statut : ${order.status || "pending"}<br><br>
-      <button onclick="focusTransport('${String(order.delivery_city).replace(/'/g, "\\'")}')">Centrer</button>
-      <button onclick="drawRoute('${String(order.delivery_city).replace(/'/g, "\\'")}')">Itinéraire</button>
-    `)
-
-    markers.addLayer(marker)
-    bounds.push([lat, lng])
-  }
-
-  await loadDrivers()
-
-  if (bounds.length > 0) {
-    map.fitBounds(bounds, { padding: [50, 50] })
-  }
+if(error){
+console.error(error)
+return
 }
 
+/* couleurs possibles */
+
+const colors = [
+"red",
+"blue",
+"green",
+"orange",
+"purple"
+]
+
+const bounds = []
+
+for(const order of data){
+
+const city = order.delivery_city
+
+if(!city) continue
+
+const geo = await geocodeCity(city)
+
+if(!geo) continue
+
+const lat = geo.lat
+const lng = geo.lng
+
+/* couleur selon tournée */
+
+let color = "gray"
+
+if(order.tour_id){
+
+const index = order.tour_id % colors.length
+color = colors[index]
+
+}
+
+/* créer marqueur */
+
+const marker = L.circleMarker([lat,lng],{
+radius:8,
+color:color,
+fillColor:color,
+fillOpacity:0.9
+})
+
+marker.bindPopup(`
+Transport #${order.id}<br>
+Destination : ${order.delivery_city}<br>
+Tournée : ${order.tour_id || "Aucune"}
+`)
+
+markers.addLayer(marker)
+
+bounds.push([lat,lng])
+
+}
+
+await loadDrivers()
+
+if(bounds.length > 0){
+map.fitBounds(bounds,{padding:[50,50]})
+}
+
+}
 /* ---------------------- */
 /* CHAUFFEURS */
 /* ---------------------- */
