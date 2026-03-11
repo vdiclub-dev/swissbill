@@ -40,15 +40,6 @@
             z-index: 1001;
             width: 300px;
         }
-        <!-- Dans le formulaire, ajoutez : -->
-<div class="form-group">
-    <label>Rue</label>
-    <input type="text" id="rue" placeholder="Rue du Simplon">
-</div>
-<div class="form-group">
-    <label>NPA</label>
-    <input type="text" id="npa" placeholder="1000">
-</div>
         input, select, button {
             width: 100%;
             margin: 8px 0;
@@ -78,50 +69,42 @@
     
     <div id="map"></div>
 
-    <!-- SCRIPTS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
     
     <script>
-        // ATTENDRE QUE TOUT SOIT CHARGÉ
+        // VERSION SIMPLE QUI MARCHAIT
         document.addEventListener('DOMContentLoaded', function() {
-            console.log("✅ DOM chargé");
+            console.log("✅ Démarrage...");
             
-            // Vérifier que window.supabase existe (créé par config.js)
+            // 1. Vérifier Supabase
             if (!window.supabase) {
-                document.body.innerHTML = '<div style="color:red; padding:20px;">❌ Supabase non initialisé dans config.js</div>';
+                alert("❌ Supabase non chargé");
                 return;
             }
             
-            console.log("✅ Supabase prêt");
-            
-            // ===== CARTE =====
+            // 2. Carte
             const map = L.map('map').setView([46.8, 8.2], 8);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             
-            // ===== CHARGER LES TRANSPORTS =====
+            // 3. Charger les transports
             async function chargerTransports() {
                 const { data } = await window.supabase.from('orders').select('*');
-                
                 if (data) {
-                    console.log(`${data.length} transports chargés`);
-                    
                     data.forEach(t => {
                         let lat = 46.8, lng = 8.2;
-                        const ville = t.delivery_city?.toLowerCase() || '';
-                        
-                        if (ville.includes('lausanne')) { lat = 46.52; lng = 6.63; }
-                        if (ville.includes('geneve')) { lat = 46.20; lng = 6.14; }
-                        if (ville.includes('yverdon')) { lat = 46.78; lng = 6.64; }
+                        if (t.delivery_city === 'Lausanne') { lat = 46.52; lng = 6.63; }
+                        if (t.delivery_city === 'Genève') { lat = 46.20; lng = 6.14; }
                         
                         L.marker([lat, lng]).addTo(map)
-                            .bindPopup(`<b>${t.client_name || 'Sans client'}</b><br>📍 ${t.pickup_city} → ${t.delivery_city}`);
+                            .bindPopup(`${t.client_name}<br>${t.pickup_city} → ${t.delivery_city}`);
                     });
                 }
             }
+            chargerTransports();
             
-            // ===== FONCTIONS GLOBALES =====
+            // 4. Fonctions globales
             window.ouvrirFormulaire = function() {
                 document.getElementById('formulaire').style.display = 'block';
             };
@@ -140,34 +123,12 @@
                     created_at: new Date()
                 };
                 
-                const { error } = await window.supabase.from('orders').insert([transport]);
-                
-                if (error) {
-                    alert('❌ Erreur: ' + error.message);
-                } else {
-                    alert('✅ Transport créé !');
-                    fermerFormulaire();
-                    location.reload();
-                }
+                await window.supabase.from('orders').insert([transport]);
+                alert('✅ Créé !');
+                fermerFormulaire();
+                location.reload();
             };
-            
-            // ===== LANCEMENT =====
-            chargerTransports();
         });
-        async function calculerDistance(pickup, delivery) {
-    // Appel à OSRM
-    const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${delivery.lng},${delivery.lat}?overview=false`
-    );
-    const data = await response.json();
-    return (data.routes[0].distance / 1000).toFixed(1);
-}
-        // pickups en bleu, deliveries en rouge
-const couleur = order.type === 'pickup' ? '#3b82f6' : '#ef4444';
-        // Afficher la liste avec km et temps
-<div id="liste-transports">
-    <!-- Les transports apparaîtront ici -->
-</div>
     </script>
     
 </body>
