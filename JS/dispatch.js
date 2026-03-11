@@ -1,5 +1,44 @@
 console.log("dispatch chargé")
 
+async function generateTour(){
+
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+.eq("status","pending")
+
+if(error){
+console.error(error)
+return
+}
+
+if(!data.length){
+alert("Aucun transport à planifier")
+return
+}
+
+/* optimisation */
+
+const optimized = await optimizeTour(data)
+
+/* mise à jour statut */
+
+for(const order of optimized){
+
+await supabase
+.from("orders")
+.update({status:"planned"})
+.eq("id",order.id)
+
+}
+
+alert("Tournée créée")
+
+loadOrdersMap()
+loadOrdersList()
+
+}
+
 function groupByRegion(orders){
 
 const regions = {
