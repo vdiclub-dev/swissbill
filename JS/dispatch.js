@@ -385,34 +385,7 @@ map.fitBounds(bounds,{padding:[50,50]})
 
 }
 
-/* créer marqueur */
 
-const marker = L.circleMarker([lat,lng],{
-radius:8,
-color:color,
-fillColor:color,
-fillOpacity:0.9
-})
-
-marker.bindPopup(`
-Transport #${order.id}<br>
-Destination : ${order.delivery_city}<br>
-Tournée : ${order.tour_id || "Aucune"}
-`)
-
-markers.addLayer(marker)
-
-bounds.push([lat,lng])
-
-}
-
-await loadDrivers()
-
-if(bounds.length > 0){
-map.fitBounds(bounds,{padding:[50,50]})
-}
-
-}
 /* ---------------------- */
 /* CHAUFFEURS */
 /* ---------------------- */
