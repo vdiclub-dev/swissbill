@@ -292,41 +292,51 @@ async function assignDriver(orderId) {
 /* LISTE TRANSPORTS */
 /* ---------------------- */
 
-async function loadOrdersList() {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*")
-    .order("id", { ascending: false })
+async function loadOrdersList(){
 
-  if (error) {
-    console.error(error)
-    return
-  }
+const { data, error } = await supabase
+.from("orders")
+.select("*")
 
-  const list = document.getElementById("orders-list")
-  list.innerHTML = ""
+if(error){
+console.error(error)
+return
+}
 
-  for (const order of data) {
-    const item = document.createElement("div")
-    item.className = "order-item"
+const list = document.getElementById("orders-list")
+list.innerHTML = ""
 
-    const route = await getRouteInfo(order.delivery_city)
+/* optimisation tournée */
 
-    item.innerHTML = `
-      📦 #${order.id}<br>
-      ${order.delivery_city || "-"}<br>
-      ${route || ""}<br><br>
-      <button onclick="event.stopPropagation(); drawRoute('${String(order.delivery_city || "").replace(/'/g, "\\'")}')">Itinéraire</button>
-      <button onclick="event.stopPropagation(); openRoute('${String(order.delivery_city || "").replace(/'/g, "\\'")}')">Google Maps</button>
-    `
+const optimized = await optimizeTour(data)
 
-    item.onclick = () => {
-      focusTransport(order.delivery_city)
-      drawRoute(order.delivery_city)
-    }
+for(const order of optimized){
 
-    list.appendChild(item)
-  }
+const item = document.createElement("div")
+
+item.className = "order-item"
+
+/* calcul distance et temps */
+
+const route = await getRouteInfo(order.delivery_city)
+
+item.innerHTML = `
+📦 #${order.id}<br>
+${order.delivery_city}<br>
+${route || ""}
+`
+
+item.onclick = ()=>{
+
+focusTransport(order.delivery_city)
+drawRoute(order.delivery_city)
+
+}
+
+list.appendChild(item)
+
+}
+
 }
 
 /* ---------------------- */
