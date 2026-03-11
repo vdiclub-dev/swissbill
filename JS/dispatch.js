@@ -95,44 +95,66 @@ window.newTransport = function(){
 openModal(
 "Créer transport",
 `
-<label>Client</label>
-<input id="client" type="text" placeholder="Nom du client">
 
-<label>Contact</label>
-<input id="contact_name" type="text" placeholder="Nom du contact">
+<h3>Client</h3>
+
+<label>Nom client</label>
+<input id="client">
 
 <label>Téléphone</label>
-<input id="contact_phone" type="text" placeholder="079 000 00 00">
+<input id="phone">
 
-<label>Adresse de ramassage</label>
-<input id="pickup_address" type="text" placeholder="Rue du départ">
 
-<label>Ville de ramassage</label>
-<input id="pickup_city" type="text" placeholder="Lausanne">
+<h3>Ramassage</h3>
 
-<label>Adresse de livraison</label>
-<input id="delivery_address" type="text" placeholder="Rue de livraison">
+<label>Rue</label>
+<input id="pickup_street">
 
-<label>Ville de livraison</label>
-<input id="delivery_city" type="text" placeholder="Genève">
+<label>N°</label>
+<input id="pickup_number">
+
+<label>Code postal</label>
+<input id="pickup_postal">
+
+<label>Ville</label>
+<input id="pickup_city">
+
+
+<h3>Livraison</h3>
+
+<label>Rue</label>
+<input id="delivery_street">
+
+<label>N°</label>
+<input id="delivery_number">
+
+<label>Code postal</label>
+<input id="delivery_postal">
+
+<label>Ville</label>
+<input id="delivery_city">
+
+
+<h3>Colis</h3>
+
+<label>Poids</label>
+<input id="weight" type="number" value="1">
 
 <label>Priorité</label>
 <select id="priority">
-  <option value="normal">Normal</option>
-  <option value="urgent">Urgent</option>
+<option value="normal">Normal</option>
+<option value="urgent">Urgent</option>
 </select>
 
-<label>Poids (kg)</label>
-<input id="weight" type="number" value="1" min="0" step="0.1">
-
 <label>Remarque</label>
-<textarea id="note" placeholder="Instructions, étage, fragile, etc."></textarea>
+<textarea id="note"></textarea>
 
 <br><br>
 
 <button class="btn" onclick="createTransport()">
 Créer transport
 </button>
+
 `
 )
 
