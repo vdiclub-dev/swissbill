@@ -114,7 +114,7 @@ return
 /* supprimer anciens marqueurs */
 
 map.eachLayer(layer=>{
-if(layer instanceof L.Marker){
+if(layer instanceof L.Marker || layer instanceof L.CircleMarker){
 map.removeLayer(layer)
 }
 })
@@ -127,6 +127,8 @@ const city = order.delivery_city
 
 if(!city) continue
 
+/* géocoder ville */
+
 const response = await fetch(
 `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
 )
@@ -138,20 +140,34 @@ if(result.length === 0) continue
 const lat = parseFloat(result[0].lat)
 const lng = parseFloat(result[0].lon)
 
-L.marker([lat,lng])
+/* couleur selon statut */
+
+let color = "blue"
+
+if(order.status === "urgent") color = "red"
+if(order.status === "in_progress") color = "orange"
+if(order.status === "delivered") color = "green"
+
+/* créer marqueur */
+
+L.circleMarker([lat,lng],{
+radius:8,
+color:color,
+fillColor:color,
+fillOpacity:0.9
+})
 .addTo(map)
 .bindPopup(`
 Transport #${order.id}<br>
-Destination : ${order.delivery_city}<br><br>
-
-<button onclick="assignDriver(${order.id})">
-Assigner chauffeur
-</button>
+Destination : ${order.delivery_city}<br>
+Statut : ${order.status}
 `)
 
 bounds.push([lat,lng])
 
 }
+
+/* ajuster zoom */
 
 if(bounds.length > 0){
 map.fitBounds(bounds,{padding:[50,50]})
@@ -185,7 +201,7 @@ color:"green"
 })
 
 }
-loadDrivers()
+()
 async function assignDriver(orderId){
 
 const driver = prompt("ID du chauffeur")
@@ -338,3 +354,5 @@ weight:4
 }).addTo(map)
 
 }
+loadOrdersMap()
+loadDrivers()
