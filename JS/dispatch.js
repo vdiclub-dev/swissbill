@@ -12,6 +12,19 @@ document.getElementById("dispatchStats").innerHTML =
 `⚠️ ${pending} à planifier • 🗺 ${planned} en tournée`
 
 }
+async function loadDispatchStats(){
+
+const { data } = await supabase
+.from("orders")
+.select("*")
+
+const pending = data.filter(o=>o.status==="pending").length
+const planned = data.filter(o=>o.status==="planned").length
+
+document.getElementById("dispatchStats").innerHTML =
+`⚠️ ${pending} à planifier • 🗺 ${planned} en tournée`
+
+}
 
 async function drawTour(tourId){
 routeLine = L.polyline(points,{
@@ -640,6 +653,7 @@ async function refreshDispatch() {
 /* ---------------------- */
 /* DEMARRAGE */
 /* ---------------------- */
+loadDispatchStats()
 loadDispatchStats()
 loadOrdersMap()
 loadDrivers()
