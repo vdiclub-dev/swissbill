@@ -1,5 +1,29 @@
 console.log("dispatch chargé")
 
+async function calculateRoute(pickupCity,deliveryCity){
+
+const p1 = await geocodeCity(pickupCity)
+const p2 = await geocodeCity(deliveryCity)
+
+if(!p1 || !p2) return null
+
+const route = await fetch(
+`https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=false`
+)
+
+const data = await route.json()
+
+if(!data.routes || !data.routes.length) return null
+
+return {
+
+km: (data.routes[0].distance / 1000),
+min: Math.round(data.routes[0].duration / 60)
+
+}
+
+}
+
 /* ------------------ */
 /* CARTE */
 /* ------------------ */
