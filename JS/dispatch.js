@@ -90,48 +90,53 @@ window.openModal = function (title, content) {
   document.getElementById("modal").style.display = "flex"
 }
 
-window.closeModal = function () {
-  document.getElementById("modal").style.display = "none"
-}
-
-/* ---------------------- */
-/* CRÉER TRANSPORT */
-/* ---------------------- */
 window.newTransport = function(){
 
 openModal(
 "Créer transport",
 `
-
 <label>Client</label>
-<input id="client" placeholder="Nom client">
+<input id="client" type="text" placeholder="Nom du client">
 
-<label>Ramassage (Pickup)</label>
-<input id="pickup_city" placeholder="Ville pickup">
+<label>Contact</label>
+<input id="contact_name" type="text" placeholder="Nom du contact">
 
-<label>Livraison</label>
-<input id="delivery_city" placeholder="Ville livraison">
+<label>Téléphone</label>
+<input id="contact_phone" type="text" placeholder="079 000 00 00">
+
+<label>Adresse de ramassage</label>
+<input id="pickup_address" type="text" placeholder="Rue du départ">
+
+<label>Ville de ramassage</label>
+<input id="pickup_city" type="text" placeholder="Lausanne">
+
+<label>Adresse de livraison</label>
+<input id="delivery_address" type="text" placeholder="Rue de livraison">
+
+<label>Ville de livraison</label>
+<input id="delivery_city" type="text" placeholder="Genève">
 
 <label>Priorité</label>
 <select id="priority">
-<option value="normal">Normal</option>
-<option value="urgent">Urgent</option>
+  <option value="normal">Normal</option>
+  <option value="urgent">Urgent</option>
 </select>
 
-<label>Poids</label>
-<input id="weight" type="number" value="1">
+<label>Poids (kg)</label>
+<input id="weight" type="number" value="1" min="0" step="0.1">
+
+<label>Remarque</label>
+<textarea id="note" placeholder="Instructions, étage, fragile, etc."></textarea>
 
 <br><br>
 
 <button class="btn" onclick="createTransport()">
 Créer transport
 </button>
-
 `
 )
 
 }
-
 window.createTransport = async function(){
 
 const client = document.getElementById("client").value
