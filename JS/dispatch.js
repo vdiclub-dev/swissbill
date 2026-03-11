@@ -21,13 +21,18 @@ return
 
 const optimized = await optimizeTour(data)
 
-/* mise à jour statut */
+/* numéro tournée */
+
+const tourId = Date.now()
 
 for(const order of optimized){
 
 await supabase
 .from("orders")
-.update({status:"planned"})
+.update({
+status:"planned",
+tour_id:tourId
+})
 .eq("id",order.id)
 
 }
@@ -38,7 +43,6 @@ loadOrdersMap()
 loadOrdersList()
 
 }
-
 function groupByRegion(orders){
 
 const regions = {
