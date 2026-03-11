@@ -1,6 +1,9 @@
 console.log("dispatch chargé")
 async function drawTour(tourId){
-
+routeLine = L.polyline(points,{
+color:"red",
+weight:4
+}).addTo(map)
 if(!tourId) return
 
 const { data, error } = await supabase
