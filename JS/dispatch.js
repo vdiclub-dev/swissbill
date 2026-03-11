@@ -1,5 +1,13 @@
 console.log("dispatch chargé")
+window.onclick = function(event){
 
+const modal = document.getElementById("modal")
+
+if(event.target === modal){
+modal.style.display = "none"
+}
+
+}
 /* ---------------------- */
 /* CARTE */
 /* ---------------------- */
@@ -84,10 +92,15 @@ function openRoute(city) {
 /* MODAL */
 /* ---------------------- */
 
-window.openModal = function (title, content) {
-  document.getElementById("modal-title").innerText = title
-  document.getElementById("modal-content").innerHTML = content
-  document.getElementById("modal").style.display = "flex"
+window.openModal = function(title,content){
+
+const modal = document.getElementById("modal")
+
+document.getElementById("modal-title").innerText = title
+document.getElementById("modal-content").innerHTML = content
+
+modal.style.display = "flex"
+
 }
 
 window.newTransport = function(){
