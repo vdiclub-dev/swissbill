@@ -289,10 +289,11 @@
 
 <script>
     // ==================== CONFIGURATION ====================
-    // 🔴 REMPLACEZ PAR VOS IDENTIFIANTS SUPABASE
+    // 🔴 REMPLACEZ ICI - VOS IDENTIFIANTS SUPABASE
     const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
     
+    // Initialisation Supabase
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     
     // Variables globales
@@ -305,7 +306,6 @@
     function initMap() {
         console.log("🔄 Initialisation carte...");
         
-        // Vérifier que l'élément map existe
         const mapElement = document.getElementById('map');
         if (!mapElement) {
             console.error("❌ Élément map non trouvé");
@@ -313,27 +313,24 @@
         }
         
         try {
-            // Créer la carte
             map = L.map('map').setView([46.8, 8.2], 8);
             
-            // Ajouter les tuiles OpenStreetMap
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '© OpenStreetMap'
             }).addTo(map);
             
-            // Groupe de marqueurs
             markers = L.markerClusterGroup();
             map.addLayer(markers);
             
             mapInitialized = true;
-            console.log("✅ Carte initialisée avec succès");
+            console.log("✅ Carte initialisée");
             
             // Charger les transports
             loadOrders();
             
         } catch (error) {
-            console.error("❌ Erreur initialisation carte:", error);
+            console.error("❌ Erreur carte:", error);
         }
     }
     
@@ -365,7 +362,7 @@
         return null;
     }
     
-    // ==================== CHARGEMENT DES TRANSPORTS ====================
+    // ==================== CHARGEMENT TRANSPORTS ====================
     async function loadOrders() {
         try {
             const { data, error } = await supabase
@@ -375,18 +372,17 @@
             
             if (error) throw error;
             
-            console.log(`📦 ${data.length} transports chargés`);
+            console.log(`📦 ${data.length} transports`);
             
-            // Mettre à jour la carte
             if (mapInitialized && markers) {
                 updateMap(data);
             }
             
-            // Mettre à jour la liste
             updateOrdersList(data);
             
         } catch (error) {
             console.error('Erreur chargement:', error);
+            document.getElementById('ordersList').innerHTML = 'Erreur de chargement';
         }
     }
     
@@ -400,50 +396,45 @@
         let count = 1;
         
         orders.forEach(order => {
-            // Pour l'instant, on utilise la ville de livraison
-            // Idéalement, il faudrait géocoder l'adresse complète
-            if (order.delivery_city) {
-                // Note: dans une version réelle, il faudrait await geocodeCity
-                // Mais pour que ça marche tout de suite, on utilise des coordonnées approximatives
-                // En attendant d'avoir les vraies coordonnées en base
-                
-                // Simulation de coordonnées pour la démo
-                let lat, lng;
-                
-                if (order.delivery_city.includes('Lausanne')) {
-                    lat = 46.519; lng = 6.632;
-                } else if (order.delivery_city.includes('Genève')) {
-                    lat = 46.204; lng = 6.143;
-                } else if (order.delivery_city.includes('Yverdon')) {
-                    lat = 46.778; lng = 6.641;
-                } else {
-                    lat = 46.8; lng = 8.2; // Centre suisse
-                }
-                
-                // Couleur selon le statut
-                let color = '#facc15'; // pending
-                if (order.status === 'urgent') color = '#ef4444';
-                if (order.status === 'planned') color = '#3b82f6';
-                if (order.status === 'delivered') color = '#10b981';
-                
-                const icon = L.divIcon({
-                    html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${count}</div>`,
-                    className: '',
-                    iconSize: [24, 24]
-                });
-                
-                const marker = L.marker([lat, lng], { icon });
-                
-                marker.bindPopup(`
-                    <b>${order.client_name || 'Sans client'}</b><br>
-                    📍 ${order.pickup_city} → ${order.delivery_city}<br>
-                    ${order.distance_km ? `📏 ${order.distance_km} km` : ''}
-                `);
-                
-                markers.addLayer(marker);
-                bounds.push([lat, lng]);
-                count++;
+            // Coordonnées par défaut pour la Suisse
+            let lat = 46.8, lng = 8.2;
+            
+            // Villes principales pour la démo
+            if (order.delivery_city && order.delivery_city.includes('Lausanne')) {
+                lat = 46.519; lng = 6.632;
+            } else if (order.delivery_city && order.delivery_city.includes('Genève')) {
+                lat = 46.204; lng = 6.143;
+            } else if (order.delivery_city && order.delivery_city.includes('Yverdon')) {
+                lat = 46.778; lng = 6.641;
+            } else if (order.delivery_city && order.delivery_city.includes('Berne')) {
+                lat = 46.948; lng = 7.447;
+            } else if (order.delivery_city && order.delivery_city.includes('Zurich')) {
+                lat = 47.376; lng = 8.541;
             }
+            
+            // Couleur selon statut
+            let color = '#facc15';
+            if (order.status === 'urgent') color = '#ef4444';
+            if (order.status === 'planned') color = '#3b82f6';
+            if (order.status === 'delivered') color = '#10b981';
+            
+            const icon = L.divIcon({
+                html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${count}</div>`,
+                className: '',
+                iconSize: [24, 24]
+            });
+            
+            const marker = L.marker([lat, lng], { icon });
+            
+            marker.bindPopup(`
+                <b>${order.client_name || 'Sans client'}</b><br>
+                📍 ${order.pickup_city || '?'} → ${order.delivery_city || '?'}<br>
+                ${order.distance_km ? `📏 ${order.distance_km} km` : ''}
+            `);
+            
+            markers.addLayer(marker);
+            bounds.push([lat, lng]);
+            count++;
         });
         
         if (bounds.length > 0) {
@@ -474,7 +465,7 @@
                     </div>
                     ${order.distance_km ? `
                         <div class="order-distance">
-                            📏 ${order.distance_km} km • ⏱️ ${order.duration_min} min
+                            📏 ${order.distance_km} km • ⏱️ ${order.duration_min || '?'} min
                         </div>
                     ` : ''}
                 </div>
@@ -486,7 +477,7 @@
     
     // ==================== FONCTIONS MODAL ====================
     window.openNewTransportModal = function() {
-        console.log("🆕 Ouverture modal");
+        console.log("🆕 Ouverture formulaire");
         
         document.getElementById('modalTitle').innerText = '➕ Nouveau transport';
         document.getElementById('modalContent').innerHTML = `
@@ -578,7 +569,7 @@
             
             alert('✅ Transport créé avec succès !');
             closeModal();
-            loadOrders(); // Recharger les données
+            loadOrders();
             
         } catch (error) {
             console.error('Erreur:', error);
@@ -589,14 +580,9 @@
     // ==================== INITIALISATION ====================
     window.addEventListener('load', function() {
         console.log("🚀 Démarrage...");
-        
-        // Initialiser la carte
         initMap();
         
-        // Charger les transports
-        loadOrders();
-        
-        // Rafraîchissement automatique toutes les 30 secondes
+        // Rafraîchissement auto
         setInterval(loadOrders, 30000);
     });
 </script>
