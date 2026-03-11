@@ -1,4 +1,42 @@
 console.log("dispatch chargé")
+
+
+async function drawTour(tourId){
+
+if(!tourId) return
+
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+.eq("tour_id",tourId)
+
+if(error){
+console.error(error)
+return
+}
+
+let points = []
+
+for(const order of data){
+
+const geo = await geocodeCity(order.delivery_city)
+
+if(!geo) continue
+
+points.push([geo.lat,geo.lng])
+
+}
+
+/* dessiner ligne */
+
+L.polyline(points,{
+color:"red",
+weight:4,
+opacity:0.8
+}).addTo(map)
+
+}
+
 async function generateTour(){
 
 const { data, error } = await supabase
@@ -318,7 +356,10 @@ const marker = L.marker([lat,lng],{icon})
 marker.bindPopup(`
 Transport #${order.id}<br>
 Destination : ${order.delivery_city}<br>
-Tournée : ${order.tour_id || "Aucune"}
+Tournée : ${order.tour_id || "Aucune"}<br><br>
+<button onclick="drawTour('${order.tour_id}')">
+Voir tournée
+</button>
 `)
 
 markers.addLayer(marker)
