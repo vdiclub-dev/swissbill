@@ -460,16 +460,15 @@ async function loadOrdersMap() {
       tourIndex++
     }
 
-    marker.bindPopup(`
-      Transport #${order.id}<br>
-      Destination : ${order.delivery_city}<br>
-      Statut : ${order.status}<br>
-      Tournée : ${order.tour_id || "Aucune"}<br><br>
-      <button onclick="focusTransport('${String(order.delivery_city).replace(/'/g, "\\'")}')">Centrer</button>
-      <button onclick="drawRoute('${String(order.delivery_city).replace(/'/g, "\\'")}')">Itinéraire</button>
-      <button onclick="openRoute('${String(order.delivery_city).replace(/'/g, "\\'")}')">Navigation</button>
-      <button onclick="drawTour('${order.tour_id || ""}')">Voir tournée</button>
-    `)
+   marker.bindPopup(`
+📦 ${order.client_name}<br>
+${order.address}<br>
+${order.delivery_city}<br><br>
+
+<button onclick="openRoute('${order.delivery_city}')">
+Navigation
+</button>
+`)
 
     markers.addLayer(marker)
     bounds.push([lat, lng])
