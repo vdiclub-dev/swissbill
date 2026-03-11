@@ -354,5 +354,13 @@ weight:4
 }).addTo(map)
 
 }
+/* ---------------------- */
+/* RAFRAICHISSEMENT AUTO */
+/* ---------------------- */
+
+setInterval(()=>{
+
 loadOrdersMap()
 loadDrivers()
+
+},10000)
