@@ -1,4 +1,144 @@
 /* À ajouter à votre style.css */
+// dispatch.js - Version améliorée pour la nouvelle interface
+
+// État global
+const AppState = {
+    currentView: 'dashboard',
+    currentTab: 'transports',
+    filters: {
+        status: 'all',
+        search: '',
+        driver: null
+    },
+    selectedOrder: null
+};
+
+// Fonctions d'interface
+function switchView(view) {
+    AppState.currentView = view;
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Mettre à jour l'interface selon la vue
+    updateView();
+}
+
+function switchTab(tab) {
+    AppState.currentTab = tab;
+    
+    // Mettre à jour les tabs
+    document.querySelectorAll('.tab').forEach(t => {
+        t.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Mettre à jour le contenu
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function filterOrders(status) {
+    AppState.filters.status = status;
+    
+    // Mettre à jour les chips
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Recharger la liste
+    loadOrdersList();
+}
+
+function openAIAssistant() {
+    switchTab('suggestions');
+    AISuggester.analyze();
+}
+
+// Gestionnaire de carte amélioré
+const MapManager = {
+    map: null,
+    markers: null,
+    
+    init() {
+        this.map = L.map('map').setView([46.52, 6.63], 9);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '© OpenStreetMap | Léman Dispatch'
+        }).addTo(this.map);
+        
+        this.markers = L.markerClusterGroup({
+            maxClusterRadius: 50,
+            iconCreateFunction: (cluster) => {
+                const count = cluster.getChildCount();
+                return L.divIcon({
+                    html: `<div class="cluster-marker">${count}</div>`,
+                    className: 'cluster-icon',
+                    iconSize: [40, 40]
+                });
+            }
+        });
+        
+        this.map.addLayer(this.markers);
+        
+        // Ajouter le dépôt
+        this.addDepotMarker();
+    },
+    
+    addDepotMarker() {
+        const depotIcon = L.divIcon({
+            html: '<i class="fas fa-warehouse"></i>',
+            className: 'depot-marker',
+            iconSize: [30, 30]
+        });
+        
+        L.marker([46.7785, 6.6411], { icon: depotIcon })
+            .bindPopup('<b>Dépôt Yverdon</b>')
+            .addTo(this.map);
+    },
+    
+    centerOnDepot() {
+        this.map.setView([46.7785, 6.6411], 12);
+    },
+    
+    refreshMarkers() {
+        loadOrdersMap();
+    },
+    
+    toggleClustering() {
+        // À implémenter
+    },
+    
+    zoomIn() {
+        this.map.zoomIn();
+    },
+    
+    zoomOut() {
+        this.map.zoomOut();
+    }
+};
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', () => {
+    MapManager.init();
+    loadOrdersMap();
+    loadOrdersList();
+    updateStats();
+    
+    // Rafraîchissement périodique
+    setInterval(() => {
+        loadOrdersMap();
+        loadOrdersList();
+        updateStats();
+    }, 10000);
+});
+
+
 
 /* Marqueurs */
 .order-marker {
