@@ -103,7 +103,9 @@ loadOrdersMap()
 /* ---------------------- */
 
 async function loadOrdersMap(){
+
 markers.clearLayers()
+
 const { data, error } = await supabase
 .from("orders")
 .select("*")
