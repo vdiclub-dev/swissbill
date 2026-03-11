@@ -1,6 +1,4 @@
 console.log("dispatch chargé")
-
-
 async function drawTour(tourId){
 
 if(!tourId) return
