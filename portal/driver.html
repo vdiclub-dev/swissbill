@@ -170,18 +170,9 @@
             border-radius: 4px;
         }
         
-        .form-group input:focus {
-            outline: none;
-            border-color: #facc15;
-        }
-        
         .form-row {
             display: flex;
             gap: 10px;
-        }
-        
-        .form-row .form-group {
-            flex: 1;
         }
         
         .order-item {
@@ -207,13 +198,6 @@
             color: white;
         }
         
-        .order-status {
-            font-size: 12px;
-            padding: 2px 8px;
-            border-radius: 12px;
-            background: #2a2a2a;
-        }
-        
         .order-address {
             font-size: 13px;
             color: #aaa;
@@ -225,7 +209,7 @@
 
 <header>
     <div class="logo">🚚 Léman Dispatch</div>
-    <button class="btn" onclick="openModal()">➕ Créer transport</button>
+    <button class="btn" onclick="openNewTransportModal()">➕ Créer transport</button>
 </header>
 
 <div class="container">
@@ -253,53 +237,56 @@
     <div class="modal-box">
         <div class="modal-header">
             <h3 id="modalTitle">Nouveau transport</h3>
-            <button onclick="closeModal()">✖</button>
+            <button onclick="closeNewTransportModal()">✖</button>
         </div>
         <div class="modal-content" id="modalContent"></div>
     </div>
 </div>
 
-<!-- SCRIPTS -->
+<!-- UN SEUL SCRIPT -->
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-    // ========== CONFIGURATION ==========
+    // ========== CONFIGURATION UNIQUE ==========
+    console.log("🚀 Démarrage...");
+    
+    // VOS IDENTIFIANTS SUPABASE (À MODIFIER)
     const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
     
+    // Initialisation Supabase (UNE SEULE FOIS)
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     
-    // ========== VARIABLES ==========
+    // Variables globales
     let map;
     let markers;
     
-    // ========== INIT CARTE ==========
+    // ========== INITIALISATION CARTE ==========
     function initMap() {
-        console.log("Initialisation carte...");
+        console.log("🗺️ Initialisation carte...");
         
         try {
             map = L.map('map').setView([46.8, 8.2], 8);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
             }).addTo(map);
             
             markers = L.markerClusterGroup();
             map.addLayer(markers);
             
-            console.log("✅ Carte OK");
-            
-            // Charger les données
+            console.log("✅ Carte prête");
             loadOrders();
             
         } catch(e) {
-            console.error("Erreur carte:", e);
+            console.error("❌ Erreur carte:", e);
         }
     }
     
-    // ========== CHARGEMENT ==========
+    // ========== CHARGEMENT DES TRANSPORTS ==========
     async function loadOrders() {
         try {
             const { data, error } = await supabase
@@ -309,7 +296,7 @@
             
             if (error) throw error;
             
-            // Mettre à jour la liste
+            // Mise à jour de la liste
             const listEl = document.getElementById('ordersList');
             
             if (!data || data.length === 0) {
@@ -323,7 +310,6 @@
                     <div class="order-item ${order.priority === 'urgent' ? 'urgent' : ''}">
                         <div class="order-header">
                             <span class="client-name">${order.client_name || 'Sans client'}</span>
-                            <span class="order-status">${order.status}</span>
                         </div>
                         <div class="order-address">
                             📍 ${order.pickup_city || '?'} → ${order.delivery_city || '?'}
@@ -334,14 +320,13 @@
             
             listEl.innerHTML = html;
             
-            // Ajouter des marqueurs sur la carte
+            // Mise à jour de la carte
             if (markers) {
                 markers.clearLayers();
                 
                 data.forEach((order, index) => {
+                    // Coordonnées approximatives pour la démo
                     let lat = 46.8, lng = 8.2;
-                    
-                    // Villes de démo
                     if (order.delivery_city?.includes('Lausanne')) {
                         lat = 46.519; lng = 6.632;
                     } else if (order.delivery_city?.includes('Genève')) {
@@ -364,15 +349,17 @@
             }
             
         } catch(e) {
-            console.error("Erreur chargement:", e);
+            console.error("❌ Erreur chargement:", e);
         }
     }
     
-    // ========== MODAL ==========
-    window.openModal = function() {
+    // ========== FONCTIONS MODAL ==========
+    window.openNewTransportModal = function() {
+        console.log("📝 Ouverture formulaire");
+        
         document.getElementById('modalTitle').innerText = '➕ Nouveau transport';
         document.getElementById('modalContent').innerHTML = `
-            <form onsubmit="event.preventDefault(); saveTransport();">
+            <form onsubmit="event.preventDefault(); saveNewTransport();">
                 <div class="form-group">
                     <label>Nom client *</label>
                     <input type="text" id="clientName" required placeholder="Jean Dupont">
@@ -413,7 +400,7 @@
                 </div>
                 
                 <div style="display:flex; gap:10px; margin-top:20px;">
-                    <button type="button" onclick="closeModal()" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px; cursor:pointer;">Annuler</button>
+                    <button type="button" onclick="closeNewTransportModal()" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px; cursor:pointer;">Annuler</button>
                     <button type="submit" style="flex:2; padding:10px; background:#facc15; color:#111; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Créer</button>
                 </div>
             </form>
@@ -422,11 +409,11 @@
         document.getElementById('modal').style.display = 'flex';
     };
     
-    window.closeModal = function() {
+    window.closeNewTransportModal = function() {
         document.getElementById('modal').style.display = 'none';
     };
     
-    window.saveTransport = async function() {
+    window.saveNewTransport = async function() {
         const client = document.getElementById('clientName')?.value;
         const phone = document.getElementById('clientPhone')?.value;
         const pickup = document.getElementById('pickupCity')?.value;
@@ -435,7 +422,7 @@
         const priority = document.getElementById('priority')?.value || 'normal';
         
         if (!client || !pickup || !delivery) {
-            alert('Champs obligatoires manquants');
+            alert('Veuillez remplir tous les champs obligatoires');
             return;
         }
         
@@ -455,13 +442,13 @@
             
             if (error) throw error;
             
-            alert('✅ Transport créé !');
-            closeModal();
+            alert('✅ Transport créé avec succès !');
+            closeNewTransportModal();
             loadOrders();
             
         } catch(e) {
-            console.error('Erreur:', e);
-            alert('❌ Erreur création');
+            console.error('❌ Erreur:', e);
+            alert('Erreur lors de la création');
         }
     };
     
