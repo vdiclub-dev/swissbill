@@ -1,324 +1,230 @@
-console.log("✅ dispatch.js chargé");
-
-// Configuration Supabase (à adapter avec vos identifiants)
-const supabaseUrl = 'VOTRE_URL';
-const supabaseKey = 'VOTRE_CLE';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-
-// Variables globales
-let map;
-let markers;
-const geoCache = {};
-
-/* ------------------ */
-/* FONCTIONS MODAL */
-/* ------------------ */
-window.openModal = function(title, content) {
-    const modal = document.getElementById('modal');
-    document.getElementById('modal-title').innerText = title;
-    document.getElementById('modal-content').innerHTML = content;
-    modal.classList.add('active');
-}
-
-window.closeModal = function() {
-    document.getElementById('modal').classList.remove('active');
-}
-
-/* ------------------ */
-/* GEOCODAGE */
-/* ------------------ */
-async function geocodeCity(city) {
-    if (!city) return null;
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Léman Dispatch</title>
     
-    const key = city.toLowerCase();
-    if (geoCache[key]) return geoCache[key];
+    <!-- Styles existants -->
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
     
-    try {
-        const r = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city + ', Suisse')}`
-        );
-        const j = await r.json();
+    <style>
+        /* Correction rapide des problèmes */
+        .dispatch-container {
+            display: flex;
+            height: calc(100vh - 60px);
+            position: relative;
+        }
         
-        if (!j.length) return null;
+        #map {
+            flex: 1;
+            height: 100%;
+            z-index: 1;
+        }
         
-        const p = {
-            lat: parseFloat(j[0].lat),
-            lng: parseFloat(j[0].lon)
-        };
+        .sidebar {
+            width: 200px;
+            background: #f5f5f5;
+            padding: 10px;
+            overflow-y: auto;
+            z-index: 2;
+        }
         
-        geoCache[key] = p;
-        return p;
-    } catch (e) {
-        console.error("Erreur géocodage:", e);
-        return null;
-    }
-}
+        .dispatch-sidebar {
+            width: 300px;
+            background: white;
+            border-left: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+            z-index: 2;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        /* Style pour les marqueurs */
+        .route-number div {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            border: 2px solid white;
+        }
+        
+        /* Style pour la liste */
+        #orders-list {
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+        
+        .order-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        
+        .order-item:hover {
+            background: #f9f9f9;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+            height: 60px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
 
-/* ------------------ */
-/* CREER TRANSPORT */
-/* ------------------ */
-window.newTransport = function() {
-    console.log("🆕 Ouverture formulaire");
-    
-    openModal(
-        "Créer transport",
-        `
-        <div style="padding: 10px;">
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Client</label>
-                <input id="client" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Téléphone</label>
-                <input id="phone" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-            </div>
-            
-            <h4>Ramassage</h4>
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Ville</label>
-                <input id="pickup_city" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-            </div>
-            
-            <h4>Livraison</h4>
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Ville</label>
-                <input id="delivery_city" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Poids (kg)</label>
-                <input id="weight" type="number" value="1" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Priorité</label>
-                <select id="priority" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-                    <option value="normal">Normal</option>
-                    <option value="urgent">Urgent</option>
-                </select>
-            </div>
-            
-            <div style="display:flex; gap:10px; margin-top:20px;">
-                <button onclick="closeModal()" style="flex:1; padding:10px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">Annuler</button>
-                <button onclick="createTransport()" style="flex:1; padding:10px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer;">Créer</button>
-            </div>
+<header>
+    <div class="logo">
+        🚚 Léman Dispatch
+    </div>
+    <div id="dispatchStats"></div>
+    <button class="btn" onclick="newTransport()">
+        Créer transport
+    </button>
+</header>
+
+<div class="dispatch-container">
+    <!-- MENU -->
+    <div class="sidebar">
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('dashboard')">📊 Dashboard</button>
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('transports')">📦 Transports</button>
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('dispatch')">🗺 Dispatch</button>
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('clients')">👤 Clients</button>
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('chauffeurs')">🚚 Chauffeurs</button>
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('vehicules')">🚛 Véhicules</button>
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('factures')">💰 Factures</button>
+        <button style="width:100%; margin-bottom:5px;" onclick="switchView('parametres')">⚙ Paramètres</button>
+        <button style="width:100%; margin-bottom:5px; background:#28a745;" onclick="proposeAITours()">🤖 Proposition IA</button>
+        <button style="width:100%; margin-bottom:5px; background:#ffc107;" onclick="generateTour()">🧠 Créer tournée optimisée</button>
+    </div>
+
+    <!-- CARTE -->
+    <div id="map"></div>
+
+    <!-- LISTE -->
+    <div class="dispatch-sidebar">
+        <h3>Transports</h3>
+        <div id="orders-list">
+            Chargement...
         </div>
-        `
-    );
-}
+    </div>
+</div>
 
-window.createTransport = async function() {
-    const client = document.getElementById('client')?.value || '';
-    const pickup = document.getElementById('pickup_city')?.value;
-    const delivery = document.getElementById('delivery_city')?.value;
-    const weight = document.getElementById('weight')?.value || 1;
-    const priority = document.getElementById('priority')?.value || 'normal';
-    
-    if (!pickup || !delivery) {
-        alert("Villes de pickup et livraison obligatoires");
-        return;
-    }
-    
-    try {
-        const { error } = await supabase
-            .from("orders")
-            .insert([{
-                client_name: client,
-                pickup_city: pickup,
-                delivery_city: delivery,
-                weight: weight,
-                priority: priority,
-                status: "pending"
-            }]);
-        
-        if (error) throw error;
-        
-        alert("Transport créé avec succès");
-        closeModal();
-        
-        // Recharger les données
-        loadOrdersMap();
-        loadOrdersList();
-        
-    } catch (error) {
-        console.error("Erreur:", error);
-        alert("Erreur lors de la création");
-    }
-}
+<!-- MODAL -->
+<div id="modal" class="modal">
+    <div class="modal-box">
+        <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+            <h3 id="modal-title">Titre</h3>
+            <button onclick="closeModal()" style="background:none; border:none; font-size:20px; cursor:pointer;">✖</button>
+        </div>
+        <div id="modal-content">
+            contenu
+        </div>
+    </div>
+</div>
 
-/* ------------------ */
-/* CARTE */
-/* ------------------ */
-async function loadOrdersMap() {
-    if (!markers) {
-        console.log("Marqueurs non initialisés");
-        return;
-    }
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="../JS/config.js"></script>
+<script src="../JS/dispatch.js"></script>
+
+<script>
+// Fonctions de débogage et correction
+console.log("🚀 Démarrage du dispatch...");
+
+// Vérifier que les fonctions existent
+function checkFunctions() {
+    const functions = ['newTransport', 'closeModal', 'proposeAITours', 'generateTour', 'loadOrdersMap', 'loadOrdersList'];
     
-    markers.clearLayers();
-    
-    try {
-        const { data, error } = await supabase
-            .from("orders")
-            .select("*");
-        
-        if (error) throw error;
-        
-        const bounds = [];
-        let index = 1;
-        
-        for (const order of data) {
-            const geo = await geocodeCity(order.delivery_city);
-            if (!geo) continue;
-            
-            let color = "gray";
-            if (order.status === "pending") color = "gray";
-            if (order.status === "planned") color = "orange";
-            if (order.status === "urgent") color = "red";
-            if (order.status === "delivered") color = "green";
-            
-            const icon = L.divIcon({
-                className: "route-number",
-                html: `<div style="background:${color}; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold">${index}</div>`,
-                iconSize: [30, 30]
-            });
-            
-            const marker = L.marker([geo.lat, geo.lng], { icon });
-            
-            marker.bindPopup(`
-                📦 ${order.client_name || ""}<br>
-                ${order.delivery_city}<br><br>
-                <button onclick="openRoute('${order.delivery_city}')">Navigation</button>
-            `);
-            
-            markers.addLayer(marker);
-            bounds.push([geo.lat, geo.lng]);
-            
-            index++;
+    functions.forEach(fn => {
+        if (typeof window[fn] === 'function') {
+            console.log(`✅ Fonction ${fn} disponible`);
+        } else {
+            console.log(`❌ Fonction ${fn} manquante`);
         }
-        
-        if (bounds.length && map) {
-            map.fitBounds(bounds, { padding: [50, 50] });
+    });
+}
+
+// Attendre que tout soit chargé
+window.addEventListener('load', function() {
+    console.log("✅ Page chargée");
+    checkFunctions();
+    
+    // Initialiser la carte manuellement si nécessaire
+    if (typeof map !== 'undefined' && map) {
+        console.log("✅ Carte déjà initialisée");
+    } else if (typeof L !== 'undefined') {
+        console.log("🔄 Initialisation manuelle de la carte...");
+        try {
+            window.map = L.map("map").setView([46.52, 6.63], 9);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 18}).addTo(window.map);
+            window.markers = L.markerClusterGroup();
+            window.map.addLayer(window.markers);
+            console.log("✅ Carte initialisée manuellement");
+            
+            // Charger les données
+            if (typeof loadOrdersMap === 'function') {
+                loadOrdersMap();
+            }
+            if (typeof loadOrdersList === 'function') {
+                loadOrdersList();
+            }
+        } catch (e) {
+            console.error("❌ Erreur initialisation carte:", e);
         }
-        
-        // Mettre à jour les stats
-        updateStats(data);
-        
-    } catch (error) {
-        console.error("Erreur chargement carte:", error);
     }
-}
+});
 
-/* ------------------ */
-/* LISTE */
-/* ------------------ */
-async function loadOrdersList() {
-    try {
-        const { data, error } = await supabase
-            .from("orders")
-            .select("*")
-            .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        
-        const list = document.getElementById("orders-list");
-        
-        if (!data || data.length === 0) {
-            list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">Aucun transport</div>';
-            return;
-        }
-        
-        let html = "";
-        
-        for (const order of data) {
-            html += `
-                <div class="order-item" onclick="selectOrder('${order.id}')">
-                    <div style="display:flex; justify-content:space-between;">
-                        <b>${order.client_name || "Sans client"}</b>
-                        <span style="color:${order.status === 'urgent' ? 'red' : '#999'};">${order.status}</span>
-                    </div>
-                    <div style="font-size:12px; color:#666; margin:5px 0;">
-                        📍 ${order.pickup_city} → ${order.delivery_city}
-                    </div>
-                    <div style="font-size:11px; color:#999;">
-                        Poids: ${order.weight || 1} kg
-                    </div>
-                </div>
-            `;
-        }
-        
-        list.innerHTML = html;
-        
-    } catch (error) {
-        console.error("Erreur chargement liste:", error);
-        document.getElementById("orders-list").innerHTML = 'Erreur de chargement';
-    }
+// Fonctions de navigation simples
+function switchView(view) {
+    console.log("Switch view:", view);
+    alert("Navigation vers " + view + " (à implémenter)");
 }
+</script>
 
-/* ------------------ */
-/* STATS */
-/* ------------------ */
-function updateStats(orders) {
-    if (!orders) return;
-    
-    const pending = orders.filter(o => o.status === 'pending').length;
-    const planned = orders.filter(o => o.status === 'planned').length;
-    const urgent = orders.filter(o => o.status === 'urgent').length;
-    
-    document.getElementById('dispatchStats').innerHTML = `
-        <span style="margin-right:15px;">⏳ En attente: ${pending}</span>
-        <span style="margin-right:15px;">🗺️ Planifiés: ${planned}</span>
-        <span style="color:red;">⚠️ Urgents: ${urgent}</span>
-    `;
-}
-
-/* ------------------ */
-/* AUTRES FONCTIONS */
-/* ------------------ */
-function openRoute(city) {
-    const url = `https://www.google.com/maps/dir/?api=1&origin=Yverdon&destination=${encodeURIComponent(city)}`;
-    window.open(url, "_blank");
-}
-
-function selectOrder(id) {
-    console.log("Order sélectionné:", id);
-    // À implémenter
-}
-
-window.proposeAITours = function() {
-    alert("Proposition IA - À implémenter");
-}
-
-window.generateTour = function() {
-    alert("Génération tournée - À implémenter");
-}
-
-/* ------------------ */
-/* INITIALISATION */
-/* ------------------ */
-async function startDispatch() {
-    console.log("🚀 Démarrage dispatch...");
-    
-    // Initialiser la carte si nécessaire
-    if (!map && typeof L !== 'undefined') {
-        map = L.map("map").setView([46.52, 6.63], 9);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
-        markers = L.markerClusterGroup();
-        map.addLayer(markers);
-        console.log("✅ Carte initialisée");
-    }
-    
-    // Charger les données
-    await loadOrdersMap();
-    await loadOrdersList();
-    
-    // Rafraîchissement périodique
-    setInterval(() => {
-        loadOrdersMap();
-        loadOrdersList();
-    }, 10000);
-}
-
-// Démarrer
-startDispatch();
+</body>
+</html>
