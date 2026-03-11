@@ -231,12 +231,12 @@ item.className = "order-item"
 
 item.innerHTML = `
 📦 #${order.id}<br>
-${order.delivery_city}
-`
+${order.delivery_city}<br>
 
-item.onclick = ()=>{
-focusTransport(order.delivery_city)
-}
+<button onclick="openRoute('${order.delivery_city}')">
+Itinéraire
+</button>
+`
 
 list.appendChild(item)
 
