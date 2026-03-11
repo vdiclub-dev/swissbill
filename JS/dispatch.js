@@ -258,7 +258,17 @@ console.error(error)
 alert("Erreur création transport")
 return
 }
+const route = await calculateRoute(pickupCity,deliveryCity)
 
+let km = null
+let min = null
+
+if(route){
+
+km = route.km
+min = route.min
+
+}
 alert("Transport créé")
 
 closeModal()
