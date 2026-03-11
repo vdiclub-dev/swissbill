@@ -373,9 +373,9 @@ async function refreshDispatch() {
 /* ---------------------- */
 /* DEMARRAGE */
 /* ---------------------- */
+await loadOrdersList()
+setInterval(()=>{
 
-refreshDispatch()
+loadOrdersMap()
 
-setInterval(() => {
-  refreshDispatch()
-}, 10000)
+},10000)
