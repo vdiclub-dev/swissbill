@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
     
     <style>
-        /* DESIGN SOMBRE */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
         
         body { 
@@ -20,7 +19,6 @@
             color: white;
         }
         
-        /* HEADER */
         header {
             background: #111;
             padding: 15px 25px;
@@ -52,13 +50,11 @@
             background: #eab308;
         }
         
-        /* LAYOUT */
         .container {
             display: flex;
             height: calc(100vh - 70px);
         }
         
-        /* SIDEBAR */
         .sidebar {
             width: 220px;
             background: #111;
@@ -76,7 +72,6 @@
             border-radius: 6px;
             cursor: pointer;
             text-align: left;
-            font-size: 14px;
         }
         
         .sidebar button:hover {
@@ -84,7 +79,6 @@
             color: #111;
         }
         
-        /* CARTE */
         .map-container {
             flex: 1;
             position: relative;
@@ -95,7 +89,6 @@
             width: 100%;
         }
         
-        /* PANEL DROIT */
         .right-panel {
             width: 320px;
             background: #111;
@@ -109,7 +102,6 @@
             margin-bottom: 20px;
         }
         
-        /* MODAL */
         .modal {
             display: none;
             position: fixed;
@@ -158,7 +150,6 @@
             padding: 20px;
         }
         
-        /* FORMULAIRE */
         .form-group {
             margin-bottom: 15px;
         }
@@ -167,12 +158,10 @@
             display: block;
             margin-bottom: 5px;
             color: #aaa;
-            font-size: 14px;
         }
         
         .form-group input,
-        .form-group select,
-        .form-group textarea {
+        .form-group select {
             width: 100%;
             padding: 10px;
             background: #111;
@@ -195,7 +184,6 @@
             flex: 1;
         }
         
-        /* LISTE TRANSPORTS */
         .order-item {
             background: #1f2937;
             padding: 12px;
@@ -231,22 +219,16 @@
             color: #aaa;
             margin: 8px 0;
         }
-        
-        .order-distance {
-            font-size: 12px;
-            color: #facc15;
-        }
     </style>
 </head>
 <body>
 
 <header>
     <div class="logo">🚚 Léman Dispatch</div>
-    <button class="btn" onclick="openNewTransportModal()">➕ Créer transport</button>
+    <button class="btn" onclick="openModal()">➕ Créer transport</button>
 </header>
 
 <div class="container">
-    <!-- SIDEBAR -->
     <div class="sidebar">
         <button>🗺️ Dispatch</button>
         <button>📦 Transports</button>
@@ -255,12 +237,10 @@
         <button>💰 Factures</button>
     </div>
     
-    <!-- CARTE -->
     <div class="map-container">
         <div id="map"></div>
     </div>
     
-    <!-- PANEL DROIT -->
     <div class="right-panel">
         <h3>📋 Transports</h3>
         <div id="ordersList">
@@ -269,16 +249,13 @@
     </div>
 </div>
 
-<!-- MODAL -->
 <div id="modal" class="modal">
     <div class="modal-box">
         <div class="modal-header">
             <h3 id="modalTitle">Nouveau transport</h3>
             <button onclick="closeModal()">✖</button>
         </div>
-        <div class="modal-content" id="modalContent">
-            <!-- Le formulaire sera injecté ici -->
-        </div>
+        <div class="modal-content" id="modalContent"></div>
     </div>
 </div>
 
@@ -288,81 +265,41 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-    // ==================== CONFIGURATION ====================
-    // 🔴 REMPLACEZ ICI - VOS IDENTIFIANTS SUPABASE
+    // ========== CONFIGURATION ==========
     const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
     
-    // Initialisation Supabase
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     
-    // Variables globales
+    // ========== VARIABLES ==========
     let map;
     let markers;
-    let mapInitialized = false;
-    const geoCache = {};
     
-    // ==================== INITIALISATION CARTE ====================
+    // ========== INIT CARTE ==========
     function initMap() {
-        console.log("🔄 Initialisation carte...");
-        
-        const mapElement = document.getElementById('map');
-        if (!mapElement) {
-            console.error("❌ Élément map non trouvé");
-            return;
-        }
+        console.log("Initialisation carte...");
         
         try {
             map = L.map('map').setView([46.8, 8.2], 8);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenStreetMap'
+                maxZoom: 19
             }).addTo(map);
             
             markers = L.markerClusterGroup();
             map.addLayer(markers);
             
-            mapInitialized = true;
-            console.log("✅ Carte initialisée");
+            console.log("✅ Carte OK");
             
-            // Charger les transports
+            // Charger les données
             loadOrders();
             
-        } catch (error) {
-            console.error("❌ Erreur carte:", error);
+        } catch(e) {
+            console.error("Erreur carte:", e);
         }
     }
     
-    // ==================== GÉOCODAGE ====================
-    async function geocodeCity(city) {
-        if (!city) return null;
-        
-        const key = city.toLowerCase().trim();
-        if (geoCache[key]) return geoCache[key];
-        
-        try {
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city + ', Suisse')}&limit=1`,
-                { headers: { 'User-Agent': 'LemanDispatch/1.0' } }
-            );
-            const data = await response.json();
-            
-            if (data && data.length > 0) {
-                const coords = {
-                    lat: parseFloat(data[0].lat),
-                    lng: parseFloat(data[0].lon)
-                };
-                geoCache[key] = coords;
-                return coords;
-            }
-        } catch (e) {
-            console.warn('Erreur géocodage:', e);
-        }
-        return null;
-    }
-    
-    // ==================== CHARGEMENT TRANSPORTS ====================
+    // ========== CHARGEMENT ==========
     async function loadOrders() {
         try {
             const { data, error } = await supabase
@@ -372,113 +309,67 @@
             
             if (error) throw error;
             
-            console.log(`📦 ${data.length} transports`);
+            // Mettre à jour la liste
+            const listEl = document.getElementById('ordersList');
             
-            if (mapInitialized && markers) {
-                updateMap(data);
+            if (!data || data.length === 0) {
+                listEl.innerHTML = '<div style="color:#666; padding:20px;">Aucun transport</div>';
+                return;
             }
             
-            updateOrdersList(data);
-            
-        } catch (error) {
-            console.error('Erreur chargement:', error);
-            document.getElementById('ordersList').innerHTML = 'Erreur de chargement';
-        }
-    }
-    
-    // ==================== MISE À JOUR CARTE ====================
-    function updateMap(orders) {
-        markers.clearLayers();
-        
-        if (!orders || orders.length === 0) return;
-        
-        const bounds = [];
-        let count = 1;
-        
-        orders.forEach(order => {
-            // Coordonnées par défaut pour la Suisse
-            let lat = 46.8, lng = 8.2;
-            
-            // Villes principales pour la démo
-            if (order.delivery_city && order.delivery_city.includes('Lausanne')) {
-                lat = 46.519; lng = 6.632;
-            } else if (order.delivery_city && order.delivery_city.includes('Genève')) {
-                lat = 46.204; lng = 6.143;
-            } else if (order.delivery_city && order.delivery_city.includes('Yverdon')) {
-                lat = 46.778; lng = 6.641;
-            } else if (order.delivery_city && order.delivery_city.includes('Berne')) {
-                lat = 46.948; lng = 7.447;
-            } else if (order.delivery_city && order.delivery_city.includes('Zurich')) {
-                lat = 47.376; lng = 8.541;
-            }
-            
-            // Couleur selon statut
-            let color = '#facc15';
-            if (order.status === 'urgent') color = '#ef4444';
-            if (order.status === 'planned') color = '#3b82f6';
-            if (order.status === 'delivered') color = '#10b981';
-            
-            const icon = L.divIcon({
-                html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${count}</div>`,
-                className: '',
-                iconSize: [24, 24]
+            let html = '';
+            data.forEach(order => {
+                html += `
+                    <div class="order-item ${order.priority === 'urgent' ? 'urgent' : ''}">
+                        <div class="order-header">
+                            <span class="client-name">${order.client_name || 'Sans client'}</span>
+                            <span class="order-status">${order.status}</span>
+                        </div>
+                        <div class="order-address">
+                            📍 ${order.pickup_city || '?'} → ${order.delivery_city || '?'}
+                        </div>
+                    </div>
+                `;
             });
             
-            const marker = L.marker([lat, lng], { icon });
+            listEl.innerHTML = html;
             
-            marker.bindPopup(`
-                <b>${order.client_name || 'Sans client'}</b><br>
-                📍 ${order.pickup_city || '?'} → ${order.delivery_city || '?'}<br>
-                ${order.distance_km ? `📏 ${order.distance_km} km` : ''}
-            `);
+            // Ajouter des marqueurs sur la carte
+            if (markers) {
+                markers.clearLayers();
+                
+                data.forEach((order, index) => {
+                    let lat = 46.8, lng = 8.2;
+                    
+                    // Villes de démo
+                    if (order.delivery_city?.includes('Lausanne')) {
+                        lat = 46.519; lng = 6.632;
+                    } else if (order.delivery_city?.includes('Genève')) {
+                        lat = 46.204; lng = 6.143;
+                    } else if (order.delivery_city?.includes('Yverdon')) {
+                        lat = 46.778; lng = 6.641;
+                    }
+                    
+                    let color = '#facc15';
+                    if (order.status === 'urgent') color = '#ef4444';
+                    
+                    const icon = L.divIcon({
+                        html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${index+1}</div>`,
+                        className: '',
+                        iconSize: [24, 24]
+                    });
+                    
+                    L.marker([lat, lng], { icon }).addTo(markers);
+                });
+            }
             
-            markers.addLayer(marker);
-            bounds.push([lat, lng]);
-            count++;
-        });
-        
-        if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [30, 30] });
+        } catch(e) {
+            console.error("Erreur chargement:", e);
         }
     }
     
-    // ==================== MISE À JOUR LISTE ====================
-    function updateOrdersList(orders) {
-        const listEl = document.getElementById('ordersList');
-        
-        if (!orders || orders.length === 0) {
-            listEl.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">Aucun transport</div>';
-            return;
-        }
-        
-        let html = '';
-        
-        orders.forEach(order => {
-            html += `
-                <div class="order-item ${order.priority === 'urgent' ? 'urgent' : ''}">
-                    <div class="order-header">
-                        <span class="client-name">${order.client_name || 'Sans client'}</span>
-                        <span class="order-status">${order.status}</span>
-                    </div>
-                    <div class="order-address">
-                        📍 ${order.pickup_city || '?'} → ${order.delivery_city || '?'}
-                    </div>
-                    ${order.distance_km ? `
-                        <div class="order-distance">
-                            📏 ${order.distance_km} km • ⏱️ ${order.duration_min || '?'} min
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        });
-        
-        listEl.innerHTML = html;
-    }
-    
-    // ==================== FONCTIONS MODAL ====================
-    window.openNewTransportModal = function() {
-        console.log("🆕 Ouverture formulaire");
-        
+    // ========== MODAL ==========
+    window.openModal = function() {
         document.getElementById('modalTitle').innerText = '➕ Nouveau transport';
         document.getElementById('modalContent').innerHTML = `
             <form onsubmit="event.preventDefault(); saveTransport();">
@@ -523,7 +414,7 @@
                 
                 <div style="display:flex; gap:10px; margin-top:20px;">
                     <button type="button" onclick="closeModal()" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px; cursor:pointer;">Annuler</button>
-                    <button type="submit" style="flex:2; padding:10px; background:#facc15; color:#111; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Créer transport</button>
+                    <button type="submit" style="flex:2; padding:10px; background:#facc15; color:#111; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Créer</button>
                 </div>
             </form>
         `;
@@ -535,7 +426,6 @@
         document.getElementById('modal').style.display = 'none';
     };
     
-    // ==================== SAUVEGARDE TRANSPORT ====================
     window.saveTransport = async function() {
         const client = document.getElementById('clientName')?.value;
         const phone = document.getElementById('clientPhone')?.value;
@@ -545,46 +435,41 @@
         const priority = document.getElementById('priority')?.value || 'normal';
         
         if (!client || !pickup || !delivery) {
-            alert('Veuillez remplir tous les champs obligatoires');
+            alert('Champs obligatoires manquants');
             return;
         }
-        
-        const transport = {
-            client_name: client,
-            client_phone: phone,
-            pickup_city: pickup,
-            delivery_city: delivery,
-            weight: weight,
-            priority: priority,
-            status: 'pending',
-            created_at: new Date()
-        };
         
         try {
             const { error } = await supabase
                 .from('orders')
-                .insert([transport]);
+                .insert([{
+                    client_name: client,
+                    client_phone: phone,
+                    pickup_city: pickup,
+                    delivery_city: delivery,
+                    weight: weight,
+                    priority: priority,
+                    status: 'pending',
+                    created_at: new Date()
+                }]);
             
             if (error) throw error;
             
-            alert('✅ Transport créé avec succès !');
+            alert('✅ Transport créé !');
             closeModal();
             loadOrders();
             
-        } catch (error) {
-            console.error('Erreur:', error);
-            alert('❌ Erreur lors de la création');
+        } catch(e) {
+            console.error('Erreur:', e);
+            alert('❌ Erreur création');
         }
     };
     
-    // ==================== INITIALISATION ====================
-    window.addEventListener('load', function() {
-        console.log("🚀 Démarrage...");
+    // ========== DÉMARRAGE ==========
+    window.onload = function() {
         initMap();
-        
-        // Rafraîchissement auto
         setInterval(loadOrders, 30000);
-    });
+    };
 </script>
 
 </body>
