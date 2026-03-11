@@ -1,4 +1,18 @@
 console.log("dispatch chargé")
+async function loadDispatchStats(){
+
+const { data } = await supabase
+.from("orders")
+.select("*")
+
+const pending = data.filter(o=>o.status==="pending").length
+const planned = data.filter(o=>o.status==="planned").length
+const delivered = data.filter(o=>o.status==="delivered").length
+
+document.getElementById("dispatchStats").innerHTML =
+`📦 ${pending} à planifier • 🗺 ${planned} tournées • ✅ ${delivered} livrés`
+
+}
 async function drawRoute(city){
 
   const origin = "Yverdon"
@@ -696,6 +710,7 @@ async function refreshDispatch() {
 /* ---------------------- */
 /* DEMARRAGE */
 /* ---------------------- */
+loadDispatchStats()
 loadDispatchStats()
 loadDispatchStats()
 loadOrdersMap()
