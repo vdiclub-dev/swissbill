@@ -257,3 +257,38 @@ https://www.google.com/maps/dir/?api=1
 window.open(url,"_blank")
 
 }
+async function getRouteInfo(city){
+
+const origin = "Yverdon"
+
+const geo1 = await fetch(
+`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}`
+)
+
+const geo2 = await fetch(
+`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
+)
+
+const r1 = await geo1.json()
+const r2 = await geo2.json()
+
+if(!r1.length || !r2.length) return null
+
+const lon1 = r1[0].lon
+const lat1 = r1[0].lat
+
+const lon2 = r2[0].lon
+const lat2 = r2[0].lat
+
+const route = await fetch(
+`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`
+)
+
+const data = await route.json()
+
+const km = (data.routes[0].distance / 1000).toFixed(1)
+const min = Math.round(data.routes[0].duration / 60)
+
+return `${km} km • ${min} min`
+
+}
