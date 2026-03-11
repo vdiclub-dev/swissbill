@@ -1,4 +1,87 @@
 console.log("dispatch chargé")
+async function applyAIProposal(){
+
+if(!window.lastAIProposal || !window.lastAIProposal.order){
+alert("Aucune proposition IA")
+return
+}
+
+const tourId = Date.now()
+
+for(const orderId of window.lastAIProposal.order){
+
+await supabase
+.from("orders")
+.update({
+status:"planned",
+tour_id: tourId
+})
+.eq("id", orderId)
+
+}
+
+closeModal()
+await refreshDispatch()
+alert("Proposition IA appliquée")
+
+}
+async function proposeAITours(){
+
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+.eq("status","pending")
+
+if(error){
+console.error(error)
+alert("Erreur chargement transports")
+return
+}
+
+if(!data.length){
+alert("Aucun transport à optimiser")
+return
+}
+
+const ai = await askDispatchAI(data)
+
+openModal(
+"Proposition IA",
+`
+<div style="white-space:pre-line;">${ai.summary || "Aucune proposition"}</div>
+<br>
+<button class="btn" onclick="applyAIProposal()">Appliquer</button>
+`
+)
+
+window.lastAIProposal = ai
+}
+async function askDispatchAI(orders){
+
+const payload = orders.map(o => ({
+id: o.id,
+client: o.client_name || "",
+pickup_city: o.pickup_city || "",
+delivery_city: o.delivery_city || "",
+priority: o.priority || "normal",
+weight: o.weight || 0
+}))
+
+const response = await fetch("/api/dispatch-ai",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body: JSON.stringify({
+depot: "Yverdon",
+orders: payload
+})
+})
+
+const result = await response.json()
+return result
+
+}
 window.onclick = function(event){
 
 const modal = document.getElementById("modal")
