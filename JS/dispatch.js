@@ -1,253 +1,4 @@
 console.log("dispatch chargé")
-function openRoute(city){
-
-const origin="Yverdon"
-
-const url=`https://www.google.com/maps/dir/?api=1
-&origin=${encodeURIComponent(origin)}
-&destination=${encodeURIComponent(city)}
-&travelmode=driving`
-
-window.open(url,"_blank")
-
-}
-async function loadDispatchStats(){
-
-const { data } = await supabase
-.from("orders")
-.select("*")
-
-const pending = data.filter(o=>o.status==="pending").length
-const planned = data.filter(o=>o.status==="planned").length
-const delivered = data.filter(o=>o.status==="delivered").length
-
-document.getElementById("dispatchStats").innerHTML =
-`📦 ${pending} à planifier • 🗺 ${planned} tournées • ✅ ${delivered} livrés`
-
-}
-async function drawRoute(city){
-
-  const origin = "Yverdon"
-
-  const p1 = await geocodeCity(origin)
-  const p2 = await geocodeCity(city)
-
-  if(!p1 || !p2) return
-
-  const route = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=full&geometries=geojson`
-  )
-
-  const data = await route.json()
-  if(!data.routes || !data.routes.length) return
-
-  const coords = data.routes[0].geometry.coordinates.map(c => [c[1],c[0]])
-
-  if(routeLine){
-    map.removeLayer(routeLine)
-  }
-
-  routeLine = L.polyline(coords,{
-    color:"blue",
-    weight:4
-  }).addTo(map)
-
-  map.fitBounds(routeLine.getBounds(),{padding:[40,40]})
-}
-async function focusTransport(city){
-  const point = await geocodeCity(city)
-  if(!point) return
-  map.setView([point.lat, point.lng], 12)
-}
-async function loadDispatchStats(){
-
-const { data } = await supabase
-.from("orders")
-.select("*")
-
-const pending = data.filter(o=>o.status==="pending").length
-const planned = data.filter(o=>o.status==="planned").length
-
-document.getElementById("dispatchStats").innerHTML =
-`⚠️ ${pending} à planifier • 🗺 ${planned} en tournée`
-
-}
-async function loadDispatchStats(){
-
-const { data } = await supabase
-.from("orders")
-.select("*")
-
-const pending = data.filter(o=>o.status==="pending").length
-const planned = data.filter(o=>o.status==="planned").length
-
-document.getElementById("dispatchStats").innerHTML =
-`⚠️ ${pending} à planifier • 🗺 ${planned} en tournée`
-
-}
-
-async function drawTour(tourId){
-routeLine = L.polyline(points,{
-color:"red",
-weight:4
-}).addTo(map)
-if(!tourId) return
-
-const { data, error } = await supabase
-.from("orders")
-.select("*")
-.eq("tour_id",tourId)
-
-if(error){
-console.error(error)
-return
-}
-
-const points = []
-
-for(const order of data){
-
-const geo = await geocodeCity(order.delivery_city)
-
-if(!geo) continue
-
-points.push([geo.lat,geo.lng])
-
-}
-
-if(points.length < 2) return
-
-L.polyline(points,{
-color:"red",
-weight:4,
-opacity:0.8
-}).addTo(map)
-
-}
-
-async function generateTour(){
-
-const { data, error } = await supabase
-.from("orders")
-.select("*")
-.eq("status","pending")
-
-if(error){
-console.error(error)
-return
-}
-
-if(!data.length){
-alert("Aucun transport à planifier")
-return
-}
-
-/* optimisation */
-
-const optimized = await optimizeTour(data)
-
-/* numéro de tournée */
-
-const tourId = Date.now()
-
-for(const order of optimized){
-
-await supabase
-.from("orders")
-.update({
-status:"planned",
-tour_id:tourId
-})
-.eq("id",order.id)
-
-}
-
-alert("Tournée créée")
-
-loadOrdersMap()
-loadOrdersList()
-
-}
-
-function groupByRegion(orders){
-
-const regions = {
-romandie:[],
-suisse_centrale:[],
-suisse_alemanique:[],
-tessin:[]
-}
-
-orders.forEach(o=>{
-
-const city = o.delivery_city.toLowerCase()
-
-if(city.includes("genève") || city.includes("lausanne") || city.includes("nyon"))
-regions.romandie.push(o)
-
-else if(city.includes("berne"))
-regions.suisse_centrale.push(o)
-
-else if(city.includes("zurich") || city.includes("bâle"))
-regions.suisse_alemanique.push(o)
-
-else
-regions.romandie.push(o)
-
-})
-
-return regions
-
-}
-
-async function optimizeTour(orders){
-
-const startCity = "Yverdon"
-
-const start = await geocodeCity(startCity)
-
-let remaining = [...orders]
-let route = []
-let current = start
-
-while(remaining.length){
-
-let bestIndex = -1
-let bestDistance = Infinity
-
-for(let i=0;i<remaining.length;i++){
-
-const geo = await geocodeCity(remaining[i].delivery_city)
-
-if(!geo) continue
-
-const routeReq = await fetch(
-`https://router.project-osrm.org/route/v1/driving/${current.lng},${current.lat};${geo.lng},${geo.lat}?overview=false`
-)
-
-const data = await routeReq.json()
-
-const distance = data.routes[0].distance
-
-if(distance < bestDistance){
-bestDistance = distance
-bestIndex = i
-remaining[i]._geo = geo
-}
-
-}
-
-const next = remaining.splice(bestIndex,1)[0]
-
-route.push(next)
-
-current = next._geo
-
-}
-
-return route
-
-}
 
 /* ---------------------- */
 /* CARTE */
@@ -259,15 +10,14 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 18
 }).addTo(map)
 
-/* groupe clusters pour transports + chauffeurs */
 const markers = L.markerClusterGroup()
 map.addLayer(markers)
 
-/* couche itinéraire */
 let routeLine = null
-
-/* cache géocodage pour éviter trop d'appels */
 const geoCache = {}
+
+/* couleurs tournées */
+const tourColors = ["red", "blue", "green", "orange", "purple"]
 
 /* ---------------------- */
 /* OUTILS */
@@ -284,7 +34,6 @@ async function geocodeCity(city) {
   )
 
   const result = await response.json()
-
   if (!result.length) return null
 
   const point = {
@@ -294,6 +43,40 @@ async function geocodeCity(city) {
 
   geoCache[key] = point
   return point
+}
+
+/* ---------------------- */
+/* STATS DISPATCH */
+/* ---------------------- */
+
+async function loadDispatchStats() {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+
+  if (error) {
+    console.error(error)
+    return
+  }
+
+  const pending = data.filter(o => o.status === "pending").length
+  const planned = data.filter(o => o.status === "planned").length
+  const delivered = data.filter(o => o.status === "delivered").length
+
+  const statsBox = document.getElementById("dispatchStats")
+  if (statsBox) {
+    statsBox.innerHTML = `⚠️ ${pending} à planifier • 🗺 ${planned} tournées • ✅ ${delivered} livrés`
+  }
+}
+
+/* ---------------------- */
+/* GOOGLE MAPS */
+/* ---------------------- */
+
+function openRoute(city) {
+  const origin = "Yverdon"
+  const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(city)}&travelmode=driving`
+  window.open(url, "_blank")
 }
 
 /* ---------------------- */
@@ -311,7 +94,7 @@ window.closeModal = function () {
 }
 
 /* ---------------------- */
-/* CREER TRANSPORT */
+/* CRÉER TRANSPORT */
 /* ---------------------- */
 
 window.newTransport = function () {
@@ -355,40 +138,7 @@ window.createTransport = async function () {
         status: "pending"
       }
     ])
-let marker
 
-if(order.status === "pending"){
-
-const icon = L.divIcon({
-className:"",
-html:`<div class="pulse-marker"></div>`,
-iconSize:[20,20]
-})
-
-marker = L.marker([lat,lng],{icon})
-
-}else{
-
-const icon = L.divIcon({
-className:"route-number",
-html:`<div style="
-background:${color};
-color:white;
-width:28px;
-height:28px;
-border-radius:50%;
-display:flex;
-align-items:center;
-justify-content:center;
-font-weight:bold;
-border:2px solid white;
-">${tourIndex}</div>`,
-iconSize:[30,30]
-})
-
-marker = L.marker([lat,lng],{icon})
-
-}
   if (error) {
     console.error(error)
     alert("Erreur création transport")
@@ -398,123 +148,129 @@ marker = L.marker([lat,lng],{icon})
   alert("Transport créé")
   closeModal()
 
-  await loadOrdersMap()
-  await loadOrdersList()
+  await refreshDispatch()
 }
 
 /* ---------------------- */
-/* AFFICHER TRANSPORTS CARTE */
+/* TOURNÉE */
 /* ---------------------- */
 
-async function loadOrdersMap(){
+async function optimizeTour(orders) {
+  const startCity = "Yverdon"
+  const start = await geocodeCity(startCity)
 
-markers.clearLayers()
+  if (!start) return orders
 
-const { data, error } = await supabase
-.from("orders")
-.select("*")
+  let remaining = [...orders]
+  let route = []
+  let current = start
 
-if(error){
-console.error(error)
-return
+  while (remaining.length) {
+    let bestIndex = -1
+    let bestDistance = Infinity
+
+    for (let i = 0; i < remaining.length; i++) {
+      const geo = await geocodeCity(remaining[i].delivery_city)
+      if (!geo) continue
+
+      const routeReq = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${current.lng},${current.lat};${geo.lng},${geo.lat}?overview=false`
+      )
+
+      const data = await routeReq.json()
+      if (!data.routes || !data.routes.length) continue
+
+      const distance = data.routes[0].distance
+
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestIndex = i
+        remaining[i]._geo = geo
+      }
+    }
+
+    if (bestIndex === -1) break
+
+    const next = remaining.splice(bestIndex, 1)[0]
+    route.push(next)
+    current = next._geo
+  }
+
+  return route
 }
 
-let color = "gray"
+async function generateTour() {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("status", "pending")
 
-if(order.status==="pending") color="gray"
-if(order.status==="planned") color="orange"
-if(order.status==="urgent") color="red"
-if(order.status==="delivered") color="green"
+  if (error) {
+    console.error(error)
+    return
+  }
 
-let tourIndex = 1
-const bounds = []
+  if (!data.length) {
+    alert("Aucun transport à planifier")
+    return
+  }
 
-for(const order of data){
+  const optimized = await optimizeTour(data)
+  const tourId = Date.now()
 
-const city = order.delivery_city
-if(!city) continue
+  for (const order of optimized) {
+    await supabase
+      .from("orders")
+      .update({
+        status: "planned",
+        tour_id: tourId
+      })
+      .eq("id", order.id)
+  }
 
-const geo = await geocodeCity(city)
-if(!geo) continue
-
-const lat = geo.lat
-const lng = geo.lng
-
-let marker
-
-/* -------- TRANSPORT NON PLANIFIÉ -------- */
-
-if(order.status === "pending"){
-
-const icon = L.divIcon({
-className:"",
-html:`<div class="pulse-marker"></div>`,
-iconSize:[20,20]
-})
-
-marker = L.marker([lat,lng],{icon})
-
+  alert("Tournée créée")
+  await refreshDispatch()
 }
 
-/* -------- TRANSPORT PLANIFIÉ -------- */
+window.generateTour = generateTour
 
-else{
+async function drawTour(tourId) {
+  if (!tourId) return
 
-let color = "gray"
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("tour_id", tourId)
 
-if(order.tour_id){
-const index = order.tour_id % colors.length
-color = colors[index]
+  if (error) {
+    console.error(error)
+    return
+  }
+
+  const points = []
+
+  for (const order of data) {
+    const geo = await geocodeCity(order.delivery_city)
+    if (!geo) continue
+    points.push([geo.lat, geo.lng])
+  }
+
+  if (points.length < 2) return
+
+  if (routeLine) {
+    map.removeLayer(routeLine)
+  }
+
+  routeLine = L.polyline(points, {
+    color: "red",
+    weight: 4,
+    opacity: 0.8
+  }).addTo(map)
+
+  map.fitBounds(routeLine.getBounds(), { padding: [40, 40] })
 }
 
-const icon = L.divIcon({
-className:"route-number",
-html:`<div style="
-background:${color};
-color:white;
-width:28px;
-height:28px;
-border-radius:50%;
-display:flex;
-align-items:center;
-justify-content:center;
-font-weight:bold;
-border:2px solid white;
-">${tourIndex}</div>`,
-iconSize:[30,30]
-})
-
-marker = L.marker([lat,lng],{icon})
-
-tourIndex++
-
-}
-
-/* -------- POPUP -------- */
-
-marker.bindPopup(`
-Transport #${order.id}<br>
-Destination : ${order.delivery_city}<br>
-Statut : ${order.status}<br><br>
-
-<button onclick="openRoute('${order.delivery_city}')">
-Navigation
-</button>
-`)
-
-markers.addLayer(marker)
-
-bounds.push([lat,lng])
-
-}
-
-await loadDrivers()
-
-if(bounds.length > 0){
-map.fitBounds(bounds,{padding:[50,50]})
-}
-
-}
+window.drawTour = drawTour
 
 /* ---------------------- */
 /* CHAUFFEURS */
@@ -540,89 +296,151 @@ async function loadDrivers() {
       fillOpacity: 0.9
     })
 
-    marker.bindPopup(`
-      🚚 Chauffeur : ${driver.name}
-    `)
-
+    marker.bindPopup(`🚚 Chauffeur : ${driver.name}`)
     markers.addLayer(marker)
   })
 }
 
 /* ---------------------- */
-/* ASSIGNER CHAUFFEUR */
+/* CARTE TRANSPORTS */
 /* ---------------------- */
 
-async function assignDriver(orderId) {
-  const driver = prompt("ID du chauffeur")
-  if (!driver) return
+async function loadOrdersMap() {
+  markers.clearLayers()
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("orders")
-    .update({ driver_id: driver })
-    .eq("id", orderId)
+    .select("*")
 
   if (error) {
     console.error(error)
-    alert("Erreur assignation")
     return
   }
 
-  alert("Chauffeur assigné")
+  let tourIndex = 1
+  const bounds = []
+
+  for (const order of data) {
+    const city = order.delivery_city
+    if (!city) continue
+
+    const geo = await geocodeCity(city)
+    if (!geo) continue
+
+    const lat = geo.lat
+    const lng = geo.lng
+
+    let marker
+
+    if (order.status === "pending") {
+      const icon = L.divIcon({
+        className: "",
+        html: `<div class="pulse-marker"></div>`,
+        iconSize: [20, 20]
+      })
+
+      marker = L.marker([lat, lng], { icon })
+    } else {
+      let color = "gray"
+
+      if (order.tour_id) {
+        const index = Math.abs(Number(order.tour_id)) % tourColors.length
+        color = tourColors[index]
+      } else if (order.status === "planned") {
+        color = "orange"
+      } else if (order.status === "urgent") {
+        color = "red"
+      } else if (order.status === "delivered") {
+        color = "green"
+      }
+
+      const icon = L.divIcon({
+        className: "route-number",
+        html: `<div style="
+          background:${color};
+          width:28px;
+          height:28px;
+          border-radius:50%;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-weight:bold;
+          border:2px solid white;
+          color:white;
+        ">${tourIndex}</div>`,
+        iconSize: [30, 30]
+      })
+
+      marker = L.marker([lat, lng], { icon })
+      tourIndex++
+    }
+
+    marker.bindPopup(`
+      Transport #${order.id}<br>
+      Destination : ${order.delivery_city}<br>
+      Statut : ${order.status}<br>
+      Tournée : ${order.tour_id || "Aucune"}<br><br>
+      <button onclick="focusTransport('${String(order.delivery_city).replace(/'/g, "\\'")}')">Centrer</button>
+      <button onclick="drawRoute('${String(order.delivery_city).replace(/'/g, "\\'")}')">Itinéraire</button>
+      <button onclick="openRoute('${String(order.delivery_city).replace(/'/g, "\\'")}')">Navigation</button>
+      <button onclick="drawTour('${order.tour_id || ""}')">Voir tournée</button>
+    `)
+
+    markers.addLayer(marker)
+    bounds.push([lat, lng])
+  }
+
+  await loadDrivers()
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [50, 50] })
+  }
 }
 
 /* ---------------------- */
 /* LISTE TRANSPORTS */
 /* ---------------------- */
 
-async function loadOrdersList(){
+async function loadOrdersList() {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
 
-const { data, error } = await supabase
-.from("orders")
-.select("*")
+  if (error) {
+    console.error(error)
+    return
+  }
 
-if(error){
-console.error(error)
-return
-}
+  const list = document.getElementById("orders-list")
+  if (!list) return
 
-const list = document.getElementById("orders-list")
-list.innerHTML = ""
+  list.innerHTML = ""
 
-/* optimisation tournée */
+  const optimized = await optimizeTour(data)
 
-const optimized = await optimizeTour(data)
+  for (const order of optimized) {
+    const item = document.createElement("div")
+    item.className = "order-item"
 
-for(const order of optimized){
+    const route = await getRouteInfo(order.delivery_city)
 
-const item = document.createElement("div")
+    item.innerHTML = `
+      📦 #${order.id}<br>
+      ${order.delivery_city}<br>
+      ${route || ""}
+    `
 
-item.className = "order-item"
+    item.onclick = () => {
+      focusTransport(order.delivery_city)
+      drawRoute(order.delivery_city)
+    }
 
-/* calcul distance et temps */
-
-const route = await getRouteInfo(order.delivery_city)
-
-item.innerHTML = `
-📦 #${order.id}<br>
-${order.delivery_city}<br>
-${route || ""}
-`
-
-item.onclick = ()=>{
-
-focusTransport(order.delivery_city)
-drawRoute(order.delivery_city)
-
-}
-
-list.appendChild(item)
-
-}
-
+    list.appendChild(item)
+  }
 }
 
 /* ---------------------- */
-/* CENTRER CARTE */
+/* CENTRER / ROUTE */
 /* ---------------------- */
 
 async function focusTransport(city) {
@@ -632,21 +450,7 @@ async function focusTransport(city) {
   map.setView([point.lat, point.lng], 12)
 }
 
-/* ---------------------- */
-/* GOOGLE MAPS */
-/* ---------------------- */
-
-function openRoute(city) {
-  const origin = "Yverdon"
-
-  const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(city)}&travelmode=driving`
-
-  window.open(url, "_blank")
-}
-
-/* ---------------------- */
-/* INFOS DISTANCE */
-/* ---------------------- */
+window.focusTransport = focusTransport
 
 async function getRouteInfo(city) {
   const origin = "Yverdon"
@@ -661,7 +465,6 @@ async function getRouteInfo(city) {
   )
 
   const data = await route.json()
-
   if (!data.routes || !data.routes.length) return null
 
   const km = (data.routes[0].distance / 1000).toFixed(1)
@@ -670,70 +473,63 @@ async function getRouteInfo(city) {
   return `${km} km • ${min} min`
 }
 
-/* ---------------------- */
-/* TRACER ITINERAIRE */
-/* ---------------------- */
+async function drawRoute(city) {
+  const origin = "Yverdon"
 
-async function drawRoute(city){
+  const p1 = await geocodeCity(origin)
+  const p2 = await geocodeCity(city)
 
-const origin = "Yverdon"
+  if (!p1 || !p2) return
 
-const p1 = await geocodeCity(origin)
-const p2 = await geocodeCity(city)
+  const route = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=full&geometries=geojson`
+  )
 
-if(!p1 || !p2) return
+  const data = await route.json()
+  if (!data.routes || !data.routes.length) return
 
-const route = await fetch(
-`https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=full&geometries=geojson`
-)
+  const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]])
 
-const data = await route.json()
+  if (routeLine) {
+    map.removeLayer(routeLine)
+  }
 
-if(!data.routes || !data.routes.length) return
+  routeLine = L.polyline(coords, {
+    color: "blue",
+    weight: 4
+  }).addTo(map)
 
-const coords = data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]])
+  map.fitBounds(routeLine.getBounds(), { padding: [40, 40] })
 
-if(routeLine){
-map.removeLayer(routeLine)
+  const km = (data.routes[0].distance / 1000).toFixed(1)
+  const min = Math.round(data.routes[0].duration / 60)
+
+  const routeInfo = document.getElementById("routeInfo")
+  if (routeInfo) {
+    routeInfo.innerHTML = `🚚 ${km} km • ${min} min`
+  }
 }
 
-routeLine = L.polyline(coords,{
-color:"blue",
-weight:4
-}).addTo(map)
+window.drawRoute = drawRoute
+window.openRoute = openRoute
 
-map.fitBounds(routeLine.getBounds(),{padding:[40,40]})
-
-/* distance et temps */
-
-const km = (data.routes[0].distance / 1000).toFixed(1)
-const min = Math.round(data.routes[0].duration / 60)
-
-document.getElementById("routeInfo").innerHTML =
-`🚚 ${km} km • ${min} min`
-
-}
 /* ---------------------- */
-/* RAFRAICHISSEMENT AUTO */
+/* RAFRAICHISSEMENT */
 /* ---------------------- */
 
 async function refreshDispatch() {
+  await loadDispatchStats()
   await loadOrdersMap()
   await loadOrdersList()
 }
 
 /* ---------------------- */
-/* DEMARRAGE */
+/* DÉMARRAGE */
 /* ---------------------- */
-loadDispatchStats()
-loadDispatchStats()
-loadDispatchStats()
-loadOrdersMap()
-loadDrivers()
-loadOrdersList()
 
-setInterval(()=>{
+refreshDispatch()
 
-loadOrdersMap()
-
-},10000)
+setInterval(() => {
+  loadOrdersMap()
+  loadDispatchStats()
+}, 10000)
