@@ -5,6 +5,7 @@
     <title>Léman Dispatch</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
+        /* Vos styles existants - je les ai gardés */
         body { margin: 0; padding: 0; }
         #map { height: 100vh; width: 100vw; }
         #barre-jaune {
@@ -51,9 +52,10 @@
 
     <div id="barre-jaune">
         <span>🚚 LÉMAN DISPATCH</span>
-        <button onclick="window.montrerFormulaire()">➕ Créer transport</button>
+        <!-- Appel à une fonction globale qui SERA définie -->
+        <button onclick="window.ouvrirFormulaire()">➕ Créer transport</button>
     </div>
-    
+
     <div id="formulaire">
         <h3>Nouveau transport</h3>
         <input type="text" id="client" placeholder="Nom client">
@@ -63,85 +65,116 @@
             <option value="normal">Normal</option>
             <option value="urgent">Urgent</option>
         </select>
-        <button onclick="window.cacherFormulaire()">Annuler</button>
-        <button onclick="window.sauvegarder()">Créer</button>
+        <button onclick="window.fermerFormulaire()">Annuler</button>
+        <button onclick="window.sauvegarderTransport()">Créer</button>
     </div>
-    
+
     <div id="map"></div>
 
-    <!-- SCRIPTS -->
+    <!-- Scripts externes -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- VOTRE FICHIER DE CONFIGURATION -->
     <script src="config.js"></script>
-    
+
     <script>
-        // Attendre que tout soit chargé
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log("✅ DOM chargé");
-            
-            // ===== SUPABASE =====
-            if (!window.SUPABASE_CONFIG) {
-                console.error("❌ config.js non chargé");
+        // Ce script s'exécute APRÈS que config.js soit chargé.
+
+        // 1. Vérification plus robuste de la config
+        if (!window.SUPABASE_CONFIG || !window.SUPABASE_CONFIG.url || !window.SUPABASE_CONFIG.key) {
+            console.error("❌ ERREUR CRITIQUE: La configuration Supabase est manquante ou invalide dans config.js");
+            document.body.innerHTML = '<div style="color:red; padding:2rem;">Erreur de configuration. Vérifiez le fichier config.js</div>';
+            // On arrête tout si la config est mauvaise.
+            throw new Error("Configuration Supabase manquante");
+        }
+
+        console.log("✅ Configuration Supabase chargée avec succès:", window.SUPABASE_CONFIG.url);
+
+        // 2. Initialisation Supabase (UNE SEULE FOIS, ici)
+        const supabase = window.supabase.createClient(
+            window.SUPABASE_CONFIG.url,
+            window.SUPABASE_CONFIG.key
+        );
+
+        // 3. Initialisation de la carte
+        const map = L.map('map').setView([46.8, 8.2], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // 4. Fonction pour charger et afficher les transports sur la carte
+        async function chargerEtAfficherTransports() {
+            console.log("Chargement des transports...");
+            const { data: transports, error } = await supabase.from('orders').select('*');
+
+            if (error) {
+                console.error("Erreur Supabase lors du chargement:", error);
                 return;
             }
-            
-            // UNE SEULE déclaration de supabase
-            const supabase = window.supabase.createClient(
-                window.SUPABASE_CONFIG.url,
-                window.SUPABASE_CONFIG.key
-            );
-            
-            // ===== CARTE =====
-            const map = L.map('map').setView([46.8, 8.2], 8);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            
-            // ===== CHARGER LES TRANSPORTS =====
-            async function chargerTransports() {
-                const { data } = await supabase.from('orders').select('*');
-                
-                if (data) {
-                    data.forEach(transport => {
-                        let lat = 46.8, lng = 8.2;
-                        const ville = transport.delivery_city?.toLowerCase() || '';
-                        
-                        if (ville.includes('lausanne')) { lat = 46.52; lng = 6.63; }
-                        if (ville.includes('geneve')) { lat = 46.20; lng = 6.14; }
-                        
-                        L.marker([lat, lng]).addTo(map)
-                            .bindPopup(`${transport.client_name}<br>${transport.pickup_city} → ${transport.delivery_city}`);
-                    });
-                }
+
+            console.log(`${transports.length} transports trouvés.`);
+
+            // Nettoyer les anciens marqueurs? Pour l'instant, on ajoute simplement.
+            // Une meilleure pratique serait de les stocker pour les effacer plus tard.
+            transports.forEach(transport => {
+                let lat = 46.8, lng = 8.2;
+                const ville = transport.delivery_city?.toLowerCase() || '';
+
+                if (ville.includes('lausanne')) { lat = 46.52; lng = 6.63; }
+                else if (ville.includes('geneve')) { lat = 46.20; lng = 6.14; }
+                else if (ville.includes('yverdon')) { lat = 46.78; lng = 6.64; }
+                // Ajoutez d'autres villes ici
+
+                L.marker([lat, lng]).addTo(map)
+                    .bindPopup(`<b>${transport.client_name || 'Sans client'}</b><br>📦 ${transport.pickup_city} → ${transport.delivery_city}`);
+            });
+        }
+
+        // 5. Définition des FONCTIONS GLOBALES pour les boutons (attachées à window)
+        window.ouvrirFormulaire = function() {
+            document.getElementById('formulaire').style.display = 'block';
+        };
+
+        window.fermerFormulaire = function() {
+            document.getElementById('formulaire').style.display = 'none';
+        };
+
+        window.sauvegarderTransport = async function() {
+            const nouveauTransport = {
+                client_name: document.getElementById('client').value,
+                pickup_city: document.getElementById('pickup').value,
+                delivery_city: document.getElementById('delivery').value,
+                priority: document.getElementById('priority').value,
+                status: 'pending',
+                created_at: new Date()
+            };
+
+            // Validation simple
+            if (!nouveauTransport.client_name || !nouveauTransport.pickup_city || !nouveauTransport.delivery_city) {
+                alert("Veuillez remplir tous les champs.");
+                return;
             }
-            
-            // ===== FONCTIONS GLOBALES =====
-            window.montrerFormulaire = function() {
-                document.getElementById('formulaire').style.display = 'block';
-            };
-            
-            window.cacherFormulaire = function() {
-                document.getElementById('formulaire').style.display = 'none';
-            };
-            
-            window.sauvegarder = async function() {
-                const transport = {
-                    client_name: document.getElementById('client').value,
-                    pickup_city: document.getElementById('pickup').value,
-                    delivery_city: document.getElementById('delivery').value,
-                    priority: document.getElementById('priority').value,
-                    status: 'pending',
-                    created_at: new Date()
-                };
-                
-                await supabase.from('orders').insert([transport]);
-                alert('✅ Créé !');
-                window.cacherFormulaire();
+
+            console.log("Sauvegarde du transport:", nouveauTransport);
+
+            const { error } = await supabase
+                .from('orders')
+                .insert([nouveauTransport]);
+
+            if (error) {
+                console.error("Erreur lors de la sauvegarde:", error);
+                alert("Erreur lors de la création du transport.");
+            } else {
+                alert("✅ Transport créé avec succès !");
+                window.fermerFormulaire();
+                // Recharger la page pour voir le nouveau transport est une solution simple mais pas idéale.
+                // Idéalement, on ajouterait le marqueur dynamiquement. On garde simple pour l'instant.
                 location.reload();
-            };
-            
-            // ===== LANCEMENT =====
-            chargerTransports();
-        });
+            }
+        };
+
+        // 6. Lancer le chargement initial
+        chargerEtAfficherTransports();
+
     </script>
-    
+
 </body>
 </html>
