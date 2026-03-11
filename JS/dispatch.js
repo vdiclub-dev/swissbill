@@ -4,370 +4,378 @@ console.log("dispatch chargé")
 /* CARTE */
 /* ---------------------- */
 
-const map = L.map('map').setView([46.52,6.63],9)
+const map = L.map("map").setView([46.52, 6.63], 9)
 
-L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-{
-maxZoom:18
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 18
 }).addTo(map)
-const markers = L.markerClusterGroup()
 
+/* groupe clusters pour transports + chauffeurs */
+const markers = L.markerClusterGroup()
 map.addLayer(markers)
+
+/* couche itinéraire */
+let routeLine = null
+
+/* cache géocodage pour éviter trop d'appels */
+const geoCache = {}
+
+/* ---------------------- */
+/* OUTILS */
+/* ---------------------- */
+
+async function geocodeCity(city) {
+  if (!city) return null
+
+  const key = city.trim().toLowerCase()
+  if (geoCache[key]) return geoCache[key]
+
+  const response = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
+  )
+
+  const result = await response.json()
+
+  if (!result.length) return null
+
+  const point = {
+    lat: parseFloat(result[0].lat),
+    lng: parseFloat(result[0].lon)
+  }
+
+  geoCache[key] = point
+  return point
+}
 
 /* ---------------------- */
 /* MODAL */
 /* ---------------------- */
 
-window.openModal = function(title,content){
-
-document.getElementById("modal-title").innerText = title
-document.getElementById("modal-content").innerHTML = content
-document.getElementById("modal").style.display = "flex"
-
+window.openModal = function (title, content) {
+  document.getElementById("modal-title").innerText = title
+  document.getElementById("modal-content").innerHTML = content
+  document.getElementById("modal").style.display = "flex"
 }
 
-window.closeModal = function(){
-
-document.getElementById("modal").style.display = "none"
-
+window.closeModal = function () {
+  document.getElementById("modal").style.display = "none"
 }
-
 
 /* ---------------------- */
 /* CREER TRANSPORT */
 /* ---------------------- */
 
-window.newTransport = function(){
+window.newTransport = function () {
+  openModal(
+    "Créer transport",
+    `
+    <label>Ville destination</label>
+    <input id="dest" type="text" placeholder="Lausanne">
 
-openModal(
-"Créer transport",
-`
-<label>Ville destination</label>
-<input id="dest" type="text" placeholder="Lausanne">
+    <br><br>
 
-<br><br>
-
-<button class="btn" onclick="createTransport()">Créer</button>
-`
-)
-
+    <button class="btn" onclick="createTransport()">Créer</button>
+    `
+  )
 }
 
-window.createTransport = async function(){
+window.createTransport = async function () {
+  const cityInput = document.getElementById("dest")
 
-const cityInput = document.getElementById("dest")
+  if (!cityInput) {
+    alert("Champ destination introuvable")
+    return
+  }
 
-if(!cityInput){
-alert("Champ destination introuvable")
-return
+  const city = cityInput.value.trim()
+
+  if (!city) {
+    alert("Veuillez saisir une destination")
+    return
+  }
+
+  const { error } = await supabase
+    .from("orders")
+    .insert([
+      {
+        delivery_city: city,
+        pickup: "Yverdon",
+        delivery: city,
+        speed: "eco",
+        weight: 1,
+        status: "pending"
+      }
+    ])
+
+  if (error) {
+    console.error(error)
+    alert("Erreur création transport")
+    return
+  }
+
+  alert("Transport créé")
+  closeModal()
+
+  await loadOrdersMap()
+  await loadOrdersList()
 }
-
-const city = cityInput.value.trim()
-
-if(!city){
-alert("Veuillez saisir une destination")
-return
-}
-
-const { error } = await supabase
-.from("orders")
-.insert([
-{
-delivery_city: city,
-pickup: "Yverdon",
-delivery: city,
-speed: "eco",
-weight: 1,
-status: "pending"
-}
-])
-
-if(error){
-console.error(error)
-alert("Erreur création transport")
-return
-}
-
-alert("Transport créé")
-
-closeModal()
-
-loadOrdersMap()
-
-}
-
 
 /* ---------------------- */
-/* AFFICHER TRANSPORTS */
+/* AFFICHER TRANSPORTS CARTE */
 /* ---------------------- */
 
-async function loadOrdersMap(){
+async function loadOrdersMap() {
+  markers.clearLayers()
 
-markers.clearLayers()
+  if (routeLine) {
+    map.removeLayer(routeLine)
+    routeLine = null
+  }
 
-const { data, error } = await supabase
-.from("orders")
-.select("*")
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
 
-if(error){
-console.error(error)
-return
+  if (error) {
+    console.error(error)
+    return
+  }
+
+  const bounds = []
+
+  for (const order of data) {
+    const city = order.delivery_city
+    if (!city) continue
+
+    const point = await geocodeCity(city)
+    if (!point) continue
+
+    const { lat, lng } = point
+
+    let color = "blue"
+    if (order.status === "urgent") color = "red"
+    if (order.status === "in_progress") color = "orange"
+    if (order.status === "delivered") color = "green"
+
+    const marker = L.circleMarker([lat, lng], {
+      radius: 8,
+      color: color,
+      fillColor: color,
+      fillOpacity: 0.9
+    })
+
+    marker.bindPopup(`
+      <strong>Transport #${order.id}</strong><br>
+      Destination : ${order.delivery_city}<br>
+      Statut : ${order.status || "pending"}<br><br>
+      <button onclick="focusTransport('${String(order.delivery_city).replace(/'/g, "\\'")}')">Centrer</button>
+      <button onclick="drawRoute('${String(order.delivery_city).replace(/'/g, "\\'")}')">Itinéraire</button>
+    `)
+
+    markers.addLayer(marker)
+    bounds.push([lat, lng])
+  }
+
+  await loadDrivers()
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [50, 50] })
+  }
 }
 
-/* supprimer anciens marqueurs */
+/* ---------------------- */
+/* CHAUFFEURS */
+/* ---------------------- */
 
-map.eachLayer(layer=>{
-if(layer instanceof L.Marker || layer instanceof L.CircleMarker){
-map.removeLayer(layer)
-}
-})
+async function loadDrivers() {
+  const { data, error } = await supabase
+    .from("drivers")
+    .select("*")
 
-const bounds = []
+  if (error) {
+    console.error(error)
+    return
+  }
 
-for(const order of data){
+  data.forEach(driver => {
+    if (driver.lat == null || driver.lng == null) return
 
-const city = order.delivery_city
+    const marker = L.circleMarker([driver.lat, driver.lng], {
+      radius: 8,
+      color: "green",
+      fillColor: "green",
+      fillOpacity: 0.9
+    })
 
-if(!city) continue
+    marker.bindPopup(`
+      🚚 Chauffeur : ${driver.name}
+    `)
 
-/* géocoder ville */
-
-const response = await fetch(
-`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
-)
-
-const result = await response.json()
-
-if(result.length === 0) continue
-
-const lat = parseFloat(result[0].lat)
-const lng = parseFloat(result[0].lon)
-
-/* couleur selon statut */
-
-let color = "blue"
-
-if(order.status === "urgent") color = "red"
-if(order.status === "in_progress") color = "orange"
-if(order.status === "delivered") color = "green"
-
-/* créer marqueur */
-
-const marker = L.marker([lat,lng])
-
-marker.bindPopup(`
-Transport #${order.id}<br>
-Destination : ${order.delivery_city}<br>
-Statut : ${order.status}
-`)
-
-markers.addLayer(marker)
-
-bounds.push([lat,lng])
-
+    markers.addLayer(marker)
+  })
 }
 
-/* ajuster zoom */
+/* ---------------------- */
+/* ASSIGNER CHAUFFEUR */
+/* ---------------------- */
 
-if(bounds.length > 0){
-map.fitBounds(bounds,{padding:[50,50]})
+async function assignDriver(orderId) {
+  const driver = prompt("ID du chauffeur")
+  if (!driver) return
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ driver_id: driver })
+    .eq("id", orderId)
+
+  if (error) {
+    console.error(error)
+    alert("Erreur assignation")
+    return
+  }
+
+  alert("Chauffeur assigné")
 }
 
+/* ---------------------- */
+/* LISTE TRANSPORTS */
+/* ---------------------- */
+
+async function loadOrdersList() {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("id", { ascending: false })
+
+  if (error) {
+    console.error(error)
+    return
+  }
+
+  const list = document.getElementById("orders-list")
+  list.innerHTML = ""
+
+  for (const order of data) {
+    const item = document.createElement("div")
+    item.className = "order-item"
+
+    const route = await getRouteInfo(order.delivery_city)
+
+    item.innerHTML = `
+      📦 #${order.id}<br>
+      ${order.delivery_city || "-"}<br>
+      ${route || ""}<br><br>
+      <button onclick="event.stopPropagation(); drawRoute('${String(order.delivery_city || "").replace(/'/g, "\\'")}')">Itinéraire</button>
+      <button onclick="event.stopPropagation(); openRoute('${String(order.delivery_city || "").replace(/'/g, "\\'")}')">Google Maps</button>
+    `
+
+    item.onclick = () => {
+      focusTransport(order.delivery_city)
+      drawRoute(order.delivery_city)
+    }
+
+    list.appendChild(item)
+  }
 }
 
+/* ---------------------- */
+/* CENTRER CARTE */
+/* ---------------------- */
 
-async function loadDrivers(){
+async function focusTransport(city) {
+  const point = await geocodeCity(city)
+  if (!point) return
 
-const { data, error } = await supabase
-.from("drivers")
-.select("*")
-
-if(error){
-console.error(error)
-return
+  map.setView([point.lat, point.lng], 12)
 }
 
-data.forEach(driver=>{
+/* ---------------------- */
+/* GOOGLE MAPS */
+/* ---------------------- */
 
-const marker = L.circleMarker([driver.lat,driver.lng],{
-radius:8,
-color:"green"
-})
+function openRoute(city) {
+  const origin = "Yverdon"
 
-marker.bindPopup(`
-🚚 Chauffeur : ${driver.name}
-`)
+  const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(city)}&travelmode=driving`
 
-markers.addLayer(marker)
-
-})
-
+  window.open(url, "_blank")
 }
 
-loadDrivers()
-async function assignDriver(orderId){
+/* ---------------------- */
+/* INFOS DISTANCE */
+/* ---------------------- */
 
-const driver = prompt("ID du chauffeur")
+async function getRouteInfo(city) {
+  const origin = "Yverdon"
 
-if(!driver) return
+  const p1 = await geocodeCity(origin)
+  const p2 = await geocodeCity(city)
 
-const { error } = await supabase
-.from("orders")
-.update({
-driver_id: driver
-})
-.eq("id",orderId)
+  if (!p1 || !p2) return null
 
-if(error){
-console.error(error)
-alert("Erreur assignation")
-return
+  const route = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=false`
+  )
+
+  const data = await route.json()
+
+  if (!data.routes || !data.routes.length) return null
+
+  const km = (data.routes[0].distance / 1000).toFixed(1)
+  const min = Math.round(data.routes[0].duration / 60)
+
+  return `${km} km • ${min} min`
 }
 
-alert("Chauffeur assigné")
+/* ---------------------- */
+/* TRACER ITINERAIRE */
+/* ---------------------- */
 
-}
-async function loadOrdersList(){
+async function drawRoute(city) {
+  const origin = "Yverdon"
 
-const { data, error } = await supabase
-.from("orders")
-.select("*")
+  const p1 = await geocodeCity(origin)
+  const p2 = await geocodeCity(city)
 
-if(error){
-console.error(error)
-return
-}
+  if (!p1 || !p2) return
 
-const list = document.getElementById("orders-list")
+  const route = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=full&geometries=geojson`
+  )
 
-list.innerHTML = ""
+  const data = await route.json()
 
-data.forEach(async order=>{
+  if (!data.routes || !data.routes.length) return
 
-const item = document.createElement("div")
+  const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]])
 
-item.className = "order-item"
+  if (routeLine) {
+    map.removeLayer(routeLine)
+  }
 
-const route = await getRouteInfo(order.delivery_city)
+  routeLine = L.polyline(coords, {
+    color: "blue",
+    weight: 4
+  }).addTo(map)
 
-item.innerHTML = `
-📦 #${order.id}<br>
-${order.delivery_city}<br>
-${route || ""}
-`
-
-item.onclick = ()=>{
-focusTransport(order.delivery_city)
+  map.fitBounds(routeLine.getBounds(), { padding: [40, 40] })
 }
 
-list.appendChild(item)
-
-})
-
-}
-function openRoute(city){
-
-const origin = "Yverdon"
-
-const url = `
-https://www.google.com/maps/dir/?api=1
-&origin=${encodeURIComponent(origin)}
-&destination=${encodeURIComponent(city)}
-&travelmode=driving
-`
-
-window.open(url,"_blank")
-
-}
-async function getRouteInfo(city){
-
-const origin = "Yverdon"
-
-const geo1 = await fetch(
-`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}`
-)
-
-const geo2 = await fetch(
-`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
-)
-
-const r1 = await geo1.json()
-const r2 = await geo2.json()
-
-if(!r1.length || !r2.length) return null
-
-const lon1 = r1[0].lon
-const lat1 = r1[0].lat
-
-const lon2 = r2[0].lon
-const lat2 = r2[0].lat
-
-const route = await fetch(
-`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`
-)
-
-const data = await route.json()
-
-const km = (data.routes[0].distance / 1000).toFixed(1)
-const min = Math.round(data.routes[0].duration / 60)
-
-return `${km} km • ${min} min`
-
-}
-async function drawRoute(city){
-
-const origin = "Yverdon"
-
-/* géocodage origine */
-
-const geo1 = await fetch(
-`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}`
-)
-
-const geo2 = await fetch(
-`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
-)
-
-const r1 = await geo1.json()
-const r2 = await geo2.json()
-
-if(!r1.length || !r2.length) return
-
-const lon1 = r1[0].lon
-const lat1 = r1[0].lat
-
-const lon2 = r2[0].lon
-const lat2 = r2[0].lat
-
-/* récupérer route */
-
-const route = await fetch(
-`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`
-)
-
-const data = await route.json()
-
-const coords = data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]])
-
-/* dessiner ligne */
-
-L.polyline(coords,{
-color:"blue",
-weight:4
-}).addTo(map)
-
-}
 /* ---------------------- */
 /* RAFRAICHISSEMENT AUTO */
 /* ---------------------- */
 
-loadOrdersMap()
-loadDrivers()
+async function refreshDispatch() {
+  await loadOrdersMap()
+  await loadOrdersList()
+}
 
-setInterval(()=>{
+/* ---------------------- */
+/* DEMARRAGE */
+/* ---------------------- */
 
-loadOrdersMap()
-loadDrivers()
+refreshDispatch()
 
-},10000)
+setInterval(() => {
+  refreshDispatch()
+}, 10000)
