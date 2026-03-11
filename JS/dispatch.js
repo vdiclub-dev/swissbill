@@ -1,6 +1,326 @@
 // dispatch.js - Version CORRECTE et FONCTIONNELLE
 console.log("✅ dispatch.js chargé avec succès");
+async function geocodeAddress(address) {
+    if (!address) return null;
+    
+    try {
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&countrycodes=ch&limit=1`,
+            { headers: { 'User-Agent': 'LemanDispatch/1.0' } }
+        );
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            return {
+                lat: parseFloat(data[0].lat),
+                lng: parseFloat(data[0].lon),
+                display_name: data[0].display_name
+            };
+        }
+    } catch (e) {
+        console.warn('Erreur géocodage:', e);
+    }
+    
+    // Fallback: géocodage simple par ville
+    return geocodeCity(address.split(',')[0]);
+}
+saveTransport: async function() {
+    // Récupérer toutes les valeurs
+    const transport = {
+        client_name: document.getElementById('clientName')?.value,
+        client_phone: document.getElementById('clientPhone')?.value,
+        client_email: document.getElementById('clientEmail')?.value,
+        
+        pickup_street: document.getElementById('pickupStreet')?.value,
+        pickup_number: document.getElementById('pickupNumber')?.value,
+        pickup_postal: document.getElementById('pickupPostal')?.value,
+        pickup_city: document.getElementById('pickupCity')?.value,
+        pickup_note: document.getElementById('pickupNote')?.value,
+        
+        delivery_street: document.getElementById('deliveryStreet')?.value,
+        delivery_number: document.getElementById('deliveryNumber')?.value,
+        delivery_postal: document.getElementById('deliveryPostal')?.value,
+        delivery_city: document.getElementById('deliveryCity')?.value,
+        delivery_note: document.getElementById('deliveryNote')?.value,
+        
+        weight: parseFloat(document.getElementById('weight')?.value) || 1,
+        dimensions: document.getElementById('dimensions')?.value,
+        parcel_type: document.getElementById('parcelType')?.value,
+        priority: document.getElementById('priority')?.value || 'normal',
+        instructions: document.getElementById('specialInstructions')?.value,
+        
+        status: 'pending',
+        created_at: new Date()
+    };
+    
+    // Validation des champs obligatoires
+    if (!transport.pickup_city || !transport.delivery_city) {
+        alert('Veuillez remplir les villes de ramassage et livraison');
+        return;
+    }
+    
+    try {
+        // Construire les adresses complètes pour le géocodage
+        const pickupAddress = `${transport.pickup_street} ${transport.pickup_number}, ${transport.pickup_postal} ${transport.pickup_city}`.trim();
+        const deliveryAddress = `${transport.delivery_street} ${transport.delivery_number}, ${transport.delivery_postal} ${transport.delivery_city}`.trim();
+        
+        // Géocoder les adresses
+        const [pickupGeo, deliveryGeo] = await Promise.all([
+            geocodeAddress(pickupAddress || transport.pickup_city + ', Suisse'),
+            geocodeAddress(deliveryAddress || transport.delivery_city + ', Suisse')
+        ]);
+        
+        if (pickupGeo) {
+            transport.pickup_lat = pickupGeo.lat;
+            transport.pickup_lng = pickupGeo.lng;
+        }
+        if (deliveryGeo) {
+            transport.delivery_lat = deliveryGeo.lat;
+            transport.delivery_lng = deliveryGeo.lng;
+        }
+        
+        // Calculer la distance si les deux points sont géocodés
+        if (pickupGeo && deliveryGeo) {
+            try {
+                const response = await fetch(
+                    `https://router.project-osrm.org/route/v1/driving/${pickupGeo.lng},${pickupGeo.lat};${deliveryGeo.lng},${deliveryGeo.lat}?overview=false`
+                );
+                const data = await response.json();
+                if (data.routes?.[0]) {
+                    transport.distance_km = (data.routes[0].distance / 1000).toFixed(1);
+                    transport.duration_min = Math.round(data.routes[0].duration / 60);
+                }
+            } catch (e) {
+                console.warn('Calcul distance impossible', e);
+            }
+        }
+        
+        // Insérer dans Supabase
+        const { error } = await supabase
+            .from('orders')
+            .insert([transport]);
+        
+        if (error) throw error;
+        
+        alert('✅ Transport créé avec succès !');
+        UI.closeModal();
+        
+        // Recharger les données
+        updateMap();
+        updateList();
+        
+    } catch (error) {
+        console.error('Erreur création:', error);
+        alert('❌ Erreur lors de la création du transport');
+    }
+}
+newTransport: function() {
+    const modalTitle = document.getElementById('modal-title');
+    const modalContent = document.getElementById('modal-content');
+    
+    modalTitle.innerText = '📦 Nouveau transport';
+    modalContent.innerHTML = `
+        <style>
+            .form-section {
+                background: #f9fafb;
+                border-radius: 8px;
+                padding: 1rem;
+                margin-bottom: 1rem;
+                border: 1px solid #e5e7eb;
+            }
+            .form-section h4 {
+                margin: 0 0 1rem 0;
+                color: #374151;
+                font-size: 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            .form-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.75rem;
+            }
+            .form-field {
+                margin-bottom: 0.75rem;
+            }
+            .form-field label {
+                display: block;
+                margin-bottom: 0.25rem;
+                font-size: 0.875rem;
+                font-weight: 500;
+                color: #4b5563;
+            }
+            .form-field input, .form-field select, .form-field textarea {
+                width: 100%;
+                padding: 0.625rem;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 0.875rem;
+                transition: border-color 0.15s;
+            }
+            .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+                outline: none;
+                border-color: #2563eb;
+                box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            }
+            .form-field.full-width {
+                grid-column: span 2;
+            }
+            .badge-option {
+                display: flex;
+                gap: 0.5rem;
+                margin-top: 0.25rem;
+            }
+            .badge {
+                padding: 0.25rem 0.75rem;
+                border-radius: 20px;
+                font-size: 0.75rem;
+                font-weight: 500;
+                cursor: pointer;
+                border: 1px solid #d1d5db;
+                background: white;
+            }
+            .badge.selected {
+                background: #2563eb;
+                color: white;
+                border-color: #2563eb;
+            }
+            .badge.urgent.selected { background: #dc2626; border-color: #dc2626; }
+        </style>
 
+        <form id="transportForm" onsubmit="event.preventDefault(); UI.saveTransport();">
+            <!-- Section Client -->
+            <div class="form-section">
+                <h4>👤 Client</h4>
+                <div class="form-grid">
+                    <div class="form-field full-width">
+                        <label>Nom complet *</label>
+                        <input type="text" id="clientName" placeholder="Jean Dupont" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Téléphone</label>
+                        <input type="tel" id="clientPhone" placeholder="079 123 45 67">
+                    </div>
+                    <div class="form-field">
+                        <label>Email</label>
+                        <input type="email" id="clientEmail" placeholder="client@email.com">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Ramassage -->
+            <div class="form-section">
+                <h4>📍 Ramassage</h4>
+                <div class="form-grid">
+                    <div class="form-field full-width">
+                        <label>Rue *</label>
+                        <input type="text" id="pickupStreet" placeholder="Rue du Simplon" required>
+                    </div>
+                    <div class="form-field">
+                        <label>N°</label>
+                        <input type="text" id="pickupNumber" placeholder="12">
+                    </div>
+                    <div class="form-field">
+                        <label>Code postal *</label>
+                        <input type="text" id="pickupPostal" placeholder="1000" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Ville *</label>
+                        <input type="text" id="pickupCity" placeholder="Lausanne" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Référence / Info</label>
+                        <input type="text" id="pickupNote" placeholder="Étage, sonnette, code...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Livraison -->
+            <div class="form-section">
+                <h4>🎯 Livraison</h4>
+                <div class="form-grid">
+                    <div class="form-field full-width">
+                        <label>Rue *</label>
+                        <input type="text" id="deliveryStreet" placeholder="Rue du Mont-Blanc" required>
+                    </div>
+                    <div class="form-field">
+                        <label>N°</label>
+                        <input type="text" id="deliveryNumber" placeholder="8">
+                    </div>
+                    <div class="form-field">
+                        <label>Code postal *</label>
+                        <input type="text" id="deliveryPostal" placeholder="1200" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Ville *</label>
+                        <input type="text" id="deliveryCity" placeholder="Genève" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Référence / Info</label>
+                        <input type="text" id="deliveryNote" placeholder="Service réception, horaires...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Colis -->
+            <div class="form-section">
+                <h4>📦 Colis</h4>
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label>Poids (kg)</label>
+                        <input type="number" id="weight" step="0.1" min="0" value="1">
+                    </div>
+                    <div class="form-field">
+                        <label>Dimensions (cm)</label>
+                        <input type="text" id="dimensions" placeholder="30x20x15">
+                    </div>
+                    <div class="form-field">
+                        <label>Type de colis</label>
+                        <select id="parcelType">
+                            <option value="colis">Colis standard</option>
+                            <option value="document">Document</option>
+                            <option value="fragile">Fragile</option>
+                            <option value="palette">Palette</option>
+                            <option value="encombrant">Encombrant</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>Priorité</label>
+                        <div class="badge-option">
+                            <span class="badge selected" onclick="selectPriority(this, 'normal')">Normal</span>
+                            <span class="badge urgent" onclick="selectPriority(this, 'urgent')">⚠️ Urgent</span>
+                        </div>
+                        <input type="hidden" id="priority" value="normal">
+                    </div>
+                    <div class="form-field full-width">
+                        <label>Instructions spéciales</label>
+                        <textarea id="specialInstructions" rows="2" placeholder="Fragile, à remettre en main propre, code d'accès..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                <button type="button" onclick="UI.closeModal()" style="flex: 1; padding: 0.75rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 500; cursor: pointer;">
+                    Annuler
+                </button>
+                <button type="submit" style="flex: 2; padding: 0.75rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    <span>✅</span> Créer le transport
+                </button>
+            </div>
+        </form>
+    `;
+    
+    document.getElementById('modal').style.display = 'flex';
+    
+    // Fonction pour la sélection de priorité
+    window.selectPriority = function(element, value) {
+        document.querySelectorAll('.badge').forEach(b => b.classList.remove('selected'));
+        element.classList.add('selected');
+        document.getElementById('priority').value = value;
+    };
+}
 // Configuration Supabase (à remplacer avec vos vraies clés)
 const supabaseUrl = 'https://votre-projet.supabase.co';
 const supabaseKey = 'votre-cle-anon';
