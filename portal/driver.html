@@ -1,91 +1,605 @@
 <!DOCTYPE html>
 <html lang="fr">
-
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>Driver Léman-Courses</title>
-
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/@zxing/library@latest"></script>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script src="https://unpkg.com/html5-qrcode"></script>
-
-<link rel="stylesheet" href="css/style.css">
-
+    <meta charset="UTF-8">
+    <title>Léman Dispatch</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+    
+    <style>
+        /* DESIGN SOMBRE */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        
+        body { 
+            background: #111; 
+            height: 100vh; 
+            overflow: hidden; 
+            color: white;
+        }
+        
+        /* HEADER */
+        header {
+            background: #111;
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #facc15;
+            height: 70px;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #facc15;
+        }
+        
+        .btn {
+            background: #facc15;
+            color: #111;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .btn:hover {
+            background: #eab308;
+        }
+        
+        /* LAYOUT */
+        .container {
+            display: flex;
+            height: calc(100vh - 70px);
+        }
+        
+        /* SIDEBAR */
+        .sidebar {
+            width: 220px;
+            background: #111;
+            padding: 20px;
+            border-right: 1px solid #2a2a2a;
+        }
+        
+        .sidebar button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #1f2937;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 14px;
+        }
+        
+        .sidebar button:hover {
+            background: #facc15;
+            color: #111;
+        }
+        
+        /* CARTE */
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        /* PANEL DROIT */
+        .right-panel {
+            width: 320px;
+            background: #111;
+            border-left: 1px solid #2a2a2a;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .right-panel h3 {
+            color: #facc15;
+            margin-bottom: 20px;
+        }
+        
+        /* MODAL */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-box {
+            background: #1f2937;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid #facc15;
+        }
+        
+        .modal-header {
+            background: #111;
+            padding: 15px 20px;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            color: #facc15;
+        }
+        
+        .modal-header button {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .modal-content {
+            padding: 20px;
+        }
+        
+        /* FORMULAIRE */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            background: #111;
+            border: 1px solid #2a2a2a;
+            color: white;
+            border-radius: 4px;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #facc15;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+        }
+        
+        /* LISTE TRANSPORTS */
+        .order-item {
+            background: #1f2937;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 3px solid #facc15;
+        }
+        
+        .order-item.urgent {
+            border-left-color: #ef4444;
+        }
+        
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .client-name {
+            font-weight: bold;
+            color: white;
+        }
+        
+        .order-status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: #2a2a2a;
+        }
+        
+        .order-address {
+            font-size: 13px;
+            color: #aaa;
+            margin: 8px 0;
+        }
+        
+        .order-distance {
+            font-size: 12px;
+            color: #facc15;
+        }
+    </style>
 </head>
-
 <body>
 
-<header class="topbar">
-
-<h1>🚚 Léman-Courses</h1>
-<p>Interface chauffeur</p>
-
+<header>
+    <div class="logo">🚚 Léman Dispatch</div>
+    <button class="btn" onclick="openNewTransportModal()">➕ Créer transport</button>
 </header>
 
-<main class="container">
+<div class="container">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <button>🗺️ Dispatch</button>
+        <button>📦 Transports</button>
+        <button>👤 Clients</button>
+        <button>🚚 Chauffeurs</button>
+        <button>💰 Factures</button>
+    </div>
+    
+    <!-- CARTE -->
+    <div class="map-container">
+        <div id="map"></div>
+    </div>
+    
+    <!-- PANEL DROIT -->
+    <div class="right-panel">
+        <h3>📋 Transports</h3>
+        <div id="ordersList">
+            Chargement...
+        </div>
+    </div>
+</div>
 
-<!-- tournée -->
+<!-- MODAL -->
+<div id="modal" class="modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 id="modalTitle">Nouveau transport</h3>
+            <button onclick="closeModal()">✖</button>
+        </div>
+        <div class="modal-content" id="modalContent">
+            <!-- Le formulaire sera injecté ici -->
+        </div>
+    </div>
+</div>
 
-<section class="card">
+<!-- SCRIPTS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<h2>📦 Tournée du jour</h2>
-
-<div id="driverOrders"></div>
-
-</section>
-
-
-<!-- carte -->
-
-<section class="card">
-
-<h2>🗺 Carte tournée</h2>
-
-<div id="map" style="height:350px;border-radius:10px;"></div>
-
-</section>
-
-
-<!-- scanner -->
-
-<section class="card">
-
-<h2>📷 Scanner colis</h2>
-
-<div id="qr-reader" style="width:300px"></div>
-
-<button onclick="startScanner()">
-Scanner colis
-</button>
-
-</section>
-
-
-<!-- actions -->
-
-<section class="card">
-
-<h2>⚙ Actions</h2>
-
-<button onclick="startPause()">⏸ Pause</button>
-
-<button onclick="resumeWork()">▶ Reprendre</button>
-
-</section>
-
-</main>
-
-
-<script src="JS/config.js"></script>
-<script src="JS/driver.js"></script>
+<script>
+    // ==================== CONFIGURATION ====================
+    // 🔴 REMPLACEZ PAR VOS IDENTIFIANTS SUPABASE
+    const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
+    
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    
+    // Variables globales
+    let map;
+    let markers;
+    let mapInitialized = false;
+    const geoCache = {};
+    
+    // ==================== INITIALISATION CARTE ====================
+    function initMap() {
+        console.log("🔄 Initialisation carte...");
+        
+        // Vérifier que l'élément map existe
+        const mapElement = document.getElementById('map');
+        if (!mapElement) {
+            console.error("❌ Élément map non trouvé");
+            return;
+        }
+        
+        try {
+            // Créer la carte
+            map = L.map('map').setView([46.8, 8.2], 8);
+            
+            // Ajouter les tuiles OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            
+            // Groupe de marqueurs
+            markers = L.markerClusterGroup();
+            map.addLayer(markers);
+            
+            mapInitialized = true;
+            console.log("✅ Carte initialisée avec succès");
+            
+            // Charger les transports
+            loadOrders();
+            
+        } catch (error) {
+            console.error("❌ Erreur initialisation carte:", error);
+        }
+    }
+    
+    // ==================== GÉOCODAGE ====================
+    async function geocodeCity(city) {
+        if (!city) return null;
+        
+        const key = city.toLowerCase().trim();
+        if (geoCache[key]) return geoCache[key];
+        
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city + ', Suisse')}&limit=1`,
+                { headers: { 'User-Agent': 'LemanDispatch/1.0' } }
+            );
+            const data = await response.json();
+            
+            if (data && data.length > 0) {
+                const coords = {
+                    lat: parseFloat(data[0].lat),
+                    lng: parseFloat(data[0].lon)
+                };
+                geoCache[key] = coords;
+                return coords;
+            }
+        } catch (e) {
+            console.warn('Erreur géocodage:', e);
+        }
+        return null;
+    }
+    
+    // ==================== CHARGEMENT DES TRANSPORTS ====================
+    async function loadOrders() {
+        try {
+            const { data, error } = await supabase
+                .from('orders')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            
+            console.log(`📦 ${data.length} transports chargés`);
+            
+            // Mettre à jour la carte
+            if (mapInitialized && markers) {
+                updateMap(data);
+            }
+            
+            // Mettre à jour la liste
+            updateOrdersList(data);
+            
+        } catch (error) {
+            console.error('Erreur chargement:', error);
+        }
+    }
+    
+    // ==================== MISE À JOUR CARTE ====================
+    function updateMap(orders) {
+        markers.clearLayers();
+        
+        if (!orders || orders.length === 0) return;
+        
+        const bounds = [];
+        let count = 1;
+        
+        orders.forEach(order => {
+            // Pour l'instant, on utilise la ville de livraison
+            // Idéalement, il faudrait géocoder l'adresse complète
+            if (order.delivery_city) {
+                // Note: dans une version réelle, il faudrait await geocodeCity
+                // Mais pour que ça marche tout de suite, on utilise des coordonnées approximatives
+                // En attendant d'avoir les vraies coordonnées en base
+                
+                // Simulation de coordonnées pour la démo
+                let lat, lng;
+                
+                if (order.delivery_city.includes('Lausanne')) {
+                    lat = 46.519; lng = 6.632;
+                } else if (order.delivery_city.includes('Genève')) {
+                    lat = 46.204; lng = 6.143;
+                } else if (order.delivery_city.includes('Yverdon')) {
+                    lat = 46.778; lng = 6.641;
+                } else {
+                    lat = 46.8; lng = 8.2; // Centre suisse
+                }
+                
+                // Couleur selon le statut
+                let color = '#facc15'; // pending
+                if (order.status === 'urgent') color = '#ef4444';
+                if (order.status === 'planned') color = '#3b82f6';
+                if (order.status === 'delivered') color = '#10b981';
+                
+                const icon = L.divIcon({
+                    html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${count}</div>`,
+                    className: '',
+                    iconSize: [24, 24]
+                });
+                
+                const marker = L.marker([lat, lng], { icon });
+                
+                marker.bindPopup(`
+                    <b>${order.client_name || 'Sans client'}</b><br>
+                    📍 ${order.pickup_city} → ${order.delivery_city}<br>
+                    ${order.distance_km ? `📏 ${order.distance_km} km` : ''}
+                `);
+                
+                markers.addLayer(marker);
+                bounds.push([lat, lng]);
+                count++;
+            }
+        });
+        
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [30, 30] });
+        }
+    }
+    
+    // ==================== MISE À JOUR LISTE ====================
+    function updateOrdersList(orders) {
+        const listEl = document.getElementById('ordersList');
+        
+        if (!orders || orders.length === 0) {
+            listEl.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">Aucun transport</div>';
+            return;
+        }
+        
+        let html = '';
+        
+        orders.forEach(order => {
+            html += `
+                <div class="order-item ${order.priority === 'urgent' ? 'urgent' : ''}">
+                    <div class="order-header">
+                        <span class="client-name">${order.client_name || 'Sans client'}</span>
+                        <span class="order-status">${order.status}</span>
+                    </div>
+                    <div class="order-address">
+                        📍 ${order.pickup_city || '?'} → ${order.delivery_city || '?'}
+                    </div>
+                    ${order.distance_km ? `
+                        <div class="order-distance">
+                            📏 ${order.distance_km} km • ⏱️ ${order.duration_min} min
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        });
+        
+        listEl.innerHTML = html;
+    }
+    
+    // ==================== FONCTIONS MODAL ====================
+    window.openNewTransportModal = function() {
+        console.log("🆕 Ouverture modal");
+        
+        document.getElementById('modalTitle').innerText = '➕ Nouveau transport';
+        document.getElementById('modalContent').innerHTML = `
+            <form onsubmit="event.preventDefault(); saveTransport();">
+                <div class="form-group">
+                    <label>Nom client *</label>
+                    <input type="text" id="clientName" required placeholder="Jean Dupont">
+                </div>
+                
+                <div class="form-group">
+                    <label>Téléphone</label>
+                    <input type="tel" id="clientPhone" placeholder="079 123 45 67">
+                </div>
+                
+                <h4 style="color:#facc15; margin:15px 0 10px;">📍 Ramassage</h4>
+                
+                <div class="form-group">
+                    <label>Ville *</label>
+                    <input type="text" id="pickupCity" required placeholder="Lausanne">
+                </div>
+                
+                <h4 style="color:#facc15; margin:15px 0 10px;">🎯 Livraison</h4>
+                
+                <div class="form-group">
+                    <label>Ville *</label>
+                    <input type="text" id="deliveryCity" required placeholder="Genève">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Poids (kg)</label>
+                        <input type="number" id="weight" value="1" step="0.1">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Priorité</label>
+                        <select id="priority">
+                            <option value="normal">Normal</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button type="button" onclick="closeModal()" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px; cursor:pointer;">Annuler</button>
+                    <button type="submit" style="flex:2; padding:10px; background:#facc15; color:#111; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Créer transport</button>
+                </div>
+            </form>
+        `;
+        
+        document.getElementById('modal').style.display = 'flex';
+    };
+    
+    window.closeModal = function() {
+        document.getElementById('modal').style.display = 'none';
+    };
+    
+    // ==================== SAUVEGARDE TRANSPORT ====================
+    window.saveTransport = async function() {
+        const client = document.getElementById('clientName')?.value;
+        const phone = document.getElementById('clientPhone')?.value;
+        const pickup = document.getElementById('pickupCity')?.value;
+        const delivery = document.getElementById('deliveryCity')?.value;
+        const weight = parseFloat(document.getElementById('weight')?.value) || 1;
+        const priority = document.getElementById('priority')?.value || 'normal';
+        
+        if (!client || !pickup || !delivery) {
+            alert('Veuillez remplir tous les champs obligatoires');
+            return;
+        }
+        
+        const transport = {
+            client_name: client,
+            client_phone: phone,
+            pickup_city: pickup,
+            delivery_city: delivery,
+            weight: weight,
+            priority: priority,
+            status: 'pending',
+            created_at: new Date()
+        };
+        
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .insert([transport]);
+            
+            if (error) throw error;
+            
+            alert('✅ Transport créé avec succès !');
+            closeModal();
+            loadOrders(); // Recharger les données
+            
+        } catch (error) {
+            console.error('Erreur:', error);
+            alert('❌ Erreur lors de la création');
+        }
+    };
+    
+    // ==================== INITIALISATION ====================
+    window.addEventListener('load', function() {
+        console.log("🚀 Démarrage...");
+        
+        // Initialiser la carte
+        initMap();
+        
+        // Charger les transports
+        loadOrders();
+        
+        // Rafraîchissement automatique toutes les 30 secondes
+        setInterval(loadOrders, 30000);
+    });
+</script>
 
 </body>
 </html>
