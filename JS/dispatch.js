@@ -1,5 +1,15 @@
 console.log("dispatch chargé")
-/* PICKUP */
+
+async function startDispatch(){
+
+await loadDispatchStats()
+await loadOrdersMap()
+await loadDrivers()
+await loadOrdersList()
+
+}
+
+startDispatch()
 
 const pickupGeo = await geocodeCity(order.pickup_city)
 
