@@ -223,20 +223,23 @@ const list = document.getElementById("orders-list")
 
 list.innerHTML = ""
 
-data.forEach(order=>{
+data.forEach(async order=>{
 
 const item = document.createElement("div")
 
 item.className = "order-item"
 
+const route = await getRouteInfo(order.delivery_city)
+
 item.innerHTML = `
 📦 #${order.id}<br>
 ${order.delivery_city}<br>
-
-<button onclick="openRoute('${order.delivery_city}')">
-Itinéraire
-</button>
+${route || ""}
 `
+
+item.onclick = ()=>{
+focusTransport(order.delivery_city)
+}
 
 list.appendChild(item)
 
