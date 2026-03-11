@@ -75,40 +75,44 @@
     <script src="config.js"></script>
     
     <script>
-        // UN SEUL BLOC SCRIPT - PAS DE DOUBLON
-        
-        // Vérifier que la config est chargée
-        if (!window.SUPABASE_CONFIG) {
-            document.body.innerHTML = '<div style="color:red; padding:20px;">❌ config.js manquant</div>';
-        } else {
-            console.log("✅ Config chargée");
+        // ATTENDRE QUE TOUT SOIT CHARGÉ
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("✅ DOM chargé");
             
-            // UNE SEULE déclaration de supabase
-            const supabase = window.supabase.createClient(
-                window.SUPABASE_CONFIG.url,
-                window.SUPABASE_CONFIG.key
-            );
+            // Vérifier que window.supabase existe (créé par config.js)
+            if (!window.supabase) {
+                document.body.innerHTML = '<div style="color:red; padding:20px;">❌ Supabase non initialisé dans config.js</div>';
+                return;
+            }
             
-            // Carte
+            console.log("✅ Supabase prêt");
+            
+            // ===== CARTE =====
             const map = L.map('map').setView([46.8, 8.2], 8);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             
-            // Charger les transports
+            // ===== CHARGER LES TRANSPORTS =====
             async function chargerTransports() {
-                const { data } = await supabase.from('orders').select('*');
+                const { data } = await window.supabase.from('orders').select('*');
+                
                 if (data) {
+                    console.log(`${data.length} transports chargés`);
+                    
                     data.forEach(t => {
                         let lat = 46.8, lng = 8.2;
-                        if (t.delivery_city?.includes('Lausanne')) { lat = 46.52; lng = 6.63; }
-                        if (t.delivery_city?.includes('Genève')) { lat = 46.20; lng = 6.14; }
+                        const ville = t.delivery_city?.toLowerCase() || '';
+                        
+                        if (ville.includes('lausanne')) { lat = 46.52; lng = 6.63; }
+                        if (ville.includes('geneve')) { lat = 46.20; lng = 6.14; }
+                        if (ville.includes('yverdon')) { lat = 46.78; lng = 6.64; }
+                        
                         L.marker([lat, lng]).addTo(map)
-                            .bindPopup(`${t.client_name}<br>${t.pickup_city} → ${t.delivery_city}`);
+                            .bindPopup(`<b>${t.client_name || 'Sans client'}</b><br>📍 ${t.pickup_city} → ${t.delivery_city}`);
                     });
                 }
             }
-            chargerTransports();
             
-            // Fonctions globales
+            // ===== FONCTIONS GLOBALES =====
             window.ouvrirFormulaire = function() {
                 document.getElementById('formulaire').style.display = 'block';
             };
@@ -127,12 +131,20 @@
                     created_at: new Date()
                 };
                 
-                await supabase.from('orders').insert([transport]);
-                alert('✅ Créé !');
-                fermerFormulaire();
-                location.reload();
+                const { error } = await window.supabase.from('orders').insert([transport]);
+                
+                if (error) {
+                    alert('❌ Erreur: ' + error.message);
+                } else {
+                    alert('✅ Transport créé !');
+                    fermerFormulaire();
+                    location.reload();
+                }
             };
-        }
+            
+            // ===== LANCEMENT =====
+            chargerTransports();
+        });
     </script>
     
 </body>
