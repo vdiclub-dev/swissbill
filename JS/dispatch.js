@@ -16,7 +16,6 @@ map.addLayer(markers)
 let routeLine = null
 const geoCache = {}
 
-const tourColors = ["red","blue","green","orange","purple"]
 
 /* couleurs tournées */
 const tourColors = ["red", "blue", "green", "orange", "purple"]
