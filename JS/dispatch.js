@@ -161,56 +161,64 @@ Créer transport
 }
 window.createTransport = async function(){
 
-const client = document.getElementById("client").value.trim()
-const contactName = document.getElementById("contact_name").value.trim()
-const contactPhone = document.getElementById("contact_phone").value.trim()
-const pickupAddress = document.getElementById("pickup_address").value.trim()
-const pickupCity = document.getElementById("pickup_city").value.trim()
-const deliveryAddress = document.getElementById("delivery_address").value.trim()
-const deliveryCity = document.getElementById("delivery_city").value.trim()
-const priority = document.getElementById("priority").value
-const weight = parseFloat(document.getElementById("weight").value || "0")
-const note = document.getElementById("note").value.trim()
+const client = document.getElementById("client").value
+const phone = document.getElementById("phone").value
 
-if(!client){
-  alert("Le nom du client est obligatoire")
-  return
-}
+const pickupStreet = document.getElementById("pickup_street").value
+const pickupNumber = document.getElementById("pickup_number").value
+const pickupPostal = document.getElementById("pickup_postal").value
+const pickupCity = document.getElementById("pickup_city").value
+
+const deliveryStreet = document.getElementById("delivery_street").value
+const deliveryNumber = document.getElementById("delivery_number").value
+const deliveryPostal = document.getElementById("delivery_postal").value
+const deliveryCity = document.getElementById("delivery_city").value
+
+const weight = document.getElementById("weight").value
+const priority = document.getElementById("priority").value
+const note = document.getElementById("note").value
 
 if(!pickupCity || !deliveryCity){
-  alert("La ville de ramassage et la ville de livraison sont obligatoires")
-  return
-}
-
-const payload = {
-  client_name: client,
-  contact_name: contactName || null,
-  contact_phone: contactPhone || null,
-  pickup_address: pickupAddress || null,
-  pickup_city: pickupCity,
-  delivery_address: deliveryAddress || null,
-  delivery_city: deliveryCity,
-  priority: priority,
-  weight: isNaN(weight) ? 0 : weight,
-  note: note || null,
-  status: "pending"
+alert("Ville pickup et livraison obligatoires")
+return
 }
 
 const { error } = await supabase
-  .from("orders")
-  .insert([payload])
+.from("orders")
+.insert([{
+
+client_name:client,
+phone:phone,
+
+pickup_street:pickupStreet,
+pickup_number:pickupNumber,
+pickup_postal:pickupPostal,
+pickup_city:pickupCity,
+
+delivery_street:deliveryStreet,
+delivery_number:deliveryNumber,
+delivery_postal:deliveryPostal,
+delivery_city:deliveryCity,
+
+priority:priority,
+weight:weight,
+note:note,
+
+status:"pending"
+
+}])
 
 if(error){
-  console.error("Erreur insert orders :", error)
-  alert("Erreur création transport")
-  return
+console.error(error)
+alert("Erreur création transport")
+return
 }
 
 alert("Transport créé")
 
 closeModal()
 
-await refreshDispatch()
+refreshDispatch()
 
 }
 /* ---------------------- */
