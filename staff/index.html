@@ -1,20 +1,373 @@
-<!-- Alternative sans caméra -->
-<div style="margin-top:15px;">
-    <p style="color:#64748b;">Ou entrez manuellement :</p>
-    <div style="display:flex; gap:10px;">
-        <input type="text" id="manualId" placeholder="TR-2401" style="flex:1; padding:12px; border:2px solid #e2e8f0; border-radius:8px;">
-        <button onclick="manuelScan()" class="btn-primary" style="padding:12px;">OK</button>
-    </div>
-</div>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Léman-Courses | Préparation</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
+        
+        body {
+            background: #f1f5f9;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: #0f172a;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid #e53935;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .logo i { color: #e53935; }
+        
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 0 15px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .card h2 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            color: #0f172a;
+        }
+        
+        .card h2 i { color: #e53935; }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #475569;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #e53935;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .btn-primary {
+            background: #e53935;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #c62828;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: #e53935;
+            border: 2px solid #e53935;
+        }
+        
+        .fixed-address {
+            background: #e2e8f0;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            border-left: 4px solid #0f172a;
+        }
+        
+        .speed-option {
+            text-align: center;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .speed-option.selected {
+            background: #e53935;
+            color: white;
+            border-color: #e53935;
+        }
+        
+        .pdf-preview {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            border: 2px dashed #e53935;
+            display: none;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
 
-<script>
-function manuelScan() {
-    const id = document.getElementById('manualId').value;
-    if (id) {
-        document.getElementById('transportId').textContent = id;
-        document.getElementById('departAddress').textContent = 'Impasse des Griottes 3, 1462 Yvonand';
-        document.getElementById('formSection').style.display = 'block';
-        showNotification('✅ Transport chargé manuellement');
-    }
-}
-</script>
+    <div class="header">
+        <div class="logo">
+            <i class="fas fa-box"></i> Léman-Courses | Préparation
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- NUMÉRO TRANSPORT -->
+        <div class="card">
+            <h2><i class="fas fa-barcode"></i> Transport</h2>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Numéro transport</label>
+                    <input type="text" id="transportId" placeholder="TR-2401" value="TR-2401">
+                </div>
+                
+                <div class="form-group">
+                    <label>Client</label>
+                    <select id="clientSelect">
+                        <option value="CL2025-001">Dupont Jean (CL2025-001)</option>
+                        <option value="CL2025-002">Martin SA (CL2025-002)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ADRESSES -->
+        <div class="card">
+            <h2><i class="fas fa-map-marker-alt"></i> Adresses</h2>
+            
+            <div class="fixed-address" id="departAddress">
+                <i class="fas fa-warehouse"></i> <strong>Départ:</strong> Impasse des Griottes 3, 1462 Yvonand
+            </div>
+            
+            <div class="form-group">
+                <label>Livraison</label>
+                <select id="deliveryAddress">
+                    <option value="Rue du Lac 12, 1000 Lausanne">Rue du Lac 12, Lausanne</option>
+                    <option value="Place de la Gare 5, 1200 Genève">Place de la Gare 5, Genève</option>
+                    <option value="Grand-Rue 8, 2000 Neuchâtel">Grand-Rue 8, Neuchâtel</option>
+                    <option value="autre">Autre...</option>
+                </select>
+            </div>
+            
+            <div id="autreAdresse" style="display:none;">
+                <input type="text" id="nouvelleAdresse" placeholder="Rue, NPA, Ville" class="form-group">
+            </div>
+        </div>
+        
+        <!-- COLIS -->
+        <div class="card">
+            <h2><i class="fas fa-box"></i> Colis</h2>
+            
+            <div class="grid-3">
+                <div class="form-group">
+                    <label>Poids (kg)</label>
+                    <input type="number" id="weight" step="0.1" value="1.0">
+                </div>
+                
+                <div class="form-group">
+                    <label>Quantité</label>
+                    <input type="number" id="quantity" value="1" min="1">
+                </div>
+                
+                <div class="form-group">
+                    <label>Type</label>
+                    <select id="parcelType">
+                        <option value="Colis">Colis</option>
+                        <option value="Fragile">Fragile</option>
+                        <option value="Palette">Palette</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Vitesse</label>
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
+                    <div class="speed-option" onclick="selectSpeed(this, '6h')">🚀 6h</div>
+                    <div class="speed-option selected" onclick="selectSpeed(this, '24h')">📦 24h</div>
+                    <div class="speed-option" onclick="selectSpeed(this, '48h')">📬 48h</div>
+                </div>
+                <input type="hidden" id="speed" value="24h">
+            </div>
+            
+            <div class="form-group">
+                <label>Instructions</label>
+                <textarea id="instructions" rows="2" placeholder="Fragile, code..."></textarea>
+            </div>
+            
+            <button class="btn btn-primary" onclick="genererPDF()">
+                <i class="fas fa-file-pdf"></i> Générer PDF étiquette
+            </button>
+            
+            <button class="btn btn-success" onclick="envoyer()">
+                <i class="fas fa-paper-plane"></i> Envoyer au dispatch
+            </button>
+            
+            <div id="pdfPreview" class="pdf-preview"></div>
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+    
+    <script>
+        // ===== SÉLECTION VITESSE =====
+        function selectSpeed(element, speed) {
+            document.querySelectorAll('.speed-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            document.getElementById('speed').value = speed;
+        }
+        
+        // ===== GÉNÉRER PDF =====
+        function genererPDF() {
+            const id = document.getElementById('transportId').value;
+            const depart = document.getElementById('departAddress').textContent.replace('Départ:', '').trim();
+            const livraison = document.getElementById('deliveryAddress').value;
+            const poids = document.getElementById('weight').value;
+            const quantite = document.getElementById('quantity').value;
+            const type = document.getElementById('parcelType').value;
+            const vitesse = document.getElementById('speed').value;
+            const instructions = document.getElementById('instructions').value;
+            
+            // Données pour QR
+            const qrData = `${id}|${depart}|${livraison}|${vitesse}`;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+            
+            // Aperçu
+            document.getElementById('pdfPreview').innerHTML = `
+                <h3 style="margin-bottom:10px;">📄 Étiquette</h3>
+                <div style="text-align:center; background:white; padding:15px; border-radius:8px;">
+                    <h3 style="color:#e53935;">Transport #${id}</h3>
+                    <img src="${qrUrl}" style="width:150px; margin:10px 0;">
+                    <p><strong>Départ:</strong> ${depart}</p>
+                    <p><strong>Livraison:</strong> ${livraison}</p>
+                    <p><strong>Poids:</strong> ${poids}kg | Qté: ${quantite}</p>
+                    <p><strong>Type:</strong> ${type} | ${vitesse}</p>
+                    ${instructions ? `<p>📝 ${instructions}</p>` : ''}
+                </div>
+            `;
+            document.getElementById('pdfPreview').style.display = 'block';
+            
+            showNotification('✅ PDF généré');
+        }
+        
+        // ===== ENVOYER AU DISPATCH =====
+        function envoyer() {
+            const transport = {
+                id: document.getElementById('transportId').value,
+                client: document.getElementById('clientSelect').value,
+                livraison: document.getElementById('deliveryAddress').value,
+                poids: document.getElementById('weight').value,
+                quantite: document.getElementById('quantity').value,
+                type: document.getElementById('parcelType').value,
+                vitesse: document.getElementById('speed').value,
+                instructions: document.getElementById('instructions').value,
+                timestamp: new Date()
+            };
+            
+            console.log("✅ Transport préparé:", transport);
+            showNotification('✅ Envoyé au dispatch');
+            
+            if (transport.vitesse === '6h') {
+                alert('🚨 URGENT 6H !');
+            }
+        }
+        
+        // ===== GESTION ADRESSE =====
+        document.getElementById('deliveryAddress').addEventListener('change', function() {
+            document.getElementById('autreAdresse').style.display = 
+                this.value === 'autre' ? 'block' : 'none';
+        });
+        
+        // ===== NOTIFICATION =====
+        function showNotification(msg) {
+            const notif = document.getElementById('notification');
+            notif.textContent = '✅ ' + msg;
+            notif.style.display = 'block';
+            setTimeout(() => { notif.style.display = 'none'; }, 2000);
+        }
+    </script>
+    
+</body>
+</html>
