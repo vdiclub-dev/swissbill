@@ -495,7 +495,11 @@ tourIndex++
 marker.bindPopup(`
 Transport #${order.id}<br>
 Destination : ${order.delivery_city}<br>
-Statut : ${order.status}
+Statut : ${order.status}<br><br>
+
+<button onclick="openRoute('${order.delivery_city}')">
+Navigation
+</button>
 `)
 
 markers.addLayer(marker)
