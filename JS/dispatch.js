@@ -73,93 +73,131 @@ document.getElementById("modal").style.display="none"
 /* CREER TRANSPORT */
 /* ------------------ */
 
-window.newTransport=function(){
+window.newTransport = function(){
 
 openModal(
 "Créer transport",
-
 `
-<div class="transport-form">
+<div class="dispatch-form">
 
-<div class="form-col">
+  <div class="dispatch-form__section dispatch-form__section--compact">
+    <div class="dispatch-form__grid dispatch-form__grid--2">
+      <div class="dispatch-field">
+        <label>Client</label>
+        <input id="client" type="text" placeholder="Nom du client">
+      </div>
 
-<h3>Client</h3>
+      <div class="dispatch-field">
+        <label>Téléphone</label>
+        <input id="phone" type="text" placeholder="079 000 00 00">
+      </div>
+    </div>
+  </div>
 
-<label>Nom</label>
-<input id="client">
+  <div class="dispatch-form__section">
+    <div class="dispatch-form__section-title">Ramassage</div>
 
-<label>Téléphone</label>
-<input id="phone">
+    <div class="dispatch-form__grid dispatch-form__grid--4">
+      <div class="dispatch-field dispatch-field--span-2">
+        <label>Rue</label>
+        <input id="pickup_street" type="text" placeholder="Rue du pickup">
+      </div>
 
-</div>
+      <div class="dispatch-field">
+        <label>N°</label>
+        <input id="pickup_number" type="text" placeholder="12">
+      </div>
 
-<div class="form-row">
+      <div class="dispatch-field">
+        <label>Code postal</label>
+        <input id="pickup_postal" type="text" placeholder="1000">
+      </div>
+    </div>
 
-<div class="form-col">
+    <div class="dispatch-form__grid dispatch-form__grid--2">
+      <div class="dispatch-field">
+        <label>Ville</label>
+        <input id="pickup_city" type="text" placeholder="Lausanne">
+      </div>
 
-<h3>Pickup</h3>
+      <div class="dispatch-field">
+        <label>Référence pickup</label>
+        <input id="pickup_note" type="text" placeholder="Quai, étage, sonnette…">
+      </div>
+    </div>
+  </div>
 
-<label>Rue</label>
-<input id="pickup_street">
+  <div class="dispatch-form__section">
+    <div class="dispatch-form__section-title">Livraison</div>
 
-<label>N°</label>
-<input id="pickup_number">
+    <div class="dispatch-form__grid dispatch-form__grid--4">
+      <div class="dispatch-field dispatch-field--span-2">
+        <label>Rue</label>
+        <input id="delivery_street" type="text" placeholder="Rue de livraison">
+      </div>
 
-<label>Code postal</label>
-<input id="pickup_postal">
+      <div class="dispatch-field">
+        <label>N°</label>
+        <input id="delivery_number" type="text" placeholder="8">
+      </div>
 
-<label>Ville</label>
-<input id="pickup_city">
+      <div class="dispatch-field">
+        <label>Code postal</label>
+        <input id="delivery_postal" type="text" placeholder="1200">
+      </div>
+    </div>
 
-</div>
+    <div class="dispatch-form__grid dispatch-form__grid--2">
+      <div class="dispatch-field">
+        <label>Ville</label>
+        <input id="delivery_city" type="text" placeholder="Genève">
+      </div>
 
-<div class="form-col">
+      <div class="dispatch-field">
+        <label>Référence livraison</label>
+        <input id="delivery_note" type="text" placeholder="Service, réception, étage…">
+      </div>
+    </div>
+  </div>
 
-<h3>Livraison</h3>
+  <div class="dispatch-form__section dispatch-form__section--compact">
+    <div class="dispatch-form__section-title">Colis</div>
 
-<label>Rue</label>
-<input id="delivery_street">
+    <div class="dispatch-form__grid dispatch-form__grid--3">
+      <div class="dispatch-field">
+        <label>Poids (kg)</label>
+        <input id="weight" type="number" value="1" min="0" step="0.1">
+      </div>
 
-<label>N°</label>
-<input id="delivery_number">
+      <div class="dispatch-field">
+        <label>Priorité</label>
+        <select id="priority">
+          <option value="normal">Normal</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
 
-<label>Code postal</label>
-<input id="delivery_postal">
+      <div class="dispatch-field">
+        <label>Type</label>
+        <select id="parcel_type">
+          <option value="colis">Colis</option>
+          <option value="document">Document</option>
+          <option value="caisse">Caisse</option>
+          <option value="palette">Palette</option>
+        </select>
+      </div>
+    </div>
 
-<label>Ville</label>
-<input id="delivery_city">
+    <div class="dispatch-field">
+      <label>Remarque générale</label>
+      <textarea id="note" placeholder="Fragile, urgent avant 10h, remise contre signature…"></textarea>
+    </div>
+  </div>
 
-</div>
-
-</div>
-
-<div class="form-col">
-
-<h3>Colis</h3>
-
-<label>Poids</label>
-<input id="weight" type="number" value="1">
-
-<label>Priorité</label>
-
-<select id="priority">
-<option value="normal">Normal</option>
-<option value="urgent">Urgent</option>
-</select>
-
-<label>Remarque</label>
-
-<textarea id="note"></textarea>
-
-</div>
-
-<div class="form-actions">
-
-<button class="btn" onclick="createTransport()">
-Créer transport
-</button>
-
-</div>
+  <div class="dispatch-form__actions">
+    <button class="btn btn-secondary" type="button" onclick="closeModal()">Annuler</button>
+    <button class="btn" type="button" onclick="createTransport()">Créer transport</button>
+  </div>
 
 </div>
 `
