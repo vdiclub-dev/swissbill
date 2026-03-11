@@ -195,46 +195,47 @@ Créer transport
 
 }
 
-window.createTransport = async function () {
-  const cityInput = document.getElementById("dest")
+window.createTransport = async function(){
 
-  if (!cityInput) {
-    alert("Champ destination introuvable")
-    return
-  }
+const clientId = document.getElementById("clientSelect").value
+const priority = document.getElementById("priority").value
+const weight = document.getElementById("weight").value
 
-  const city = cityInput.value.trim()
+const { data:client } = await supabase
+.from("clients")
+.select("*")
+.eq("id",clientId)
+.single()
 
-  if (!city) {
-    alert("Veuillez saisir une destination")
-    return
-  }
+const { error } = await supabase
+.from("orders")
+.insert([{
 
-  const { error } = await supabase
-    .from("orders")
-    .insert([
-      {
-        delivery_city: city,
-        pickup: "Yverdon",
-        delivery: city,
-        speed: "eco",
-        weight: 1,
-        status: "pending"
-      }
-    ])
+client_id:client.id,
+client_name:client.name,
+delivery_city:client.city,
+address:client.address,
 
-  if (error) {
-    console.error(error)
-    alert("Erreur création transport")
-    return
-  }
+pickup:"Yverdon",
+status:"pending",
+priority:priority,
+weight:weight
 
-  alert("Transport créé")
-  closeModal()
+}])
 
-  await refreshDispatch()
+if(error){
+console.error(error)
+alert("Erreur création transport")
+return
 }
 
+alert("Transport créé")
+
+closeModal()
+
+refreshDispatch()
+
+}
 /* ---------------------- */
 /* TOURNÉE */
 /* ---------------------- */
