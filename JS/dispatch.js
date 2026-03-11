@@ -152,18 +152,15 @@ if(order.status === "delivered") color = "green"
 
 /* créer marqueur */
 
-L.circleMarker([lat,lng],{
-radius:8,
-color:color,
-fillColor:color,
-fillOpacity:0.9
-})
-.addTo(map)
-.bindPopup(`
+const marker = L.marker([lat,lng])
+
+marker.bindPopup(`
 Transport #${order.id}<br>
 Destination : ${order.delivery_city}<br>
 Statut : ${order.status}
 `)
+
+markers.addLayer(marker)
 
 bounds.push([lat,lng])
 
