@@ -28,15 +28,6 @@ points.push([geo.lat,geo.lng])
 if(points.length < 2) return
 
 L.polyline(points,{
-color:"blue",
-weight:4
-}).addTo(map)
-
-}
-
-/* dessiner ligne */
-
-L.polyline(points,{
 color:"red",
 weight:4,
 opacity:0.8
