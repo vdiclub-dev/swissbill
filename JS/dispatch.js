@@ -1,5 +1,56 @@
 console.log("dispatch chargé")
 
+
+
+async function optimizeTour(orders){
+
+const startCity = "Yverdon"
+
+const start = await geocodeCity(startCity)
+
+let remaining = [...orders]
+let route = []
+let current = start
+
+while(remaining.length){
+
+let bestIndex = -1
+let bestDistance = Infinity
+
+for(let i=0;i<remaining.length;i++){
+
+const geo = await geocodeCity(remaining[i].delivery_city)
+
+if(!geo) continue
+
+const routeReq = await fetch(
+`https://router.project-osrm.org/route/v1/driving/${current.lng},${current.lat};${geo.lng},${geo.lat}?overview=false`
+)
+
+const data = await routeReq.json()
+
+const distance = data.routes[0].distance
+
+if(distance < bestDistance){
+bestDistance = distance
+bestIndex = i
+remaining[i]._geo = geo
+}
+
+}
+
+const next = remaining.splice(bestIndex,1)[0]
+
+route.push(next)
+
+current = next._geo
+
+}
+
+return route
+
+}
+
 /* ---------------------- */
 /* CARTE */
 /* ---------------------- */
