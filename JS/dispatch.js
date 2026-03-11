@@ -3,6 +3,26 @@ async function optimizeTourAI(orders){
 
 const cities = orders.map(o=>o.delivery_city)
 
+const response = await fetch("/api/ai-dispatch",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+start:"Yverdon",
+destinations:cities
+})
+})
+
+const result = await response.json()
+
+return result.order
+
+}
+async function optimizeTourAI(orders){
+
+const cities = orders.map(o=>o.delivery_city)
+
 const response = await fetch("https://api.deepseek.com/v1/chat/completions",{
 
 method:"POST",
