@@ -116,57 +116,213 @@ async function calculateRoute(pickupCity, deliveryCity) {
 /* ------------------ */
 /* CREER TRANSPORT */
 /* ------------------ */
-window.newTransport = function() {
-    console.log("🆕 Ouverture formulaire");
+newTransport: function() {
+    const modalTitle = document.getElementById('modal-title');
+    const modalContent = document.getElementById('modal-content');
     
-    openModal(
-        "Créer transport",
-        `
-        <div style="padding: 10px;">
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px; font-weight:bold;">Client</label>
-                <input id="client" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;" placeholder="Nom du client">
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px; font-weight:bold;">Téléphone</label>
-                <input id="phone" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;" placeholder="079 000 00 00">
-            </div>
-            
-            <h4 style="margin:15px 0 10px; color:#007bff;">📍 Ramassage</h4>
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Ville *</label>
-                <input id="pickup_city" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;" placeholder="Lausanne">
-            </div>
-            
-            <h4 style="margin:15px 0 10px; color:#dc3545;">📦 Livraison</h4>
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Ville *</label>
-                <input id="delivery_city" type="text" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;" placeholder="Genève">
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Poids (kg)</label>
-                <input id="weight" type="number" value="1" min="0" step="0.1" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">Priorité</label>
-                <select id="priority" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-                    <option value="normal">Normal</option>
-                    <option value="urgent">Urgent</option>
-                </select>
-            </div>
-            
-            <div style="display:flex; gap:10px; margin-top:20px;">
-                <button onclick="closeModal()" style="flex:1; padding:10px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">Annuler</button>
-                <button onclick="createTransport()" style="flex:1; padding:10px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer;">Créer transport</button>
-            </div>
-        </div>
-        `
-    );
-}
+    modalTitle.innerText = '📦 Nouveau transport';
+    modalContent.innerHTML = `
+        <style>
+            .form-section {
+                background: #f9fafb;
+                border-radius: 8px;
+                padding: 1rem;
+                margin-bottom: 1rem;
+                border: 1px solid #e5e7eb;
+            }
+            .form-section h4 {
+                margin: 0 0 1rem 0;
+                color: #374151;
+                font-size: 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            .form-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.75rem;
+            }
+            .form-field {
+                margin-bottom: 0.75rem;
+            }
+            .form-field label {
+                display: block;
+                margin-bottom: 0.25rem;
+                font-size: 0.875rem;
+                font-weight: 500;
+                color: #4b5563;
+            }
+            .form-field input, .form-field select, .form-field textarea {
+                width: 100%;
+                padding: 0.625rem;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 0.875rem;
+                transition: border-color 0.15s;
+            }
+            .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+                outline: none;
+                border-color: #2563eb;
+                box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            }
+            .form-field.full-width {
+                grid-column: span 2;
+            }
+            .badge-option {
+                display: flex;
+                gap: 0.5rem;
+                margin-top: 0.25rem;
+            }
+            .badge {
+                padding: 0.25rem 0.75rem;
+                border-radius: 20px;
+                font-size: 0.75rem;
+                font-weight: 500;
+                cursor: pointer;
+                border: 1px solid #d1d5db;
+                background: white;
+            }
+            .badge.selected {
+                background: #2563eb;
+                color: white;
+                border-color: #2563eb;
+            }
+            .badge.urgent.selected { background: #dc2626; border-color: #dc2626; }
+        </style>
 
+        <form id="transportForm" onsubmit="event.preventDefault(); UI.saveTransport();">
+            <!-- Section Client -->
+            <div class="form-section">
+                <h4>👤 Client</h4>
+                <div class="form-grid">
+                    <div class="form-field full-width">
+                        <label>Nom complet *</label>
+                        <input type="text" id="clientName" placeholder="Jean Dupont" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Téléphone</label>
+                        <input type="tel" id="clientPhone" placeholder="079 123 45 67">
+                    </div>
+                    <div class="form-field">
+                        <label>Email</label>
+                        <input type="email" id="clientEmail" placeholder="client@email.com">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Ramassage -->
+            <div class="form-section">
+                <h4>📍 Ramassage</h4>
+                <div class="form-grid">
+                    <div class="form-field full-width">
+                        <label>Rue *</label>
+                        <input type="text" id="pickupStreet" placeholder="Rue du Simplon" required>
+                    </div>
+                    <div class="form-field">
+                        <label>N°</label>
+                        <input type="text" id="pickupNumber" placeholder="12">
+                    </div>
+                    <div class="form-field">
+                        <label>Code postal *</label>
+                        <input type="text" id="pickupPostal" placeholder="1000" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Ville *</label>
+                        <input type="text" id="pickupCity" placeholder="Lausanne" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Référence / Info</label>
+                        <input type="text" id="pickupNote" placeholder="Étage, sonnette, code...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Livraison -->
+            <div class="form-section">
+                <h4>🎯 Livraison</h4>
+                <div class="form-grid">
+                    <div class="form-field full-width">
+                        <label>Rue *</label>
+                        <input type="text" id="deliveryStreet" placeholder="Rue du Mont-Blanc" required>
+                    </div>
+                    <div class="form-field">
+                        <label>N°</label>
+                        <input type="text" id="deliveryNumber" placeholder="8">
+                    </div>
+                    <div class="form-field">
+                        <label>Code postal *</label>
+                        <input type="text" id="deliveryPostal" placeholder="1200" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Ville *</label>
+                        <input type="text" id="deliveryCity" placeholder="Genève" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Référence / Info</label>
+                        <input type="text" id="deliveryNote" placeholder="Service réception, horaires...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Colis -->
+            <div class="form-section">
+                <h4>📦 Colis</h4>
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label>Poids (kg)</label>
+                        <input type="number" id="weight" step="0.1" min="0" value="1">
+                    </div>
+                    <div class="form-field">
+                        <label>Dimensions (cm)</label>
+                        <input type="text" id="dimensions" placeholder="30x20x15">
+                    </div>
+                    <div class="form-field">
+                        <label>Type de colis</label>
+                        <select id="parcelType">
+                            <option value="colis">Colis standard</option>
+                            <option value="document">Document</option>
+                            <option value="fragile">Fragile</option>
+                            <option value="palette">Palette</option>
+                            <option value="encombrant">Encombrant</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>Priorité</label>
+                        <div class="badge-option">
+                            <span class="badge selected" onclick="selectPriority(this, 'normal')">Normal</span>
+                            <span class="badge urgent" onclick="selectPriority(this, 'urgent')">⚠️ Urgent</span>
+                        </div>
+                        <input type="hidden" id="priority" value="normal">
+                    </div>
+                    <div class="form-field full-width">
+                        <label>Instructions spéciales</label>
+                        <textarea id="specialInstructions" rows="2" placeholder="Fragile, à remettre en main propre, code d'accès..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                <button type="button" onclick="UI.closeModal()" style="flex: 1; padding: 0.75rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 500; cursor: pointer;">
+                    Annuler
+                </button>
+                <button type="submit" style="flex: 2; padding: 0.75rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    <span>✅</span> Créer le transport
+                </button>
+            </div>
+        </form>
+    `;
+    
+    document.getElementById('modal').style.display = 'flex';
+    
+    // Fonction pour la sélection de priorité
+    window.selectPriority = function(element, value) {
+        document.querySelectorAll('.badge').forEach(b => b.classList.remove('selected'));
+        element.classList.add('selected');
+        document.getElementById('priority').value = value;
+    };
+}
 window.createTransport = async function() {
     console.log("📝 Création transport...");
     
