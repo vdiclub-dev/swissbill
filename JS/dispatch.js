@@ -331,97 +331,158 @@ async function loadDrivers() {
 /* CARTE TRANSPORTS */
 /* ---------------------- */
 
-async function loadOrdersMap() {
-  markers.clearLayers()
+async function loadOrdersMap(){
 
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*")
+markers.clearLayers()
 
-  if (error) {
-    console.error(error)
-    return
-  }
+const { data, error } = await supabase
+.from("orders")
+.select("*")
 
-  let tourIndex = 1
-  const bounds = []
+if(error){
+console.error(error)
+return
+}
 
-  for (const order of data) {
-    const city = order.delivery_city
-    if (!city) continue
+let tourIndex = 1
+const bounds = []
 
-    const geo = await geocodeCity(city)
-    if (!geo) continue
+for(const order of data){
 
-    const lat = geo.lat
-    const lng = geo.lng
+/* ---------------------- */
+/* PICKUP */
+/* ---------------------- */
 
-    let marker
+if(order.pickup_city){
 
-    if (order.status === "pending") {
-      const icon = L.divIcon({
-        className: "",
-        html: `<div class="pulse-marker"></div>`,
-        iconSize: [20, 20]
-      })
+const pickupGeo = await geocodeCity(order.pickup_city)
 
-      marker = L.marker([lat, lng], { icon })
-    } else {
-      let color = "gray"
+if(pickupGeo){
 
-      if (order.tour_id) {
-        const index = Math.abs(Number(order.tour_id)) % tourColors.length
-        color = tourColors[index]
-      } else if (order.status === "planned") {
-        color = "orange"
-      } else if (order.status === "urgent") {
-        color = "red"
-      } else if (order.status === "delivered") {
-        color = "green"
-      }
+const pickupMarker = L.circleMarker(
+[pickupGeo.lat,pickupGeo.lng],
+{
+radius:7,
+color:"blue",
+fillColor:"blue",
+fillOpacity:0.9
+})
 
-      const icon = L.divIcon({
-        className: "route-number",
-        html: `<div style="
-          background:${color};
-          width:28px;
-          height:28px;
-          border-radius:50%;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          font-weight:bold;
-          border:2px solid white;
-          color:white;
-        ">${tourIndex}</div>`,
-        iconSize: [30, 30]
-      })
+pickupMarker.bindPopup(`
+📦 Pickup<br>
+${order.client_name}<br>
+${order.pickup_city}
+`)
 
-      marker = L.marker([lat, lng], { icon })
-      tourIndex++
-    }
+markers.addLayer(pickupMarker)
+bounds.push([pickupGeo.lat,pickupGeo.lng])
 
-   marker.bindPopup(`
+}
+
+}
+
+/* ---------------------- */
+/* DELIVERY */
+/* ---------------------- */
+
+if(order.delivery_city){
+
+const deliveryGeo = await geocodeCity(order.delivery_city)
+
+if(!deliveryGeo) continue
+
+const lat = deliveryGeo.lat
+const lng = deliveryGeo.lng
+
+let marker
+
+/* transport en attente */
+
+if(order.status === "pending"){
+
+const icon = L.divIcon({
+className:"",
+html:`<div class="pulse-marker"></div>`,
+iconSize:[20,20]
+})
+
+marker = L.marker([lat,lng],{icon})
+
+}
+
+/* transport planifié */
+
+else{
+
+let color = "gray"
+
+if(order.tour_id){
+
+const index = Math.abs(Number(order.tour_id)) % tourColors.length
+color = tourColors[index]
+
+}
+
+else if(order.status === "planned") color = "orange"
+else if(order.status === "urgent") color = "red"
+else if(order.status === "delivered") color = "green"
+
+const icon = L.divIcon({
+className:"route-number",
+html:`<div style="
+background:${color};
+width:28px;
+height:28px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:bold;
+border:2px solid white;
+color:white;
+">${tourIndex}</div>`,
+iconSize:[30,30]
+})
+
+marker = L.marker([lat,lng],{icon})
+tourIndex++
+
+}
+
+marker.bindPopup(`
 📦 ${order.client_name}<br>
-${order.address}<br>
-${order.delivery_city}<br><br>
+Pickup : ${order.pickup_city}<br>
+Delivery : ${order.delivery_city}<br><br>
 
 <button onclick="openRoute('${order.delivery_city}')">
 Navigation
 </button>
 `)
 
-    markers.addLayer(marker)
-    bounds.push([lat, lng])
-  }
+markers.addLayer(marker)
+bounds.push([lat,lng])
 
-  await loadDrivers()
-
-  if (bounds.length > 0) {
-    map.fitBounds(bounds, { padding: [50, 50] })
-  }
 }
 
+}
+
+/* ---------------------- */
+/* CHAUFFEURS */
+/* ---------------------- */
+
+await loadDrivers()
+
+/* ---------------------- */
+/* ZOOM AUTO */
+/* ---------------------- */
+
+if(bounds.length > 0){
+
+map.fitBounds(bounds,{padding:[50,50]})
+
+}
+
+}
 /* ---------------------- */
 /* LISTE TRANSPORTS */
 /* ---------------------- */
