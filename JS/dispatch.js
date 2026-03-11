@@ -1,4 +1,16 @@
 console.log("dispatch chargé")
+function openRoute(city){
+
+const origin="Yverdon"
+
+const url=`https://www.google.com/maps/dir/?api=1
+&origin=${encodeURIComponent(origin)}
+&destination=${encodeURIComponent(city)}
+&travelmode=driving`
+
+window.open(url,"_blank")
+
+}
 async function loadDispatchStats(){
 
 const { data } = await supabase
@@ -407,13 +419,12 @@ console.error(error)
 return
 }
 
-const colors = [
-"red",
-"blue",
-"green",
-"orange",
-"purple"
-]
+let color = "gray"
+
+if(order.status==="pending") color="gray"
+if(order.status==="planned") color="orange"
+if(order.status==="urgent") color="red"
+if(order.status==="delivered") color="green"
 
 let tourIndex = 1
 const bounds = []
