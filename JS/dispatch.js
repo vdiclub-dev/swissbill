@@ -243,3 +243,17 @@ list.appendChild(item)
 })
 
 }
+function openRoute(city){
+
+const origin = "Yverdon"
+
+const url = `
+https://www.google.com/maps/dir/?api=1
+&origin=${encodeURIComponent(origin)}
+&destination=${encodeURIComponent(city)}
+&travelmode=driving
+`
+
+window.open(url,"_blank")
+
+}
