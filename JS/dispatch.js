@@ -1,4 +1,38 @@
 console.log("dispatch chargé")
+async function drawRoute(city){
+
+  const origin = "Yverdon"
+
+  const p1 = await geocodeCity(origin)
+  const p2 = await geocodeCity(city)
+
+  if(!p1 || !p2) return
+
+  const route = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=full&geometries=geojson`
+  )
+
+  const data = await route.json()
+  if(!data.routes || !data.routes.length) return
+
+  const coords = data.routes[0].geometry.coordinates.map(c => [c[1],c[0]])
+
+  if(routeLine){
+    map.removeLayer(routeLine)
+  }
+
+  routeLine = L.polyline(coords,{
+    color:"blue",
+    weight:4
+  }).addTo(map)
+
+  map.fitBounds(routeLine.getBounds(),{padding:[40,40]})
+}
+async function focusTransport(city){
+  const point = await geocodeCity(city)
+  if(!point) return
+  map.setView([point.lat, point.lng], 12)
+}
 async function loadDispatchStats(){
 
 const { data } = await supabase
