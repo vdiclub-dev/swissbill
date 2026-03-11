@@ -5,7 +5,7 @@ console.log("dispatch chargé")
 /* ---------------------- */
 
 const map = L.map("map").setView([46.52, 6.63], 9)
-
+const tourColors = ["red", "blue", "green", "orange", "purple"]
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 maxZoom:18
 }).addTo(map)
@@ -18,7 +18,7 @@ const geoCache = {}
 
 
 /* couleurs tournées */
-const tourColors = ["red", "blue", "green", "orange", "purple"]
+
 
 /* ---------------------- */
 /* OUTILS */
