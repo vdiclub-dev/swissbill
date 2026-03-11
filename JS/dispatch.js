@@ -1,5 +1,43 @@
 console.log("dispatch chargé")
+async function optimizeTourAI(orders){
 
+const cities = orders.map(o=>o.delivery_city)
+
+const response = await fetch("https://api.deepseek.com/v1/chat/completions",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json",
+"Authorization":"Bearer TON_API_KEY"
+},
+
+body:JSON.stringify({
+
+model:"deepseek-chat",
+
+messages:[
+{
+role:"system",
+content:"Tu es un logiciel de dispatch transport qui optimise les tournées."
+},
+
+{
+role:"user",
+content:`Optimise cette tournée en partant de Yverdon: ${cities.join(", ")}`
+}
+
+]
+
+})
+
+})
+
+const data = await response.json()
+
+return data.choices[0].message.content
+
+}
 /* ---------------------- */
 /* CARTE */
 /* ---------------------- */
