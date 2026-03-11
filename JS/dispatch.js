@@ -398,7 +398,9 @@ for(const order of data){
 /* ---------------------- */
 
 if(order.pickup_city){
-
+const address =
+`${order.delivery_street} ${order.delivery_number} ${order.delivery_postal} ${order.delivery_city}`
+  const geo = await geocodeCity(address)
 const pickupGeo = await geocodeCity(order.pickup_city)
 
 if(pickupGeo){
