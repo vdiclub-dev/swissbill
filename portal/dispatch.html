@@ -2,229 +2,392 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Léman Dispatch</title>
-    
-    <!-- Styles existants -->
-    <link rel="stylesheet" href="../css/style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Léman Dispatch - Correctif</title>
+
+    <!-- Feuilles de style Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+
     <style>
-        /* Correction rapide des problèmes */
-        .dispatch-container {
-            display: flex;
-            height: calc(100vh - 60px);
-            position: relative;
-        }
-        
-        #map {
-            flex: 1;
-            height: 100%;
-            z-index: 1;
-        }
-        
-        .sidebar {
-            width: 200px;
-            background: #f5f5f5;
-            padding: 10px;
-            overflow-y: auto;
-            z-index: 2;
-        }
-        
-        .dispatch-sidebar {
-            width: 300px;
-            background: white;
-            border-left: 1px solid #ddd;
-            padding: 10px;
-            overflow-y: auto;
-            z-index: 2;
-        }
-        
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-        }
-        
-        .modal.active {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal-box {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            max-width: 500px;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        
-        /* Style pour les marqueurs */
-        .route-number div {
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            border: 2px solid white;
-        }
-        
-        /* Style pour la liste */
-        #orders-list {
-            max-height: calc(100vh - 100px);
-            overflow-y: auto;
-        }
-        
-        .order-item {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-            cursor: pointer;
-        }
-        
-        .order-item:hover {
-            background: #f9f9f9;
-        }
-        
+        /* Styles de base */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+        body { height: 100vh; display: flex; flex-direction: column; background: #f4f4f5; }
         header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 20px;
-            background: white;
-            border-bottom: 1px solid #ddd;
-            height: 60px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.75rem 1.5rem; background: white; border-bottom: 1px solid #e4e4e7;
+            height: 60px; flex-shrink: 0;
         }
-        
+        .logo { font-weight: 600; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem; }
         .btn {
-            padding: 8px 16px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+            padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #d4d4d8;
+            background: white; cursor: pointer; font-weight: 500;
+            display: inline-flex; align-items: center; gap: 0.5rem;
         }
-        
-        .btn:hover {
-            background: #0056b3;
+        .btn-primary { background: #2563eb; border-color: #2563eb; color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+
+        .dispatch-container {
+            display: flex; flex: 1; min-height: 0; /* Important pour le flex */
         }
+        /* Menu latéral */
+        .sidebar {
+            width: 240px; background: white; border-right: 1px solid #e4e4e7;
+            display: flex; flex-direction: column; padding: 1rem; overflow-y: auto;
+            gap: 0.25rem; flex-shrink: 0;
+        }
+        .sidebar button {
+            padding: 0.75rem; border: none; background: none; border-radius: 6px;
+            text-align: left; cursor: pointer; font-size: 0.9rem;
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+        .sidebar button:hover { background: #f4f4f5; }
+        .sidebar button:last-child { margin-top: auto; background: #f4f4f5; font-weight: 500;}
+
+        /* Carte */
+        #map { flex: 1; background: #cbd5e1; min-width: 0; }
+
+        /* Panneau droit (liste) */
+        .dispatch-sidebar {
+            width: 320px; background: white; border-left: 1px solid #e4e4e7;
+            display: flex; flex-direction: column; padding: 1rem; overflow-y: auto; flex-shrink: 0;
+        }
+        .dispatch-sidebar h3 { margin-bottom: 1rem; font-weight: 600; }
+        #orders-list {
+            display: flex; flex-direction: column; gap: 0.75rem;
+            overflow-y: auto; padding-right: 0.25rem;
+        }
+        .order-card {
+            border: 1px solid #e4e4e7; border-radius: 8px; padding: 0.75rem;
+            background: white; transition: all 0.1s;
+        }
+        .order-card:hover { border-color: #2563eb; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .order-card.urgent { border-left: 4px solid #dc2626; }
+
+        /* Modal */
+        .modal {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-box {
+            background: white; border-radius: 12px; width: 90%; max-width: 500px;
+            max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 1.5rem; border-bottom: 1px solid #e4e4e7;
+        }
+        .modal-header button { background: none; border: none; font-size: 1.25rem; cursor: pointer; }
+        .modal-content { padding: 1.5rem; }
     </style>
 </head>
 <body>
+    <header>
+        <div class="logo">🚚 Léman Dispatch</div>
+        <div id="dispatchStats" style="font-size:0.9rem; color:#4b5563;">⏳ Chargement stats...</div>
+        <button class="btn btn-primary" onclick="UI.newTransport()">➕ Créer transport</button>
+    </header>
 
-<header>
-    <div class="logo">
-        🚚 Léman Dispatch
-    </div>
-    <div id="dispatchStats"></div>
-    <button class="btn" onclick="newTransport()">
-        Créer transport
-    </button>
-</header>
+    <div class="dispatch-container">
+        <!-- MENU LATÉRAL -->
+        <div class="sidebar">
+            <button>📊 Dashboard</button>
+            <button>📦 Transports</button>
+            <button>🗺 Dispatch</button>
+            <button>👤 Clients</button>
+            <button>🚚 Chauffeurs</button>
+            <button>🚛 Véhicules</button>
+            <button>💰 Factures</button>
+            <button>⚙ Paramètres</button>
+            <button onclick="alert('🤖 Proposition IA - Fonctionnalité à venir')">🤖 Proposition IA</button>
+            <button onclick="alert('🧠 Création tournée - Fonctionnalité à venir')">🧠 Créer tournée optimisée</button>
+        </div>
 
-<div class="dispatch-container">
-    <!-- MENU -->
-    <div class="sidebar">
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('dashboard')">📊 Dashboard</button>
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('transports')">📦 Transports</button>
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('dispatch')">🗺 Dispatch</button>
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('clients')">👤 Clients</button>
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('chauffeurs')">🚚 Chauffeurs</button>
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('vehicules')">🚛 Véhicules</button>
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('factures')">💰 Factures</button>
-        <button style="width:100%; margin-bottom:5px;" onclick="switchView('parametres')">⚙ Paramètres</button>
-        <button style="width:100%; margin-bottom:5px; background:#28a745;" onclick="proposeAITours()">🤖 Proposition IA</button>
-        <button style="width:100%; margin-bottom:5px; background:#ffc107;" onclick="generateTour()">🧠 Créer tournée optimisée</button>
-    </div>
+        <!-- CARTE LEAFLET -->
+        <div id="map"></div>
 
-    <!-- CARTE -->
-    <div id="map"></div>
-
-    <!-- LISTE -->
-    <div class="dispatch-sidebar">
-        <h3>Transports</h3>
-        <div id="orders-list">
-            Chargement...
+        <!-- PANEL DROIT - LISTE DES TRANSPORTS -->
+        <div class="dispatch-sidebar">
+            <h3>📋 Transports</h3>
+            <div id="orders-list">Chargement...</div>
         </div>
     </div>
-</div>
 
-<!-- MODAL -->
-<div id="modal" class="modal">
-    <div class="modal-box">
-        <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-            <h3 id="modal-title">Titre</h3>
-            <button onclick="closeModal()" style="background:none; border:none; font-size:20px; cursor:pointer;">✖</button>
-        </div>
-        <div id="modal-content">
-            contenu
+    <!-- MODAL -->
+    <div id="modal" class="modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="modal-title">Titre</h3>
+                <button onclick="UI.closeModal()">✖</button>
+            </div>
+            <div class="modal-content" id="modal-content">
+                Contenu
+            </div>
         </div>
     </div>
-</div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SCRIPTS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<script src="../JS/config.js"></script>
-<script src="../JS/dispatch.js"></script>
-
-<script>
-// Fonctions de débogage et correction
-console.log("🚀 Démarrage du dispatch...");
-
-// Vérifier que les fonctions existent
-function checkFunctions() {
-    const functions = ['newTransport', 'closeModal', 'proposeAITours', 'generateTour', 'loadOrdersMap', 'loadOrdersList'];
-    
-    functions.forEach(fn => {
-        if (typeof window[fn] === 'function') {
-            console.log(`✅ Fonction ${fn} disponible`);
-        } else {
-            console.log(`❌ Fonction ${fn} manquante`);
-        }
-    });
-}
-
-// Attendre que tout soit chargé
-window.addEventListener('load', function() {
-    console.log("✅ Page chargée");
-    checkFunctions();
-    
-    // Initialiser la carte manuellement si nécessaire
-    if (typeof map !== 'undefined' && map) {
-        console.log("✅ Carte déjà initialisée");
-    } else if (typeof L !== 'undefined') {
-        console.log("🔄 Initialisation manuelle de la carte...");
-        try {
-            window.map = L.map("map").setView([46.52, 6.63], 9);
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 18}).addTo(window.map);
-            window.markers = L.markerClusterGroup();
-            window.map.addLayer(window.markers);
-            console.log("✅ Carte initialisée manuellement");
+    <script>
+        (function() {
+            // ==================== CONFIGURATION ====================
+            // 🔴 REMPLACEZ CES VALEURS PAR VOS IDENTIFIANTS SUPABASE
+            const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
+            const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
             
-            // Charger les données
-            if (typeof loadOrdersMap === 'function') {
-                loadOrdersMap();
+            // ==================== INITIALISATION ====================
+            console.log('🚀 Initialisation de l\'application...');
+            
+            if (SUPABASE_URL.includes('votre-projet')) {
+                console.error('❌ Configuration Supabase manquante !');
+                document.body.innerHTML = '<div style="padding:2rem; text-align:center; color:red;"><h2>⚠️ Erreur de configuration</h2><p>Veuillez configurer les identifiants Supabase dans le fichier dispatch.html</p></div>';
+                return;
             }
-            if (typeof loadOrdersList === 'function') {
-                loadOrdersList();
+            
+            // Client Supabase
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            
+            // Variables globales de la carte
+            let map, markersLayer, routeLine = null;
+            const geoCache = {}; // Cache pour le géocodage
+
+            // ==================== CARTE LEAFLET ====================
+            function initMap() {
+                if (!document.getElementById('map')) return;
+                map = L.map('map').setView([46.8, 8.2], 8);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(map);
+                markersLayer = L.markerClusterGroup({ maxClusterRadius: 40 });
+                map.addLayer(markersLayer);
+                console.log('✅ Carte initialisée');
             }
-        } catch (e) {
-            console.error("❌ Erreur initialisation carte:", e);
-        }
-    }
-});
 
-// Fonctions de navigation simples
-function switchView(view) {
-    console.log("Switch view:", view);
-    alert("Navigation vers " + view + " (à implémenter)");
-}
-</script>
+            // ==================== GÉOCODAGE (Nominatim) ====================
+            async function geocodeCity(cityName) {
+                if (!cityName) return null;
+                const cacheKey = cityName.toLowerCase().trim();
+                if (geoCache[cacheKey]) return geoCache[cacheKey];
+                
+                try {
+                    const response = await fetch(
+                        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName + ', Suisse')}&limit=1`,
+                        { headers: { 'User-Agent': 'LemanDispatch/1.0' } }
+                    );
+                    const data = await response.json();
+                    if (data && data.length > 0) {
+                        const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                        geoCache[cacheKey] = coords;
+                        return coords;
+                    }
+                } catch (e) {
+                    console.warn('Erreur géocodage pour', cityName, e);
+                }
+                return null;
+            }
 
+            // ==================== CHARGEMENT DES DONNÉES ====================
+            async function loadOrders() {
+                const { data: orders, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (error) {
+                    console.error('Erreur Supabase:', error);
+                    document.getElementById('orders-list').innerHTML = '<div style="color:red; padding:1rem;">Erreur de chargement</div>';
+                    return [];
+                }
+                return orders || [];
+            }
+
+            // Mise à jour de la carte avec les transports
+            async function updateMap() {
+                if (!map || !markersLayer) return;
+                
+                markersLayer.clearLayers();
+                const orders = await loadOrders();
+                if (!orders.length) {
+                    map.setView([46.8, 8.2], 8); // Vue Suisse
+                    return;
+                }
+
+                const bounds = [];
+                let markerIndex = 1;
+
+                for (const order of orders) {
+                    const geo = await geocodeCity(order.delivery_city || 'Lausanne');
+                    if (!geo) continue;
+
+                    // Couleur selon le statut
+                    let color = '#6b7280'; // gris
+                    if (order.status === 'pending') color = '#f59e0b'; // orange
+                    if (order.status === 'planned') color = '#3b82f6'; // bleu
+                    if (order.status === 'urgent') color = '#ef4444'; // rouge
+                    if (order.status === 'delivered') color = '#10b981'; // vert
+
+                    const icon = L.divIcon({
+                        html: `<div style="background:${color}; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.2);">${markerIndex}</div>`,
+                        className: '',
+                        iconSize: [30, 30]
+                    });
+
+                    const marker = L.marker([geo.lat, geo.lng], { icon });
+                    marker.bindPopup(`
+                        <b>${order.client_name || 'Sans client'}</b><br>
+                        📍 ${order.pickup_city || '?'} → ${order.delivery_city || '?'}<br>
+                        ${order.distance_km ? `📏 ${order.distance_km} km` : ''}
+                    `);
+                    markersLayer.addLayer(marker);
+                    bounds.push([geo.lat, geo.lng]);
+                    markerIndex++;
+                }
+
+                if (bounds.length) {
+                    map.fitBounds(bounds, { padding: [30, 30] });
+                }
+            }
+
+            // Mise à jour de la liste latérale
+            async function updateList() {
+                const listEl = document.getElementById('orders-list');
+                const orders = await loadOrders();
+                
+                if (!orders.length) {
+                    listEl.innerHTML = '<div style="text-align:center; color:#6b7280; padding:2rem;">Aucun transport</div>';
+                    return;
+                }
+
+                let html = '';
+                let pending = 0, urgent = 0;
+
+                orders.forEach(order => {
+                    if (order.status === 'pending') pending++;
+                    if (order.status === 'urgent') urgent++;
+                    
+                    const isUrgent = order.priority === 'urgent' || order.status === 'urgent';
+                    html += `
+                        <div class="order-card ${isUrgent ? 'urgent' : ''}" onclick="console.log('Détail de ', '${order.id}')">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                <span style="font-weight:600;">${order.client_name || 'Sans client'}</span>
+                                <span style="font-size:0.7rem; background:#e4e4e7; padding:2px 6px; border-radius:10px;">${order.status}</span>
+                            </div>
+                            <div style="font-size:0.8rem; color:#4b5563; margin-bottom:4px;">
+                                ${order.pickup_city || '?'} → ${order.delivery_city || '?'}
+                            </div>
+                            ${order.distance_km ? `<div style="font-size:0.7rem; color:#6b7280;">📏 ${order.distance_km} km</div>` : ''}
+                        </div>
+                    `;
+                });
+
+                listEl.innerHTML = html;
+                document.getElementById('dispatchStats').innerHTML = `⏳ En attente: ${pending} ⚠️ Urgents: ${urgent}`;
+            }
+
+            // ==================== FONCTIONS UI ====================
+            const UI = {
+                newTransport: function() {
+                    const modalTitle = document.getElementById('modal-title');
+                    const modalContent = document.getElementById('modal-content');
+                    modalTitle.innerText = 'Créer un transport';
+                    modalContent.innerHTML = `
+                        <div style="display:flex; flex-direction:column; gap:1rem;">
+                            <div><label style="display:block; margin-bottom:4px;">Client</label><input id="clientName" class="modal-input" style="width:100%; padding:8px; border:1px solid #d4d4d8; border-radius:6px;"></div>
+                            <div><label style="display:block; margin-bottom:4px;">Ville de ramassage *</label><input id="pickupCity" class="modal-input" style="width:100%; padding:8px; border:1px solid #d4d4d8; border-radius:6px;" placeholder="Lausanne"></div>
+                            <div><label style="display:block; margin-bottom:4px;">Ville de livraison *</label><input id="deliveryCity" class="modal-input" style="width:100%; padding:8px; border:1px solid #d4d4d8; border-radius:6px;" placeholder="Genève"></div>
+                            <div><label style="display:block; margin-bottom:4px;">Priorité</label>
+                                <select id="priority" style="width:100%; padding:8px; border:1px solid #d4d4d8; border-radius:6px;">
+                                    <option value="normal">Normal</option>
+                                    <option value="urgent">Urgent</option>
+                                </select>
+                            </div>
+                            <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+                                <button onclick="UI.closeModal()" style="flex:1; padding:8px; background:#f4f4f5; border:1px solid #d4d4d8; border-radius:6px; cursor:pointer;">Annuler</button>
+                                <button onclick="UI.saveTransport()" style="flex:1; padding:8px; background:#2563eb; color:white; border:none; border-radius:6px; cursor:pointer;">Créer</button>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('modal').style.display = 'flex';
+                },
+                
+                closeModal: function() {
+                    document.getElementById('modal').style.display = 'none';
+                },
+                
+                saveTransport: async function() {
+                    const client = document.getElementById('clientName')?.value || '';
+                    const pickup = document.getElementById('pickupCity')?.value;
+                    const delivery = document.getElementById('deliveryCity')?.value;
+                    const priority = document.getElementById('priority')?.value || 'normal';
+
+                    if (!pickup || !delivery) {
+                        alert('Veuillez remplir les villes');
+                        return;
+                    }
+
+                    // Calcul optionnel de la distance (pour amélioration future)
+                    let distance = null, duration = null;
+                    try {
+                        const p1 = await geocodeCity(pickup);
+                        const p2 = await geocodeCity(delivery);
+                        if (p1 && p2) {
+                            const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=false`);
+                            const data = await response.json();
+                            if (data.routes?.[0]) {
+                                distance = (data.routes[0].distance / 1000).toFixed(1);
+                                duration = Math.round(data.routes[0].duration / 60);
+                            }
+                        }
+                    } catch (e) { console.warn('Calcul distance impossible', e); }
+
+                    const { error } = await supabase
+                        .from('orders')
+                        .insert([{
+                            client_name: client,
+                            pickup_city: pickup,
+                            delivery_city: delivery,
+                            priority: priority,
+                            status: 'pending',
+                            distance_km: distance ? parseFloat(distance) : null,
+                            duration_min: duration,
+                            created_at: new Date()
+                        }]);
+
+                    if (error) {
+                        console.error('Erreur insertion:', error);
+                        alert('Erreur lors de la création');
+                    } else {
+                        alert('✅ Transport créé');
+                        UI.closeModal();
+                        updateMap();
+                        updateList();
+                    }
+                }
+            };
+
+            // Exposer UI globalement
+            window.UI = UI;
+
+            // ==================== POINT D'ENTRÉE ====================
+            window.addEventListener('load', async () => {
+                initMap();
+                await updateMap();
+                await updateList();
+                
+                // Rafraîchissement périodique (toutes les 20 secondes)
+                setInterval(async () => {
+                    console.log('🔄 Rafraîchissement...');
+                    await updateMap();
+                    await updateList();
+                }, 20000);
+            });
+
+        })();
+    </script>
 </body>
 </html>
