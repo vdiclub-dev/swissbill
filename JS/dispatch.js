@@ -174,7 +174,7 @@ map.fitBounds(bounds,{padding:[50,50]})
 
 }
 
-loadOrdersMap()
+
 async function loadDrivers(){
 
 const { data, error } = await supabase
@@ -188,19 +188,22 @@ return
 
 data.forEach(driver=>{
 
-L.circleMarker([driver.lat,driver.lng],{
+const marker = L.circleMarker([driver.lat,driver.lng],{
 radius:8,
 color:"green"
 })
-.addTo(map)
-.bindPopup(`
+
+marker.bindPopup(`
 🚚 Chauffeur : ${driver.name}
 `)
+
+markers.addLayer(marker)
 
 })
 
 }
-()
+
+loadDrivers()
 async function assignDriver(orderId){
 
 const driver = prompt("ID du chauffeur")
@@ -356,6 +359,9 @@ weight:4
 /* ---------------------- */
 /* RAFRAICHISSEMENT AUTO */
 /* ---------------------- */
+
+loadOrdersMap()
+loadDrivers()
 
 setInterval(()=>{
 
