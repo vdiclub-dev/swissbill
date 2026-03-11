@@ -11,7 +11,9 @@ L.tileLayer(
 {
 maxZoom:18
 }).addTo(map)
+const markers = L.markerClusterGroup()
 
+map.addLayer(markers)
 
 /* ---------------------- */
 /* MODAL */
