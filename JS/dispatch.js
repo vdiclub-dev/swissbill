@@ -268,7 +268,40 @@ window.createTransport = async function () {
         status: "pending"
       }
     ])
+let marker
 
+if(order.status === "pending"){
+
+const icon = L.divIcon({
+className:"",
+html:`<div class="pulse-marker"></div>`,
+iconSize:[20,20]
+})
+
+marker = L.marker([lat,lng],{icon})
+
+}else{
+
+const icon = L.divIcon({
+className:"route-number",
+html:`<div style="
+background:${color};
+color:white;
+width:28px;
+height:28px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:bold;
+border:2px solid white;
+">${tourIndex}</div>`,
+iconSize:[30,30]
+})
+
+marker = L.marker([lat,lng],{icon})
+
+}
   if (error) {
     console.error(error)
     alert("Erreur création transport")
