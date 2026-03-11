@@ -373,7 +373,11 @@ async function refreshDispatch() {
 /* ---------------------- */
 /* DEMARRAGE */
 /* ---------------------- */
-await loadOrdersList()
+
+loadOrdersMap()
+loadDrivers()
+loadOrdersList()
+
 setInterval(()=>{
 
 loadOrdersMap()
