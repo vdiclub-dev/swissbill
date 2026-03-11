@@ -464,9 +464,12 @@ tourIndex++
 }
 
 marker.bindPopup(`
-📦 ${order.client_name}<br>
-Pickup : ${order.pickup_city}<br>
-Delivery : ${order.delivery_city}<br><br>
+📦 ${order.client_name || "Client"}<br>
+🔵 Pickup : ${order.pickup_address || ""} ${order.pickup_city || ""}<br>
+🔴 Delivery : ${order.delivery_address || ""} ${order.delivery_city || ""}<br>
+☎️ ${order.contact_phone || "-"}<br>
+⚡ ${order.priority || "normal"} • ${order.weight || 0} kg<br>
+📝 ${order.note || "-"}<br><br>
 
 <button onclick="openRoute('${order.delivery_city}')">
 Navigation
