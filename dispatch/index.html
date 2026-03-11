@@ -51,7 +51,7 @@
 
     <div id="barre-jaune">
         <span>🚚 LÉMAN DISPATCH</span>
-        <button onclick="montrerFormulaire()">➕ Créer transport</button>
+        <button onclick="window.montrerFormulaire()">➕ Créer transport</button>
     </div>
     
     <div id="formulaire">
@@ -63,109 +63,84 @@
             <option value="normal">Normal</option>
             <option value="urgent">Urgent</option>
         </select>
-        <button onclick="cacherFormulaire()">Annuler</button>
-        <button onclick="sauvegarder()">Créer</button>
+        <button onclick="window.cacherFormulaire()">Annuler</button>
+        <button onclick="window.sauvegarder()">Créer</button>
     </div>
     
     <div id="map"></div>
 
-    <!-- LES SCRIPTS DANS LE BON ORDRE -->
+    <!-- SCRIPTS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <!-- D'ABORD la config, ENSUITE le reste -->
- <script src="/dispatch/config.js"></script>
+    <script src="config.js"></script>
     
     <script>
-        // ===== VÉRIFICATION =====
-        console.log("🚀 Démarrage...");
-        
-        if (!window.SUPABASE_CONFIG) {
-            console.error("❌ config.js non chargé !");
-            alert("Erreur: config.js manquant");
-        } else {
-            console.log("✅ Configuration trouvée");
-        }
-        
-        // ===== SUPABASE AVEC LA CONFIG =====
-        const supabase = window.supabase.createClient(
-            window.SUPABASE_CONFIG.url,
-            window.SUPABASE_CONFIG.key
-        );
-        
-        // ===== CARTE =====
-        const map = L.map('map').setView([46.8, 8.2], 8);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        
-        // ===== CHARGER LES TRANSPORTS =====
-        async function chargerTransports() {
-            console.log("Chargement des transports...");
+        // Attendre que tout soit chargé
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("✅ DOM chargé");
             
-            const { data, error } = await supabase.from('orders').select('*');
-            
-            if (error) {
-                console.error("Erreur Supabase:", error);
-                alert("Erreur de connexion à Supabase");
+            // ===== SUPABASE =====
+            if (!window.SUPABASE_CONFIG) {
+                console.error("❌ config.js non chargé");
                 return;
             }
             
-            console.log(`${data.length} transports chargés`);
+            // UNE SEULE déclaration de supabase
+            const supabase = window.supabase.createClient(
+                window.SUPABASE_CONFIG.url,
+                window.SUPABASE_CONFIG.key
+            );
             
-            data.forEach(transport => {
-                let lat = 46.8, lng = 8.2;
+            // ===== CARTE =====
+            const map = L.map('map').setView([46.8, 8.2], 8);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            
+            // ===== CHARGER LES TRANSPORTS =====
+            async function chargerTransports() {
+                const { data } = await supabase.from('orders').select('*');
                 
-                const ville = transport.delivery_city?.toLowerCase() || '';
-                
-                if (ville.includes('lausanne')) { lat = 46.52; lng = 6.63; }
-                else if (ville.includes('geneve')) { lat = 46.20; lng = 6.14; }
-                else if (ville.includes('yverdon')) { lat = 46.78; lng = 6.64; }
-                else if (ville.includes('berne')) { lat = 46.95; lng = 7.45; }
-                
-                const marker = L.marker([lat, lng]).addTo(map);
-                marker.bindPopup(`
-                    <b>${transport.client_name || 'Sans client'}</b><br>
-                    📍 ${transport.pickup_city} → ${transport.delivery_city}
-                `);
-            });
-        }
-        
-        // ===== FORMULAIRE =====
-        function montrerFormulaire() {
-            document.getElementById('formulaire').style.display = 'block';
-        }
-        
-        function cacherFormulaire() {
-            document.getElementById('formulaire').style.display = 'none';
-        }
-        
-        async function sauvegarder() {
-            const transport = {
-                client_name: document.getElementById('client').value,
-                pickup_city: document.getElementById('pickup').value,
-                delivery_city: document.getElementById('delivery').value,
-                priority: document.getElementById('priority').value,
-                status: 'pending',
-                created_at: new Date()
+                if (data) {
+                    data.forEach(transport => {
+                        let lat = 46.8, lng = 8.2;
+                        const ville = transport.delivery_city?.toLowerCase() || '';
+                        
+                        if (ville.includes('lausanne')) { lat = 46.52; lng = 6.63; }
+                        if (ville.includes('geneve')) { lat = 46.20; lng = 6.14; }
+                        
+                        L.marker([lat, lng]).addTo(map)
+                            .bindPopup(`${transport.client_name}<br>${transport.pickup_city} → ${transport.delivery_city}`);
+                    });
+                }
+            }
+            
+            // ===== FONCTIONS GLOBALES =====
+            window.montrerFormulaire = function() {
+                document.getElementById('formulaire').style.display = 'block';
             };
             
-            const { error } = await supabase.from('orders').insert([transport]);
+            window.cacherFormulaire = function() {
+                document.getElementById('formulaire').style.display = 'none';
+            };
             
-            if (error) {
-                alert('Erreur: ' + error.message);
-            } else {
-                alert('✅ Transport créé !');
-                cacherFormulaire();
+            window.sauvegarder = async function() {
+                const transport = {
+                    client_name: document.getElementById('client').value,
+                    pickup_city: document.getElementById('pickup').value,
+                    delivery_city: document.getElementById('delivery').value,
+                    priority: document.getElementById('priority').value,
+                    status: 'pending',
+                    created_at: new Date()
+                };
+                
+                await supabase.from('orders').insert([transport]);
+                alert('✅ Créé !');
+                window.cacherFormulaire();
                 location.reload();
-            }
-        }
-        
-        // ===== LANCEMENT =====
-        chargerTransports();
-        
-        // Rendre les fonctions accessibles
-        window.montrerFormulaire = montrerFormulaire;
-        window.cacherFormulaire = cacherFormulaire;
-        window.sauvegarder = sauvegarder;
+            };
+            
+            // ===== LANCEMENT =====
+            chargerTransports();
+        });
     </script>
     
 </body>
