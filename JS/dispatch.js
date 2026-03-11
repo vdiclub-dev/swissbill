@@ -139,47 +139,56 @@ Créer transport
 }
 window.createTransport = async function(){
 
-const client = document.getElementById("client").value
-const pickup = document.getElementById("pickup_city").value
-const delivery = document.getElementById("delivery_city").value
+const client = document.getElementById("client").value.trim()
+const contactName = document.getElementById("contact_name").value.trim()
+const contactPhone = document.getElementById("contact_phone").value.trim()
+const pickupAddress = document.getElementById("pickup_address").value.trim()
+const pickupCity = document.getElementById("pickup_city").value.trim()
+const deliveryAddress = document.getElementById("delivery_address").value.trim()
+const deliveryCity = document.getElementById("delivery_city").value.trim()
 const priority = document.getElementById("priority").value
-const weight = document.getElementById("weight").value
+const weight = parseFloat(document.getElementById("weight").value || "0")
+const note = document.getElementById("note").value.trim()
 
-if(!pickup || !delivery){
-alert("Pickup et livraison obligatoires")
-return
+if(!client){
+  alert("Le nom du client est obligatoire")
+  return
+}
+
+if(!pickupCity || !deliveryCity){
+  alert("La ville de ramassage et la ville de livraison sont obligatoires")
+  return
+}
+
+const payload = {
+  client_name: client,
+  contact_name: contactName || null,
+  contact_phone: contactPhone || null,
+  pickup_address: pickupAddress || null,
+  pickup_city: pickupCity,
+  delivery_address: deliveryAddress || null,
+  delivery_city: deliveryCity,
+  priority: priority,
+  weight: isNaN(weight) ? 0 : weight,
+  note: note || null,
+  status: "pending"
 }
 
 const { error } = await supabase
-.from("orders")
-.insert([{
-
-client_name:client,
-
-pickup_city:pickup,
-delivery_city:delivery,
-
-priority:priority,
-weight:weight,
-
-status:"pending"
-
-}])
+  .from("orders")
+  .insert([payload])
 
 if(error){
-
-console.error(error)
-alert("Erreur création transport")
-return
-
+  console.error("Erreur insert orders :", error)
+  alert("Erreur création transport")
+  return
 }
 
 alert("Transport créé")
 
 closeModal()
 
-loadOrdersMap()
-loadOrdersList()
+await refreshDispatch()
 
 }
 /* ---------------------- */
