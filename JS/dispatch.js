@@ -154,63 +154,41 @@ window.closeModal = function () {
 /* ---------------------- */
 /* CRÉER TRANSPORT */
 /* ---------------------- */
-
-window.newTransport = async function(){
-
-let options = ""
-
-const { data, error } = await supabase
-.from("clients")
-.select("*")
-.order("name")
-
-if(error || !data){
-
-options = `<option>Aucun client</option>`
-
-}else{
-
-options = data.map(c =>
-`<option value="${c.id}">
-${c.name} - ${c.city}
-</option>`
-).join("")
-
-}
+window.newTransport = function(){
 
 openModal(
 "Créer transport",
 `
+
 <label>Client</label>
+<input id="client" placeholder="Nom client">
 
-<select id="clientSelect">
-${options}
-</select>
+<label>Ramassage (Pickup)</label>
+<input id="pickup_city" placeholder="Ville pickup">
 
-<br><br>
+<label>Livraison</label>
+<input id="delivery_city" placeholder="Ville livraison">
 
 <label>Priorité</label>
-
 <select id="priority">
 <option value="normal">Normal</option>
 <option value="urgent">Urgent</option>
 </select>
 
-<br><br>
-
 <label>Poids</label>
-
 <input id="weight" type="number" value="1">
 
 <br><br>
 
 <button class="btn" onclick="createTransport()">
-Créer
+Créer transport
 </button>
+
 `
 )
 
 }
+
 window.createTransport = async function(){
 
 const clientId = document.getElementById("clientSelect").value
