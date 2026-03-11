@@ -1,4 +1,51 @@
 console.log("dispatch chargé")
+/* PICKUP */
+
+const pickupGeo = await geocodeCity(order.pickup_city)
+
+if(pickupGeo){
+
+const marker = L.circleMarker(
+[pickupGeo.lat,pickupGeo.lng],
+{
+radius:7,
+color:"blue"
+}
+)
+
+marker.bindPopup(`
+Pickup
+${order.pickup_city}
+Client : ${order.client_name}
+`)
+
+markers.addLayer(marker)
+
+}
+
+/* DELIVERY */
+
+const deliveryGeo = await geocodeCity(order.delivery_city)
+
+if(deliveryGeo){
+
+const marker = L.circleMarker(
+[deliveryGeo.lat,deliveryGeo.lng],
+{
+radius:7,
+color:"red"
+}
+)
+
+marker.bindPopup(`
+Delivery
+${order.delivery_city}
+Client : ${order.client_name}
+`)
+
+markers.addLayer(marker)
+
+}
 async function optimizeTourAI(orders){
 
 const cities = orders.map(o=>o.delivery_city)
@@ -191,43 +238,47 @@ Créer transport
 
 window.createTransport = async function(){
 
-const clientId = document.getElementById("clientSelect").value
+const client = document.getElementById("client").value
+const pickup = document.getElementById("pickup_city").value
+const delivery = document.getElementById("delivery_city").value
 const priority = document.getElementById("priority").value
 const weight = document.getElementById("weight").value
 
-const { data:client } = await supabase
-.from("clients")
-.select("*")
-.eq("id",clientId)
-.single()
+if(!pickup || !delivery){
+alert("Pickup et livraison obligatoires")
+return
+}
 
 const { error } = await supabase
 .from("orders")
 .insert([{
 
-client_id:client.id,
-client_name:client.name,
-delivery_city:client.city,
-address:client.address,
+client_name:client,
 
-pickup:"Yverdon",
-status:"pending",
+pickup_city:pickup,
+delivery_city:delivery,
+
 priority:priority,
-weight:weight
+weight:weight,
+
+status:"pending"
 
 }])
 
 if(error){
+
 console.error(error)
 alert("Erreur création transport")
 return
+
 }
 
 alert("Transport créé")
 
 closeModal()
 
-refreshDispatch()
+loadOrdersMap()
+loadOrdersList()
 
 }
 /* ---------------------- */
