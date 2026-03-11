@@ -155,18 +155,44 @@ window.closeModal = function () {
 /* CRÉER TRANSPORT */
 /* ---------------------- */
 
-window.newTransport = function () {
-  openModal(
-    "Créer transport",
-    `
-    <label>Ville destination</label>
-    <input id="dest" type="text" placeholder="Lausanne">
+window.newTransport = async function(){
 
-    <br><br>
+const { data } = await supabase
+.from("clients")
+.select("*")
+.order("name")
 
-    <button class="btn" onclick="createTransport()">Créer</button>
-    `
-  )
+let options = data.map(c =>
+`<option value="${c.id}">${c.name} - ${c.city}</option>`
+).join("")
+
+openModal(
+"Créer transport",
+`
+<label>Client</label>
+<select id="clientSelect">${options}</select>
+
+<br><br>
+
+<label>Priorité</label>
+<select id="priority">
+<option value="normal">Normal</option>
+<option value="urgent">Urgent</option>
+</select>
+
+<br><br>
+
+<label>Poids colis</label>
+<input id="weight" type="number" value="1">
+
+<br><br>
+
+<button class="btn" onclick="createTransport()">
+Créer transport
+</button>
+`
+)
+
 }
 
 window.createTransport = async function () {
