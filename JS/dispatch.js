@@ -15,47 +15,7 @@ const pickupGeo = await geocodeCity(order.pickup_city)
 
 if(pickupGeo){
 
-const marker = L.circleMarker(
-[pickupGeo.lat,pickupGeo.lng],
-{
-radius:7,
-color:"blue"
-}
-)
 
-marker.bindPopup(`
-Pickup
-${order.pickup_city}
-Client : ${order.client_name}
-`)
-
-markers.addLayer(marker)
-
-}
-
-/* DELIVERY */
-
-const deliveryGeo = await geocodeCity(order.delivery_city)
-
-if(deliveryGeo){
-
-const marker = L.circleMarker(
-[deliveryGeo.lat,deliveryGeo.lng],
-{
-radius:7,
-color:"red"
-}
-)
-
-marker.bindPopup(`
-Delivery
-${order.delivery_city}
-Client : ${order.client_name}
-`)
-
-markers.addLayer(marker)
-
-}
 async function optimizeTourAI(orders){
 
 const cities = orders.map(o=>o.delivery_city)
