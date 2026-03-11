@@ -645,36 +645,45 @@ async function getRouteInfo(city) {
 /* TRACER ITINERAIRE */
 /* ---------------------- */
 
-async function drawRoute(city) {
-  const origin = "Yverdon"
+async function drawRoute(city){
 
-  const p1 = await geocodeCity(origin)
-  const p2 = await geocodeCity(city)
+const origin = "Yverdon"
 
-  if (!p1 || !p2) return
+const p1 = await geocodeCity(origin)
+const p2 = await geocodeCity(city)
 
-  const route = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=full&geometries=geojson`
-  )
+if(!p1 || !p2) return
 
-  const data = await route.json()
+const route = await fetch(
+`https://router.project-osrm.org/route/v1/driving/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?overview=full&geometries=geojson`
+)
 
-  if (!data.routes || !data.routes.length) return
+const data = await route.json()
 
-  const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]])
+if(!data.routes || !data.routes.length) return
 
-  if (routeLine) {
-    map.removeLayer(routeLine)
-  }
+const coords = data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]])
 
-  routeLine = L.polyline(coords, {
-    color: "blue",
-    weight: 4
-  }).addTo(map)
-
-  map.fitBounds(routeLine.getBounds(), { padding: [40, 40] })
+if(routeLine){
+map.removeLayer(routeLine)
 }
 
+routeLine = L.polyline(coords,{
+color:"blue",
+weight:4
+}).addTo(map)
+
+map.fitBounds(routeLine.getBounds(),{padding:[40,40]})
+
+/* distance et temps */
+
+const km = (data.routes[0].distance / 1000).toFixed(1)
+const min = Math.round(data.routes[0].duration / 60)
+
+document.getElementById("routeInfo").innerHTML =
+`🚚 ${km} km • ${min} min`
+
+}
 /* ---------------------- */
 /* RAFRAICHISSEMENT AUTO */
 /* ---------------------- */
