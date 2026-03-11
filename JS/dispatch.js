@@ -295,3 +295,46 @@ const min = Math.round(data.routes[0].duration / 60)
 return `${km} km • ${min} min`
 
 }
+async function drawRoute(city){
+
+const origin = "Yverdon"
+
+/* géocodage origine */
+
+const geo1 = await fetch(
+`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}`
+)
+
+const geo2 = await fetch(
+`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`
+)
+
+const r1 = await geo1.json()
+const r2 = await geo2.json()
+
+if(!r1.length || !r2.length) return
+
+const lon1 = r1[0].lon
+const lat1 = r1[0].lat
+
+const lon2 = r2[0].lon
+const lat2 = r2[0].lat
+
+/* récupérer route */
+
+const route = await fetch(
+`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`
+)
+
+const data = await route.json()
+
+const coords = data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]])
+
+/* dessiner ligne */
+
+L.polyline(coords,{
+color:"blue",
+weight:4
+}).addTo(map)
+
+}
