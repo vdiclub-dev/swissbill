@@ -648,5 +648,5 @@ loadOrdersList()
 setInterval(()=>{
 
 loadOrdersMap()
-const map = L.map("map").setView([46.7785,6.6412],9)
+
 },10000)
