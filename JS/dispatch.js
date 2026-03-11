@@ -25,7 +25,9 @@ await refreshDispatch()
 alert("Proposition IA appliquée")
 
 }
-async function proposeAITours(){
+window.proposeAITours = async function(){
+
+console.log("IA bouton cliqué")
 
 const { data, error } = await supabase
 .from("orders")
@@ -43,17 +45,9 @@ alert("Aucun transport à optimiser")
 return
 }
 
-const ai = await askDispatchAI(data)
+alert("IA va analyser "+data.length+" transports")
 
-openModal(
-"Proposition IA",
-`
-<div style="white-space:pre-line;">${ai.summary || "Aucune proposition"}</div>
-<br>
-<button class="btn" onclick="applyAIProposal()">Appliquer</button>
-`
-)
-
+}
 window.lastAIProposal = ai
 }
 async function askDispatchAI(orders){
