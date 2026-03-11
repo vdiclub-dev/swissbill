@@ -369,10 +369,17 @@ for(const order of data){
 
 html+=`
 <div class="order-item">
-
+<th>Distance</th>
 <b>${order.client_name || ""}</b>
 <br>
+<td>
 
+${order.distance_km ? order.distance_km.toFixed(1)+" km" : ""}
+<br>
+
+${order.duration_min ? order.duration_min+" min" : ""}
+
+</td>
 ${order.pickup_city} → ${order.delivery_city}
 
 </div>
