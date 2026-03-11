@@ -63,6 +63,23 @@
         
         .card h2 i { color: #e53935; }
         
+        .transport-number {
+            background: #0f172a;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .transport-number span {
+            font-size: 24px;
+            font-weight: bold;
+            color: #facc15;
+        }
+        
         .form-group {
             margin-bottom: 15px;
         }
@@ -229,13 +246,21 @@
             z-index: 1000;
         }
         
-        .total-weight {
+        .total-info {
             background: #0f172a;
             color: white;
-            padding: 10px;
-            border-radius: 6px;
+            padding: 15px;
+            border-radius: 8px;
             margin-top: 10px;
-            text-align: right;
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+        }
+        
+        .total-info span {
+            color: #facc15;
+            font-weight: bold;
+            font-size: 18px;
         }
     </style>
 </head>
@@ -248,22 +273,25 @@
     </div>
     
     <div class="container">
-        <!-- INFOS TRANSPORT -->
+        <!-- NUMÉRO TRANSPORT AUTO -->
         <div class="card">
-            <h2><i class="fas fa-barcode"></i> Transport</h2>
+            <div class="transport-number">
+                <span><i class="fas fa-barcode"></i> Transport N°</span>
+                <span id="transportNumber">TR-2026-000001</span>
+            </div>
             
             <div class="grid-2">
-                <div class="form-group">
-                    <label>Numéro transport</label>
-                    <input type="text" id="transportId" placeholder="TR-2401" value="TR-2401">
-                </div>
-                
                 <div class="form-group">
                     <label>Client</label>
                     <select id="clientSelect">
                         <option value="CL2025-001|Dupont Jean|Impasse des Griottes 3, 1462 Yvonand">Dupont Jean</option>
                         <option value="CL2025-002|Martin SA|Route de Neuchâtel 8, 1400 Yverdon">Martin SA</option>
                     </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="text" id="currentDate" readonly>
                 </div>
             </div>
         </div>
@@ -316,7 +344,7 @@
                     </div>
                     
                     <div class="form-group">
-                        <label>Poids (kg)</label>
+                        <label>Poids unitaire (kg)</label>
                         <input type="number" id="editWeight" step="0.1" value="1.0">
                     </div>
                 </div>
@@ -344,9 +372,10 @@
                 </div>
             </div>
             
-            <!-- Poids total -->
-            <div id="totalWeight" class="total-weight">
-                Poids total: 0 kg
+            <!-- RÉCAPITULATIF POIDS ET NOMBRE COLIS -->
+            <div id="recapColis" class="total-info">
+                <span>📊 Récapitulatif</span>
+                <span id="recapText">0 colis • 0 kg</span>
             </div>
         </div>
         
@@ -368,7 +397,7 @@
             </div>
             
             <button class="btn btn-primary" onclick="genererPDF()">
-                <i class="fas fa-file-pdf"></i> Générer PDF étiquette
+                <i class="fas fa-file-pdf"></i> Générer PDF (preuve)
             </button>
             
             <button class="btn btn-success" onclick="envoyer()">
@@ -382,6 +411,21 @@
     <div id="notification" class="notification"></div>
     
     <script>
+        // ===== NUMÉRO DE TRANSPORT AUTO =====
+        let compteur = 1; // À remplacer par le dernier numéro en base
+        
+        function genererNumeroTransport() {
+            const annee = new Date().getFullYear();
+            const numeroFormate = String(compteur).padStart(6, '0');
+            return `TR-${annee}-${numeroFormate}`;
+        }
+        
+        document.getElementById('transportNumber').textContent = genererNumeroTransport();
+        
+        // Date du jour
+        const today = new Date();
+        document.getElementById('currentDate').value = today.toLocaleDateString('fr-CH');
+        
         // ===== DONNÉES =====
         let colisList = [];
         let editingIndex = -1;
@@ -408,8 +452,8 @@
             const colis = colisList[index];
             editingIndex = index;
             document.getElementById('editDescription').value = colis.description;
-            document.getElementById('editWeight').value = colis.weight;
-            document.getElementById('editQuantity').value = colis.quantity;
+            document.getElementById('editWeight').value = colis.poids;
+            document.getElementById('editQuantity').value = colis.quantite;
             document.getElementById('editType').value = colis.type;
             document.getElementById('formTitle').textContent = 'Modifier le colis';
             document.getElementById('colisForm').style.display = 'block';
@@ -425,8 +469,8 @@
         
         function saveColis() {
             const description = document.getElementById('editDescription').value;
-            const weight = parseFloat(document.getElementById('editWeight').value);
-            const quantity = parseInt(document.getElementById('editQuantity').value);
+            const poids = parseFloat(document.getElementById('editWeight').value);
+            const quantite = parseInt(document.getElementById('editQuantity').value);
             const type = document.getElementById('editType').value;
             
             if (!description) {
@@ -436,9 +480,10 @@
             
             const colis = {
                 description: description,
-                weight: weight,
-                quantity: quantity,
-                type: type
+                poids: poids,
+                quantite: quantite,
+                type: type,
+                poidsTotal: poids * quantite
             };
             
             if (editingIndex === -1) {
@@ -460,20 +505,21 @@
         
         function afficherColis() {
             const listEl = document.getElementById('colisList');
-            let total = 0;
+            let totalColis = 0;
+            let totalPoids = 0;
             let html = '';
             
             colisList.forEach((colis, index) => {
-                const poidsTotal = colis.weight * colis.quantity;
-                total += poidsTotal;
+                totalColis += colis.quantite;
+                totalPoids += colis.poidsTotal;
                 
                 html += `
                     <div class="colis-item">
                         <div class="colis-info">
                             <span><strong>${colis.description}</strong></span>
-                            <span>${colis.weight}kg x ${colis.quantity}</span>
+                            <span>${colis.poids}kg x ${colis.quantite}</span>
                             <span>(${colis.type})</span>
-                            <span style="color:#e53935;">= ${poidsTotal}kg</span>
+                            <span style="color:#e53935; font-weight:bold;">= ${colis.poidsTotal}kg</span>
                         </div>
                         <div class="colis-actions">
                             <button class="btn-edit" onclick="editColis(${index})"><i class="fas fa-edit"></i></button>
@@ -488,7 +534,9 @@
             }
             
             listEl.innerHTML = html;
-            document.getElementById('totalWeight').innerHTML = `Poids total: ${total.toFixed(1)} kg`;
+            
+            // Mise à jour du récapitulatif
+            document.getElementById('recapText').innerHTML = `${totalColis} colis • ${totalPoids.toFixed(1)} kg`;
         }
         
         // ===== SÉLECTION VITESSE =====
@@ -500,58 +548,136 @@
             document.getElementById('speed').value = speed;
         }
         
-        // ===== GÉNÉRER PDF =====
+        // ===== GÉNÉRER PDF AVEC TOUS LES DÉTAILS =====
         function genererPDF() {
-            const id = document.getElementById('transportId').value;
+            const transportId = document.getElementById('transportNumber').textContent;
+            const client = document.getElementById('clientSelect').value.split('|')[1];
             const depart = document.getElementById('departAddress').textContent.replace('Départ:', '').trim();
             const livraison = document.getElementById('deliveryAddress').value;
             const vitesse = document.getElementById('speed').value;
             const instructions = document.getElementById('instructions').value;
+            const date = document.getElementById('currentDate').value;
             
-            // Calculer poids total
-            let poidsTotal = 0;
+            // Calculs
+            let totalColis = 0;
+            let totalPoids = 0;
             let detailsColis = '';
+            
             colisList.forEach(c => {
-                const total = c.weight * c.quantity;
-                poidsTotal += total;
-                detailsColis += `<p>📦 ${c.description}: ${c.weight}kg x ${c.quantity} = ${total}kg (${c.type})</p>`;
+                totalColis += c.quantite;
+                totalPoids += c.poidsTotal;
+                detailsColis += `
+                    <tr>
+                        <td>${c.description}</td>
+                        <td>${c.poids} kg</td>
+                        <td>${c.quantite}</td>
+                        <td>${c.poidsTotal} kg</td>
+                        <td>${c.type}</td>
+                    </tr>
+                `;
             });
             
             // Données pour QR
-            const qrData = `${id}|${depart}|${livraison}|${vitesse}`;
+            const qrData = `${transportId}|${client}|${depart}|${livraison}|${totalColis}colis|${totalPoids}kg|${vitesse}`;
             const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
             
-            // Aperçu
+            // APERÇU PDF
             document.getElementById('pdfPreview').innerHTML = `
-                <h3 style="margin-bottom:10px;">📄 Étiquette</h3>
-                <div style="text-align:center; background:white; padding:15px; border-radius:8px;">
-                    <h3 style="color:#e53935;">Transport #${id}</h3>
-                    <img src="${qrUrl}" style="width:150px; margin:10px 0;">
-                    <p><strong>Départ:</strong> ${depart}</p>
-                    <p><strong>Livraison:</strong> ${livraison}</p>
-                    <p><strong>Poids total:</strong> ${poidsTotal.toFixed(1)} kg</p>
-                    <div style="text-align:left; margin:10px 0; padding:10px; background:#f8fafc;">
-                        ${detailsColis}
+                <h3 style="margin-bottom:15px;">📄 BORDEREAU DE TRANSPORT</h3>
+                <div style="background:white; padding:20px; border-radius:8px; border:1px solid #e2e8f0;">
+                    
+                    <!-- EN-TÊTE -->
+                    <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+                        <div>
+                            <h2 style="color:#e53935;">LÉMAN-COURSES</h2>
+                            <p>Impasse des Griottes 3, 1462 Yvonand</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <h3 style="color:#0f172a;">${transportId}</h3>
+                            <p>Date: ${date}</p>
+                        </div>
                     </div>
-                    <p><strong>Vitesse:</strong> ${vitesse}</p>
-                    ${instructions ? `<p>📝 ${instructions}</p>` : ''}
+                    
+                    <!-- QR CODE -->
+                    <div style="text-align:center; margin:20px 0;">
+                        <img src="${qrUrl}" style="width:150px; border:1px solid #000;">
+                        <p style="font-size:12px;">Scan pour prise en charge</p>
+                    </div>
+                    
+                    <!-- CLIENT ET ADRESSES -->
+                    <div style="margin:20px 0; padding:15px; background:#f8fafc; border-radius:8px;">
+                        <p><strong>Client:</strong> ${client}</p>
+                        <p><strong>Départ:</strong> ${depart}</p>
+                        <p><strong>Livraison:</strong> ${livraison}</p>
+                        <p><strong>Vitesse:</strong> ${vitesse}</p>
+                    </div>
+                    
+                    <!-- TABLEAU DES COLIS (PREUVE) -->
+                    <h4 style="margin:15px 0;">📦 Détail des colis</h4>
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#e53935; color:white;">
+                                <th style="padding:8px;">Description</th>
+                                <th>Poids U.</th>
+                                <th>Qté</th>
+                                <th>Poids Total</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${detailsColis}
+                        </tbody>
+                        <tfoot>
+                            <tr style="background:#0f172a; color:white; font-weight:bold;">
+                                <td colspan="2" style="padding:8px;">TOTAUX</td>
+                                <td>${totalColis} colis</td>
+                                <td>${totalPoids.toFixed(1)} kg</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    
+                    <!-- INSTRUCTIONS -->
+                    ${instructions ? `
+                        <div style="margin-top:15px; padding:10px; background:#fee2e2; border-radius:8px;">
+                            <strong>📝 Instructions:</strong> ${instructions}
+                        </div>
+                    ` : ''}
+                    
+                    <!-- SIGNATURES -->
+                    <div style="margin-top:30px; display:flex; justify-content:space-between;">
+                        <div>
+                            <p>Expéditeur: ____________________</p>
+                        </div>
+                        <div>
+                            <p>Chauffeur: ____________________</p>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top:20px; font-size:11px; color:#64748b; text-align:center;">
+                        Ce document fait office de preuve de prise en charge
+                    </div>
                 </div>
             `;
             document.getElementById('pdfPreview').style.display = 'block';
             
             showNotification('✅ PDF généré');
+            
+            // Incrémenter le compteur pour le prochain transport
+            compteur++;
+            document.getElementById('transportNumber').textContent = genererNumeroTransport();
         }
         
         // ===== ENVOYER AU DISPATCH =====
         function envoyer() {
             const transport = {
-                id: document.getElementById('transportId').value,
+                id: document.getElementById('transportNumber').textContent,
                 client: document.getElementById('clientSelect').value.split('|')[1],
                 livraison: document.getElementById('deliveryAddress').value,
                 colis: colisList,
                 vitesse: document.getElementById('speed').value,
                 instructions: document.getElementById('instructions').value,
-                timestamp: new Date()
+                date: document.getElementById('currentDate').value
             };
             
             console.log("✅ Transport préparé:", transport);
@@ -576,13 +702,14 @@
             setTimeout(() => { notif.style.display = 'none'; }, 2000);
         }
         
-        // Ajouter un premier colis exemple
+        // Ajouter un exemple
         window.onload = function() {
             colisList.push({
                 description: 'Carton principal',
-                weight: 1.5,
-                quantity: 2,
-                type: 'Fragile'
+                poids: 1.5,
+                quantite: 2,
+                type: 'Fragile',
+                poidsTotal: 3.0
             });
             afficherColis();
         };
