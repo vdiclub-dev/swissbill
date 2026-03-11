@@ -549,42 +549,82 @@ map.fitBounds(bounds,{padding:[50,50]})
 /* LISTE TRANSPORTS */
 /* ---------------------- */
 
-async function loadOrdersList() {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*")
+async function loadOrdersList(){
 
-  if (error) {
-    console.error(error)
-    return
-  }
+const { data, error } = await supabase
+.from("orders")
+.select("*")
 
-  const list = document.getElementById("orders-list")
-  if (!list) return
+if(error){
+console.error(error)
+return
+}
 
-  list.innerHTML = ""
+const list = document.getElementById("orders-list")
+if(!list) return
 
-  const optimized = await optimizeTour(data)
+/* tableau */
 
-  for (const order of optimized) {
-    const item = document.createElement("div")
-    item.className = "order-item"
+let html = `
+<table class="dispatch-table">
 
-    const route = await getRouteInfo(order.delivery_city)
+<thead>
+<tr>
+<th>ID</th>
+<th>Client</th>
+<th>Pickup</th>
+<th>Delivery</th>
+<th>Priorité</th>
+<th>Poids</th>
+<th></th>
+</tr>
+</thead>
 
-    item.innerHTML = `
-      📦 #${order.id}<br>
-      ${order.delivery_city}<br>
-      ${route || ""}
-    `
+<tbody>
+`
 
-    item.onclick = () => {
-      focusTransport(order.delivery_city)
-      drawRoute(order.delivery_city)
-    }
+for(const order of data){
 
-    list.appendChild(item)
-  }
+html += `
+<tr>
+
+<td>#${order.id}</td>
+
+<td>
+${order.client_name || ""}
+</td>
+
+<td>
+${order.pickup_street || ""} ${order.pickup_number || ""}<br>
+${order.pickup_postal || ""} ${order.pickup_city || ""}
+</td>
+
+<td>
+${order.delivery_street || ""} ${order.delivery_number || ""}<br>
+${order.delivery_postal || ""} ${order.delivery_city || ""}
+</td>
+
+<td>${order.priority || ""}</td>
+
+<td>${order.weight || ""} kg</td>
+
+<td>
+<button onclick="focusTransport('${order.delivery_city}')">
+Carte
+</button>
+</td>
+
+</tr>
+`
+}
+
+html += `
+</tbody>
+</table>
+`
+
+list.innerHTML = html
+
 }
 
 /* ---------------------- */
