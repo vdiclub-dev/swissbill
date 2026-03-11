@@ -77,30 +77,91 @@ window.newTransport=function(){
 
 openModal(
 "Créer transport",
-`
 
-<label>Client</label>
+`
+<div class="transport-form">
+
+<div class="form-col">
+
+<h3>Client</h3>
+
+<label>Nom</label>
 <input id="client">
 
-<label>Pickup ville</label>
+<label>Téléphone</label>
+<input id="phone">
+
+</div>
+
+<div class="form-row">
+
+<div class="form-col">
+
+<h3>Pickup</h3>
+
+<label>Rue</label>
+<input id="pickup_street">
+
+<label>N°</label>
+<input id="pickup_number">
+
+<label>Code postal</label>
+<input id="pickup_postal">
+
+<label>Ville</label>
 <input id="pickup_city">
 
-<label>Livraison ville</label>
+</div>
+
+<div class="form-col">
+
+<h3>Livraison</h3>
+
+<label>Rue</label>
+<input id="delivery_street">
+
+<label>N°</label>
+<input id="delivery_number">
+
+<label>Code postal</label>
+<input id="delivery_postal">
+
+<label>Ville</label>
 <input id="delivery_city">
+
+</div>
+
+</div>
+
+<div class="form-col">
+
+<h3>Colis</h3>
 
 <label>Poids</label>
 <input id="weight" type="number" value="1">
 
 <label>Priorité</label>
+
 <select id="priority">
 <option value="normal">Normal</option>
 <option value="urgent">Urgent</option>
 </select>
 
-<br><br>
+<label>Remarque</label>
 
-<button onclick="createTransport()">Créer</button>
+<textarea id="note"></textarea>
 
+</div>
+
+<div class="form-actions">
+
+<button class="btn" onclick="createTransport()">
+Créer transport
+</button>
+
+</div>
+
+</div>
 `
 )
 
