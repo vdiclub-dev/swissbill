@@ -653,12 +653,22 @@ async function refreshDispatch() {
 }
 
 /* ---------------------- */
-/* DÉMARRAGE */
+/* DEMARRAGE */
 /* ---------------------- */
 
-refreshDispatch()
+async function startDispatch(){
 
-setInterval(() => {
-  loadOrdersMap()
-  loadDispatchStats()
-}, 10000)
+await loadDispatchStats()
+await loadOrdersMap()
+await loadDrivers()
+await loadOrdersList()
+
+}
+
+startDispatch()
+
+setInterval(()=>{
+
+loadOrdersMap()
+
+},10000)
