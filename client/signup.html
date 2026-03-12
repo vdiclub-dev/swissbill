@@ -304,71 +304,60 @@
 </div>
 
 <script>
-    // Fonction pour remplir les données de démonstration
-    function fillDemoData() {
-        document.getElementById('civility').value = 'M.';
-        document.getElementById('name').value = 'Dupont Jean';
-        document.getElementById('email').value = 'jean.dupont@email.ch';
-        document.getElementById('phone').value = '079 123 45 67';
-        document.getElementById('address').value = 'Rue du Simplon 12';
-        document.getElementById('npa').value = '1000';
-        document.getElementById('city').value = 'Lausanne';
-        document.getElementById('clientNumber').value = 'CL2025-001';
-        document.getElementById('password').value = '1234';
-        document.getElementById('confirmPassword').value = '1234';
-        document.getElementById('deliveryInstructions').value = 'Sonnette: Dupont, 2ème étage';
+async function createAccount() {
+    const clientNumber = document.getElementById('clientNumber').value;
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    const terms = document.getElementById('terms').checked;
+    
+    if (!terms) {
+        alert('Veuillez accepter les conditions générales');
+        return;
     }
-    // Rediriger vers la connexion après inscription
-alert(`✅ Compte créé ! Vous pouvez maintenant vous connecter.`);
-window.location.href = 'index.html';
-    // Fonction de création de compte
-    function createAccount() {
-        // Récupérer les valeurs
-        const clientNumber = document.getElementById('clientNumber').value;
-        const password = document.getElementById('password').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
-        const terms = document.getElementById('terms').checked;
+    
+    if (password !== confirmPassword) {
+        alert('Les codes ne correspondent pas');
+        return;
+    }
+    
+    try {
+        // 1. Créer dans users
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .insert([{
+                username: clientNumber,
+                password: password,
+                role: 'client'
+            }])
+            .select();
         
-        // Validations
-        if (!terms) {
-            alert('Veuillez accepter les conditions générales');
-            return;
-        }
+        if (userError) throw userError;
         
-        if (password !== confirmPassword) {
-            alert('Les codes d\'accès ne correspondent pas');
-            return;
-        }
+        // 2. Créer dans clients
+        const { error: clientError } = await supabase
+            .from('clients')
+            .insert([{
+                user_id: userData[0].id,
+                client_number: clientNumber,
+                company_name: document.getElementById('name').value,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value,
+                address: document.getElementById('address').value,
+                npa: document.getElementById('npa').value,
+                city: document.getElementById('city').value,
+                default_pickup_address: 'Impasse des Griottes 3, 1462 Yvonand'
+            }]);
         
-        if (password.length !== 4 || isNaN(password)) {
-            alert('Le code doit être composé de 4 chiffres');
-            return;
-        }
+        if (clientError) throw clientError;
         
-        // Simuler la création de compte
-        const newClient = {
-            clientNumber: clientNumber,
-            name: document.getElementById('name').value,
-            email: document.getElementById('email').value,
-            phone: document.getElementById('phone').value,
-            address: document.getElementById('address').value,
-            npa: document.getElementById('npa').value,
-            city: document.getElementById('city').value,
-            password: password,
-            deliveryInstructions: document.getElementById('deliveryInstructions').value,
-            createdAt: new Date().toISOString()
-        };
-        
-        console.log('✅ NOUVEAU CLIENT CRÉÉ:', newClient);
-        
-        // ICI, vous enverrez vers Supabase
-        // await supabase.from('clients').insert([newClient]);
-        
-        alert(`✅ Compte créé avec succès !\n\nVotre numéro client: ${clientNumber}\n\nVous pouvez maintenant vous connecter.`);
-        
-        // Rediriger vers la page de connexion
+        alert('✅ Compte créé ! Vous pouvez vous connecter.');
         window.location.href = 'index.html';
+        
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('❌ Erreur: ' + error.message);
     }
+}
 </script>
 
 </body>
