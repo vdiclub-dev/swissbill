@@ -16,7 +16,6 @@
         * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
         body { background: #f1f5f9; min-height: 100vh; }
         
-        /* HEADER */
         .header {
             background: #0f172a; color: white; padding: 15px 30px;
             display: flex; justify-content: space-between; align-items: center;
@@ -26,12 +25,10 @@
         .logo i { color: #10b981; }
         .user-section { display: flex; align-items: center; gap: 20px; }
         .user-badge { background: #1e293b; padding: 8px 16px; border-radius: 50px; display: flex; align-items: center; gap: 8px; }
-        .user-badge i { color: #10b981; }
         .btn-logout { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         
         .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; }
         
-        /* CARTES STATISTIQUES */
         .stats-grid {
             display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px; margin-bottom: 20px;
@@ -47,7 +44,6 @@
         .stat-info h3 { font-size: 24px; margin-bottom: 4px; }
         .stat-info p { color: #64748b; font-size: 14px; }
         
-        /* POINTAGE */
         .pointage-section {
             background: white; border-radius: 12px; padding: 20px;
             margin-bottom: 20px; border: 1px solid #e2e8f0;
@@ -65,7 +61,6 @@
         .btn-fin { background: #ef4444; color: white; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        /* COMPTEURS */
         .compteurs-grid {
             display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;
         }
@@ -76,7 +71,6 @@
         .compteur-valeur { font-size: 32px; font-weight: bold; color: #10b981; }
         .compteur-label { color: #64748b; font-size: 14px; margin-top: 5px; }
         
-        /* LISTE COLIS (cliquable) */
         .colis-list {
             background: white; border-radius: 12px; padding: 20px;
             margin-bottom: 20px; border: 1px solid #e2e8f0;
@@ -92,48 +86,19 @@
             transform: translateX(5px);
         }
         .colis-item:last-child { border-bottom: none; }
-        .colis-info {
-            flex: 1;
-        }
-        .colis-numero {
-            font-weight: bold;
-            color: #0f172a;
-        }
-        .colis-adresse {
-            font-size: 13px;
-            color: #64748b;
-            margin-top: 4px;
-        }
+        .colis-info { flex: 1; }
+        .colis-numero { font-weight: bold; color: #0f172a; }
+        .colis-adresse { font-size: 13px; color: #64748b; margin-top: 4px; }
         .colis-statut {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
+            padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
         }
-        .statut-charge {
-            background: #fef3c7;
-            color: #92400e;
-        }
-        .statut-livre {
-            background: #dcfce7;
-            color: #166534;
-        }
-        .statut-transit {
-            background: #dbeafe;
-            color: #1e40af;
-        }
+        .statut-charge { background: #fef3c7; color: #92400e; }
+        .statut-transit { background: #dbeafe; color: #1e40af; }
+        .statut-livre { background: #dcfce7; color: #166534; }
         
-        /* MESSAGE SUCCÈS */
         .success-message {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #10b981;
-            color: white;
-            padding: 15px 25px;
-            border-radius: 8px;
-            animation: slideIn 0.3s;
-            z-index: 1000;
+            position: fixed; top: 20px; right: 20px; background: #10b981; color: white;
+            padding: 15px 25px; border-radius: 8px; animation: slideIn 0.3s; z-index: 1000;
         }
         
         @keyframes slideIn {
@@ -156,7 +121,6 @@
             try {
                 console.log("🚀 Dashboard chauffeur...");
                 
-                // ===== VÉRIFICATION CONFIG =====
                 if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
                 const supabase = window.supabase.createClient(
@@ -164,7 +128,6 @@
                     window.SUPABASE_CONFIG.key
                 );
                 
-                // ===== VÉRIFICATION CONNEXION =====
                 const chauffeurData = JSON.parse(localStorage.getItem('chauffeur'));
                 if (!chauffeurData || !chauffeurData.loggedIn) {
                     window.location.href = 'index.html';
@@ -173,7 +136,6 @@
                 
                 console.log("✅ Chauffeur connecté:", chauffeurData);
                 
-                // ===== CHARGEMENT DES DONNÉES =====
                 const { data: chauffeur, error: chauffeurError } = await supabase
                     .from('chauffeurs')
                     .select('*')
@@ -214,108 +176,6 @@
                     console.warn("Erreur pointage:", e);
                 }
                 
-                // ===== CHARGEMENT DES COLIS =====
-                async function chargerColis() {
-                    try {
-                        // Charger les colis en cours (status = 'pending' ou 'transit')
-                        const { data } = await supabase
-                            .from('transport_orders_simple')
-                            .select('*')
-                            .in('status', ['pending', 'transit'])
-                            .order('created_at', { ascending: false })
-                            .limit(10);
-                        
-                        let html = '';
-                        
-                        if (data && data.length > 0) {
-                            data.forEach(t => {
-                                let statutTexte = 'En charge';
-                                let statutClass = 'statut-charge';
-                                
-                                if (t.status === 'transit') {
-                                    statutTexte = 'En route';
-                                    statutClass = 'statut-transit';
-                                }
-                                
-                                html += `
-                                    <div class="colis-item" onclick="prendreColis('${t.id}', '${t.status}')">
-                                        <div class="colis-info">
-                                            <div class="colis-numero">📦 ${t.order_number}</div>
-                                            <div class="colis-adresse">${t.delivery_address?.substring(0, 50) || 'Adresse inconnue'}</div>
-                                            <div style="font-size:11px; color:#aaa; margin-top:4px;">${t.destinataire_nom || 'Destinataire inconnu'}</div>
-                                        </div>
-                                        <span class="colis-statut ${statutClass}">${statutTexte}</span>
-                                    </div>
-                                `;
-                            });
-                        } else {
-                            html = '<div style="text-align:center; padding:20px; color:#64748b;">Aucun colis à livrer</div>';
-                        }
-                        
-                        document.getElementById('colisList').innerHTML = html;
-                        
-                    } catch(e) {
-                        console.error(e);
-                        document.getElementById('colisList').innerHTML = '<div style="color:#ef4444;">Erreur de chargement</div>';
-                    }
-                }
-                
-                // ===== FONCTION POUR PRENDRE UN COLIS =====
-                window.prendreColis = async function(id, statutActuel) {
-                    try {
-                        if (statutActuel === 'pending') {
-                            // Première prise : "En route"
-                            if (confirm('Prendre ce colis en charge ?')) {
-                                const { error } = await supabase
-                                    .from('transport_orders_simple')
-                                    .update({ 
-                                        status: 'transit',
-                                        pris_en_charge: new Date()
-                                    })
-                                    .eq('id', id);
-                                
-                                if (error) throw error;
-                                
-                                showMessage('✅ Colis pris en charge', '#10b981');
-                            }
-                        } else if (statutActuel === 'transit') {
-                            // Deuxième clic : "Livré"
-                            if (confirm('Marquer ce colis comme livré ?')) {
-                                const { error } = await supabase
-                                    .from('transport_orders_simple')
-                                    .update({ 
-                                        status: 'delivered',
-                                        delivered_at: new Date()
-                                    })
-                                    .eq('id', id);
-                                
-                                if (error) throw error;
-                                
-                                showMessage('✅ Colis livré avec succès', '#10b981');
-                            }
-                        }
-                        
-                        // Recharger la liste
-                        chargerColis();
-                        
-                    } catch(e) {
-                        alert('❌ Erreur: ' + e.message);
-                    }
-                };
-                
-                // ===== MESSAGE DE SUCCÈS =====
-                function showMessage(texte, couleur) {
-                    const msg = document.createElement('div');
-                    msg.className = 'success-message';
-                    msg.style.backgroundColor = couleur;
-                    msg.innerHTML = texte;
-                    document.body.appendChild(msg);
-                    
-                    setTimeout(() => {
-                        msg.remove();
-                    }, 3000);
-                }
-                
                 // ===== CONSTRUCTION PAGE =====
                 document.getElementById('app').innerHTML = `
                     <div class="header">
@@ -327,7 +187,6 @@
                     </div>
                     
                     <div class="container">
-                        <!-- STATS DU JOUR -->
                         <div class="stats-grid">
                             <div class="stat-card">
                                 <div class="stat-icon"><i class="fas fa-clock"></i></div>
@@ -352,7 +211,6 @@
                             </div>
                         </div>
                         
-                        <!-- POINTAGE -->
                         <div class="pointage-section">
                             <h3><i class="fas fa-fingerprint"></i> Pointage du jour</h3>
                             <div style="display: grid; grid-template-columns: repeat(2,1fr); gap:10px; margin:15px 0;">
@@ -377,7 +235,6 @@
                             </div>
                         </div>
                         
-                        <!-- COMPTEURS PERSONNELS -->
                         <div class="compteurs-grid">
                             <div class="compteur-card">
                                 <div class="compteur-valeur" id="congesRestants">${compteurActuel?.conges_restants || 20}</div>
@@ -393,40 +250,135 @@
                             </div>
                         </div>
                         
-                        <!-- LISTE DES COLIS (cliquable) -->
                         <div class="colis-list">
                             <h3><i class="fas fa-box"></i> Mes colis à livrer</h3>
                             <div id="colisList">Chargement...</div>
                             <div style="margin-top:15px; font-size:12px; color:#64748b; text-align:center;">
-                                👆 Cliquez sur un colis pour le prendre en charge ou le livrer
+                                👆 Clic 1 = prendre en charge | Clic 2 = livrer
                             </div>
                         </div>
                     </div>
                 `;
                 
-                // ===== VARIABLES GLOBALES =====
+                // ===== VARIABLES =====
                 window.chauffeurId = chauffeur.id;
                 window.pointageActuel = pointage;
-                window.supabaseClient = supabase;
                 
-                // ===== FONCTIONS DE POINTAGE =====
+                // ===== CHARGEMENT DES COLIS =====
+                async function chargerColis() {
+                    try {
+                        // Charger les colis non livrés
+                        const { data } = await supabase
+                            .from('transport_orders_simple')
+                            .select('*')
+                            .neq('status', 'delivered')
+                            .order('created_at', { ascending: false })
+                            .limit(10);
+                        
+                        let html = '';
+                        
+                        if (data && data.length > 0) {
+                            data.forEach(t => {
+                                let statutTexte = 'En attente';
+                                let statutClass = 'statut-charge';
+                                
+                                if (t.status === 'transit') {
+                                    statutTexte = 'En route';
+                                    statutClass = 'statut-transit';
+                                }
+                                
+                                html += `
+                                    <div class="colis-item" onclick="gererColis('${t.id}', '${t.status}')">
+                                        <div class="colis-info">
+                                            <div class="colis-numero">📦 ${t.order_number}</div>
+                                            <div class="colis-adresse">${t.delivery_address?.substring(0, 50) || 'Adresse inconnue'}</div>
+                                            <div style="font-size:11px; color:#aaa; margin-top:4px;">${t.destinataire_nom || 'Destinataire inconnu'}</div>
+                                        </div>
+                                        <span class="colis-statut ${statutClass}">${statutTexte}</span>
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            html = '<div style="text-align:center; padding:20px;">Aucun colis à livrer</div>';
+                        }
+                        
+                        document.getElementById('colisList').innerHTML = html;
+                        
+                        // Compter les colis livrés aujourd'hui
+                        const aujourdhui = new Date().toISOString().split('T')[0];
+                        const livres = data?.filter(t => 
+                            t.status === 'delivered' && 
+                            t.delivered_at?.startsWith(aujourdhui)
+                        ).length || 0;
+                        
+                        document.getElementById('colisAujourdhui').textContent = livres;
+                        
+                    } catch(e) {
+                        console.error(e);
+                    }
+                }
+                
+                // ===== GESTION DES COLIS =====
+                window.gererColis = async function(id, statutActuel) {
+                    try {
+                        if (statutActuel === 'pending') {
+                            // Passer en transit
+                            if (confirm('Prendre ce colis en charge ?')) {
+                                const { error } = await supabase
+                                    .from('transport_orders_simple')
+                                    .update({ 
+                                        status: 'transit'
+                                    })
+                                    .eq('id', id);
+                                
+                                if (error) throw error;
+                                
+                                showMessage('✅ Colis pris en charge');
+                            }
+                        } else if (statutActuel === 'transit') {
+                            // Passer en livré
+                            if (confirm('Marquer ce colis comme livré ?')) {
+                                const { error } = await supabase
+                                    .from('transport_orders_simple')
+                                    .update({ 
+                                        status: 'delivered',
+                                        delivered_at: new Date()
+                                    })
+                                    .eq('id', id);
+                                
+                                if (error) throw error;
+                                
+                                showMessage('✅ Colis livré avec succès');
+                            }
+                        }
+                        
+                        // Recharger
+                        await chargerColis();
+                        
+                    } catch(e) {
+                        alert('❌ Erreur: ' + e.message);
+                    }
+                };
+                
+                // ===== MESSAGE =====
+                function showMessage(texte) {
+                    const msg = document.createElement('div');
+                    msg.className = 'success-message';
+                    msg.innerHTML = texte;
+                    document.body.appendChild(msg);
+                    setTimeout(() => msg.remove(), 3000);
+                }
+                
+                // ===== POINTAGE =====
                 window.pointer = async function(action) {
                     const now = new Date();
                     const updates = {};
                     
                     switch(action) {
-                        case 'debut':
-                            updates.debut_travail = now;
-                            break;
-                        case 'pause_debut':
-                            updates.debut_pause = now;
-                            break;
-                        case 'pause_fin':
-                            updates.fin_pause = now;
-                            break;
-                        case 'fin':
-                            updates.fin_travail = now;
-                            break;
+                        case 'debut': updates.debut_travail = now; break;
+                        case 'pause_debut': updates.debut_pause = now; break;
+                        case 'pause_fin': updates.fin_pause = now; break;
+                        case 'fin': updates.fin_travail = now; break;
                     }
                     
                     try {
