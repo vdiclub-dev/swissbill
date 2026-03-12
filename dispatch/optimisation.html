@@ -13,10 +13,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
     
-    <!-- Supabase et Config -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
-    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
         body { background: #111; height: 100vh; overflow: hidden; color: white; }
@@ -103,8 +99,15 @@
         <div style="padding:20px;">Chargement...</div>
     </div>
 
+    <!-- SCRIPTS DANS LE BODY (ordre crucial) -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+
     <script>
-        document.addEventListener('DOMContentLoaded', async function() {
+        // Attendre que tout soit chargé
+        window.addEventListener('load', async function() {
             try {
                 console.log("🚀 Optimisation des tournées...");
                 
@@ -120,6 +123,11 @@
                 if (!user) { window.location.href = '../login/'; return; }
                 const userData = JSON.parse(user);
                 if (userData.role !== 'admin') { window.location.href = '../'; return; }
+                
+                // ===== VÉRIFICATION LEAFLET =====
+                if (typeof L === 'undefined') {
+                    throw new Error("Leaflet n'est pas chargé. Vérifiez les scripts.");
+                }
                 
                 // ===== DONNÉES =====
                 let allTransports = [];
@@ -231,6 +239,8 @@
                     
                     // Ajouter le dépôt
                     L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
+                    
+                    console.log("✅ Carte initialisée");
                 }
                 
                 // ===== FONCTION D'OPTIMISATION =====
@@ -258,7 +268,7 @@
                             adresse: t.delivery_address,
                             urgent: t.speed === '6h',
                             poids: t.weight || 1,
-                            service: 15 // 15 min de service
+                            service: 15
                         };
                     });
                     
@@ -283,27 +293,21 @@
                         
                         let positionActuelle = { lat: depot.lat, lng: depot.lng };
                         
-                        // Prendre les jobs dans l'ordre
                         for (let i = jobsRestants.length - 1; i >= 0; i--) {
                             const job = jobsRestants[i];
                             
-                            // Vérifier la capacité
                             if (tournee.poidsTotal + job.poids > vehicule.capacite) continue;
                             
-                            // Calculer la distance
                             const distance = calculerDistance(
                                 positionActuelle.lat, positionActuelle.lng,
                                 job.lat, job.lng
                             );
                             
-                            // Temps de trajet
-                            const tempsTrajet = (distance / vehicule.vitesse) * 60; // en minutes
-                            
-                            // Vérifier l'heure de fin
+                            const tempsTrajet = (distance / vehicule.vitesse) * 60;
                             const heureArrivee = tournee.tempsActuel + tempsTrajet + job.service;
+                            
                             if (heureArrivee > vehicule.fin) continue;
                             
-                            // Ajouter à la tournée
                             tournee.stops.push({
                                 ...job,
                                 distance: distance,
@@ -316,11 +320,9 @@
                             tournee.tempsActuel = heureArrivee;
                             positionActuelle = { lat: job.lat, lng: job.lng };
                             
-                            // Retirer des jobs restants
                             jobsRestants.splice(i, 1);
                         }
                         
-                        // Calculer le retour au dépôt
                         if (tournee.stops.length > 0) {
                             const dernier = tournee.stops[tournee.stops.length - 1];
                             const distanceRetour = calculerDistance(
@@ -336,7 +338,6 @@
                         }
                     });
                     
-                    // Afficher les résultats
                     afficherResultats(tournees, jobsRestants);
                 };
                 
@@ -375,15 +376,13 @@
                                             <div class="tour-stats">
                                                 <span>📏 ${Math.round(t.distanceTotal)} km</span>
                                                 <span>⚖️ ${t.poidsTotal} kg / ${t.capacite} kg</span>
-                                                <span>⏱️ ${formatTime(t.tempsActuel)}</span>
+                                                <span>⏱️ ${formatTime(Math.round(t.tempsActuel))}</span>
                                             </div>
                                             ${t.stops.map((s, i) => `
                                                 <div class="tour-stop">
                                                     <strong>${i+1}. ${s.nom}</strong>
-                                                    <div class="stop-time">
-                                                        🕐 Arrivée: ${formatTime(Math.round(s.heureArrivee))}
-                                                    </div>
-                                                    <div style="font-size:11px; color:#aaa;">${s.adresse?.substring(0,30)}</div>
+                                                    <div class="stop-time">🕐 Arrivée: ${formatTime(Math.round(s.heureArrivee))}</div>
+                                                    <div style="font-size:11px;">${s.adresse?.substring(0,30)}</div>
                                                 </div>
                                             `).join('')}
                                             <div class="tour-stop">
@@ -394,12 +393,10 @@
                                     `).join('')}
                                     
                                     ${nonAssignes.length > 0 ? `
-                                        <div style="background:#991b1b; padding:15px; border-radius:8px; margin-top:15px;">
-                                            <h4 style="color:white; margin-bottom:10px;">⚠️ Non assignés</h4>
+                                        <div style="background:#991b1b; padding:15px; border-radius:8px;">
+                                            <h4 style="color:white;">⚠️ Non assignés (${nonAssignes.length})</h4>
                                             ${nonAssignes.map(j => `
-                                                <div style="padding:5px 0; border-bottom:1px solid #b91c1c;">
-                                                    ${j.nom} (${j.poids} kg)
-                                                </div>
+                                                <div style="padding:5px 0;">${j.nom} (${j.poids}kg)</div>
                                             `).join('')}
                                         </div>
                                     ` : ''}
@@ -408,8 +405,9 @@
                         </div>
                     `;
                     
-                    // Dessiner les routes
+                    // Re-créer la carte pour les résultats
                     setTimeout(() => {
+                        if (typeof L === 'undefined') return;
                         map = L.map('map').setView([46.8, 8.2], 8);
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                         
