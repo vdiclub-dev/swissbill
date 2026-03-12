@@ -21,6 +21,7 @@
         .user-badge { background: #1f2937; padding: 8px 16px; border-radius: 50px; display: flex; align-items: center; gap: 8px; }
         .btn-logout { background: #2a2a2a; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .btn { background: #facc15; color: #111; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-success { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         .btn-delete { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -39,7 +40,7 @@
         .transport-route { font-size: 13px; color: #aaa; margin: 4px 0; }
         .transport-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #666; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
-        .modal-box { background: #1f2937; border-radius: 10px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; border: 1px solid #facc15; }
+        .modal-box { background: #1f2937; border-radius: 10px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; border: 1px solid #facc15; }
         .modal-header { background: #111; padding: 15px 20px; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; }
         .modal-header h3 { color: #facc15; }
         .modal-header button { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
@@ -54,6 +55,7 @@
         .btn-save { background: #facc15; color: #111; border: none; padding: 12px; border-radius: 4px; cursor: pointer; flex: 1; font-weight: bold; }
         .section { background: #1a1a1a; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
         .section-title { color: #facc15; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .parcel-item { background: #1f2937; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -72,206 +74,199 @@
             try {
                 console.log("🚀 Léman Dispatch - Démarrage...");
                 
-                // ===== VÉRIFICATIONS =====
                 if (typeof L === 'undefined') throw new Error("Leaflet non chargé");
                 if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
-                // ===== SUPABASE =====
                 const supabase = window.supabase.createClient(
                     window.SUPABASE_CONFIG.url,
                     window.SUPABASE_CONFIG.key
                 );
                 
-                // ===== UTILISATEUR SIMULÉ =====
                 const userData = { username: 'admin', role: 'admin' };
                 
                 // ===== CONSTRUCTION PAGE =====
                 document.getElementById('app').innerHTML = `
                     <header>
                         <div class="logo"><i class="fas fa-map-marked-alt"></i> Léman Dispatch</div>
-             <!-- MODAL COMPLÈTE STRUCTURÉE -->
-<div id="modal" class="modal">
-    <div class="modal-box">
-        <!-- HEADER -->
-        <div class="modal-header">
-            <h3>➕ Nouveau transport</h3>
-            <button id="closeModalBtn">✖</button>
-        </div>
-        
-        <!-- CONTENU -->
-        <div class="modal-content">
-            <form id="transportForm">
-                
-                <!-- 1. SECTION CLIENT -->
-                <div class="section">
-                    <h4 class="section-title"><i class="fas fa-user-circle"></i> Client</h4>
-                    <div class="form-group">
-                        <label>Numéro client *</label>
-                        <input type="text" id="clientNumber" value="CL2025-001" required>
-                    </div>
-                </div>
-                
-                <!-- 2. SECTION LIVRAISON COMPLÈTE -->
-                <div class="section">
-                    <h4 class="section-title"><i class="fas fa-map-marked-alt"></i> Livraison</h4>
-                    
-                    <!-- 2.1 Contact sur place -->
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 2;">
-                            <label>Nom du contact / Entreprise *</label>
-                            <input type="text" id="contactName" placeholder="Jean Dupont / SARL Exemple" required>
+                        <div class="stats-header">
+                            <div class="stat-item"><span>📦 Total</span><span class="stat-value" id="totalCount">0</span></div>
+                            <div class="stat-item"><span>⚠️ Urgents</span><span class="stat-value" id="urgentCount">0</span></div>
                         </div>
-                        <div class="form-group" style="flex: 1;">
-                            <label>Téléphone contact</label>
-                            <input type="tel" id="contactPhone" placeholder="079 123 45 67">
+                        <div class="user-section">
+                            <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
+                            <button class="btn-logout" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
+                            <button class="btn" id="newTransportBtn">➕ Nouveau transport</button>
                         </div>
-                    </div>
-                    
-                    <!-- 2.2 Rue et numéro -->
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 2;">
-                            <label>Rue *</label>
-                            <input type="text" id="street" placeholder="Rue du Simplon" required>
-                        </div>
-                        <div class="form-group" style="flex: 0.5;">
-                            <label>N°</label>
-                            <input type="text" id="streetNumber" placeholder="12">
-                        </div>
-                    </div>
-                    
-                    <!-- 2.3 NPA et Ville -->
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 0.5;">
-                            <label>NPA *</label>
-                            <input type="text" id="npa" placeholder="1000" required>
-                        </div>
-                        <div class="form-group" style="flex: 1.5;">
-                            <label>Ville *</label>
-                            <input type="text" id="city" placeholder="Lausanne" required>
-                        </div>
-                    </div>
-                    
-                    <!-- 2.4 Complément -->
-                    <div class="form-group">
-                        <label>Complément (étage, code, service)</label>
-                        <input type="text" id="addressComplement" placeholder="2ème étage, code 1234">
-                    </div>
-                </div>
-                
-                <!-- 3. SECTION COLIS PRINCIPAL -->
-                <div class="section">
-                    <h4 class="section-title"><i class="fas fa-box"></i> Colis principal</h4>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Description</label>
-                            <input type="text" id="mainDescription" value="Colis principal" placeholder="Description">
-                        </div>
-                        <div class="form-group">
-                            <label>Poids (kg)</label>
-                            <input type="number" id="mainWeight" value="1" step="0.1">
-                        </div>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Quantité</label>
-                            <input type="number" id="mainQuantity" value="1" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label>Type</label>
-                            <select id="mainType">
-                                <option value="Colis">📦 Colis</option>
-                                <option value="Fragile">⚠️ Fragile</option>
-                                <option value="Palette">📦 Palette</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 4. SECTION COLIS SUPPLÉMENTAIRES -->
-                <div class="section">
-                    <!-- En-tête avec bouton ajouter -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h4 class="section-title" style="margin-bottom: 0;"><i class="fas fa-cubes"></i> Colis supplémentaires</h4>
-                        <button type="button" class="btn-success" id="addParcelBtn" style="padding: 8px 16px;">
-                            <i class="fas fa-plus"></i> Ajouter
-                        </button>
-                    </div>
-                    
-                    <!-- Liste des colis supplémentaires -->
-                    <div id="parcelsList"></div>
-                    
-                    <!-- Total général -->
-                    <div id="parcelsTotal" style="margin-top: 15px; padding: 10px; background: #0f172a; border-radius: 4px; display: flex; justify-content: space-between;">
-                        <span>📊 Total colis:</span>
-                        <span id="totalParcelsWeight">1 kg</span>
-                    </div>
-                </div>
-                
-                <!-- 5. SECTION SERVICE -->
-                <div class="section">
-                    <h4 class="section-title"><i class="fas fa-clock"></i> Service</h4>
-                    <div class="form-group">
-                        <label>Vitesse de livraison</label>
-                        <select id="speed">
-                            <option value="24h">📦 24h (Standard)</option>
-                            <option value="12h">⚡ 12h (Express)</option>
-                            <option value="6h">🚨 6h (Urgent)</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- 6. BOUTONS D'ACTION -->
-                <div class="modal-buttons">
-                    <button type="button" class="btn-cancel" id="cancelModalBtn">Annuler</button>
-                    <button type="submit" class="btn-save">✅ Créer le transport</button>
-                </div>
-                
-            </form>
-        </div>
-    </div>
-</div>
+                    </header>
 
-<!-- TEMPLATE POUR COLIS SUPPLÉMENTAIRE (caché) -->
-<template id="parcelTemplate">
-    <div class="parcel-item" style="background: #1f2937; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-        <div class="form-row">
-            <!-- Description -->
-            <div class="form-group" style="flex: 2;">
-                <label>Description</label>
-                <input type="text" class="parcel-desc" placeholder="Description">
-            </div>
-            
-            <!-- Poids -->
-            <div class="form-group" style="flex: 1;">
-                <label>Poids (kg)</label>
-                <input type="number" class="parcel-weight" value="1" step="0.1">
-            </div>
-            
-            <!-- Quantité -->
-            <div class="form-group" style="flex: 0.5;">
-                <label>Qté</label>
-                <input type="number" class="parcel-qty" value="1" min="1">
-            </div>
-            
-            <!-- Type -->
-            <div class="form-group" style="flex: 1;">
-                <label>Type</label>
-                <select class="parcel-type">
-                    <option value="Colis">Colis</option>
-                    <option value="Fragile">Fragile</option>
-                    <option value="Palette">Palette</option>
-                </select>
-            </div>
-            
-            <!-- Bouton suppression -->
-            <button type="button" class="btn-delete" style="width: 40px; height: 40px; margin-top: 22px;" onclick="this.parentElement.parentElement.remove()">
-                <i class="fas fa-trash"></i>
-            </button>
-        </div>
-    </div>
-</template>
+                    <div class="container">
+                        <div class="sidebar">
+                            <button class="active">🗺️ Dispatch</button>
+                            <button>📦 Transports</button>
+                        </div>
+                        
+                        <div class="map-container"><div id="map"></div></div>
+                        
+                        <div class="right-panel">
+                            <h3>📋 Derniers transports</h3>
+                            <div id="transportList"><div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div></div>
+                        </div>
+                    </div>
+
+                    <!-- MODAL (placée correctement) -->
+                    <div id="modal" class="modal">
+                        <div class="modal-box">
+                            <div class="modal-header">
+                                <h3>➕ Nouveau transport</h3>
+                                <button id="closeModalBtn">✖</button>
+                            </div>
+                            
+                            <div class="modal-content">
+                                <form id="transportForm">
+                                    
+                                    <!-- SECTION CLIENT -->
+                                    <div class="section">
+                                        <h4 class="section-title"><i class="fas fa-user-circle"></i> Client</h4>
+                                        <div class="form-group">
+                                            <label>Numéro client *</label>
+                                            <input type="text" id="clientNumber" value="CL2025-001" required>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- SECTION LIVRAISON -->
+                                    <div class="section">
+                                        <h4 class="section-title"><i class="fas fa-map-marked-alt"></i> Livraison</h4>
+                                        
+                                        <div class="form-row">
+                                            <div class="form-group" style="flex: 2;">
+                                                <label>Nom du contact *</label>
+                                                <input type="text" id="contactName" placeholder="Jean Dupont" required>
+                                            </div>
+                                            <div class="form-group" style="flex: 1;">
+                                                <label>Téléphone</label>
+                                                <input type="tel" id="contactPhone" placeholder="079 123 45 67">
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-row">
+                                            <div class="form-group" style="flex: 2;">
+                                                <label>Rue *</label>
+                                                <input type="text" id="street" placeholder="Rue du Simplon" required>
+                                            </div>
+                                            <div class="form-group" style="flex: 0.5;">
+                                                <label>N°</label>
+                                                <input type="text" id="streetNumber" placeholder="12">
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-row">
+                                            <div class="form-group" style="flex: 0.5;">
+                                                <label>NPA *</label>
+                                                <input type="text" id="npa" placeholder="1000" required>
+                                            </div>
+                                            <div class="form-group" style="flex: 1.5;">
+                                                <label>Ville *</label>
+                                                <input type="text" id="city" placeholder="Lausanne" required>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label>Complément</label>
+                                            <input type="text" id="addressComplement" placeholder="2ème étage, code 1234">
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- SECTION COLIS PRINCIPAL -->
+                                    <div class="section">
+                                        <h4 class="section-title"><i class="fas fa-box"></i> Colis principal</h4>
+                                        
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label>Description</label>
+                                                <input type="text" id="mainDescription" value="Colis principal">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Poids (kg)</label>
+                                                <input type="number" id="mainWeight" value="1" step="0.1">
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label>Quantité</label>
+                                                <input type="number" id="mainQuantity" value="1" min="1">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Type</label>
+                                                <select id="mainType">
+                                                    <option value="Colis">📦 Colis</option>
+                                                    <option value="Fragile">⚠️ Fragile</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- SECTION COLIS SUPPLÉMENTAIRES -->
+                                    <div class="section">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                            <h4 class="section-title" style="margin-bottom: 0;"><i class="fas fa-cubes"></i> Colis supplémentaires</h4>
+                                            <button type="button" class="btn-success" id="addParcelBtn">➕ Ajouter</button>
+                                        </div>
+                                        
+                                        <div id="parcelsList"></div>
+                                        
+                                        <div id="parcelsTotal" style="margin-top: 15px; padding: 10px; background: #0f172a; border-radius: 4px; display: flex; justify-content: space-between;">
+                                            <span>📊 Total colis:</span>
+                                            <span id="totalParcelsWeight">1 kg</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- SECTION SERVICE -->
+                                    <div class="section">
+                                        <h4 class="section-title"><i class="fas fa-clock"></i> Service</h4>
+                                        <div class="form-group">
+                                            <label>Vitesse</label>
+                                            <select id="speed">
+                                                <option value="24h">📦 24h</option>
+                                                <option value="12h">⚡ 12h</option>
+                                                <option value="6h">🚨 6h</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- BOUTONS -->
+                                    <div class="modal-buttons">
+                                        <button type="button" class="btn-cancel" id="cancelModalBtn">Annuler</button>
+                                        <button type="submit" class="btn-save">✅ Créer</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TEMPLATE POUR COLIS -->
+                    <template id="parcelTemplate">
+                        <div class="parcel-item">
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 2;">
+                                    <input type="text" class="parcel-desc" placeholder="Description">
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <input type="number" class="parcel-weight" value="1" step="0.1">
+                                </div>
+                                <div class="form-group" style="flex: 0.5;">
+                                    <input type="number" class="parcel-qty" value="1" min="1">
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <select class="parcel-type">
+                                        <option value="Colis">Colis</option>
+                                        <option value="Fragile">Fragile</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn-delete" style="width: 40px; height: 40px;" onclick="this.parentElement.parentElement.remove()">🗑️</button>
+                            </div>
+                        </div>
+                    </template>
                 `;
                 
                 // ===== RÉFÉRENCES =====
@@ -279,19 +274,56 @@
                 const newBtn = document.getElementById('newTransportBtn');
                 const closeBtn = document.getElementById('closeModalBtn');
                 const cancelBtn = document.getElementById('cancelModalBtn');
+                const addParcelBtn = document.getElementById('addParcelBtn');
+                const parcelsList = document.getElementById('parcelsList');
+                const parcelTemplate = document.getElementById('parcelTemplate');
                 const form = document.getElementById('transportForm');
                 const logoutBtn = document.getElementById('logoutBtn');
                 
+                // ===== VÉRIFICATION =====
+                console.log("modal:", modal ? "✅" : "❌");
+                console.log("newBtn:", newBtn ? "✅" : "❌");
+                console.log("closeBtn:", closeBtn ? "✅" : "❌");
+                console.log("cancelBtn:", cancelBtn ? "✅" : "❌");
+                console.log("addParcelBtn:", addParcelBtn ? "✅" : "❌");
+                
                 // ===== GESTION MODAL =====
-                newBtn.onclick = () => modal.style.display = 'flex';
-                closeBtn.onclick = () => modal.style.display = 'none';
-                cancelBtn.onclick = () => modal.style.display = 'none';
+                if (newBtn) newBtn.onclick = () => modal.style.display = 'flex';
+                if (closeBtn) closeBtn.onclick = () => modal.style.display = 'none';
+                if (cancelBtn) cancelBtn.onclick = () => modal.style.display = 'none';
+                
+                // ===== GESTION COLIS =====
+                if (addParcelBtn && parcelsList && parcelTemplate) {
+                    addParcelBtn.onclick = function() {
+                        const clone = parcelTemplate.content.cloneNode(true);
+                        parcelsList.appendChild(clone);
+                        updateParcelsTotal();
+                    };
+                }
+                
+                function updateParcelsTotal() {
+                    let total = parseFloat(document.getElementById('mainWeight')?.value || 1) * parseInt(document.getElementById('mainQuantity')?.value || 1);
+                    
+                    document.querySelectorAll('.parcel-item').forEach(item => {
+                        const weight = parseFloat(item.querySelector('.parcel-weight')?.value) || 0;
+                        const qty = parseInt(item.querySelector('.parcel-qty')?.value) || 1;
+                        total += weight * qty;
+                    });
+                    
+                    const totalEl = document.getElementById('totalParcelsWeight');
+                    if (totalEl) totalEl.textContent = total.toFixed(1) + ' kg';
+                }
+                
+                document.getElementById('mainWeight')?.addEventListener('input', updateParcelsTotal);
+                document.getElementById('mainQuantity')?.addEventListener('input', updateParcelsTotal);
                 
                 // ===== DÉCONNEXION =====
-                logoutBtn.onclick = () => {
-                    localStorage.removeItem('user');
-                    window.location.href = '../login/';
-                };
+                if (logoutBtn) {
+                    logoutBtn.onclick = () => {
+                        localStorage.removeItem('user');
+                        window.location.href = '../login/';
+                    };
+                }
                 
                 // ===== CARTE =====
                 const map = L.map('map').setView([46.8, 8.2], 8);
@@ -299,7 +331,7 @@
                 const markers = L.markerClusterGroup();
                 map.addLayer(markers);
                 
-                // ===== FONCTIONS =====
+                // ===== CHARGEMENT TRANSPORTS =====
                 async function loadTransports() {
                     try {
                         const { data, error } = await supabase
@@ -332,7 +364,6 @@
                                 </div>
                             `;
                             
-                            // Marqueurs
                             let lat = 46.8, lng = 8.2;
                             const color = isUrgent ? '#ef4444' : '#facc15';
                             const icon = L.divIcon({
@@ -360,34 +391,43 @@
                 };
                 
                 // ===== CRÉATION =====
-                form.onsubmit = async function(e) {
-                    e.preventDefault();
-                    
-                    const orderNumber = 'TR-' + Date.now().toString().slice(-6);
-                    
-                    const transport = {
-                        order_number: orderNumber,
-                        client_number: document.getElementById('clientNumber').value,
-                        delivery_address: document.getElementById('deliveryAddress').value,
-                        weight: parseFloat(document.getElementById('weight').value) || 1,
-                        speed: document.getElementById('speed').value,
-                        priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
-                        status: 'pending',
-                        created_at: new Date()
+                if (form) {
+                    form.onsubmit = async function(e) {
+                        e.preventDefault();
+                        
+                        const orderNumber = 'TR-' + Date.now().toString().slice(-6);
+                        
+                        const fullAddress = `${document.getElementById('street').value} ${document.getElementById('streetNumber').value}, ${document.getElementById('npa').value} ${document.getElementById('city').value}`;
+                        const addressComplement = document.getElementById('addressComplement').value;
+                        
+                        const transport = {
+                            order_number: orderNumber,
+                            client_number: document.getElementById('clientNumber').value,
+                            delivery_address: fullAddress + (addressComplement ? ' (' + addressComplement + ')' : ''),
+                            contact_name: document.getElementById('contactName').value,
+                            contact_phone: document.getElementById('contactPhone').value,
+                            weight: parseFloat(document.getElementById('mainWeight').value) || 1,
+                            quantity: parseInt(document.getElementById('mainQuantity').value) || 1,
+                            package_type: document.getElementById('mainType').value,
+                            speed: document.getElementById('speed').value,
+                            priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+                            status: 'pending',
+                            created_at: new Date()
+                        };
+                        
+                        if (!transport.client_number || !transport.delivery_address) {
+                            alert('Numéro client et adresse requis');
+                            return;
+                        }
+                        
+                        try {
+                            await supabase.from('transport_orders_simple').insert([transport]);
+                            alert(`✅ Transport ${orderNumber} créé !`);
+                            modal.style.display = 'none';
+                            loadTransports();
+                        } catch(e) { alert('❌ Erreur: ' + e.message); }
                     };
-                    
-                    if (!transport.client_number || !transport.delivery_address) {
-                        alert('Numéro client et adresse de livraison requis');
-                        return;
-                    }
-                    
-                    try {
-                        await supabase.from('transport_orders_simple').insert([transport]);
-                        alert(`✅ Transport ${orderNumber} créé !`);
-                        modal.style.display = 'none';
-                        loadTransports();
-                    } catch(e) { alert('❌ Erreur: ' + e.message); }
-                };
+                }
                 
                 // ===== LANCEMENT =====
                 loadTransports();
@@ -397,40 +437,6 @@
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
-        // ===== GESTION COLIS SUPPLÉMENTAIRES =====
-const addParcelBtn = document.getElementById('addParcelBtn');
-const parcelsList = document.getElementById('parcelsList');
-const parcelTemplate = document.getElementById('parcelTemplate');
-
-addParcelBtn.onclick = function() {
-    const clone = parcelTemplate.content.cloneNode(true);
-    parcelsList.appendChild(clone);
-    updateParcelsTotal();
-};
-
-// Mise à jour du total
-function updateParcelsTotal() {
-    let total = parseFloat(document.getElementById('mainWeight').value) * parseInt(document.getElementById('mainQuantity').value);
-    
-    document.querySelectorAll('.parcel-item').forEach(item => {
-        const weight = parseFloat(item.querySelector('.parcel-weight').value) || 0;
-        const qty = parseInt(item.querySelector('.parcel-qty').value) || 1;
-        total += weight * qty;
-    });
-    
-    document.getElementById('totalParcelsWeight').textContent = total.toFixed(1) + ' kg';
-}
-
-// Écouter les changements
-document.getElementById('mainWeight').addEventListener('input', updateParcelsTotal);
-document.getElementById('mainQuantity').addEventListener('input', updateParcelsTotal);
-        // Dans saveTransport, reconstruire l'adresse complète
-const fullAddress = `${document.getElementById('street').value} ${document.getElementById('streetNumber').value}, ${document.getElementById('npa').value} ${document.getElementById('city').value}`;
-const addressComplement = document.getElementById('addressComplement').value;
-
-transport.delivery_address = fullAddress + (addressComplement ? ' (' + addressComplement + ')' : '');
-transport.contact_name = document.getElementById('contactName').value;
-transport.contact_phone = document.getElementById('contactPhone').value;
     </script>
     
 </body>
