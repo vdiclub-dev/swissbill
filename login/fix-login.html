@@ -1,1 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Réparation login</title>
+    <script src="../dispatch/config.js"></script>
+    <style>
+        body { background:#111; color:white; padding:20px; font-family:system-ui; }
+        .success { color:#10b981; }
+        .error { color:#ef4444; }
+        pre { background:#1f2937; padding:10px; border-radius:4px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Diagnostic de connexion</h1>
+    <div id="result"></div>
 
+    <script>
+        (async function() {
+            try {
+                if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
+                
+                const res = await fetch(`${window.SUPABASE_CONFIG.url}/rest/v1/users?select=username,password,role`, {
+                    headers: {
+                        'apikey': window.SUPABASE_CONFIG.key,
+                        'Authorization': `Bearer ${window.SUPABASE_CONFIG.key}`
+                    }
+                });
+                
+                const users = await res.json();
+                
+                let html = '<h2>📋 Utilisateurs existants :</h2><pre>' + JSON.stringify(users, null, 2) + '</pre>';
+                
+                // Vérifier si admin existe
+                const admin = users.find(u => u.username === 'admin');
+                
+                if (admin) {
+                    html += '<p class="success">✅ Admin existe déjà</p>';
+                } else {
+                    // Créer admin
+                    const createRes = await fetch(`${window.SUPABASE_CONFIG.url}/rest/v1/users`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': window.SUPABASE_CONFIG.key,
+                            'Authorization': `Bearer ${window.SUPABASE_CONFIG.key}`
+                        },
+                        body: JSON.stringify({
+                            username: 'admin',
+                            password: '1234',
+                            role: 'admin'
+                        })
+                    });
+                    
+                    if (createRes.ok) {
+                        html += '<p class="success">✅ Admin créé avec succès !</p>';
+                    } else {
+                        const err = await createRes.json();
+                        html += '<p class="error">❌ Erreur création: ' + JSON.stringify(err) + '</p>';
+                    }
+                }
+                
+                document.getElementById('result').innerHTML = html;
+                
+            } catch(e) {
+                document.getElementById('result').innerHTML = '<p class="error">❌ ' + e.message + '</p>';
+            }
+        })();
+    </script>
+</body>
+</html>
