@@ -52,12 +52,25 @@
     </style>
 </head>
 <body>
-
     <div id="app"></div>
+
+    <!-- TOUS LES SCRIPTS ICI, DANS LE BON ORDRE -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             console.log("🚀 Démarrage...");
+            
+            // Vérifier que Leaflet est chargé
+            if (typeof L === 'undefined') {
+                console.error("❌ Leaflet non chargé !");
+                document.body.innerHTML = '<div style="color:red; padding:20px;">❌ Erreur: Leaflet non chargé</div>';
+                return;
+            }
+            console.log("✅ Leaflet OK");
             
             // ===== VÉRIFICATION CONFIG =====
             if (!window.SUPABASE_CONFIG) {
@@ -77,10 +90,6 @@
             if (!user) { window.location.href = '../login/'; return; }
             const userData = JSON.parse(user);
             if (!userData.loggedIn || userData.role !== 'admin') { window.location.href = '../'; return; }
-            
-            // ===== VARIABLES GLOBALES =====
-            let map, markers;
-            let colisListe = []; // Pour les colis supplémentaires
             
             // ===== CONSTRUCTION PAGE =====
             document.getElementById('app').innerHTML = `
@@ -114,74 +123,26 @@
                     </div>
                 </div>
 
-                <!-- MODAL -->
+                <!-- MODAL SIMPLIFIÉE -->
                 <div id="modal" class="modal">
                     <div class="modal-box">
                         <div class="modal-header"><h3>➕ Nouveau transport</h3><button onclick="closeModal()">✖</button></div>
                         <div class="modal-content">
                             <form onsubmit="event.preventDefault(); saveTransport();">
-                                
-                                <!-- Client -->
-                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                                    <h4 style="color:#facc15; margin-bottom:15px;">👤 Client</h4>
-                                    <div class="form-group">
-                                        <label>Rechercher</label>
-                                        <input type="text" id="clientSearch" placeholder="Nom, téléphone..." onkeyup="searchClient()">
-                                        <div id="clientResults"></div>
-                                    </div>
-                                    <div class="form-group"><label>Nom *</label><input type="text" id="clientName" required></div>
-                                    <div class="form-row">
-                                        <div class="form-group"><label>Téléphone</label><input type="tel" id="clientPhone"></div>
-                                        <div class="form-group"><label>Email</label><input type="email" id="clientEmail"></div>
-                                    </div>
+                                <div class="form-group"><label>Nom client *</label><input type="text" id="clientName" required></div>
+                                <div class="form-group"><label>Téléphone</label><input type="tel" id="clientPhone"></div>
+                                <div class="form-group"><label>Adresse ramassage *</label><input type="text" id="pickupAddress" required value="Impasse des Griottes 3, 1462 Yvonand"></div>
+                                <div class="form-group"><label>Adresse livraison *</label><input type="text" id="deliveryAddress" required></div>
+                                <div class="form-row">
+                                    <div class="form-group"><label>Poids (kg)</label><input type="number" id="weight" value="1"></div>
+                                    <div class="form-group"><label>Quantité</label><input type="number" id="quantity" value="1"></div>
                                 </div>
-                                
-                                <!-- Ramassage -->
-                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                                    <h4 style="color:#facc15; margin-bottom:15px;">📍 Ramassage</h4>
-                                    <div class="form-group"><label>Adresse *</label><input type="text" id="pickupAddress" required value="Impasse des Griottes 3, 1462 Yvonand"></div>
+                                <div class="form-group"><label>Priorité</label>
+                                    <select id="priority">
+                                        <option value="normal">Normal</option>
+                                        <option value="urgent">Urgent</option>
+                                    </select>
                                 </div>
-                                
-                                <!-- Livraison -->
-                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                                    <h4 style="color:#facc15; margin-bottom:15px;">🎯 Livraison</h4>
-                                    <div class="form-group"><label>Adresse *</label><input type="text" id="deliveryAddress" required></div>
-                                </div>
-                                
-                                <!-- Colis principal -->
-                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                                    <h4 style="color:#facc15; margin-bottom:15px;">📦 Colis</h4>
-                                    <div class="form-row">
-                                        <div class="form-group"><label>Poids (kg)</label><input type="number" id="weight" value="1" step="0.1"></div>
-                                        <div class="form-group"><label>Quantité</label><input type="number" id="quantity" value="1" min="1"></div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Type</label>
-                                        <select id="parcelType">
-                                            <option value="Colis">Colis</option>
-                                            <option value="Fragile">Fragile</option>
-                                            <option value="Palette">Palette</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                
-                                <!-- Vitesse -->
-                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                                    <h4 style="color:#facc15; margin-bottom:15px;">⚡ Vitesse</h4>
-                                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
-                                        <div class="speed-option" onclick="selectSpeed(this, '6h')">🚀 6h</div>
-                                        <div class="speed-option selected" onclick="selectSpeed(this, '12h')">⚡ 12h</div>
-                                        <div class="speed-option" onclick="selectSpeed(this, '24h')">📦 24h</div>
-                                    </div>
-                                    <input type="hidden" id="speed" value="12h">
-                                </div>
-                                
-                                <!-- Instructions -->
-                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                                    <div class="form-group"><label>Instructions</label><textarea id="instructions" rows="2"></textarea></div>
-                                </div>
-                                
-                                <!-- Boutons -->
                                 <div class="modal-buttons">
                                     <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
                                     <button type="submit" class="btn-save">Créer</button>
@@ -197,25 +158,15 @@
             window.openModal = function() { document.getElementById('modal').style.display = 'flex'; };
             window.closeModal = function() { document.getElementById('modal').style.display = 'none'; };
             
-            // Vitesse
-            window.selectSpeed = function(el, speed) {
-                document.querySelectorAll('.speed-option').forEach(opt => opt.classList.remove('selected'));
-                el.classList.add('selected');
-                document.getElementById('speed').value = speed;
-            };
-            
-            // Recherche client (simplifiée)
-            window.searchClient = function() {
-                // Version simplifiée pour l'instant
-            };
-            
             // Carte
             function initMap() {
                 try {
+                    console.log("🗺️ Initialisation carte...");
                     map = L.map('map').setView([46.8, 8.2], 8);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                     markers = L.markerClusterGroup();
                     map.addLayer(markers);
+                    console.log("✅ Carte OK");
                     loadTransports();
                 } catch(e) { console.error("Erreur carte:", e); }
             }
@@ -234,15 +185,13 @@
                             <div class="transport-route">${t.pickup_city || t.pickup_address || '?'} → ${t.delivery_city || t.delivery_address || '?'}</div>
                         </div>`;
                     });
-                    document.getElementById('transportList').innerHTML = html || '<div style="padding:20px;">Aucun transport</div>';
+                    document.getElementById('transportList').innerHTML = html || '<div>Aucun transport</div>';
                     
                     if (markers) {
                         markers.clearLayers();
                         data?.forEach((t, i) => {
-                            if (t.delivery_city || t.delivery_address) {
-                                let lat = 46.8, lng = 8.2;
-                                L.marker([lat, lng]).addTo(markers);
-                            }
+                            let lat = 46.8, lng = 8.2;
+                            L.marker([lat, lng]).addTo(markers);
                         });
                     }
                 } catch(e) { console.error("Erreur chargement:", e); }
@@ -252,15 +201,11 @@
                 const transport = {
                     client_name: document.getElementById('clientName').value,
                     client_phone: document.getElementById('clientPhone').value,
-                    client_email: document.getElementById('clientEmail').value,
                     pickup_address: document.getElementById('pickupAddress').value,
                     delivery_address: document.getElementById('deliveryAddress').value,
                     weight: parseFloat(document.getElementById('weight').value) || 1,
                     quantity: parseInt(document.getElementById('quantity').value) || 1,
-                    parcel_type: document.getElementById('parcelType').value,
-                    speed: document.getElementById('speed').value,
-                    instructions: document.getElementById('instructions').value,
-                    priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+                    priority: document.getElementById('priority').value,
                     status: 'pending',
                     created_at: new Date()
                 };
@@ -283,6 +228,4 @@
             setInterval(loadTransports, 30000);
         });
     </script>
-    
 </body>
-</html>
