@@ -427,66 +427,63 @@ function afficherColis() {
     container.innerHTML = html || '<div style="color:#666; padding:10px; text-align:center;">Aucun colis supplémentaire</div>';
     document.getElementById('totalColis').textContent = total.toFixed(1) + ' kg';
 }
-                // Sauvegarder le transport
                 window.saveTransport = async function() {
-                    const year = new Date().getFullYear();
-                    const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-                    const orderNumber = `TR-${year}-${random}`;
-                    
-                    const transport = {
-                        order_number: orderNumber,
-                        client_number: document.getElementById('clientNumber').value,
-                        pickup_address: document.getElementById('pickupAddress').value,
-                        delivery_address: document.getElementById('deliveryAddress').value,
-                        weight: parseFloat(document.getElementById('weight').value) || 1,
-                        quantity: parseInt(document.getElementById('quantity').value) || 1,
-                        package_type: document.getElementById('packageType').value,
-                        service_type: document.getElementById('serviceType').value,
-                        speed: document.getElementById('speed').value,
-                        night_delivery: document.getElementById('nightDelivery').value === 'true',
-                        instructions: document.getElementById('instructions').value,
-                        status: 'pending',
-                        priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
-                        created_at: new Date()
-                    };
-                    
-                    if (!transport.client_number || !transport.delivery_address) {
-                        alert('Numéro client et adresse de livraison requis');
-                        return;
-                    }
-                    
-                    try {
-                        const { error } = await supabase
-                            .from('transport_orders_simple')
-                            .insert([transport]);
-                        
-                        if (error) throw error;
-                        
-                        alert(`✅ Transport ${orderNumber} créé avec succès !`);
-                        closeModal();
-                        
-                        // Reset
-                        document.getElementById('clientNumber').value = '';
-                        document.getElementById('deliveryAddress').value = '';
-                        document.getElementById('instructions').value = '';
-                        
-                        loadTransports();
-                        
-                    } catch(e) {
-                        console.error('Erreur:', e);
-                        alert('❌ Erreur: ' + e.message);
-                    }
-                };
-                
-                // Lancement
-                initMap();
-                setInterval(loadTransports, 30000);
-                
-            } catch(error) {
-                console.error("❌ Erreur fatale:", error);
-                document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${error.message}</div>`;
-            }
-        });
+    const year = new Date().getFullYear();
+    const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+    const orderNumber = `TR-${year}-${random}`;
+    
+    // Calcul du poids total (colis principal + supplémentaires)
+    let poidsTotal = parseFloat(document.getElementById('weight').value) || 1;
+    colisList.forEach(c => {
+        poidsTotal += (c.poids || 0) * (c.quantite || 1);
+    });
+    
+    const transport = {
+        order_number: orderNumber,
+        client_number: document.getElementById('clientNumber').value,
+        pickup_address: document.getElementById('pickupAddress').value,
+        delivery_address: document.getElementById('deliveryAddress').value,
+        weight: poidsTotal,  // Poids total
+        quantity: (parseInt(document.getElementById('quantity').value) || 1) + colisList.reduce((acc, c) => acc + (c.quantite || 0), 0),
+        package_type: document.getElementById('packageType').value,
+        service_type: document.getElementById('serviceType').value,
+        speed: document.getElementById('speed').value,
+        night_delivery: document.getElementById('nightDelivery').value === 'true',
+        instructions: document.getElementById('instructions').value,
+        status: 'pending',
+        priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+        created_at: new Date()
+    };
+    
+    if (!transport.client_number || !transport.delivery_address) {
+        alert('Numéro client et adresse de livraison requis');
+        return;
+    }
+    
+    try {
+        const { error } = await supabase
+            .from('transport_orders_simple')
+            .insert([transport]);
+        
+        if (error) throw error;
+        
+        alert(`✅ Transport ${orderNumber} créé avec succès !`);
+        closeModal();
+        
+        // Reset
+        document.getElementById('clientNumber').value = '';
+        document.getElementById('deliveryAddress').value = '';
+        document.getElementById('instructions').value = '';
+        colisList = [];
+        afficherColis();
+        
+        loadTransports();
+        
+    } catch(e) {
+        console.error('Erreur:', e);
+        alert('❌ Erreur: ' + e.message);
+    }
+};
         window.supprimerTransport = async function(orderId) {
     if (!confirm('⚠️ Êtes-vous sûr de vouloir supprimer ce transport ?')) {
         return;
