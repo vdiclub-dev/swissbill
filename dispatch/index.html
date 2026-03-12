@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Léman Dispatch | Admin</title>
+    <title>Léman Dispatch | Optimisation réelle</title>
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -31,7 +31,6 @@
         .btn-logout { background: #2a2a2a; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .btn { background: #facc15; color: #111; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-optimize { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-        .btn-delete { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -48,29 +47,24 @@
             border-radius: 6px; cursor: pointer; text-align: left;
         }
         .sidebar button:hover { background: #facc15; color: #111; }
-        .sidebar button.active { background: #facc15; color: #111; }
         
         .map-container { flex: 1; position: relative; }
         #map { height: 100%; width: 100%; }
         
         .right-panel {
-            width: 400px; background: #111; border-left: 1px solid #2a2a2a;
+            width: 450px; background: #111; border-left: 1px solid #2a2a2a;
             padding: 20px; overflow-y: auto;
         }
-        .right-panel h3 {
-            color: #facc15; margin-bottom: 20px;
-            display: flex; justify-content: space-between; align-items: center;
-        }
+        .right-panel h3 { color: #facc15; margin-bottom: 20px; }
         
         .transport-item {
             background: #1f2937; padding: 12px; margin-bottom: 10px;
             border-radius: 6px; border-left: 3px solid #facc15;
+            cursor: pointer;
         }
         .transport-item.urgent { border-left-color: #ef4444; }
-        .transport-header { display: flex; justify-content: space-between; align-items: center; }
         .transport-client { font-weight: bold; color: white; }
-        .transport-route { font-size: 12px; color: #aaa; margin: 4px 0; }
-        .transport-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; }
+        .transport-address { font-size: 12px; color: #aaa; margin: 4px 0; }
         
         .tour-item {
             background: #2a2a2a; padding: 15px; margin-bottom: 15px;
@@ -87,23 +81,24 @@
         }
         .tour-stop {
             padding: 8px 0 8px 15px; border-bottom: 1px solid #3a3a3a;
-            font-size: 13px; position: relative;
+            font-size: 13px;
         }
-        .stop-time { font-size: 11px; color: #facc15; margin-left: 20px; }
+        .stop-time { font-size: 11px; color: #facc15; }
         
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%;
-                background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index:1000; }
-        .modal-box { background: #1f2937; width:90%; max-width:500px; padding:20px; border-radius:8px; border:1px solid #facc15; }
-        .form-group { margin-bottom:15px; }
-        .form-group label { display:block; color:#aaa; margin-bottom:5px; }
-        .form-group input, .form-group select { width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px; }
-        .modal-buttons { display:flex; gap:10px; margin-top:20px; }
-        .btn-cancel { background:#2a2a2a; color:white; border:none; padding:12px; border-radius:4px; cursor:pointer; flex:1; }
-        .btn-save { background:#facc15; color:#111; border:none; padding:12px; border-radius:4px; cursor:pointer; flex:1; }
+        .loader {
+            text-align: center; padding: 30px; color: #aaa;
+        }
+        .loader i { font-size: 30px; color: #facc15; animation: spin 1s infinite linear; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         
-        .loader { text-align:center; padding:20px; color:#aaa; }
-        .loader i { font-size:30px; color:#facc15; animation:spin 1s infinite linear; }
-        @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+        .modal {
+            display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index:1000;
+        }
+        .modal-box {
+            background: #1f2937; padding: 20px; border-radius: 8px;
+            max-width: 400px; width: 90%; border: 1px solid #facc15;
+        }
     </style>
 </head>
 <body>
@@ -119,7 +114,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             try {
-                console.log("🚀 Léman Dispatch...");
+                console.log("🚀 Léman Dispatch - Optimisation réelle...");
                 
                 if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
@@ -128,7 +123,7 @@
                     window.SUPABASE_CONFIG.key
                 );
                 
-                // ===== UTILISATEUR =====
+                // ===== VÉRIFICATION CONNEXION =====
                 const user = localStorage.getItem('user');
                 if (!user) { window.location.href = '../login/'; return; }
                 const userData = JSON.parse(user);
@@ -136,8 +131,7 @@
                 
                 // ===== DONNÉES =====
                 let allTransports = [];
-                let map, markers, routeLayers = [];
-                let modeOptimisation = false;
+                let map, markers;
                 
                 // Dépôt
                 const depot = {
@@ -146,34 +140,46 @@
                     lng: 6.6411
                 };
                 
-                // ===== GÉOCODAGE SIMPLE =====
-                function getCityCoordinates(adresse) {
-                    const adr = (adresse || '').toLowerCase();
-                    if (adr.includes('lausanne')) return { lat: 46.52, lng: 6.63 };
-                    if (adr.includes('geneve')) return { lat: 46.20, lng: 6.14 };
-                    if (adr.includes('yverdon')) return { lat: 46.78, lng: 6.64 };
-                    if (adr.includes('berne')) return { lat: 46.95, lng: 7.45 };
-                    if (adr.includes('zurich')) return { lat: 47.37, lng: 8.54 };
-                    return { lat: 46.8, lng: 8.2 };
+                // ===== GÉOCODAGE =====
+                async function geocoderAdresse(adresse) {
+                    try {
+                        const response = await fetch(
+                            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(adresse + ', Suisse')}&limit=1`,
+                            { headers: { 'User-Agent': 'LemanDispatch/1.0' } }
+                        );
+                        const data = await response.json();
+                        if (data && data.length > 0) {
+                            return {
+                                lat: parseFloat(data[0].lat),
+                                lng: parseFloat(data[0].lon)
+                            };
+                        }
+                    } catch(e) {
+                        console.warn("Erreur géocodage:", e);
+                    }
+                    return null;
                 }
                 
-                // ===== CALCUL DE DISTANCE =====
-                function calculerDistance(lat1, lon1, lat2, lon2) {
-                    const R = 6371;
-                    const dLat = (lat2 - lat1) * Math.PI / 180;
-                    const dLon = (lon2 - lon1) * Math.PI / 180;
-                    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                             Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                             Math.sin(dLon/2) * Math.sin(dLon/2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                    return R * c;
-                }
-                
-                // ===== FORMAT HEURE =====
-                function formatTime(minutes) {
-                    const h = Math.floor(minutes / 60);
-                    const m = minutes % 60;
-                    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                // ===== CALCUL DE DISTANCE ROUTIÈRE =====
+                async function calculerRoute(origine, destination) {
+                    if (!origine || !destination) return null;
+                    
+                    const url = `https://router.project-osrm.org/route/v1/driving/${origine.lng},${origine.lat};${destination.lng},${destination.lat}?overview=false`;
+                    
+                    try {
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        
+                        if (data.routes && data.routes.length > 0) {
+                            return {
+                                distance: data.routes[0].distance / 1000, // km
+                                duree: data.routes[0].duration / 60 // minutes
+                            };
+                        }
+                    } catch(e) {
+                        console.warn("Erreur calcul route:", e);
+                    }
+                    return null;
                 }
                 
                 // ===== CHARGEMENT =====
@@ -187,10 +193,8 @@
                     afficherTransports();
                 }
                 
-                // ===== AFFICHAGE NORMAL =====
+                // ===== AFFICHAGE =====
                 function afficherTransports() {
-                    modeOptimisation = false;
-                    
                     document.getElementById('app').innerHTML = `
                         <header>
                             <div class="logo"><i class="fas fa-map-marked-alt"></i> Léman Dispatch</div>
@@ -202,7 +206,7 @@
                                 <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
                                 <button class="btn-logout" onclick="logout()">Déconnexion</button>
                                 <button class="btn" onclick="openModal()">➕ Nouveau</button>
-                                <button class="btn-optimize" onclick="optimiser()">🧠 Optimiser</button>
+                                <button class="btn-optimize" onclick="optimiser()">🚀 Optimisation réelle</button>
                             </div>
                         </header>
                         
@@ -210,25 +214,18 @@
                             <div class="sidebar">
                                 <button class="active">🗺️ Dispatch</button>
                                 <button>📦 Transports</button>
-                                <button>👤 Clients</button>
                             </div>
                             
                             <div class="map-container"><div id="map"></div></div>
                             
                             <div class="right-panel">
-                                <h3>📋 Derniers transports</h3>
+                                <h3>📋 Transports à optimiser</h3>
                                 <div id="transportList">
-                                    ${allTransports.slice(0, 10).map(t => `
+                                    ${allTransports.filter(t => t.status !== 'delivered').map(t => `
                                         <div class="transport-item ${t.speed === '6h' ? 'urgent' : ''}">
-                                            <div class="transport-header">
-                                                <span class="transport-client">${t.destinataire_nom || '?'}</span>
-                                                <button class="btn-delete" onclick="supprimer('${t.id}')">🗑️</button>
-                                            </div>
-                                            <div class="transport-route">${(t.delivery_address || '').substring(0,50)}</div>
-                                            <div class="transport-footer">
-                                                <span>${t.speed || '24h'}</span>
-                                                <span>${t.weight || 0} kg</span>
-                                            </div>
+                                            <div class="transport-client">${t.destinataire_nom || 'Client'}</div>
+                                            <div class="transport-address">${(t.delivery_address || '').substring(0,50)}</div>
+                                            <div style="font-size:11px; color:#666;">${t.speed} | ${t.weight || 0} kg</div>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -236,129 +233,183 @@
                         </div>
                     `;
                     
-                    initMap(false);
+                    initMap();
                 }
                 
                 // ===== INIT CARTE =====
-                function initMap(avecRoutes = false) {
-                    if (map) map.remove();
+                function initMap() {
                     map = L.map('map').setView([46.8, 8.2], 8);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                     markers = L.markerClusterGroup();
                     map.addLayer(markers);
                     
-                    // Dépôt
                     L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
                     
-                    if (!avecRoutes) {
-                        allTransports.forEach((t, i) => {
-                            const coords = getCityCoordinates(t.delivery_address);
+                    allTransports.forEach((t, i) => {
+                        if (t.lat && t.lng) {
                             const color = t.speed === '6h' ? '#ef4444' : '#facc15';
                             const icon = L.divIcon({
                                 html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${i+1}</div>`,
                                 iconSize: [24, 24]
                             });
-                            L.marker([coords.lat, coords.lng], { icon }).addTo(markers);
-                        });
-                    }
+                            L.marker([t.lat, t.lng], { icon }).addTo(markers);
+                        }
+                    });
                 }
                 
-                // ===== OPTIMISATION =====
-                window.optimiser = function() {
+                // ===== OPTIMISATION AVEC DISTANCES RÉELLES =====
+                window.optimiser = async function() {
                     const nonLivres = allTransports.filter(t => t.status !== 'delivered');
                     if (nonLivres.length === 0) {
                         alert("Aucun transport à optimiser");
                         return;
                     }
                     
-                    modeOptimisation = true;
+                    document.getElementById('app').innerHTML = `
+                        <div class="loader">
+                            <i class="fas fa-spinner fa-spin"></i> Calcul des itinéraires...
+                        </div>
+                    `;
                     
+                    // 1. Obtenir les coordonnées pour chaque transport
+                    const transportsAvecCoords = [];
+                    
+                    for (const t of nonLivres) {
+                        let coords = null;
+                        if (t.lat && t.lng) {
+                            coords = { lat: t.lat, lng: t.lng };
+                        } else {
+                            coords = await geocoderAdresse(t.delivery_address);
+                        }
+                        
+                        if (coords) {
+                            transportsAvecCoords.push({
+                                ...t,
+                                lat: coords.lat,
+                                lng: coords.lng
+                            });
+                        }
+                    }
+                    
+                    // 2. Calculer la matrice des distances
+                    const points = [depot, ...transportsAvecCoords];
+                    const matrice = [];
+                    
+                    for (let i = 0; i < points.length; i++) {
+                        matrice[i] = [];
+                        for (let j = 0; j < points.length; j++) {
+                            if (i === j) {
+                                matrice[i][j] = { distance: 0, duree: 0 };
+                            } else {
+                                const route = await calculerRoute(points[i], points[j]);
+                                matrice[i][j] = route || { distance: 0, duree: 0 };
+                            }
+                        }
+                    }
+                    
+                    // 3. Créer les tournées (algorithme du plus proche voisin)
                     const vehicules = [
-                        { id: 1, capacite: 800, vitesse: 60, debut: 6*60, fin: 22*60 },
-                        { id: 2, capacite: 500, vitesse: 60, debut: 6*60, fin: 22*60 },
-                        { id: 3, capacite: 300, vitesse: 60, debut: 6*60, fin: 22*60 }
+                        { id: 1, capacite: 800, debut: 6*60, fin: 22*60 },
+                        { id: 2, capacite: 500, debut: 6*60, fin: 22*60 },
+                        { id: 3, capacite: 300, debut: 6*60, fin: 22*60 }
                     ];
                     
-                    const jobs = nonLivres.map((t, i) => {
-                        const coords = getCityCoordinates(t.delivery_address);
-                        return {
-                            id: i+1,
-                            ...coords,
-                            nom: t.destinataire_nom || 'Client',
-                            adresse: t.delivery_address,
-                            urgent: t.speed === '6h',
-                            poids: t.weight || 1,
-                            service: 15
-                        };
-                    });
-                    
-                    jobs.sort((a, b) => (a.urgent && !b.urgent) ? -1 : 0);
-                    
                     const tournees = [];
-                    let restants = [...jobs];
+                    const indicesUtilises = new Set();
                     
-                    vehicules.forEach((v, idx) => {
-                        if (restants.length === 0) return;
+                    for (let v = 0; v < vehicules.length; v++) {
+                        if (indicesUtilises.size >= transportsAvecCoords.length) break;
                         
-                        const tour = {
-                            vehicule: idx+1,
-                            capacite: v.capacite,
+                        const tournee = {
+                            vehicule: v+1,
+                            capacite: vehicules[v].capacite,
                             stops: [],
                             poidsTotal: 0,
                             distanceTotal: 0,
-                            tempsActuel: v.debut
+                            dureeTotal: 0,
+                            tempsActuel: vehicules[v].debut
                         };
                         
-                        let pos = { lat: depot.lat, lng: depot.lng };
+                        let positionActuelle = 0; // index 0 = dépôt
                         
-                        for (let i = restants.length-1; i >= 0; i--) {
-                            const job = restants[i];
-                            if (tour.poidsTotal + job.poids > v.capacite) continue;
+                        while (indicesUtilises.size < transportsAvecCoords.length) {
+                            // Trouver le point non visité le plus proche
+                            let meilleurIndex = -1;
+                            let meilleureDistance = Infinity;
                             
-                            const dist = calculerDistance(pos.lat, pos.lng, job.lat, job.lng);
-                            const trajet = (dist / v.vitesse) * 60;
-                            const arrivee = tour.tempsActuel + trajet + job.service;
+                            for (let i = 0; i < transportsAvecCoords.length; i++) {
+                                if (indicesUtilises.has(i)) continue;
+                                
+                                const distance = matrice[positionActuelle][i+1].distance;
+                                const duree = matrice[positionActuelle][i+1].duree;
+                                const poids = transportsAvecCoords[i].weight || 1;
+                                
+                                // Vérifier capacité
+                                if (tournee.poidsTotal + poids > vehicules[v].capacite) continue;
+                                
+                                // Vérifier horaire
+                                const heureArrivee = tournee.tempsActuel + duree;
+                                if (heureArrivee + 15 > vehicules[v].fin) continue;
+                                
+                                if (distance < meilleureDistance) {
+                                    meilleureDistance = distance;
+                                    meilleurIndex = i;
+                                }
+                            }
                             
-                            if (arrivee > v.fin) continue;
+                            if (meilleurIndex === -1) break;
                             
-                            tour.stops.push({
-                                ...job,
-                                distance: dist,
-                                heureArrivee: tour.tempsActuel + trajet
+                            // Ajouter le point à la tournée
+                            const indexMatrice = meilleurIndex + 1;
+                            const distance = matrice[positionActuelle][indexMatrice].distance;
+                            const duree = matrice[positionActuelle][indexMatrice].duree;
+                            
+                            tournee.tempsActuel += duree;
+                            tournee.stops.push({
+                                ...transportsAvecCoords[meilleurIndex],
+                                heureArrivee: tournee.tempsActuel,
+                                distanceDepuisPrecedent: distance
                             });
                             
-                            tour.poidsTotal += job.poids;
-                            tour.distanceTotal += dist;
-                            tour.tempsActuel = arrivee;
-                            pos = { lat: job.lat, lng: job.lng };
+                            tournee.poidsTotal += transportsAvecCoords[meilleurIndex].weight || 1;
+                            tournee.distanceTotal += distance;
+                            tournee.dureeTotal += duree;
                             
-                            restants.splice(i, 1);
+                            // Temps de service
+                            tournee.tempsActuel += 15;
+                            tournee.dureeTotal += 15;
+                            
+                            indicesUtilises.add(meilleurIndex);
+                            positionActuelle = indexMatrice;
                         }
                         
-                        if (tour.stops.length > 0) {
-                            const dernier = tour.stops[tour.stops.length-1];
-                            const retour = calculerDistance(dernier.lat, dernier.lng, depot.lat, depot.lng);
-                            tour.distanceTotal += retour;
-                            tour.tempsActuel += (retour / v.vitesse) * 60;
-                            tournees.push(tour);
+                        // Retour au dépôt
+                        if (tournee.stops.length > 0) {
+                            const distanceRetour = matrice[positionActuelle][0].distance;
+                            const dureeRetour = matrice[positionActuelle][0].duree;
+                            
+                            tournee.distanceTotal += distanceRetour;
+                            tournee.dureeTotal += dureeRetour;
+                            tournee.tempsActuel += dureeRetour;
+                            
+                            tournees.push(tournee);
                         }
-                    });
+                    }
                     
-                    afficherOptimisation(tournees, restants);
+                    afficherOptimisation(tournees, transportsAvecCoords.length - indicesUtilises.size);
                 };
                 
-                // ===== AFFICHAGE OPTIMISATION =====
+                // ===== AFFICHAGE RÉSULTATS =====
                 function afficherOptimisation(tournees, restants) {
                     document.getElementById('app').innerHTML = `
                         <header>
-                            <div class="logo"><i class="fas fa-route"></i> Tournées optimisées</div>
+                            <div class="logo"><i class="fas fa-route"></i> Résultat</div>
                             <div class="stats-header">
                                 <div class="stat-item"><span>🚚 Tournées</span><span class="stat-value">${tournees.length}</span></div>
-                                <div class="stat-item"><span>📦 Restants</span><span class="stat-value">${restants.length}</span></div>
+                                <div class="stat-item"><span>📦 Restants</span><span class="stat-value">${restants}</span></div>
                             </div>
                             <div class="user-section">
                                 <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
-                                <button class="btn-logout" onclick="logout()">Déconnexion</button>
                                 <button class="btn" onclick="loadTransports()">← Retour</button>
                             </div>
                         </header>
@@ -372,7 +423,7 @@
                             <div class="map-container"><div id="map"></div></div>
                             
                             <div class="right-panel">
-                                <h3>📋 Tournées proposées</h3>
+                                <h3>📋 Tournées optimisées</h3>
                                 <div id="tourneesList">
                                     ${tournees.map((t, idx) => `
                                         <div class="tour-item">
@@ -383,12 +434,14 @@
                                             <div class="tour-stats">
                                                 <span>📏 ${Math.round(t.distanceTotal)} km</span>
                                                 <span>⚖️ ${t.poidsTotal}/${t.capacite} kg</span>
-                                                <span>⏱️ ${formatTime(Math.round(t.tempsActuel))}</span>
+                                                <span>⏱️ ${Math.round(t.dureeTotal)} min</span>
                                             </div>
                                             ${t.stops.map((s, i) => `
                                                 <div class="tour-stop">
-                                                    <strong>${i+1}. ${s.nom}</strong>
-                                                    <div class="stop-time">🕐 ${formatTime(Math.round(s.heureArrivee))}</div>
+                                                    <strong>${i+1}. ${s.destinataire_nom || 'Client'}</strong>
+                                                    <div class="stop-time">
+                                                        🕐 Arrivée: ${formatTime(Math.round(s.heureArrivee))}
+                                                    </div>
                                                 </div>
                                             `).join('')}
                                             <div class="tour-stop">
@@ -402,10 +455,11 @@
                         </div>
                     `;
                     
-                    initMap(true);
+                    initMap();
                     
                     // Dessiner les routes
                     const couleurs = ['#3b82f6', '#10b981', '#f59e0b'];
+                    
                     tournees.forEach((t, index) => {
                         const points = [[depot.lat, depot.lng]];
                         t.stops.forEach(s => points.push([s.lat, s.lng]));
@@ -419,51 +473,50 @@
                     });
                 }
                 
-                // ===== SUPPRESSION =====
-                window.supprimer = async function(id) {
-                    if (!confirm("Supprimer ce transport ?")) return;
-                    await supabase.from('transport_orders_simple').delete().eq('id', id);
-                    loadTransports();
-                };
+                // ===== FORMAT HEURE =====
+                function formatTime(minutes) {
+                    const h = Math.floor(minutes / 60);
+                    const m = minutes % 60;
+                    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                }
                 
-                // ===== MODAL =====
+                // ===== MODAL SIMPLE =====
                 window.openModal = function() {
                     document.getElementById('app').innerHTML += `
                         <div id="modal" class="modal" style="display:flex;">
                             <div class="modal-box">
-                                <h3 style="margin-bottom:20px;">➕ Nouveau transport</h3>
-                                <form id="transportForm" onsubmit="event.preventDefault(); saveTransport();">
-                                    <div class="form-group"><label>Client</label><input type="text" id="clientNumber" value="CL2025-001" required></div>
-                                    <div class="form-group"><label>Destinataire</label><input type="text" id="destinataireNom" required></div>
-                                    <div class="form-group"><label>Adresse</label><input type="text" id="deliveryAddress" required></div>
-                                    <div class="form-group"><label>Poids (kg)</label><input type="number" id="weight" value="1"></div>
-                                    <div class="form-group">
-                                        <label>Vitesse</label>
-                                        <select id="speed">
-                                            <option value="24h">24h</option>
-                                            <option value="12h">12h</option>
-                                            <option value="6h">6h</option>
-                                        </select>
-                                    </div>
-                                    <div class="modal-buttons">
-                                        <button type="button" class="btn-cancel" onclick="document.getElementById('modal').remove()">Annuler</button>
-                                        <button type="submit" class="btn-save">Créer</button>
-                                    </div>
-                                </form>
+                                <h3>➕ Nouveau transport</h3>
+                                <input type="text" id="clientNum" placeholder="Client" value="CL2025-001" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
+                                <input type="text" id="destNom" placeholder="Destinataire" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
+                                <input type="text" id="addr" placeholder="Adresse livraison" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
+                                <input type="number" id="pds" placeholder="Poids" value="1" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
+                                <select id="vit" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
+                                    <option value="24h">24h</option>
+                                    <option value="12h">12h</option>
+                                    <option value="6h">6h</option>
+                                </select>
+                                <div style="display:flex; gap:10px;">
+                                    <button onclick="document.getElementById('modal').remove()" style="flex:1; padding:10px; background:#2a2a2a; color:white;">Annuler</button>
+                                    <button onclick="saveTransport()" style="flex:1; padding:10px; background:#facc15;">Créer</button>
+                                </div>
                             </div>
                         </div>
                     `;
                 };
                 
                 window.saveTransport = async function() {
+                    const coords = await geocoderAdresse(document.getElementById('addr').value);
+                    
                     const transport = {
                         order_number: 'TR-' + Date.now(),
-                        client_number: document.getElementById('clientNumber').value,
-                        destinataire_nom: document.getElementById('destinataireNom').value,
-                        delivery_address: document.getElementById('deliveryAddress').value,
-                        weight: parseFloat(document.getElementById('weight').value) || 1,
-                        speed: document.getElementById('speed').value,
-                        priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+                        client_number: document.getElementById('clientNum').value,
+                        destinataire_nom: document.getElementById('destNom').value,
+                        delivery_address: document.getElementById('addr').value,
+                        lat: coords?.lat || null,
+                        lng: coords?.lng || null,
+                        weight: parseFloat(document.getElementById('pds').value) || 1,
+                        speed: document.getElementById('vit').value,
+                        priority: document.getElementById('vit').value === '6h' ? 'urgent' : 'normal',
                         status: 'pending',
                         created_at: new Date()
                     };
@@ -482,7 +535,7 @@
                 await loadTransports();
                 
             } catch(e) {
-                console.error("Erreur:", e);
+                console.error("Erreur fatale:", e);
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
