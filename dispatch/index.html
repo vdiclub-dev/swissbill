@@ -61,6 +61,46 @@
     <script src="config.js"></script>
 
     <script>
+        // À AJOUTER DANS VOTRE SCRIPT
+window.selectSpeed = function(el, speed) {
+    document.querySelectorAll('.speed-option').forEach(opt => opt.classList.remove('selected'));
+    el.classList.add('selected');
+    document.getElementById('speed').value = speed;
+};
+
+window.saveTransport = async function() {
+    const transport = {
+        client_name: document.getElementById('clientName').value,
+        client_phone: document.getElementById('clientPhone').value,
+        client_email: document.getElementById('clientEmail').value,
+        pickup_address: document.getElementById('pickupAddress').value,
+        delivery_address: document.getElementById('deliveryAddress').value,
+        weight: parseFloat(document.getElementById('weight').value) || 1,
+        quantity: parseInt(document.getElementById('quantity').value) || 1,
+        parcel_type: document.getElementById('parcelType').value,
+        speed: document.getElementById('speed').value,
+        instructions: document.getElementById('instructions').value,
+        priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+        status: 'pending',
+        created_at: new Date()
+    };
+    
+    if (!transport.client_name || !transport.pickup_address || !transport.delivery_address) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
+    }
+    
+    try {
+        const { error } = await supabase.from('transport_orders').insert([transport]);
+        if (error) throw error;
+        alert('✅ Transport créé avec succès !');
+        closeModal();
+        loadTransports();
+    } catch(e) {
+        console.error('Erreur:', e);
+        alert('❌ Erreur: ' + e.message);
+    }
+};
         document.addEventListener('DOMContentLoaded', function() {
             console.log("🚀 Démarrage...");
             
@@ -123,35 +163,101 @@
                     </div>
                 </div>
 
-                <!-- MODAL SIMPLIFIÉE -->
-                <div id="modal" class="modal">
-                    <div class="modal-box">
-                        <div class="modal-header"><h3>➕ Nouveau transport</h3><button onclick="closeModal()">✖</button></div>
-                        <div class="modal-content">
-                            <form onsubmit="event.preventDefault(); saveTransport();">
-                                <div class="form-group"><label>Nom client *</label><input type="text" id="clientName" required></div>
-                                <div class="form-group"><label>Téléphone</label><input type="tel" id="clientPhone"></div>
-                                <div class="form-group"><label>Adresse ramassage *</label><input type="text" id="pickupAddress" required value="Impasse des Griottes 3, 1462 Yvonand"></div>
-                                <div class="form-group"><label>Adresse livraison *</label><input type="text" id="deliveryAddress" required></div>
-                                <div class="form-row">
-                                    <div class="form-group"><label>Poids (kg)</label><input type="number" id="weight" value="1"></div>
-                                    <div class="form-group"><label>Quantité</label><input type="number" id="quantity" value="1"></div>
-                                </div>
-                                <div class="form-group"><label>Priorité</label>
-                                    <select id="priority">
-                                        <option value="normal">Normal</option>
-                                        <option value="urgent">Urgent</option>
-                                    </select>
-                                </div>
-                                <div class="modal-buttons">
-                                    <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
-                                    <button type="submit" class="btn-save">Créer</button>
-                                </div>
-                            </form>
-                        </div>
+              <!-- MODAL DE CRÉATION DE TRANSPORT (COMPLÈTE) -->
+<div id="modal" class="modal">
+    <div class="modal-box" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3>➕ Nouveau transport</h3>
+            <button onclick="closeModal()">✖</button>
+        </div>
+        <div class="modal-content" style="max-height: 70vh; overflow-y: auto;">
+            <form onsubmit="event.preventDefault(); saveTransport();">
+                
+                <!-- SECTION CLIENT -->
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                    <h4 style="color:#facc15; margin-bottom:15px;">👤 Client</h4>
+                    
+                    <div class="form-group">
+                        <label>Rechercher client</label>
+                        <input type="text" id="clientSearch" placeholder="Nom, téléphone..." style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Nom client *</label>
+                        <input type="text" id="clientName" required placeholder="Jean Dupont" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                    </div>
+                    
+                    <div class="form-row" style="display:flex; gap:10px;">
+                        <div style="flex:1;"><label>Téléphone</label><input type="tel" id="clientPhone" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;"></div>
+                        <div style="flex:1;"><label>Email</label><input type="email" id="clientEmail" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;"></div>
                     </div>
                 </div>
-            `;
+                
+                <!-- RAMASSAGE -->
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                    <h4 style="color:#facc15; margin-bottom:15px;">📍 Ramassage</h4>
+                    <div class="form-group">
+                        <label>Adresse complète *</label>
+                        <input type="text" id="pickupAddress" required value="Impasse des Griottes 3, 1462 Yvonand" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                    </div>
+                </div>
+                
+                <!-- LIVRAISON -->
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                    <h4 style="color:#facc15; margin-bottom:15px;">🎯 Livraison</h4>
+                    <div class="form-group">
+                        <label>Adresse complète *</label>
+                        <input type="text" id="deliveryAddress" required style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                    </div>
+                </div>
+                
+                <!-- COLIS PRINCIPAL -->
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                    <h4 style="color:#facc15; margin-bottom:15px;">📦 Colis</h4>
+                    <div class="form-row" style="display:flex; gap:10px;">
+                        <div style="flex:1;"><label>Poids (kg)</label><input type="number" id="weight" value="1" step="0.1" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;"></div>
+                        <div style="flex:1;"><label>Quantité</label><input type="number" id="quantity" value="1" min="1" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Type de colis</label>
+                        <select id="parcelType" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                            <option value="Colis">📦 Colis standard</option>
+                            <option value="Fragile">⚠️ Fragile</option>
+                            <option value="Palette">📦 Palette</option>
+                            <option value="Document">📄 Document</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- VITESSE -->
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                    <h4 style="color:#facc15; margin-bottom:15px;">⚡ Vitesse de livraison</h4>
+                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
+                        <div class="speed-option" onclick="selectSpeed(this, '6h')" style="text-align:center; padding:10px; background:#2a2a2a; border-radius:4px; cursor:pointer;">🚀 6h</div>
+                        <div class="speed-option selected" onclick="selectSpeed(this, '12h')" style="text-align:center; padding:10px; background:#facc15; color:#111; border-radius:4px; cursor:pointer;">⚡ 12h</div>
+                        <div class="speed-option" onclick="selectSpeed(this, '24h')" style="text-align:center; padding:10px; background:#2a2a2a; border-radius:4px; cursor:pointer;">📦 24h</div>
+                    </div>
+                    <input type="hidden" id="speed" value="12h">
+                </div>
+                
+                <!-- INSTRUCTIONS -->
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                    <div class="form-group">
+                        <label>Instructions spéciales</label>
+                        <textarea id="instructions" rows="2" style="width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;"></textarea>
+                    </div>
+                </div>
+                
+                <!-- BOUTONS -->
+                <div class="modal-buttons" style="display:flex; gap:10px; margin-top:20px;">
+                    <button type="button" class="btn-cancel" onclick="closeModal()" style="flex:1; padding:12px; background:#2a2a2a; color:white; border:none; border-radius:4px; cursor:pointer;">Annuler</button>
+                    <button type="submit" class="btn-save" style="flex:1; padding:12px; background:#facc15; color:#111; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Créer le transport</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
             
             // ===== FONCTIONS =====
             window.logout = function() { localStorage.removeItem('user'); window.location.href = '../login/'; };
