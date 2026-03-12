@@ -3,16 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Léman Dispatch | Gestion des tournées</title>
+    <title>Léman Dispatch | Tournées</title>
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- Leaflet CSS (doit être avant tout) -->
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
     
-    <!-- Drag & Drop CSS -->
+    <!-- Drag & Drop -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
+    
+    <!-- Supabase et Config -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
@@ -29,66 +35,115 @@
         .btn-logout { background: #2a2a2a; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .btn { background: #facc15; color: #111; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-optimize { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-        .btn-save { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .btn-delete-tour { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
         .stat-value { background: #2a2a2a; padding: 4px 10px; border-radius: 20px; color: #facc15; font-weight: bold; }
         
-        .container { display: flex; height: calc(100vh - 70px); }
-        .sidebar {
-            width: 220px; background: #111; padding: 20px;
-            border-right: 1px solid #2a2a2a; overflow-y: auto;
-        }
-        .sidebar button {
-            width: 100%; padding: 12px; margin-bottom: 8px;
-            background: #1f2937; color: white; border: none;
-            border-radius: 6px; cursor: pointer; text-align: left;
-        }
-        .sidebar button:hover { background: #facc15; color: #111; }
-        .sidebar button.active { background: #facc15; color: #111; }
-        
-        .main-content {
-            flex: 1;
+        .container {
             display: flex;
-            flex-direction: column;
+            height: calc(100vh - 70px);
             overflow: hidden;
         }
         
+        /* SIDEBAR GAUCHE - FORMULAIRE */
+        .form-sidebar {
+            width: 350px;
+            background: #111;
+            border-right: 1px solid #2a2a2a;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .form-sidebar h2 {
+            color: #facc15;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            color: #aaa;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            background: #1f2937;
+            border: 1px solid #2a2a2a;
+            color: white;
+            border-radius: 6px;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #facc15;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+        }
+        
+        .btn-submit {
+            width: 100%;
+            padding: 12px;
+            background: #facc15;
+            color: #111;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        .btn-submit:hover {
+            background: #eab308;
+        }
+        
+        /* CARTE CENTRALE */
         .map-container {
-            height: 40%;
-            min-height: 250px;
-            border-bottom: 1px solid #2a2a2a;
+            flex: 1;
             position: relative;
         }
         #map { height: 100%; width: 100%; }
         
-        .tours-container {
-            height: 60%;
+        /* PANEL DROIT - TOURNÉES */
+        .tours-panel {
+            width: 400px;
+            background: #111;
+            border-left: 1px solid #2a2a2a;
             padding: 20px;
             overflow-y: auto;
-            background: #0f172a;
         }
         
-        .tours-header {
+        .tours-panel h2 {
+            color: #facc15;
+            margin-bottom: 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
         }
         
-        .tours-grid {
-            display: flex;
-            gap: 20px;
-            overflow-x: auto;
-            padding-bottom: 20px;
-        }
-        
-        .tour-column {
-            min-width: 300px;
+        .tour-card {
             background: #1f2937;
             border-radius: 8px;
             padding: 15px;
+            margin-bottom: 15px;
             border-left: 4px solid #3b82f6;
         }
         
@@ -96,9 +151,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #2a2a2a;
+            margin-bottom: 10px;
         }
         
         .tour-title {
@@ -112,70 +165,61 @@
         }
         
         .tour-list {
-            min-height: 200px;
+            min-height: 50px;
             padding: 5px;
         }
         
-        .transport-card {
+        .transport-mini {
             background: #2a2a2a;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 10px;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 5px;
+            font-size: 12px;
+            border-left: 2px solid #facc15;
             cursor: move;
-            border-left: 3px solid #facc15;
         }
         
-        .transport-card.urgent {
+        .transport-mini.urgent {
             border-left-color: #ef4444;
         }
         
-        .transport-client {
-            font-weight: bold;
-            color: white;
-            font-size: 14px;
-        }
-        
-        .transport-address {
-            font-size: 11px;
-            color: #aaa;
-            margin: 4px 0;
-        }
-        
-        .transport-meta {
+        .tour-footer {
             display: flex;
             justify-content: space-between;
-            font-size: 10px;
-            color: #666;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #2a2a2a;
         }
         
-        .pending-list {
-            min-width: 300px;
+        .pending-area {
             background: #1f2937;
             border-radius: 8px;
             padding: 15px;
+            margin-bottom: 20px;
             border-left: 4px solid #6b7280;
         }
         
-        .drop-target {
-            border: 2px dashed #3b82f6;
-            background: #1e3a8a;
+        .pending-title {
+            color: #facc15;
+            margin-bottom: 10px;
+            font-weight: bold;
         }
         
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
+        .pending-list {
+            min-height: 100px;
+            padding: 5px;
         }
-        .modal-box {
-            background: #1f2937;
-            padding: 20px;
-            border-radius: 8px;
-            max-width: 500px;
-            width: 90%;
+        
+        /* ANIMATION CLIGNOTANTE */
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
+        .marker-blink {
+            animation: blink 1.5s infinite;
         }
         
         .loader {
@@ -194,17 +238,18 @@
         </div>
     </div>
 
-    <!-- SCRIPTS DANS LE BON ORDRE -->
+    <!-- SCRIPTS -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             try {
-                console.log("🚀 Gestion des tournées...");
+                console.log("🚀 Léman Dispatch - Tournées...");
                 
                 if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
@@ -218,15 +263,10 @@
                 const userData = JSON.parse(user);
                 if (userData.role !== 'admin') { window.location.href = '../'; return; }
                 
-                // ===== VÉRIFICATION LEAFLET =====
-                if (typeof L === 'undefined') {
-                    throw new Error("Leaflet n'est pas chargé");
-                }
-                
                 // ===== DONNÉES =====
                 let allTransports = [];
                 let tours = [];
-                let map;
+                let map, markers, markerMap = new Map();
                 
                 const depot = {
                     nom: "Dépôt Yverdon",
@@ -243,26 +283,11 @@
                     
                     allTransports = data || [];
                     
-                    // Charger les tournées sauvegardées
+                    // Initialiser les tournées
                     tours = [
-                        {
-                            id: 1,
-                            nom: "Tournée Lausanne",
-                            transports: [],
-                            couleur: '#3b82f6'
-                        },
-                        {
-                            id: 2,
-                            nom: "Tournée Genève",
-                            transports: [],
-                            couleur: '#10b981'
-                        },
-                        {
-                            id: 3,
-                            nom: "Tournée Berne",
-                            transports: [],
-                            couleur: '#f59e0b'
-                        }
+                        { id: 1, nom: "Tournée Lausanne", couleur: '#3b82f6', transports: [] },
+                        { id: 2, nom: "Tournée Genève", couleur: '#10b981', transports: [] },
+                        { id: 3, nom: "Tournée Berne", couleur: '#f59e0b', transports: [] }
                     ];
                     
                     afficherPage();
@@ -274,7 +299,7 @@
                     
                     document.getElementById('app').innerHTML = `
                         <header>
-                            <div class="logo"><i class="fas fa-route"></i> Gestion des tournées</div>
+                            <div class="logo"><i class="fas fa-route"></i> Léman Dispatch</div>
                             <div class="stats-header">
                                 <div class="stat-item"><span>📦 En attente</span><span class="stat-value">${nonLivres.length}</span></div>
                                 <div class="stat-item"><span>🚚 Tournées</span><span class="stat-value">${tours.length}</span></div>
@@ -282,113 +307,154 @@
                             <div class="user-section">
                                 <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
                                 <button class="btn-logout" onclick="logout()">Déconnexion</button>
-                                <button class="btn" onclick="window.location.href='index.html'">← Dispatch</button>
-                                <button class="btn-optimize" onclick="optimiser()">🧠 Optimiser</button>
-                                <button class="btn-save" onclick="sauvegarderTout()">💾 Sauvegarder</button>
                             </div>
                         </header>
                         
                         <div class="container">
-                            <div class="sidebar">
-                                <button onclick="window.location.href='index.html'">🗺️ Dispatch</button>
-                                <button class="active">🗂️ Tournées</button>
-                                <button>📊 Statistiques</button>
-                            </div>
-                            
-                            <div class="main-content">
-                                <div class="map-container">
-                                    <div id="map"></div>
+                            <!-- FORMULAIRE À GAUCHE -->
+                            <div class="form-sidebar">
+                                <h2><i class="fas fa-plus-circle"></i> Nouveau transport</h2>
+                                
+                                <div class="form-group">
+                                    <label>Numéro client</label>
+                                    <input type="text" id="clientNumber" value="CL2025-001">
                                 </div>
                                 
-                                <div class="tours-container">
-                                    <div class="tours-header">
-                                        <h2 style="color:#facc15;">Glissez les transports vers les tournées</h2>
-                                        <div>
-                                            <button class="btn-optimize" onclick="ajouterTournee()">➕ Nouvelle tournée</button>
-                                        </div>
+                                <div class="form-group">
+                                    <label>Destinataire</label>
+                                    <input type="text" id="destinataireNom" placeholder="Nom / Entreprise">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Adresse de livraison</label>
+                                    <input type="text" id="deliveryAddress" placeholder="Rue, NPA, Ville">
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Poids (kg)</label>
+                                        <input type="number" id="weight" value="1">
                                     </div>
-                                    
-                                    <div class="tours-grid" id="toursGrid">
-                                        <!-- Colonne des transports en attente -->
-                                        <div class="pending-list" id="pendingList">
-                                            <div class="tour-header">
-                                                <span class="tour-title">📋 En attente</span>
-                                                <span class="tour-stats">${nonLivres.length} transport(s)</span>
-                                            </div>
-                                            <div class="tour-list" id="pendingTransports">
-                                                ${nonLivres.map(t => `
-                                                    <div class="transport-card ${t.speed === '6h' ? 'urgent' : ''}" 
-                                                         data-id="${t.id}"
-                                                         data-client="${t.destinataire_nom || 'Client'}"
-                                                         data-address="${t.delivery_address || ''}"
-                                                         data-weight="${t.weight || 0}"
-                                                         data-speed="${t.speed || '24h'}"
-                                                         data-lat="${t.lat || 0}"
-                                                         data-lng="${t.lng || 0}">
-                                                        <div class="transport-client">${t.destinataire_nom || 'Client'}</div>
-                                                        <div class="transport-address">${(t.delivery_address || '').substring(0,40)}</div>
-                                                        <div class="transport-meta">
-                                                            <span>${t.speed || '24h'}</span>
-                                                            <span>${t.weight || 0} kg</span>
-                                                        </div>
-                                                    </div>
-                                                `).join('')}
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Colonnes des tournées -->
-                                        ${tours.map((tour, index) => `
-                                            <div class="tour-column" data-tour="${tour.id}" style="border-left-color: ${tour.couleur};">
-                                                <div class="tour-header">
-                                                    <span class="tour-title">🚚 ${tour.nom}</span>
-                                                    <span class="tour-stats">${tour.transports.length} transport(s)</span>
-                                                </div>
-                                                <div class="tour-list" id="tour-${tour.id}" data-tour-id="${tour.id}">
-                                                    ${tour.transports.map(t => `
-                                                        <div class="transport-card" 
-                                                             data-id="${t.id}"
-                                                             data-client="${t.destinataire_nom || 'Client'}"
-                                                             data-address="${t.delivery_address || ''}">
-                                                            <div class="transport-client">${t.destinataire_nom || 'Client'}</div>
-                                                            <div class="transport-address">${(t.delivery_address || '').substring(0,40)}</div>
-                                                        </div>
-                                                    `).join('')}
-                                                </div>
-                                                <div style="display:flex; gap:5px; margin-top:10px;">
-                                                    <button class="btn-optimize" style="flex:1; padding:5px;" onclick="optimiserTournee(${tour.id})">🔄 Optimiser</button>
-                                                    <button class="btn-save" style="flex:1; padding:5px;" onclick="assignerChauffeur(${tour.id})">👤 Assigner</button>
-                                                </div>
+                                    <div class="form-group">
+                                        <label>Vitesse</label>
+                                        <select id="speed">
+                                            <option value="24h">24h</option>
+                                            <option value="12h">12h</option>
+                                            <option value="6h">6h</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Instructions</label>
+                                    <textarea id="instructions" rows="2"></textarea>
+                                </div>
+                                
+                                <button class="btn-submit" onclick="creerTransport()">
+                                    <i class="fas fa-check"></i> Créer le transport
+                                </button>
+                            </div>
+                            
+                            <!-- CARTE CENTRALE -->
+                            <div class="map-container">
+                                <div id="map"></div>
+                            </div>
+                            
+                            <!-- TOURNÉES À DROITE -->
+                            <div class="tours-panel">
+                                <h2>
+                                    <span><i class="fas fa-route"></i> Tournées</span>
+                                    <button class="btn-optimize" onclick="ajouterTournee()">➕ Nouvelle</button>
+                                </h2>
+                                
+                                <!-- Transports en attente -->
+                                <div class="pending-area">
+                                    <div class="pending-title">
+                                        📋 En attente (${nonLivres.length})
+                                    </div>
+                                    <div class="pending-list" id="pendingList">
+                                        ${nonLivres.map(t => `
+                                            <div class="transport-mini ${t.speed === '6h' ? 'urgent' : ''}" 
+                                                 data-id="${t.id}"
+                                                 data-client="${t.destinataire_nom || 'Client'}"
+                                                 data-address="${t.delivery_address || ''}"
+                                                 data-lat="${t.lat || 0}"
+                                                 data-lng="${t.lng || 0}">
+                                                <strong>${t.destinataire_nom || 'Client'}</strong><br>
+                                                <small>${(t.delivery_address || '').substring(0,30)}</small>
                                             </div>
                                         `).join('')}
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Modal assignation chauffeur -->
-                        <div id="assignModal" class="modal">
-                            <div class="modal-box">
-                                <h3 style="margin-bottom:15px;">👤 Assigner un chauffeur</h3>
-                                <select id="chauffeurSelect" style="width:100%; padding:10px; margin-bottom:15px;">
-                                    <option value="1">Jean Dupont</option>
-                                    <option value="2">Pierre Martin</option>
-                                    <option value="3">Michel Bernard</option>
-                                </select>
-                                <div style="display:flex; gap:10px;">
-                                    <button class="btn" onclick="fermerModal()">Annuler</button>
-                                    <button class="btn-save" onclick="confirmerAssignation()">Assigner</button>
-                                </div>
+                                
+                                <!-- Liste des tournées -->
+                                ${tours.map((tour, index) => `
+                                    <div class="tour-card" style="border-left-color: ${tour.couleur};">
+                                        <div class="tour-header">
+                                            <span class="tour-title">🚚 ${tour.nom}</span>
+                                            <button class="btn-delete-tour" onclick="supprimerTournee(${tour.id})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                        <div class="tour-list" id="tour-${tour.id}" data-tour-id="${tour.id}">
+                                            ${tour.transports.map(t => `
+                                                <div class="transport-mini">
+                                                    <strong>${t.destinataire_nom || 'Client'}</strong>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                        <div class="tour-footer">
+                                            <span>${tour.transports.length} arrêts</span>
+                                            <button class="btn-optimize" style="padding:4px 8px;" onclick="optimiserTournee(${tour.id})">
+                                                Optimiser
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
                             </div>
                         </div>
                     `;
                     
-                    initDragAndDrop();
                     initMap();
+                    initDragAndDrop();
+                }
+                
+                // ===== INIT CARTE =====
+                function initMap() {
+                    if (map) map.remove();
+                    map = L.map('map').setView([46.8, 8.2], 8);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                    
+                    // Dépôt
+                    L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
+                    
+                    // Marqueurs des transports
+                    const nonLivres = allTransports.filter(t => t.status !== 'delivered');
+                    
+                    nonLivres.forEach(t => {
+                        if (t.lat && t.lng) {
+                            const estDansTournee = false; // À vérifier
+                            const color = t.speed === '6h' ? '#ef4444' : '#facc15';
+                            
+                            const icon = L.divIcon({
+                                html: `<div style="background:${color}; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white; ${!estDansTournee ? 'animation:blink 1.5s infinite;' : ''}">•</div>`,
+                                iconSize: [20, 20]
+                            });
+                            
+                            const marker = L.marker([t.lat, t.lng], { icon }).addTo(map);
+                            marker.bindPopup(`
+                                <b>${t.destinataire_nom || 'Client'}</b><br>
+                                ${t.delivery_address}
+                            `);
+                            
+                            markerMap.set(t.id, marker);
+                        }
+                    });
                 }
                 
                 // ===== DRAG & DROP =====
                 function initDragAndDrop() {
-                    $(".transport-card").draggable({
+                    $(".transport-mini").draggable({
                         revert: "invalid",
                         helper: "clone",
                         cursor: "move",
@@ -397,7 +463,7 @@
                     });
                     
                     $(".tour-list").droppable({
-                        accept: ".transport-card",
+                        accept: ".transport-mini",
                         hoverClass: "drop-target",
                         drop: function(event, ui) {
                             const transportId = ui.draggable.data('id');
@@ -405,74 +471,36 @@
                             
                             const clone = ui.draggable.clone();
                             $(this).append(clone);
-                            
                             ui.draggable.remove();
-                            
-                            clone.draggable({
-                                revert: "invalid",
-                                helper: "clone",
-                                cursor: "move",
-                                opacity: 0.7,
-                                zIndex: 1000
-                            });
                             
                             ajouterTransportATournee(transportId, tourId);
                         }
                     });
                 }
                 
-                // ===== INIT CARTE =====
-                function initMap() {
-                    map = L.map('map').setView([46.8, 8.2], 8);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                    
-                    L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
-                    
-                    $(".transport-card").each(function() {
-                        const lat = $(this).data('lat');
-                        const lng = $(this).data('lng');
-                        if (lat && lng && lat != 0) {
-                            L.marker([lat, lng]).addTo(map).bindPopup($(this).data('client'));
-                        }
-                    });
-                }
-                
                 // ===== FONCTIONS =====
+                window.creerTransport = async function() {
+                    const transport = {
+                        order_number: 'TR-' + Date.now(),
+                        client_number: document.getElementById('clientNumber').value,
+                        destinataire_nom: document.getElementById('destinataireNom').value,
+                        delivery_address: document.getElementById('deliveryAddress').value,
+                        weight: parseFloat(document.getElementById('weight').value) || 1,
+                        speed: document.getElementById('speed').value,
+                        instructions: document.getElementById('instructions').value,
+                        status: 'pending',
+                        priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+                        created_at: new Date()
+                    };
+                    
+                    await supabase.from('transport_orders_simple').insert([transport]);
+                    alert("✅ Transport créé");
+                    loadData();
+                };
+                
                 window.ajouterTransportATournee = function(transportId, tourId) {
-                    console.log(`Transport ${transportId} ajouté à la tournée ${tourId}`);
-                };
-                
-                window.optimiser = function() {
-                    const pendingCards = $("#pendingTransports .transport-card");
-                    
-                    if (pendingCards.length === 0) {
-                        alert("Aucun transport en attente");
-                        return;
-                    }
-                    
-                    let index = 0;
-                    pendingCards.each(function() {
-                        const tourId = tours[index % tours.length].id;
-                        const clone = $(this).clone();
-                        $(`#tour-${tourId}`).append(clone);
-                        $(this).remove();
-                        
-                        clone.draggable({
-                            revert: "invalid",
-                            helper: "clone",
-                            cursor: "move",
-                            opacity: 0.7,
-                            zIndex: 1000
-                        });
-                        
-                        index++;
-                    });
-                    
-                    alert("✅ Transports répartis dans les tournées");
-                };
-                
-                window.optimiserTournee = function(tourId) {
-                    alert(`Optimisation de la tournée ${tourId}...`);
+                    console.log(`Transport ${transportId} → Tournée ${tourId}`);
+                    // Ici, mettre à jour Supabase
                 };
                 
                 window.ajouterTournee = function() {
@@ -482,30 +510,22 @@
                     tours.push({
                         id: newId,
                         nom: `Tournée ${newId}`,
-                        transports: [],
-                        couleur: couleurs[newId % couleurs.length]
+                        couleur: couleurs[newId % couleurs.length],
+                        transports: []
                     });
                     
                     afficherPage();
                 };
                 
-                window.assignerChauffeur = function(tourId) {
-                    document.getElementById('assignModal').style.display = 'flex';
-                    window.currentTourId = tourId;
+                window.supprimerTournee = function(tourId) {
+                    if (confirm("Supprimer cette tournée ?")) {
+                        tours = tours.filter(t => t.id !== tourId);
+                        afficherPage();
+                    }
                 };
                 
-                window.fermerModal = function() {
-                    document.getElementById('assignModal').style.display = 'none';
-                };
-                
-                window.confirmerAssignation = function() {
-                    const chauffeur = document.getElementById('chauffeurSelect').value;
-                    alert(`Tournée assignée au chauffeur ${chauffeur}`);
-                    fermerModal();
-                };
-                
-                window.sauvegarderTout = function() {
-                    alert("✅ Tournées sauvegardées !");
+                window.optimiserTournee = function(tourId) {
+                    alert(`Optimisation de la tournée ${tourId}`);
                 };
                 
                 window.logout = function() {
