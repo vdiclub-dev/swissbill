@@ -13,7 +13,7 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Inter', -apple-system, sans-serif;
+            font-family: system-ui, -apple-system, sans-serif;
         }
         
         body {
@@ -75,7 +75,7 @@
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            font-weight: 500;
+            font-weight: 600;
             color: #0f172a;
         }
         
@@ -151,10 +151,6 @@
             font-weight: 600;
         }
         
-        .login-link a:hover {
-            text-decoration: underline;
-        }
-        
         .info-note {
             background: #fef3c7;
             color: #92400e;
@@ -174,6 +170,18 @@
         .required::after {
             content: " *";
             color: #e53935;
+        }
+        
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            border-left: 4px solid #e53935;
         }
         
         @media (max-width: 600px) {
@@ -196,9 +204,13 @@
         <p>Rejoignez Léman-Courses pour gérer vos transports</p>
     </div>
     
+    <div id="errorMessage" class="error-message">
+        <i class="fas fa-exclamation-circle"></i>
+        <span id="errorText"></span>
+    </div>
+    
     <form onsubmit="event.preventDefault(); createAccount();">
         <div class="form-grid">
-            <!-- INFORMATIONS PERSONNELLES -->
             <div class="form-group">
                 <label class="required">Civilité</label>
                 <select id="civility">
@@ -223,7 +235,6 @@
                 <input type="tel" id="phone" placeholder="079 123 45 67" required>
             </div>
             
-            <!-- ADRESSE -->
             <div class="form-group full-width">
                 <label class="required">Adresse</label>
                 <input type="text" id="address" placeholder="Rue du Simplon 12" required>
@@ -239,11 +250,9 @@
                 <input type="text" id="city" placeholder="Lausanne" required>
             </div>
             
-            <!-- IDENTIFIANTS DE CONNEXION -->
             <div class="form-group">
                 <label class="required">Numéro client souhaité</label>
-                <input type="text" id="clientNumber" placeholder="CL2025-XXX" value="CL2025-" required>
-                <small style="color:#64748b;">6-12 caractères, lettres et chiffres</small>
+                <input type="text" id="clientNumber" placeholder="CL2025-001" value="CL2025-" required>
             </div>
             
             <div class="form-group">
@@ -256,14 +265,12 @@
                 <input type="password" id="confirmPassword" placeholder="1234" maxlength="4" pattern="[0-9]{4}" required>
             </div>
             
-            <!-- INFORMATIONS COMPLÉMENTAIRES -->
             <div class="form-group full-width">
                 <label>Instructions de livraison (optionnel)</label>
                 <textarea id="deliveryInstructions" rows="2" placeholder="Code d'accès, horaires préférés..."></textarea>
             </div>
         </div>
         
-        <!-- NOTICE D'INFORMATION -->
         <div class="info-note">
             <i class="fas fa-info-circle"></i>
             <div>
@@ -272,18 +279,11 @@
             </div>
         </div>
         
-        <!-- CONDITIONS -->
         <div class="checkbox-group">
             <input type="checkbox" id="terms" required>
             <label for="terms">J'accepte les <a href="#" style="color:#e53935;">conditions générales</a> de service</label>
         </div>
         
-        <div class="checkbox-group">
-            <input type="checkbox" id="newsletter">
-            <label for="newsletter">Je souhaite recevoir des offres et actualités</label>
-        </div>
-        
-        <!-- BOUTONS -->
         <button type="submit" class="btn">
             <i class="fas fa-user-plus"></i> Créer mon compte
         </button>
@@ -303,61 +303,122 @@
     </form>
 </div>
 
+<!-- SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../dispatch/config.js"></script>
+
 <script>
-async function createAccount() {
-    const clientNumber = document.getElementById('clientNumber').value;
-    const password = document.getElementById('password').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-    const terms = document.getElementById('terms').checked;
-    
-    if (!terms) {
-        alert('Veuillez accepter les conditions générales');
-        return;
+    // ===== INITIALISATION SUPABASE =====
+    if (!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="color:red; padding:20px;">❌ Erreur: config.js non trouvé</div>';
+        throw new Error("Configuration manquante");
     }
     
-    if (password !== confirmPassword) {
-        alert('Les codes ne correspondent pas');
-        return;
+    const supabase = window.supabase.createClient(
+        window.SUPABASE_CONFIG.url,
+        window.SUPABASE_CONFIG.key
+    );
+    
+    console.log("✅ Supabase prêt pour inscription");
+    
+    // ===== FONCTIONS =====
+    function fillDemoData() {
+        document.getElementById('civility').value = 'M.';
+        document.getElementById('name').value = 'Dupont Jean';
+        document.getElementById('email').value = 'jean.dupont@email.ch';
+        document.getElementById('phone').value = '079 123 45 67';
+        document.getElementById('address').value = 'Rue du Simplon 12';
+        document.getElementById('npa').value = '1000';
+        document.getElementById('city').value = 'Lausanne';
+        document.getElementById('clientNumber').value = 'CL2025-' + Math.floor(Math.random() * 1000);
+        document.getElementById('password').value = '1234';
+        document.getElementById('confirmPassword').value = '1234';
     }
     
-    try {
-        // 1. Créer dans users
-        const { data: userData, error: userError } = await supabase
-            .from('users')
-            .insert([{
-                username: clientNumber,
-                password: password,
-                role: 'client'
-            }])
-            .select();
-        
-        if (userError) throw userError;
-        
-        // 2. Créer dans clients
-        const { error: clientError } = await supabase
-            .from('clients')
-            .insert([{
-                user_id: userData[0].id,
-                client_number: clientNumber,
-                company_name: document.getElementById('name').value,
-                email: document.getElementById('email').value,
-                phone: document.getElementById('phone').value,
-                address: document.getElementById('address').value,
-                npa: document.getElementById('npa').value,
-                city: document.getElementById('city').value,
-                default_pickup_address: 'Impasse des Griottes 3, 1462 Yvonand'
-            }]);
-        
-        if (clientError) throw clientError;
-        
-        alert('✅ Compte créé ! Vous pouvez vous connecter.');
-        window.location.href = 'index.html';
-        
-    } catch (error) {
-        console.error('Erreur:', error);
-        alert('❌ Erreur: ' + error.message);
+    function showError(message) {
+        document.getElementById('errorText').textContent = message;
+        document.getElementById('errorMessage').style.display = 'flex';
+        setTimeout(() => {
+            document.getElementById('errorMessage').style.display = 'none';
+        }, 5000);
     }
-}
+    
+    async function createAccount() {
+        const clientNumber = document.getElementById('clientNumber').value.trim();
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        const terms = document.getElementById('terms').checked;
+        
+        // Cacher les erreurs précédentes
+        document.getElementById('errorMessage').style.display = 'none';
+        
+        // Validations
+        if (!terms) {
+            showError('Veuillez accepter les conditions générales');
+            return;
+        }
+        
+        if (password !== confirmPassword) {
+            showError('Les codes d\'accès ne correspondent pas');
+            return;
+        }
+        
+        if (password.length !== 4 || isNaN(password)) {
+            showError('Le code doit être composé de 4 chiffres');
+            return;
+        }
+        
+        try {
+            // 1. Vérifier si le nom d'utilisateur existe déjà
+            const { data: existingUser, error: checkError } = await supabase
+                .from('users')
+                .select('username')
+                .eq('username', clientNumber);
+            
+            if (checkError) throw checkError;
+            
+            if (existingUser && existingUser.length > 0) {
+                showError('Ce numéro client est déjà utilisé');
+                return;
+            }
+            
+            // 2. Créer dans users
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .insert([{
+                    username: clientNumber,
+                    password: password,
+                    role: 'client'
+                }])
+                .select();
+            
+            if (userError) throw userError;
+            
+            // 3. Créer dans clients
+            const { error: clientError } = await supabase
+                .from('clients')
+                .insert([{
+                    user_id: userData[0].id,
+                    client_number: clientNumber,
+                    company_name: document.getElementById('name').value,
+                    email: document.getElementById('email').value,
+                    phone: document.getElementById('phone').value,
+                    address: document.getElementById('address').value,
+                    npa: document.getElementById('npa').value,
+                    city: document.getElementById('city').value,
+                    default_pickup_address: 'Impasse des Griottes 3, 1462 Yvonand'
+                }]);
+            
+            if (clientError) throw clientError;
+            
+            alert('✅ Compte créé avec succès ! Vous pouvez maintenant vous connecter.');
+            window.location.href = 'index.html';
+            
+        } catch (error) {
+            console.error('Erreur création:', error);
+            showError('Erreur: ' + error.message);
+        }
+    }
 </script>
 
 </body>
