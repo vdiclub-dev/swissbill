@@ -31,14 +31,15 @@
         .sidebar button { width: 100%; padding: 12px; margin-bottom: 8px; background: #1f2937; color: white; border: none; border-radius: 6px; cursor: pointer; text-align: left; }
         .map-container { flex: 1; }
         #map { height: 100%; width: 100%; }
-        .right-panel { width: 350px; background: #111; border-left: 1px solid #2a2a2a; padding: 20px; overflow-y: auto; }
+        .right-panel { width: 380px; background: #111; border-left: 1px solid #2a2a2a; padding: 20px; overflow-y: auto; }
         .right-panel h3 { color: #facc15; margin-bottom: 20px; }
         .transport-item { background: #1f2937; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-left: 3px solid #facc15; }
         .transport-item.urgent { border-left-color: #ef4444; }
-        .transport-header { display: flex; justify-content: space-between; align-items: center; }
-        .transport-client { font-weight: bold; color: white; }
-        .transport-route { font-size: 13px; color: #aaa; margin: 4px 0; }
-        .transport-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #666; }
+        .transport-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .transport-client { font-weight: bold; color: white; font-size: 14px; }
+        .transport-destinataire { color: #facc15; font-size: 13px; margin: 2px 0; }
+        .transport-address { font-size: 12px; color: #aaa; line-height: 1.4; margin: 2px 0; }
+        .transport-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #666; border-top: 1px solid #2a2a2a; padding-top: 4px; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
         .modal-box { background: #1f2937; border-radius: 10px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; border: 1px solid #facc15; }
         .modal-header { background: #111; padding: 15px 20px; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; }
@@ -109,7 +110,7 @@
                         <div class="map-container"><div id="map"></div></div>
                         
                         <div class="right-panel">
-                            <h3>📋 Derniers transports</h3>
+                            <h3>📋 Liste des transports</h3>
                             <div id="transportList"><div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div></div>
                         </div>
                     </div>
@@ -125,29 +126,34 @@
                             <div class="modal-content">
                                 <form id="transportForm">
                                     
-                                    <!-- SECTION CLIENT -->
+                                    <!-- SECTION CLIENT (EXPÉDITEUR) -->
                                     <div class="section">
-                                        <h4 class="section-title"><i class="fas fa-user-circle"></i> Client</h4>
+                                        <h4 class="section-title"><i class="fas fa-user-circle"></i> Expéditeur</h4>
                                         <div class="form-group">
                                             <label>Numéro client *</label>
                                             <input type="text" id="clientNumber" value="CL2025-001" required>
                                         </div>
                                     </div>
 
-                                    <!-- SECTION LIVRAISON -->
+                                    <!-- SECTION DESTINATAIRE (NOUVEAU) -->
                                     <div class="section">
-                                        <h4 class="section-title"><i class="fas fa-map-marked-alt"></i> Livraison</h4>
+                                        <h4 class="section-title"><i class="fas fa-user-tag"></i> Destinataire</h4>
                                         
                                         <div class="form-row">
                                             <div class="form-group" style="flex: 2;">
-                                                <label>Nom du contact *</label>
-                                                <input type="text" id="contactName" placeholder="Jean Dupont" required>
+                                                <label>Nom / Entreprise *</label>
+                                                <input type="text" id="destinataireNom" placeholder="Jean Dupont / SARL Exemple" required>
                                             </div>
                                             <div class="form-group" style="flex: 1;">
                                                 <label>Téléphone</label>
-                                                <input type="tel" id="contactPhone" placeholder="079 123 45 67">
+                                                <input type="tel" id="destinataireTel" placeholder="079 123 45 67">
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <!-- SECTION ADRESSE DE LIVRAISON -->
+                                    <div class="section">
+                                        <h4 class="section-title"><i class="fas fa-map-marked-alt"></i> Adresse de livraison</h4>
                                         
                                         <div class="form-row">
                                             <div class="form-group" style="flex: 2;">
@@ -173,7 +179,7 @@
                                         
                                         <div class="form-group">
                                             <label>Complément</label>
-                                            <input type="text" id="addressComplement" placeholder="2ème étage, code 1234">
+                                            <input type="text" id="addressComplement" placeholder="Étage, code, service">
                                         </div>
                                     </div>
 
@@ -238,7 +244,7 @@
                                     <!-- BOUTONS -->
                                     <div class="modal-buttons">
                                         <button type="button" class="btn-cancel" id="cancelModalBtn">Annuler</button>
-                                        <button type="submit" class="btn-save">✅ Créer</button>
+                                        <button type="submit" class="btn-save">✅ Créer le transport</button>
                                     </div>
                                 </form>
                             </div>
@@ -351,20 +357,28 @@
                         data?.forEach((t, index) => {
                             const isUrgent = t.speed === '6h';
                             
+                            // Adresse complète pour l'affichage
+                            const adresseComplete = t.delivery_address || '';
+                            
                             html += `
                                 <div class="transport-item ${isUrgent ? 'urgent' : ''}">
                                     <div class="transport-header">
-                                        <span class="transport-client">${t.client_number || '?'}</span>
+                                        <div>
+                                            <div class="transport-client">📦 Transport #${t.order_number || ''}</div>
+                                            <div class="transport-destinataire">👤 ${t.destinataire_nom || 'Destinataire inconnu'}</div>
+                                            ${t.destinataire_tel ? `<div class="transport-address">📞 ${t.destinataire_tel}</div>` : ''}
+                                            <div class="transport-address">📍 ${adresseComplete.substring(0, 50)}</div>
+                                        </div>
                                         <button class="btn-delete" onclick="supprimerTransport('${t.id}')">🗑️</button>
                                     </div>
-                                    <div class="transport-route">🎯 ${t.delivery_address?.substring(0,30) || '?'}</div>
                                     <div class="transport-footer">
-                                        <span>${t.order_number || ''}</span>
+                                        <span>Client: ${t.client_number || '?'}</span>
                                         <span>${t.weight || 0} kg</span>
                                     </div>
                                 </div>
                             `;
                             
+                            // Marqueurs sur la carte (simplifiés)
                             let lat = 46.8, lng = 8.2;
                             const color = isUrgent ? '#ef4444' : '#facc15';
                             const icon = L.divIcon({
@@ -404,9 +418,9 @@
                         const transport = {
                             order_number: orderNumber,
                             client_number: document.getElementById('clientNumber').value,
+                            destinataire_nom: document.getElementById('destinataireNom').value,
+                            destinataire_tel: document.getElementById('destinataireTel').value,
                             delivery_address: fullAddress + (addressComplement ? ' (' + addressComplement + ')' : ''),
-                            contact_name: document.getElementById('contactName').value,
-                            contact_phone: document.getElementById('contactPhone').value,
                             weight: parseFloat(document.getElementById('mainWeight').value) || 1,
                             quantity: parseInt(document.getElementById('mainQuantity').value) || 1,
                             package_type: document.getElementById('mainType').value,
@@ -416,8 +430,8 @@
                             created_at: new Date()
                         };
                         
-                        if (!transport.client_number || !transport.delivery_address) {
-                            alert('Numéro client et adresse requis');
+                        if (!transport.client_number || !transport.delivery_address || !transport.destinataire_nom) {
+                            alert('Numéro client, destinataire et adresse requis');
                             return;
                         }
                         
