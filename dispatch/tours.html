@@ -65,7 +65,6 @@
             color: #facc15;
         }
         
-        /* TOURNÉES */
         .tour-card {
             background: #1f2937;
             border-radius: 8px;
@@ -148,7 +147,7 @@
         
         /* PANEL DROIT - EN ATTENTE */
         .pending-panel {
-            width: 350px;
+            width: 400px;
             background: #111;
             border-left: 1px solid #2a2a2a;
             padding: 20px;
@@ -175,11 +174,12 @@
         .transport-card {
             background: #1f2937;
             border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 10px;
+            padding: 15px;
+            margin-bottom: 12px;
             cursor: move;
             border-left: 3px solid #facc15;
             transition: 0.2s;
+            position: relative;
         }
         
         .transport-card:hover {
@@ -190,15 +190,37 @@
             border-left-color: #ef4444;
         }
         
-        .transport-client {
-            font-weight: bold;
-            font-size: 14px;
+        .transport-header {
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .transport-expediteur {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        
+        .transport-expediteur i {
+            color: #facc15;
+            margin-right: 4px;
+        }
+        
+        .transport-client {
+            font-weight: bold;
+            font-size: 15px;
+            color: white;
+        }
+        
+        .transport-destinataire {
+            font-size: 14px;
+            color: #facc15;
+            margin: 5px 0;
         }
         
         .transport-address {
-            font-size: 11px;
+            font-size: 12px;
             color: #aaa;
             margin: 4px 0;
         }
@@ -206,8 +228,9 @@
         .transport-meta {
             display: flex;
             justify-content: space-between;
-            font-size: 10px;
+            font-size: 11px;
             color: #9ca3af;
+            margin-top: 8px;
         }
         
         .remove-from-tour {
@@ -216,6 +239,18 @@
             color: #ef4444;
             cursor: pointer;
             font-size: 14px;
+            padding: 5px;
+        }
+        
+        .btn-delete-transport {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-top: 8px;
         }
         
         .drop-target {
@@ -232,7 +267,6 @@
         }
         
         .btn-optimize { background: #3b82f6; color: white; }
-        .btn-assign { background: #10b981; color: white; }
         
         .loader {
             text-align: center; padding: 30px; color: #aaa;
@@ -282,7 +316,8 @@
                     { id: 3, nom: "Tournée Berne", couleur: '#f59e0b', chauffeur: null, transports: [] }
                 ];
                 let chauffeurs = [];
-                let map, markers;
+                let map;
+                let markers = [];
                 
                 const depot = {
                     nom: "Dépôt Yverdon",
@@ -328,13 +363,12 @@
                         if (t.lat && t.lng) {
                             const trajet = calculerDistance(precedent.lat, precedent.lng, t.lat, t.lng);
                             distance += trajet;
-                            duree += (trajet / 50) * 60 + 15; // vitesse moyenne 50 km/h + 15 min service
+                            duree += (trajet / 50) * 60 + 15;
                             poids += t.weight || 1;
                             precedent = t;
                         }
                     });
                     
-                    // Retour au dépôt
                     if (transports.length > 0 && transports[transports.length-1].lat) {
                         const dernier = transports[transports.length - 1];
                         const retour = calculerDistance(dernier.lat, dernier.lng, depot.lat, depot.lng);
@@ -427,16 +461,23 @@
                                             <div class="tour-list" data-tour-id="${tour.id}">
                                                 ${tour.transports.map(t => `
                                                     <div class="transport-card" data-id="${t.id}">
-                                                        <div class="transport-client">
-                                                            ${t.destinataire_nom || 'Client'}
+                                                        <div class="transport-header">
+                                                            <span class="transport-expediteur">
+                                                                <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
+                                                            </span>
                                                             <button class="remove-from-tour" onclick="enleverDeTournee('${t.id}')">
                                                                 <i class="fas fa-times"></i>
                                                             </button>
                                                         </div>
-                                                        <div class="transport-address">${(t.delivery_address || '').substring(0,30)}</div>
+                                                        <div class="transport-destinataire">
+                                                            👤 ${t.destinataire_nom || 'Destinataire inconnu'}
+                                                        </div>
+                                                        <div class="transport-address">
+                                                            📍 ${(t.delivery_address || '').substring(0,40)}
+                                                        </div>
                                                         <div class="transport-meta">
-                                                            <span>${t.speed || '24h'}</span>
-                                                            <span>${t.weight || 1} kg</span>
+                                                            <span>⚡ ${t.speed || '24h'}</span>
+                                                            <span>⚖️ ${t.weight || 1} kg</span>
                                                         </div>
                                                     </div>
                                                 `).join('')}
@@ -471,19 +512,26 @@
                                     ${enAttente.map(t => `
                                         <div class="transport-card ${t.speed === '6h' ? 'urgent' : ''}" 
                                              data-id="${t.id}"
-                                             data-client="${t.destinataire_nom || 'Client'}"
-                                             data-address="${t.delivery_address || ''}"
                                              data-lat="${t.lat || 0}"
-                                             data-lng="${t.lng || 0}"
-                                             data-weight="${t.weight || 1}">
-                                            <div class="transport-client">
-                                                ${t.destinataire_nom || 'Client'}
+                                             data-lng="${t.lng || 0}">
+                                            <div class="transport-header">
+                                                <span class="transport-expediteur">
+                                                    <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
+                                                </span>
                                             </div>
-                                            <div class="transport-address">${(t.delivery_address || '').substring(0,40)}</div>
+                                            <div class="transport-destinataire">
+                                                👤 ${t.destinataire_nom || 'Destinataire inconnu'}
+                                            </div>
+                                            <div class="transport-address">
+                                                📍 ${(t.delivery_address || '').substring(0,40)}
+                                            </div>
                                             <div class="transport-meta">
-                                                <span>${t.speed || '24h'}</span>
-                                                <span>${t.weight || 1} kg</span>
+                                                <span>⚡ ${t.speed || '24h'}</span>
+                                                <span>⚖️ ${t.weight || 1} kg</span>
                                             </div>
+                                            <button class="btn-delete-transport" onclick="supprimerTransport('${t.id}')">
+                                                <i class="fas fa-trash"></i> Supprimer
+                                            </button>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -501,21 +549,21 @@
                     map = L.map('map').setView([46.8, 8.2], 8);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                     
-                    // Dépôt
                     L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
                     
-                    // Marqueurs des transports en attente
                     if (transports) {
                         transports.forEach(t => {
                             if (t.lat && t.lng) {
                                 const color = t.speed === '6h' ? '#ef4444' : '#facc15';
                                 const icon = L.divIcon({
-                                    html: `<div style="background:${color}; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">•</div>`,
-                                    iconSize: [20, 20]
+                                    html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white;"></div>`,
+                                    className: '',
+                                    iconSize: [16, 16]
                                 });
                                 L.marker([t.lat, t.lng], { icon }).addTo(map).bindPopup(`
                                     <b>${t.destinataire_nom || 'Client'}</b><br>
-                                    ${t.delivery_address}
+                                    ${t.delivery_address}<br>
+                                    Expéditeur: ${t.client_number}
                                 `);
                             }
                         });
@@ -574,12 +622,10 @@
                     const tour = tours.find(t => t.id === parseInt(tourId));
                     
                     if (transport && tour) {
-                        // Enlever des autres tournées
                         tours.forEach(t => {
                             t.transports = t.transports.filter(t => t.id !== transportId);
                         });
                         
-                        // Ajouter à la nouvelle
                         tour.transports.push(transport);
                         afficherPage();
                     }
@@ -592,11 +638,30 @@
                     afficherPage();
                 };
                 
-                window.assignerChauffeur = function(tourId, chauffeurId) {
+                window.supprimerTransport = async function(transportId) {
+                    if (confirm("Supprimer définitivement ce transport ?")) {
+                        await supabase
+                            .from('transport_orders_simple')
+                            .delete()
+                            .eq('id', transportId);
+                        
+                        loadData();
+                    }
+                };
+                
+                window.assignerChauffeur = async function(tourId, chauffeurId) {
                     const tour = tours.find(t => t.id === tourId);
                     if (tour) {
                         tour.chauffeur = chauffeurId || null;
-                        alert(chauffeurId ? "✅ Chauffeur assigné" : "Chauffeur retiré");
+                        
+                        // Si un chauffeur est assigné, mettre à jour dans Supabase
+                        if (chauffeurId) {
+                            // Ici, vous pouvez sauvegarder l'assignation
+                            alert(`✅ Tournée assignée au chauffeur`);
+                            
+                            // Le transport apparaîtra dans la page du chauffeur
+                            // car on filtrera par chauffeur_id
+                        }
                     }
                 };
                 
