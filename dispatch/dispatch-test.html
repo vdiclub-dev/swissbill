@@ -135,7 +135,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- SECTION DESTINATAIRE (NOUVEAU) -->
+                                    <!-- SECTION DESTINATAIRE -->
                                     <div class="section">
                                         <h4 class="section-title"><i class="fas fa-user-tag"></i> Destinataire</h4>
                                         
@@ -357,9 +357,6 @@
                         data?.forEach((t, index) => {
                             const isUrgent = t.speed === '6h';
                             
-                            // Adresse complète pour l'affichage
-                            const adresseComplete = t.delivery_address || '';
-                            
                             html += `
                                 <div class="transport-item ${isUrgent ? 'urgent' : ''}">
                                     <div class="transport-header">
@@ -367,7 +364,7 @@
                                             <div class="transport-client">📦 Transport #${t.order_number || ''}</div>
                                             <div class="transport-destinataire">👤 ${t.destinataire_nom || 'Destinataire inconnu'}</div>
                                             ${t.destinataire_tel ? `<div class="transport-address">📞 ${t.destinataire_tel}</div>` : ''}
-                                            <div class="transport-address">📍 ${adresseComplete.substring(0, 50)}</div>
+                                            <div class="transport-address">📍 ${t.delivery_address?.substring(0, 50) || ''}</div>
                                         </div>
                                         <button class="btn-delete" onclick="supprimerTransport('${t.id}')">🗑️</button>
                                     </div>
@@ -378,7 +375,7 @@
                                 </div>
                             `;
                             
-                            // Marqueurs sur la carte (simplifiés)
+                            // Marqueurs
                             let lat = 46.8, lng = 8.2;
                             const color = isUrgent ? '#ef4444' : '#facc15';
                             const icon = L.divIcon({
@@ -436,11 +433,34 @@
                         }
                         
                         try {
-                            await supabase.from('transport_orders_simple').insert([transport]);
-                            alert(`✅ Transport ${orderNumber} créé !`);
+                            const { data, error } = await supabase
+                                .from('transport_orders_simple')
+                                .insert([transport])
+                                .select();
+                            
+                            if (error) {
+                                console.error("Erreur Supabase:", error);
+                                alert('❌ Erreur: ' + error.message);
+                                return;
+                            }
+                            
+                            alert(`✅ Transport ${orderNumber} créé avec succès !`);
                             modal.style.display = 'none';
+                            
+                            // Reset du formulaire
+                            document.getElementById('destinataireNom').value = '';
+                            document.getElementById('destinataireTel').value = '';
+                            document.getElementById('street').value = '';
+                            document.getElementById('streetNumber').value = '';
+                            document.getElementById('npa').value = '';
+                            document.getElementById('city').value = '';
+                            
                             loadTransports();
-                        } catch(e) { alert('❌ Erreur: ' + e.message); }
+                            
+                        } catch(e) { 
+                            console.error("Erreur:", e);
+                            alert('❌ Erreur: ' + e.message); 
+                        }
                     };
                 }
                 
