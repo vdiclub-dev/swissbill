@@ -404,11 +404,6 @@
             throw new Error("Configuration manquante");
         }
         
-        const supabase = window.supabase.createClient(
-            window.SUPABASE_CONFIG.url,
-            window.SUPABASE_CONFIG.key
-        );
-        
         // ===== VÉRIFICATION AUTHENTIFICATION =====
         (function() {
             const user = localStorage.getItem('user');
@@ -576,195 +571,205 @@
         
         function startApp() {
             console.log("🚀 Léman Dispatch démarré");
+            
+            // UNE SEULE INSTANCE DE SUPABASE ICI
+            const supabase = window.supabase.createClient(
+                window.SUPABASE_CONFIG.url,
+                window.SUPABASE_CONFIG.key
+            );
+            
+            // Rendre supabase disponible pour toutes les fonctions
+            window.supabaseClient = supabase;
+            
             initMap();
-        }
-        
-        // ===== INITIALISATION CARTE =====
-        function initMap() {
-            try {
-                map = L.map('map').setView([46.8, 8.2], 8);
-                
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
-                
-                markers = L.markerClusterGroup();
-                map.addLayer(markers);
-                
-                mapInitialized = true;
-                console.log("✅ Carte initialisée");
-                
-                loadTransports();
-                
-            } catch(error) {
-                console.error("❌ Erreur carte:", error);
-            }
-        }
-        
-        // ===== CHARGER LES TRANSPORTS =====
-        async function loadTransports() {
-            try {
-                const { data, error } = await supabase
-                    .from('transport_orders')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (error) throw error;
-                
-                console.log(`📦 ${data.length} transports chargés`);
-                
-                updateStats(data);
-                updateTransportList(data);
-                
-                if (mapInitialized && markers) {
-                    updateMap(data);
+            
+            // ===== INITIALISATION CARTE =====
+            function initMap() {
+                try {
+                    map = L.map('map').setView([46.8, 8.2], 8);
+                    
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: '© OpenStreetMap'
+                    }).addTo(map);
+                    
+                    markers = L.markerClusterGroup();
+                    map.addLayer(markers);
+                    
+                    mapInitialized = true;
+                    console.log("✅ Carte initialisée");
+                    
+                    loadTransports();
+                    
+                } catch(error) {
+                    console.error("❌ Erreur carte:", error);
                 }
-                
-            } catch(error) {
-                console.error("Erreur chargement:", error);
-                document.getElementById('transportList').innerHTML = '<div style="color:#ef4444; padding:20px;">Erreur de chargement</div>';
             }
-        }
-        
-        // ===== METTRE À JOUR LA CARTE =====
-        function updateMap(transports) {
-            markers.clearLayers();
             
-            if (!transports || transports.length === 0) return;
+            // ===== CHARGER LES TRANSPORTS =====
+            async function loadTransports() {
+                try {
+                    const { data, error } = await window.supabaseClient
+                        .from('transport_orders')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) throw error;
+                    
+                    console.log(`📦 ${data.length} transports chargés`);
+                    
+                    updateStats(data);
+                    updateTransportList(data);
+                    
+                    if (mapInitialized && markers) {
+                        updateMap(data);
+                    }
+                    
+                } catch(error) {
+                    console.error("Erreur chargement:", error);
+                    document.getElementById('transportList').innerHTML = '<div style="color:#ef4444; padding:20px;">Erreur de chargement</div>';
+                }
+            }
             
-            const bounds = [];
-            
-            transports.forEach((transport, index) => {
-                if (!transport.delivery_city) return;
+            // ===== METTRE À JOUR LA CARTE =====
+            function updateMap(transports) {
+                markers.clearLayers();
                 
-                let lat = 46.8, lng = 8.2;
-                const city = transport.delivery_city.toLowerCase();
+                if (!transports || transports.length === 0) return;
                 
-                if (city.includes('lausanne')) { lat = 46.52; lng = 6.63; }
-                else if (city.includes('geneve')) { lat = 46.20; lng = 6.14; }
-                else if (city.includes('yverdon')) { lat = 46.78; lng = 6.64; }
-                else if (city.includes('berne')) { lat = 46.95; lng = 7.45; }
-                else if (city.includes('zurich')) { lat = 47.37; lng = 8.54; }
+                const bounds = [];
                 
-                let color = '#facc15';
-                if (transport.priority === 'urgent' || transport.speed === '6h') color = '#ef4444';
-                if (transport.status === 'delivered') color = '#10b981';
-                
-                const icon = L.divIcon({
-                    html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${index+1}</div>`,
-                    className: '',
-                    iconSize: [24, 24]
+                transports.forEach((transport, index) => {
+                    if (!transport.delivery_city) return;
+                    
+                    let lat = 46.8, lng = 8.2;
+                    const city = transport.delivery_city.toLowerCase();
+                    
+                    if (city.includes('lausanne')) { lat = 46.52; lng = 6.63; }
+                    else if (city.includes('geneve')) { lat = 46.20; lng = 6.14; }
+                    else if (city.includes('yverdon')) { lat = 46.78; lng = 6.64; }
+                    else if (city.includes('berne')) { lat = 46.95; lng = 7.45; }
+                    else if (city.includes('zurich')) { lat = 47.37; lng = 8.54; }
+                    
+                    let color = '#facc15';
+                    if (transport.priority === 'urgent' || transport.speed === '6h') color = '#ef4444';
+                    if (transport.status === 'delivered') color = '#10b981';
+                    
+                    const icon = L.divIcon({
+                        html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${index+1}</div>`,
+                        className: '',
+                        iconSize: [24, 24]
+                    });
+                    
+                    const marker = L.marker([lat, lng], { icon });
+                    
+                    marker.bindPopup(`
+                        <b>${transport.client_name || 'Sans client'}</b><br>
+                        📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}<br>
+                        ${transport.distance_km ? `📏 ${transport.distance_km} km` : ''}
+                        ${transport.priority === 'urgent' ? '<br>⚠️ URGENT' : ''}
+                    `);
+                    
+                    markers.addLayer(marker);
+                    bounds.push([lat, lng]);
                 });
                 
-                const marker = L.marker([lat, lng], { icon });
-                
-                marker.bindPopup(`
-                    <b>${transport.client_name || 'Sans client'}</b><br>
-                    📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}<br>
-                    ${transport.distance_km ? `📏 ${transport.distance_km} km` : ''}
-                    ${transport.priority === 'urgent' ? '<br>⚠️ URGENT' : ''}
-                `);
-                
-                markers.addLayer(marker);
-                bounds.push([lat, lng]);
-            });
-            
-            if (bounds.length > 0) {
-                map.fitBounds(bounds, { padding: [30, 30] });
-            }
-        }
-        
-        // ===== METTRE À JOUR LA LISTE =====
-        function updateTransportList(transports) {
-            const listEl = document.getElementById('transportList');
-            
-            if (!transports || transports.length === 0) {
-                listEl.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">Aucun transport</div>';
-                return;
+                if (bounds.length > 0) {
+                    map.fitBounds(bounds, { padding: [30, 30] });
+                }
             }
             
-            let html = '';
-            transports.slice(0, 10).forEach(transport => {
-                const date = transport.created_at ? new Date(transport.created_at).toLocaleDateString('fr-CH') : '';
+            // ===== METTRE À JOUR LA LISTE =====
+            function updateTransportList(transports) {
+                const listEl = document.getElementById('transportList');
                 
-                html += `
-                    <div class="transport-item ${transport.priority === 'urgent' ? 'urgent' : ''}">
-                        <div class="transport-client">${transport.client_name || 'Sans client'}</div>
-                        <div class="transport-route">📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}</div>
-                        <div class="transport-route" style="font-size:11px;">📅 ${date}</div>
-                        ${transport.distance_km ? `<div class="transport-distance">📏 ${transport.distance_km} km</div>` : ''}
-                    </div>
-                `;
-            });
+                if (!transports || transports.length === 0) {
+                    listEl.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">Aucun transport</div>';
+                    return;
+                }
+                
+                let html = '';
+                transports.slice(0, 10).forEach(transport => {
+                    const date = transport.created_at ? new Date(transport.created_at).toLocaleDateString('fr-CH') : '';
+                    
+                    html += `
+                        <div class="transport-item ${transport.priority === 'urgent' ? 'urgent' : ''}">
+                            <div class="transport-client">${transport.client_name || 'Sans client'}</div>
+                            <div class="transport-route">📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}</div>
+                            <div class="transport-route" style="font-size:11px;">📅 ${date}</div>
+                            ${transport.distance_km ? `<div class="transport-distance">📏 ${transport.distance_km} km</div>` : ''}
+                        </div>
+                    `;
+                });
+                
+                listEl.innerHTML = html;
+            }
             
-            listEl.innerHTML = html;
-        }
-        
-        // ===== METTRE À JOUR LES STATS =====
-        function updateStats(transports) {
-            const total = transports.length;
-            const urgent = transports.filter(t => t.priority === 'urgent' || t.speed === '6h').length;
+            // ===== METTRE À JOUR LES STATS =====
+            function updateStats(transports) {
+                const total = transports.length;
+                const urgent = transports.filter(t => t.priority === 'urgent' || t.speed === '6h').length;
+                
+                document.getElementById('totalCount').textContent = total;
+                document.getElementById('urgentCount').textContent = urgent;
+            }
             
-            document.getElementById('totalCount').textContent = total;
-            document.getElementById('urgentCount').textContent = urgent;
-        }
-        
-        // ===== FONCTIONS MODAL =====
-        window.openModal = function() {
-            document.getElementById('modal').style.display = 'flex';
-        };
-        
-        window.closeModal = function() {
-            document.getElementById('modal').style.display = 'none';
-        };
-        
-        window.saveTransport = async function() {
-            const transport = {
-                order_number: 'TR-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 1000000)).padStart(6, '0'),
-                client_name: document.getElementById('clientName').value,
-                client_phone: document.getElementById('clientPhone').value,
-                client_email: document.getElementById('clientEmail').value,
-                pickup_city: document.getElementById('pickupCity').value,
-                delivery_city: document.getElementById('deliveryCity').value,
-                weight: parseFloat(document.getElementById('weight').value) || 1,
-                priority: document.getElementById('priority').value,
-                instructions: document.getElementById('instructions').value,
-                status: 'pending',
-                created_at: new Date()
+            // ===== FONCTIONS MODAL =====
+            window.openModal = function() {
+                document.getElementById('modal').style.display = 'flex';
             };
             
-            if (!transport.client_name || !transport.pickup_city || !transport.delivery_city) {
-                alert('Veuillez remplir tous les champs obligatoires');
-                return;
-            }
+            window.closeModal = function() {
+                document.getElementById('modal').style.display = 'none';
+            };
             
-            try {
-                const { error } = await supabase.from('transport_orders').insert([transport]);
+            window.saveTransport = async function() {
+                const transport = {
+                    order_number: 'TR-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 1000000)).padStart(6, '0'),
+                    client_name: document.getElementById('clientName').value,
+                    client_phone: document.getElementById('clientPhone').value,
+                    client_email: document.getElementById('clientEmail').value,
+                    pickup_city: document.getElementById('pickupCity').value,
+                    delivery_city: document.getElementById('deliveryCity').value,
+                    weight: parseFloat(document.getElementById('weight').value) || 1,
+                    priority: document.getElementById('priority').value,
+                    instructions: document.getElementById('instructions').value,
+                    status: 'pending',
+                    created_at: new Date()
+                };
                 
-                if (error) throw error;
+                if (!transport.client_name || !transport.pickup_city || !transport.delivery_city) {
+                    alert('Veuillez remplir tous les champs obligatoires');
+                    return;
+                }
                 
-                alert('✅ Transport créé avec succès !');
-                closeModal();
-                
-                document.getElementById('clientName').value = '';
-                document.getElementById('clientPhone').value = '';
-                document.getElementById('clientEmail').value = '';
-                document.getElementById('pickupCity').value = '';
-                document.getElementById('deliveryCity').value = '';
-                document.getElementById('weight').value = '1';
-                document.getElementById('instructions').value = '';
-                
-                loadTransports();
-                
-            } catch (error) {
-                console.error('Erreur:', error);
-                alert('❌ Erreur: ' + error.message);
-            }
-        };
-        
-        // ===== RAFRAÎCHISSEMENT AUTO =====
-        setInterval(loadTransports, 30000);
+                try {
+                    const { error } = await window.supabaseClient.from('transport_orders').insert([transport]);
+                    
+                    if (error) throw error;
+                    
+                    alert('✅ Transport créé avec succès !');
+                    closeModal();
+                    
+                    document.getElementById('clientName').value = '';
+                    document.getElementById('clientPhone').value = '';
+                    document.getElementById('clientEmail').value = '';
+                    document.getElementById('pickupCity').value = '';
+                    document.getElementById('deliveryCity').value = '';
+                    document.getElementById('weight').value = '1';
+                    document.getElementById('instructions').value = '';
+                    
+                    loadTransports();
+                    
+                } catch (error) {
+                    console.error('Erreur:', error);
+                    alert('❌ Erreur: ' + error.message);
+                }
+            };
+            
+            // ===== RAFRAÎCHISSEMENT AUTO =====
+            setInterval(loadTransports, 30000);
+        }
     </script>
     
 </body>
