@@ -2,57 +2,100 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Test Dispatch</title>
+    <title>Créer transport</title>
     
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
+    
+    <style>
+        body { background:#111; color:white; padding:20px; font-family:system-ui; }
+        .form-group { margin-bottom:15px; }
+        label { display:block; color:#aaa; margin-bottom:5px; }
+        input { width:100%; padding:10px; background:#1f2937; border:1px solid #2a2a2a; color:white; border-radius:4px; }
+        button { background:#facc15; color:#111; border:none; padding:12px 24px; border-radius:4px; font-weight:bold; cursor:pointer; margin-top:20px; }
+        .result { margin-top:20px; padding:15px; background:#1f2937; border-radius:4px; }
+        .success { color:#10b981; }
+        .error { color:#ef4444; }
+    </style>
 </head>
-<body style="background:#111; color:white; padding:20px; font-family:system-ui;">
+<body>
     
-    <h1>🔧 Test de connexion Supabase</h1>
+    <h1>➕ Créer un transport</h1>
     
-    <div id="status">Chargement...</div>
-    <div id="result"></div>
+    <form id="transportForm">
+        <div class="form-group">
+            <label>Numéro client</label>
+            <input type="text" id="clientNumber" value="CL2025-001" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Adresse de livraison</label>
+            <input type="text" id="deliveryAddress" value="Rue du Lac 12, 1000 Lausanne" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Poids (kg)</label>
+            <input type="number" id="weight" value="2.5" step="0.1">
+        </div>
+        
+        <button type="submit">Créer le transport</button>
+    </form>
+    
+    <div id="result" class="result"></div>
     
     <script>
-        (async function() {
+        document.getElementById('transportForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
             try {
-                // Vérification config
                 if (!window.SUPABASE_CONFIG) {
-                    document.getElementById('status').innerHTML = '❌ config.js non chargé';
-                    return;
+                    throw new Error("config.js non chargé");
                 }
                 
-                document.getElementById('status').innerHTML = '✅ config.js chargé';
-                
-                // Création client
                 const supabase = window.supabase.createClient(
                     window.SUPABASE_CONFIG.url,
                     window.SUPABASE_CONFIG.key
                 );
                 
-                // Test simple
+                const year = new Date().getFullYear();
+                const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+                const orderNumber = `TR-${year}-${random}`;
+                
+                // UNIQUEMENT les colonnes essentielles
+                const transport = {
+                    order_number: orderNumber,
+                    client_number: document.getElementById('clientNumber').value,
+                    delivery_address: document.getElementById('deliveryAddress').value,
+                    weight: parseFloat(document.getElementById('weight').value) || 1,
+                    status: 'pending',
+                    created_at: new Date()
+                };
+                
+                console.log("Tentative d'insertion:", transport);
+                
                 const { data, error } = await supabase
                     .from('transport_orders')
-                    .select('order_number, client_number, created_at')
-                    .limit(5);
+                    .insert(transport);
                 
                 if (error) throw error;
                 
                 document.getElementById('result').innerHTML = `
-                    <h3>✅ Connexion réussie !</h3>
-                    <p>${data.length} transports trouvés</p>
-                    <pre style="background:#333; padding:10px;">${JSON.stringify(data, null, 2)}</pre>
+                    <h3 class="success">✅ Transport créé !</h3>
+                    <p>N°: ${orderNumber}</p>
+                    <p>Client: ${transport.client_number}</p>
+                    <p>Livraison: ${transport.delivery_address}</p>
                 `;
                 
             } catch(e) {
+                console.error('Erreur:', e);
                 document.getElementById('result').innerHTML = `
-                    <h3 style="color:red;">❌ Erreur</h3>
+                    <h3 class="error">❌ Erreur</h3>
                     <p>${e.message}</p>
+                    <p style="font-size:12px; color:#aaa;">Vérifiez la console (F12)</p>
                 `;
             }
-        })();
+        });
     </script>
     
 </body>
