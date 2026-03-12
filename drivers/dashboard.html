@@ -138,6 +138,7 @@
                 
                 console.log("✅ Chauffeur connecté:", chauffeurData);
                 
+                // ===== CHARGEMENT DES DONNÉES =====
                 const { data: chauffeur, error: chauffeurError } = await supabase
                     .from('chauffeurs')
                     .select('*')
@@ -145,6 +146,25 @@
                     .single();
                 
                 if (chauffeurError) throw chauffeurError;
+                
+                // ===== CHARGEMENT DES COMPTEURS =====
+                let compteurActuel = { conges_restants: 20, compensation_restantes: 0 };
+                try {
+                    const { data: compteurs } = await supabase
+                        .from('compteurs')
+                        .select('*')
+                        .eq('chauffeur_id', chauffeur.id);
+                    
+                    if (compteurs && compteurs.length > 0) {
+                        const annee = new Date().getFullYear();
+                        const found = compteurs.find(c => c.annee === annee);
+                        if (found) {
+                            compteurActuel = found;
+                        }
+                    }
+                } catch(e) {
+                    console.warn("Erreur compteurs:", e);
+                }
                 
                 // ===== GESTION DU POINTAGE EN LOCAL =====
                 let pointageActuel = JSON.parse(localStorage.getItem('pointage_' + chauffeur.id)) || {
@@ -154,7 +174,7 @@
                     fin: null
                 };
                 
-                // ===== CONSTRUCTION PAGE SANS CONDITIONS DANS LE HTML =====
+                // ===== CONSTRUCTION PAGE (après avoir chargé les données) =====
                 document.getElementById('app').innerHTML = `
                     <div class="header">
                         <div class="logo"><i class="fas fa-truck"></i> Léman-Courses</div>
@@ -215,11 +235,11 @@
                         
                         <div class="compteurs-grid">
                             <div class="compteur-card">
-                                <div class="compteur-valeur" id="congesRestants">${compteurActuel?.conges_restants || 20}</div>
+                                <div class="compteur-valeur" id="congesRestants">${compteurActuel.conges_restants || 20}</div>
                                 <div class="compteur-label">Jours de congés</div>
                             </div>
                             <div class="compteur-card">
-                                <div class="compteur-valeur" id="compensationRestantes">${compteurActuel?.compensation_restantes || 0}</div>
+                                <div class="compteur-valeur" id="compensationRestantes">${compteurActuel.compensation_restantes || 0}</div>
                                 <div class="compteur-label">Heures de compensation</div>
                             </div>
                             <div class="compteur-card">
@@ -248,7 +268,6 @@
                         document.getElementById('affFin').textContent = new Date(pointageActuel.fin).toLocaleTimeString();
                     }
                     
-                    // Calcul pause
                     if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
                         const dureePause = Math.round((new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 60000);
                         document.getElementById('affPause').textContent = dureePause + ' min';
@@ -256,7 +275,6 @@
                         document.getElementById('affPause').textContent = 'En cours';
                     }
                     
-                    // Calcul total
                     if (pointageActuel.debut && pointageActuel.fin) {
                         let total = (new Date(pointageActuel.fin) - new Date(pointageActuel.debut)) / 3600000;
                         if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
@@ -288,7 +306,6 @@
                 window.pointer = function(action) {
                     const maintenant = new Date();
                     
-                    // Logique métier simple
                     if (action === 'debut' && !pointageActuel.debut) {
                         pointageActuel.debut = maintenant;
                     }
@@ -306,34 +323,10 @@
                         return;
                     }
                     
-                    // Sauvegarder
                     localStorage.setItem('pointage_' + window.chauffeurId, JSON.stringify(pointageActuel));
-                    
-                    // Mettre à jour l'affichage
                     mettreAJourAffichage();
-                    
                     showMessage('✅ Pointage enregistré');
                 };
-                
-                // ===== COMPTEURS =====
-                let compteurActuel = null;
-                try {
-                    const { data: compteurs } = await supabase
-                        .from('compteurs')
-                        .select('*')
-                        .eq('chauffeur_id', chauffeur.id);
-                    
-                    if (compteurs && compteurs.length > 0) {
-                        const annee = new Date().getFullYear();
-                        compteurActuel = compteurs.find(c => c.annee === annee);
-                        if (compteurActuel) {
-                            document.getElementById('congesRestants').textContent = compteurActuel.conges_restants || 20;
-                            document.getElementById('compensationRestantes').textContent = compteurActuel.compensation_restantes || 0;
-                        }
-                    }
-                } catch(e) {
-                    console.warn("Erreur compteurs:", e);
-                }
                 
                 // ===== CHARGEMENT DES COLIS =====
                 async function chargerColis() {
