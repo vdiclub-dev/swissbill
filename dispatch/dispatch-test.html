@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Léman Dispatch</title>
+    <title>Léman Dispatch | Optimisation</title>
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -22,6 +22,7 @@
         .btn-logout { background: #2a2a2a; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .btn { background: #facc15; color: #111; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-success { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .btn-optimize { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         .btn-delete { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -29,10 +30,11 @@
         .container { display: flex; height: calc(100vh - 70px); }
         .sidebar { width: 220px; background: #111; padding: 20px; border-right: 1px solid #2a2a2a; }
         .sidebar button { width: 100%; padding: 12px; margin-bottom: 8px; background: #1f2937; color: white; border: none; border-radius: 6px; cursor: pointer; text-align: left; }
-        .map-container { flex: 1; }
+        .sidebar button:hover { background: #facc15; color: #111; }
+        .map-container { flex: 1; position: relative; }
         #map { height: 100%; width: 100%; }
-        .right-panel { width: 380px; background: #111; border-left: 1px solid #2a2a2a; padding: 20px; overflow-y: auto; }
-        .right-panel h3 { color: #facc15; margin-bottom: 20px; }
+        .right-panel { width: 400px; background: #111; border-left: 1px solid #2a2a2a; padding: 20px; overflow-y: auto; }
+        .right-panel h3 { color: #facc15; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
         .transport-item { background: #1f2937; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-left: 3px solid #facc15; }
         .transport-item.urgent { border-left-color: #ef4444; }
         .transport-header { display: flex; justify-content: space-between; align-items: flex-start; }
@@ -40,6 +42,9 @@
         .transport-destinataire { color: #facc15; font-size: 13px; margin: 2px 0; }
         .transport-address { font-size: 12px; color: #aaa; line-height: 1.4; margin: 2px 0; }
         .transport-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #666; border-top: 1px solid #2a2a2a; padding-top: 4px; }
+        .tour-item { background: #2a2a2a; padding: 10px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid #3b82f6; }
+        .tour-header { display: flex; justify-content: space-between; color: #3b82f6; font-weight: bold; margin-bottom: 5px; }
+        .tour-stop { padding: 5px 0 5px 15px; border-bottom: 1px solid #3a3a3a; font-size: 12px; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
         .modal-box { background: #1f2937; border-radius: 10px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; border: 1px solid #facc15; }
         .modal-header { background: #111; padding: 15px 20px; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; }
@@ -97,25 +102,28 @@
                         <div class="user-section">
                             <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
                             <button class="btn-logout" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
-                            <button class="btn" id="newTransportBtn">➕ Nouveau transport</button>
+                            <button class="btn" id="newTransportBtn">➕ Nouveau</button>
                         </div>
                     </header>
 
                     <div class="container">
                         <div class="sidebar">
-                            <button class="active">🗺️ Dispatch</button>
+                            <button class="active" id="btnDispatch">🗺️ Dispatch</button>
+                            <button id="btnOptimize">🧠 Optimisation</button>
                             <button>📦 Transports</button>
                         </div>
                         
                         <div class="map-container"><div id="map"></div></div>
                         
                         <div class="right-panel">
-                            <h3>📋 Liste des transports</h3>
+                            <h3 id="panelTitle">📋 Transports en attente
+                                <button class="btn-optimize" id="optimizeBtn" style="font-size:12px;">🧠 Optimiser</button>
+                            </h3>
                             <div id="transportList"><div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div></div>
                         </div>
                     </div>
 
-                    <!-- MODAL -->
+                    <!-- MODAL (inchangée) -->
                     <div id="modal" class="modal">
                         <div class="modal-box">
                             <div class="modal-header">
@@ -126,7 +134,7 @@
                             <div class="modal-content">
                                 <form id="transportForm">
                                     
-                                    <!-- SECTION CLIENT (EXPÉDITEUR) -->
+                                    <!-- SECTION CLIENT -->
                                     <div class="section">
                                         <h4 class="section-title"><i class="fas fa-user-circle"></i> Expéditeur</h4>
                                         <div class="form-group">
@@ -142,7 +150,7 @@
                                         <div class="form-row">
                                             <div class="form-group" style="flex: 2;">
                                                 <label>Nom / Entreprise *</label>
-                                                <input type="text" id="destinataireNom" placeholder="Jean Dupont / SARL Exemple" required>
+                                                <input type="text" id="destinataireNom" placeholder="Jean Dupont" required>
                                             </div>
                                             <div class="form-group" style="flex: 1;">
                                                 <label>Téléphone</label>
@@ -151,9 +159,9 @@
                                         </div>
                                     </div>
 
-                                    <!-- SECTION ADRESSE DE LIVRAISON -->
+                                    <!-- SECTION ADRESSE -->
                                     <div class="section">
-                                        <h4 class="section-title"><i class="fas fa-map-marked-alt"></i> Adresse de livraison</h4>
+                                        <h4 class="section-title"><i class="fas fa-map-marked-alt"></i> Adresse</h4>
                                         
                                         <div class="form-row">
                                             <div class="form-group" style="flex: 2;">
@@ -176,55 +184,21 @@
                                                 <input type="text" id="city" placeholder="Lausanne" required>
                                             </div>
                                         </div>
-                                        
-                                        <div class="form-group">
-                                            <label>Complément</label>
-                                            <input type="text" id="addressComplement" placeholder="Étage, code, service">
-                                        </div>
                                     </div>
 
-                                    <!-- SECTION COLIS PRINCIPAL -->
+                                    <!-- SECTION COLIS -->
                                     <div class="section">
-                                        <h4 class="section-title"><i class="fas fa-box"></i> Colis principal</h4>
+                                        <h4 class="section-title"><i class="fas fa-box"></i> Colis</h4>
                                         
                                         <div class="form-row">
-                                            <div class="form-group">
-                                                <label>Description</label>
-                                                <input type="text" id="mainDescription" value="Colis principal">
-                                            </div>
                                             <div class="form-group">
                                                 <label>Poids (kg)</label>
                                                 <input type="number" id="mainWeight" value="1" step="0.1">
                                             </div>
-                                        </div>
-                                        
-                                        <div class="form-row">
                                             <div class="form-group">
                                                 <label>Quantité</label>
                                                 <input type="number" id="mainQuantity" value="1" min="1">
                                             </div>
-                                            <div class="form-group">
-                                                <label>Type</label>
-                                                <select id="mainType">
-                                                    <option value="Colis">📦 Colis</option>
-                                                    <option value="Fragile">⚠️ Fragile</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- SECTION COLIS SUPPLÉMENTAIRES -->
-                                    <div class="section">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                            <h4 class="section-title" style="margin-bottom: 0;"><i class="fas fa-cubes"></i> Colis supplémentaires</h4>
-                                            <button type="button" class="btn-success" id="addParcelBtn">➕ Ajouter</button>
-                                        </div>
-                                        
-                                        <div id="parcelsList"></div>
-                                        
-                                        <div id="parcelsTotal" style="margin-top: 15px; padding: 10px; background: #0f172a; border-radius: 4px; display: flex; justify-content: space-between;">
-                                            <span>📊 Total colis:</span>
-                                            <span id="totalParcelsWeight">1 kg</span>
                                         </div>
                                     </div>
 
@@ -244,36 +218,12 @@
                                     <!-- BOUTONS -->
                                     <div class="modal-buttons">
                                         <button type="button" class="btn-cancel" id="cancelModalBtn">Annuler</button>
-                                        <button type="submit" class="btn-save">✅ Créer le transport</button>
+                                        <button type="submit" class="btn-save">✅ Créer</button>
                                     </div>
                                 </form>
                             </div>
                         </div>
                     </div>
-
-                    <!-- TEMPLATE POUR COLIS -->
-                    <template id="parcelTemplate">
-                        <div class="parcel-item">
-                            <div class="form-row">
-                                <div class="form-group" style="flex: 2;">
-                                    <input type="text" class="parcel-desc" placeholder="Description">
-                                </div>
-                                <div class="form-group" style="flex: 1;">
-                                    <input type="number" class="parcel-weight" value="1" step="0.1">
-                                </div>
-                                <div class="form-group" style="flex: 0.5;">
-                                    <input type="number" class="parcel-qty" value="1" min="1">
-                                </div>
-                                <div class="form-group" style="flex: 1;">
-                                    <select class="parcel-type">
-                                        <option value="Colis">Colis</option>
-                                        <option value="Fragile">Fragile</option>
-                                    </select>
-                                </div>
-                                <button type="button" class="btn-delete" style="width: 40px; height: 40px;" onclick="this.parentElement.parentElement.remove(); updateParcelsTotal();">🗑️</button>
-                            </div>
-                        </div>
-                    </template>
                 `;
                 
                 // ===== RÉFÉRENCES =====
@@ -281,48 +231,16 @@
                 const newBtn = document.getElementById('newTransportBtn');
                 const closeBtn = document.getElementById('closeModalBtn');
                 const cancelBtn = document.getElementById('cancelModalBtn');
-                const addParcelBtn = document.getElementById('addParcelBtn');
-                const parcelsList = document.getElementById('parcelsList');
-                const parcelTemplate = document.getElementById('parcelTemplate');
                 const form = document.getElementById('transportForm');
                 const logoutBtn = document.getElementById('logoutBtn');
-                
-                // ===== VÉRIFICATION =====
-                console.log("modal:", modal ? "✅" : "❌");
-                console.log("newBtn:", newBtn ? "✅" : "❌");
-                console.log("closeBtn:", closeBtn ? "✅" : "❌");
-                console.log("cancelBtn:", cancelBtn ? "✅" : "❌");
-                console.log("addParcelBtn:", addParcelBtn ? "✅" : "❌");
+                const optimizeBtn = document.getElementById('optimizeBtn');
+                const btnOptimize = document.getElementById('btnOptimize');
+                const btnDispatch = document.getElementById('btnDispatch');
                 
                 // ===== GESTION MODAL =====
                 if (newBtn) newBtn.onclick = () => modal.style.display = 'flex';
                 if (closeBtn) closeBtn.onclick = () => modal.style.display = 'none';
                 if (cancelBtn) cancelBtn.onclick = () => modal.style.display = 'none';
-                
-                // ===== GESTION COLIS =====
-                function updateParcelsTotal() {
-                    let total = parseFloat(document.getElementById('mainWeight')?.value || 1) * parseInt(document.getElementById('mainQuantity')?.value || 1);
-                    
-                    document.querySelectorAll('.parcel-item').forEach(item => {
-                        const weight = parseFloat(item.querySelector('.parcel-weight')?.value) || 0;
-                        const qty = parseInt(item.querySelector('.parcel-qty')?.value) || 1;
-                        total += weight * qty;
-                    });
-                    
-                    const totalEl = document.getElementById('totalParcelsWeight');
-                    if (totalEl) totalEl.textContent = total.toFixed(1) + ' kg';
-                }
-                
-                if (addParcelBtn && parcelsList && parcelTemplate) {
-                    addParcelBtn.onclick = function() {
-                        const clone = parcelTemplate.content.cloneNode(true);
-                        parcelsList.appendChild(clone);
-                        updateParcelsTotal();
-                    };
-                }
-                
-                document.getElementById('mainWeight')?.addEventListener('input', updateParcelsTotal);
-                document.getElementById('mainQuantity')?.addEventListener('input', updateParcelsTotal);
                 
                 // ===== DÉCONNEXION =====
                 if (logoutBtn) {
@@ -337,6 +255,10 @@
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                 const markers = L.markerClusterGroup();
                 map.addLayer(markers);
+                let routeLayer = null;
+                
+                // ===== DONNÉES =====
+                let allTransports = [];
                 
                 // ===== CHARGEMENT TRANSPORTS =====
                 async function loadTransports() {
@@ -348,49 +270,158 @@
                         
                         if (error) throw error;
                         
-                        document.getElementById('totalCount').textContent = data?.length || 0;
-                        document.getElementById('urgentCount').textContent = data?.filter(t => t.speed === '6h').length || 0;
+                        allTransports = data || [];
                         
-                        let html = '';
-                        markers.clearLayers();
+                        document.getElementById('totalCount').textContent = allTransports.length;
+                        document.getElementById('urgentCount').textContent = allTransports.filter(t => t.speed === '6h').length;
                         
-                        data?.forEach((t, index) => {
-                            const isUrgent = t.speed === '6h';
-                            
-                            html += `
-                                <div class="transport-item ${isUrgent ? 'urgent' : ''}">
-                                    <div class="transport-header">
-                                        <div>
-                                            <div class="transport-client">📦 Transport #${t.order_number || ''}</div>
-                                            <div class="transport-destinataire">👤 ${t.destinataire_nom || 'Destinataire inconnu'}</div>
-                                            ${t.destinataire_tel ? `<div class="transport-address">📞 ${t.destinataire_tel}</div>` : ''}
-                                            <div class="transport-address">📍 ${t.delivery_address?.substring(0, 50) || ''}</div>
-                                        </div>
-                                        <button class="btn-delete" onclick="supprimerTransport('${t.id}')">🗑️</button>
-                                    </div>
-                                    <div class="transport-footer">
-                                        <span>Client: ${t.client_number || '?'}</span>
-                                        <span>${t.weight || 0} kg</span>
-                                    </div>
-                                </div>
-                            `;
-                            
-                            // Marqueurs
-                            let lat = 46.8, lng = 8.2;
-                            const color = isUrgent ? '#ef4444' : '#facc15';
-                            const icon = L.divIcon({
-                                html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${index+1}</div>`,
-                                iconSize: [24, 24]
-                            });
-                            
-                            L.marker([lat, lng], { icon }).addTo(markers);
-                        });
-                        
-                        document.getElementById('transportList').innerHTML = html || '<div style="text-align:center; padding:20px;">Aucun transport</div>';
+                        afficherTransports();
                         
                     } catch(e) {
                         console.error("Erreur chargement:", e);
                     }
+                }
+                
+                // ===== AFFICHAGE NORMAL =====
+                function afficherTransports() {
+                    document.getElementById('panelTitle').innerHTML = '📋 Transports en attente <button class="btn-optimize" id="optimizeBtn" style="font-size:12px;">🧠 Optimiser</button>';
+                    
+                    let html = '';
+                    markers.clearLayers();
+                    if (routeLayer) map.removeLayer(routeLayer);
+                    
+                    allTransports.forEach((t, index) => {
+                        const isUrgent = t.speed === '6h';
+                        
+                        html += `
+                            <div class="transport-item ${isUrgent ? 'urgent' : ''}">
+                                <div class="transport-header">
+                                    <div>
+                                        <div class="transport-client">📦 #${t.order_number || ''}</div>
+                                        <div class="transport-destinataire">👤 ${t.destinataire_nom || '?'}</div>
+                                        <div class="transport-address">📍 ${t.delivery_address?.substring(0, 30) || ''}</div>
+                                    </div>
+                                    <button class="btn-delete" onclick="supprimerTransport('${t.id}')">🗑️</button>
+                                </div>
+                                <div class="transport-footer">
+                                    <span>${t.speed || '24h'}</span>
+                                    <span>${t.weight || 0} kg</span>
+                                </div>
+                            </div>
+                        `;
+                        
+                        // Marqueur
+                        let lat = 46.8, lng = 8.2;
+                        if (t.delivery_address?.toLowerCase().includes('lausanne')) { lat = 46.52; lng = 6.63; }
+                        if (t.delivery_address?.toLowerCase().includes('geneve')) { lat = 46.20; lng = 6.14; }
+                        
+                        const color = isUrgent ? '#ef4444' : '#facc15';
+                        const icon = L.divIcon({
+                            html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${index+1}</div>`,
+                            iconSize: [24, 24]
+                        });
+                        
+                        L.marker([lat, lng], { icon }).addTo(markers);
+                    });
+                    
+                    document.getElementById('transportList').innerHTML = html || '<div>Aucun transport</div>';
+                    
+                    // Réattacher l'événement
+                    document.getElementById('optimizeBtn').onclick = optimiserTournees;
+                }
+                
+                // ===== OPTIMISATION DES TOURNÉES =====
+                function optimiserTournees() {
+                    if (!allTransports.length) {
+                        alert('Aucun transport à optimiser');
+                        return;
+                    }
+                    
+                    // Regrouper par région
+                    const regions = {
+                        'lausanne': { lat: 46.52, lng: 6.63, transports: [] },
+                        'geneve': { lat: 46.20, lng: 6.14, transports: [] },
+                        'yverdon': { lat: 46.78, lng: 6.64, transports: [] },
+                        'berne': { lat: 46.95, lng: 7.45, transports: [] },
+                        'autre': { lat: 46.8, lng: 8.2, transports: [] }
+                    };
+                    
+                    // Classer les transports par région
+                    allTransports.forEach(t => {
+                        const address = (t.delivery_address || '').toLowerCase();
+                        let assigned = false;
+                        
+                        for (let region in regions) {
+                            if (region !== 'autre' && address.includes(region)) {
+                                regions[region].transports.push(t);
+                                assigned = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!assigned) {
+                            regions['autre'].transports.push(t);
+                        }
+                    });
+                    
+                    // Trier chaque région par urgence (6h en premier)
+                    for (let region in regions) {
+                        regions[region].transports.sort((a, b) => {
+                            if (a.speed === '6h' && b.speed !== '6h') return -1;
+                            if (a.speed !== '6h' && b.speed === '6h') return 1;
+                            return 0;
+                        });
+                    }
+                    
+                    // Afficher les tournées
+                    document.getElementById('panelTitle').innerHTML = '🧠 Tournées optimisées <button class="btn-optimize" id="backBtn" style="font-size:12px;">← Retour</button>';
+                    
+                    let html = '';
+                    let totalTours = 0;
+                    
+                    for (let region in regions) {
+                        if (regions[region].transports.length === 0) continue;
+                        totalTours++;
+                        
+                        html += `<div class="tour-item">`;
+                        html += `<div class="tour-header"><span>🚚 Tournée ${region}</span><span>${regions[region].transports.length} arrêts</span></div>`;
+                        
+                        regions[region].transports.forEach((t, idx) => {
+                            const urgent = t.speed === '6h' ? '🔴 ' : '';
+                            html += `<div class="tour-stop">${idx+1}. ${urgent}${t.destinataire_nom || '?'} - ${(t.delivery_address || '').substring(0,20)}</div>`;
+                        });
+                        
+                        html += `</div>`;
+                        
+                        // Dessiner la route pour la première région (exemple)
+                        if (region === 'lausanne' && regions[region].transports.length > 0) {
+                            dessinerRouteExemple(regions[region].transports);
+                        }
+                    }
+                    
+                    html += `<div style="margin-top:15px; padding:10px; background:#0f172a; border-radius:4px; text-align:center;">
+                        🎯 ${totalTours} tournées proposées
+                    </div>`;
+                    
+                    document.getElementById('transportList').innerHTML = html;
+                    
+                    document.getElementById('backBtn').onclick = afficherTransports;
+                }
+                
+                // ===== DESSINER UNE ROUTE EXEMPLE =====
+                function dessinerRouteExemple(transports) {
+                    if (routeLayer) map.removeLayer(routeLayer);
+                    
+                    // Points de la route (simplifiés)
+                    const points = [
+                        [46.52, 6.63], // Lausanne
+                        [46.78, 6.64], // Yverdon
+                        [46.95, 7.45], // Berne
+                        [46.20, 6.14]  // Genève
+                    ];
+                    
+                    routeLayer = L.polyline(points, { color: '#3b82f6', weight: 4 }).addTo(map);
+                    map.fitBounds(routeLayer.getBounds());
                 }
                 
                 // ===== SUPPRESSION =====
@@ -398,7 +429,7 @@
                     if (!confirm('⚠️ Supprimer ce transport ?')) return;
                     try {
                         await supabase.from('transport_orders_simple').delete().eq('id', id);
-                        loadTransports();
+                        await loadTransports();
                     } catch(e) { alert('❌ Erreur: ' + e.message); }
                 };
                 
@@ -410,17 +441,15 @@
                         const orderNumber = 'TR-' + Date.now().toString().slice(-6);
                         
                         const fullAddress = `${document.getElementById('street').value} ${document.getElementById('streetNumber').value}, ${document.getElementById('npa').value} ${document.getElementById('city').value}`;
-                        const addressComplement = document.getElementById('addressComplement').value;
                         
                         const transport = {
                             order_number: orderNumber,
                             client_number: document.getElementById('clientNumber').value,
                             destinataire_nom: document.getElementById('destinataireNom').value,
                             destinataire_tel: document.getElementById('destinataireTel').value,
-                            delivery_address: fullAddress + (addressComplement ? ' (' + addressComplement + ')' : ''),
+                            delivery_address: fullAddress,
                             weight: parseFloat(document.getElementById('mainWeight').value) || 1,
                             quantity: parseInt(document.getElementById('mainQuantity').value) || 1,
-                            package_type: document.getElementById('mainType').value,
                             speed: document.getElementById('speed').value,
                             priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
                             status: 'pending',
@@ -428,44 +457,21 @@
                         };
                         
                         if (!transport.client_number || !transport.delivery_address || !transport.destinataire_nom) {
-                            alert('Numéro client, destinataire et adresse requis');
+                            alert('Champs requis manquants');
                             return;
                         }
                         
                         try {
-                            const { data, error } = await supabase
-                                .from('transport_orders_simple')
-                                .insert([transport])
-                                .select();
-                            
-                            if (error) {
-                                console.error("Erreur Supabase:", error);
-                                alert('❌ Erreur: ' + error.message);
-                                return;
-                            }
-                            
-                            alert(`✅ Transport ${orderNumber} créé avec succès !`);
+                            await supabase.from('transport_orders_simple').insert([transport]);
+                            alert(`✅ Transport ${orderNumber} créé !`);
                             modal.style.display = 'none';
-                            
-                            // Reset du formulaire
-                            document.getElementById('destinataireNom').value = '';
-                            document.getElementById('destinataireTel').value = '';
-                            document.getElementById('street').value = '';
-                            document.getElementById('streetNumber').value = '';
-                            document.getElementById('npa').value = '';
-                            document.getElementById('city').value = '';
-                            
-                            loadTransports();
-                            
-                        } catch(e) { 
-                            console.error("Erreur:", e);
-                            alert('❌ Erreur: ' + e.message); 
-                        }
+                            await loadTransports();
+                        } catch(e) { alert('❌ Erreur: ' + e.message); }
                     };
                 }
                 
                 // ===== LANCEMENT =====
-                loadTransports();
+                await loadTransports();
                 
             } catch(e) {
                 console.error("Erreur fatale:", e);
