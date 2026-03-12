@@ -492,6 +492,206 @@
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
+        // ===== OPTIMISATION GÉOGRAPHIQUE INTELLIGENTE =====
+function optimiserTournees() {
+    if (allTransports.length === 0) {
+        alert("Aucun transport à optimiser");
+        return;
+    }
+    
+    // 1. Préparer les transports avec leurs coordonnées
+    const transportsAvecCoords = allTransports.map(t => {
+        const coords = getCityCoordinates(t.delivery_address);
+        return {
+            ...t,
+            lat: coords.lat,
+            lng: coords.lng,
+            urgent: t.speed === '6h'
+        };
+    });
+    
+    // 2. Séparer les urgents (6h) des normaux
+    const urgents = transportsAvecCoords.filter(t => t.urgent);
+    const normaux = transportsAvecCoords.filter(t => !t.urgent);
+    
+    // 3. Créer les tournées
+    const tournees = [];
+    const transportsAssignes = new Set();
+    
+    // === FONCTION POUR TROUVER LE CLUSTER LE PLUS PROCHE ===
+    function trouverClusterAutour(point, transportsDisponibles, rayonKm = 30) {
+        const cluster = [];
+        const aRetirer = [];
+        
+        for (let i = 0; i < transportsDisponibles.length; i++) {
+            const t = transportsDisponibles[i];
+            const distance = calculerDistance(
+                point.lat, point.lng,
+                t.lat, t.lng
+            );
+            
+            if (distance <= rayonKm) {
+                cluster.push(t);
+                aRetirer.push(i);
+            }
+        }
+        
+        // Retirer du plus loin au plus près pour ne pas casser les indices
+        for (let i = aRetirer.length - 1; i >= 0; i--) {
+            transportsDisponibles.splice(aRetirer[i], 1);
+        }
+        
+        return cluster;
+    }
+    
+    // === TRAITER LES URGENTS D'ABORD ===
+    // Copie des tableaux
+    let urgentsRestants = [...urgents];
+    let normauxRestants = [...normaux];
+    
+    // Pour chaque urgent, créer une tournée avec les normaux proches
+    while (urgentsRestants.length > 0) {
+        const urgent = urgentsRestants.shift();
+        
+        // Chercher les normaux dans un rayon de 30km autour de l'urgent
+        const cluster = trouverClusterAutour(urgent, normauxRestants, 30);
+        
+        // Créer la tournée : urgent + cluster trié par distance
+        const tournee = [urgent, ...cluster.sort((a, b) => {
+            const distA = calculerDistance(urgent.lat, urgent.lng, a.lat, a.lng);
+            const distB = calculerDistance(urgent.lat, urgent.lng, b.lat, b.lng);
+            return distA - distB;
+        })];
+        
+        tournees.push({
+            type: 'urgente',
+            transports: tournee,
+            couleur: '#ef4444'
+        });
+    }
+    
+    // === TRAITER LES NORMAUX RESTANTS ===
+    while (normauxRestants.length > 0) {
+        // Prendre le premier transport comme point de départ
+        const depart = normauxRestants.shift();
+        
+        // Chercher les autres dans un rayon de 50km
+        const cluster = trouverClusterAutour(depart, normauxRestants, 50);
+        
+        // Créer la tournée
+        const tournee = [depart, ...cluster];
+        tournees.push({
+            type: 'normale',
+            transports: tournee,
+            couleur: '#3b82f6'
+        });
+    }
+    
+    // === AFFICHAGE DES RÉSULTATS ===
+    document.getElementById('panelTitle').innerHTML = '🧠 Tournées optimisées <button class="btn-optimize" id="backBtn">← Retour</button>';
+    
+    let html = '';
+    
+    tournees.forEach((tournee, index) => {
+        const urgentCount = tournee.transports.filter(t => t.urgent).length;
+        
+        html += `
+            <div class="tour-item" style="border-left-color: ${tournee.couleur};">
+                <div class="tour-header">
+                    <span>🚚 Tournée ${index + 1} ${urgentCount > 0 ? '🔴 ' + urgentCount + ' urgent(s)' : ''}</span>
+                    <span>${tournee.transports.length} arrêts</span>
+                </div>
+        `;
+        
+        // Trier par urgence puis par distance depuis le dépôt
+        const ordre = [...tournee.transports].sort((a, b) => {
+            if (a.urgent && !b.urgent) return -1;
+            if (!a.urgent && b.urgent) return 1;
+            
+            const distA = calculerDistance(depot.lat, depot.lng, a.lat, a.lng);
+            const distB = calculerDistance(depot.lat, depot.lng, b.lat, b.lng);
+            return distA - distB;
+        });
+        
+        ordre.forEach((t, idx) => {
+            const heure = t.speed === '6h' ? '🔴 ' : '';
+            html += `
+                <div class="tour-stop">
+                    <strong>${idx+1}. ${heure}${t.destinataire_nom || 'Client'}</strong>
+                    <div style="font-size:11px; color:#aaa;">${t.delivery_address?.substring(0,30)}</div>
+                    <div class="stop-time">${t.speed || '24h'} | ${t.weight || 0} kg</div>
+                </div>
+            `;
+        });
+        
+        html += `</div>`;
+    });
+    
+    // Ajouter un résumé
+    html += `
+        <div style="margin-top:15px; padding:15px; background:#0f172a; border-radius:6px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span>🚚 ${tournees.length} tournées</span>
+                <span>🔴 ${urgents.length} urgents</span>
+            </div>
+            <div style="font-size:12px; color:#aaa;">
+                Les tournées sont créées en regroupant les transports proches géographiquement.<br>
+                Les urgents (6h) sont traités en priorité.
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('transportList').innerHTML = html;
+    
+    // Dessiner les routes sur la carte
+    dessinerRoutesOptimisees(tournees);
+    
+    document.getElementById('backBtn').onclick = afficherTransports;
+}
+
+// ===== DESSINER LES ROUTES SUR LA CARTE =====
+function dessinerRoutesOptimisees(tournees) {
+    // Nettoyer les anciennes routes
+    if (window.routeLayers) {
+        window.routeLayers.forEach(l => map.removeLayer(l));
+    }
+    window.routeLayers = [];
+    
+    const couleurs = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+    
+    tournees.forEach((tournee, index) => {
+        const points = [[depot.lat, depot.lng]];
+        
+        // Ajouter les points dans l'ordre optimal
+        const ordre = [...tournee.transports].sort((a, b) => {
+            const distA = calculerDistance(depot.lat, depot.lng, a.lat, a.lng);
+            const distB = calculerDistance(depot.lat, depot.lng, b.lat, b.lng);
+            return distA - distB;
+        });
+        
+        ordre.forEach(t => {
+            points.push([t.lat, t.lng]);
+        });
+        
+        // Retour au dépôt
+        points.push([depot.lat, depot.lng]);
+        
+        // Dessiner la ligne
+        const route = L.polyline(points, {
+            color: couleurs[index % couleurs.length],
+            weight: 4,
+            opacity: 0.7
+        }).addTo(map);
+        
+        window.routeLayers.push(route);
+    });
+    
+    // Ajuster la vue
+    if (window.routeLayers.length > 0) {
+        const group = L.featureGroup(window.routeLayers);
+        map.fitBounds(group.getBounds().pad(0.1));
+    }
+}
     </script>
     
 </body>
