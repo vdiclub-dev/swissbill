@@ -1,1 +1,127 @@
-
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Créer transport</title>
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    
+    <style>
+        body { background:#111; color:white; padding:20px; font-family:system-ui; }
+        .form-group { margin-bottom:15px; }
+        label { display:block; color:#aaa; margin-bottom:5px; }
+        input, select, textarea { width:100%; padding:10px; background:#1f2937; border:1px solid #2a2a2a; color:white; border-radius:4px; }
+        button { background:#facc15; color:#111; border:none; padding:12px 24px; border-radius:4px; font-weight:bold; cursor:pointer; margin-top:20px; }
+        .result { margin-top:20px; padding:15px; background:#1f2937; border-radius:4px; white-space:pre-wrap; }
+    </style>
+</head>
+<body>
+    
+    <h1>➕ Créer un transport de test</h1>
+    
+    <form id="transportForm">
+        <div class="form-group">
+            <label>Numéro client</label>
+            <input type="text" id="clientNumber" value="CL2025-001" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Adresse de livraison</label>
+            <input type="text" id="deliveryAddress" value="Rue du Lac 12, 1000 Lausanne" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Poids (kg)</label>
+            <input type="number" id="weight" value="2.5" step="0.1">
+        </div>
+        
+        <div class="form-group">
+            <label>Type de colis</label>
+            <select id="packageType">
+                <option value="Colis">Colis</option>
+                <option value="Fragile">Fragile</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>Vitesse</label>
+            <select id="speed">
+                <option value="24h">24h</option>
+                <option value="12h">12h</option>
+                <option value="6h">6h</option>
+            </select>
+        </div>
+        
+        <button type="submit">Créer le transport</button>
+    </form>
+    
+    <div id="result" class="result"></div>
+    
+    <script>
+        document.getElementById('transportForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            try {
+                // Vérification config
+                if (!window.SUPABASE_CONFIG) {
+                    alert('❌ config.js non chargé');
+                    return;
+                }
+                
+                // Client Supabase
+                const supabase = window.supabase.createClient(
+                    window.SUPABASE_CONFIG.url,
+                    window.SUPABASE_CONFIG.key
+                );
+                
+                // Générer un numéro unique
+                const year = new Date().getFullYear();
+                const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+                const orderNumber = `TR-${year}-${random}`;
+                
+                // Préparer le transport
+                const transport = {
+                    order_number: orderNumber,
+                    client_number: document.getElementById('clientNumber').value,
+                    delivery_address: document.getElementById('deliveryAddress').value,
+                    pickup_address: 'Impasse des Griottes 3, 1462 Yvonand',
+                    weight: parseFloat(document.getElementById('weight').value),
+                    package_type: document.getElementById('packageType').value,
+                    speed: document.getElementById('speed').value,
+                    quantity: 1,
+                    status: 'pending',
+                    priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+                    created_at: new Date()
+                };
+                
+                // Insertion
+                const { data, error } = await supabase
+                    .from('transport_orders')
+                    .insert([transport])
+                    .select();
+                
+                if (error) throw error;
+                
+                // Afficher le résultat
+                document.getElementById('result').innerHTML = `
+                    <h3 style="color:#10b981;">✅ Transport créé !</h3>
+                    <p><strong>N°</strong> ${orderNumber}</p>
+                    <p><strong>Client</strong> ${transport.client_number}</p>
+                    <p><strong>Livraison</strong> ${transport.delivery_address}</p>
+                    <p><strong>Poids</strong> ${transport.weight} kg</p>
+                    <p><strong>Vitesse</strong> ${transport.speed}</p>
+                `;
+                
+            } catch(e) {
+                document.getElementById('result').innerHTML = `
+                    <h3 style="color:#ef4444;">❌ Erreur</h3>
+                    <p>${e.message}</p>
+                `;
+            }
+        });
+    </script>
+    
+</body>
+</html>
