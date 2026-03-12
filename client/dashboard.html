@@ -324,6 +324,12 @@
             border-radius: 8px;
             display: none;
             z-index: 1000;
+            animation: slideIn 0.3s;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
         
         /* UNAUTHORIZED */
@@ -334,6 +340,39 @@
             margin: 100px auto;
             background: white;
             border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .unauthorized i {
+            font-size: 60px;
+            color: #e53935;
+            margin-bottom: 20px;
+        }
+        
+        .unauthorized h2 {
+            margin-bottom: 10px;
+        }
+        
+        .unauthorized p {
+            color: #64748b;
+            margin-bottom: 30px;
+        }
+        
+        .loader {
+            text-align: center;
+            padding: 30px;
+            color: #64748b;
+        }
+        
+        .loader i {
+            font-size: 30px;
+            color: #e53935;
+            animation: spin 1s infinite linear;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -341,7 +380,23 @@
 
     <div id="app"></div>
 
+    <!-- SCRIPTS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../dispatch/config.js"></script>
+
     <script>
+        // ===== VÉRIFICATION CONFIG =====
+        if (!window.SUPABASE_CONFIG) {
+            document.body.innerHTML = '<div class="unauthorized"><i class="fas fa-exclamation-triangle"></i><h2>Erreur</h2><p>Fichier de configuration manquant</p></div>';
+            throw new Error("Configuration manquante");
+        }
+        
+        const supabase = window.supabase.createClient(
+            window.SUPABASE_CONFIG.url,
+            window.SUPABASE_CONFIG.key
+        );
+        
         // ===== VÉRIFICATION AUTHENTIFICATION =====
         (function() {
             const user = localStorage.getItem('user');
@@ -349,8 +404,8 @@
             if (!user) {
                 document.body.innerHTML = `
                     <div class="unauthorized">
-                        <i class="fas fa-lock" style="font-size:60px; color:#e53935;"></i>
-                        <h2 style="margin:20px 0;">Accès non autorisé</h2>
+                        <i class="fas fa-lock"></i>
+                        <h2>Accès non autorisé</h2>
                         <p>Vous devez être connecté en tant que client.</p>
                         <button class="btn" onclick="window.location.href='../login/'">Se connecter</button>
                     </div>
@@ -363,8 +418,8 @@
             if (!userData.loggedIn || userData.role !== 'client') {
                 document.body.innerHTML = `
                     <div class="unauthorized">
-                        <i class="fas fa-shield-alt" style="font-size:60px; color:#e53935;"></i>
-                        <h2 style="margin:20px 0;">Accès restreint</h2>
+                        <i class="fas fa-shield-alt"></i>
+                        <h2>Accès restreint</h2>
                         <p>Cette page est réservée aux clients.</p>
                         <button class="btn" onclick="window.location.href='../'">Accueil</button>
                     </div>
@@ -401,34 +456,7 @@
                     
                     <!-- STATS -->
                     <div class="stats-grid" id="statsGrid">
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-box"></i></div>
-                            <div class="stat-info">
-                                <h3 id="totalTransports">0</h3>
-                                <p>Transports total</p>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-clock"></i></div>
-                            <div class="stat-info">
-                                <h3 id="enCours">0</h3>
-                                <p>En cours</p>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                            <div class="stat-info">
-                                <h3 id="livres">0</h3>
-                                <p>Livrés</p>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
-                            <div class="stat-info">
-                                <h3 id="urgents">0</h3>
-                                <p>Urgents</p>
-                            </div>
-                        </div>
+                        <div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>
                     </div>
                     
                     <!-- QUICK ACTIONS -->
@@ -491,7 +519,6 @@
                     <!-- TRANSPORTS RÉCENTS -->
                     <div class="section-header">
                         <h2>📋 Transports récents</h2>
-                        <a href="#" style="color:#e53935;" onclick="showAllTransports()">Voir tout</a>
                     </div>
                     
                     <div class="transport-list">
@@ -502,9 +529,9 @@
                             <div>Arrivée</div>
                             <div>Statut</div>
                         </div>
-                        <tbody id="transportsList">
-                            <tr><td colspan="5" style="text-align:center; padding:20px;">Chargement...</td></tr>
-                        </tbody>
+                        <div id="transportsList" class="loader">
+                            <i class="fas fa-spinner fa-spin"></i> Chargement...
+                        </div>
                     </div>
                     
                     <!-- MAP SECTION -->
@@ -525,64 +552,126 @@
             window.location.href = '../login/';
         }
         
-        function startApp() {
-            // ===== DONNÉES SIMULÉES =====
-            const transports = [
-                { id: 'TR-2401', date: '11/03/2026', pickup: 'Lausanne', delivery: 'Genève', status: 'transit' },
-                { id: 'TR-2400', date: '10/03/2026', pickup: 'Yverdon', delivery: 'Neuchâtel', status: 'pending' },
-                { id: 'TR-2398', date: '09/03/2026', pickup: 'Fribourg', delivery: 'Berne', status: 'delivered' },
-                { id: 'TR-2395', date: '08/03/2026', pickup: 'Lausanne', delivery: 'Genève', status: 'urgent' }
-            ];
+        async function startApp() {
+            const user = JSON.parse(localStorage.getItem('user'));
             
-            // Mettre à jour les stats
-            document.getElementById('totalTransports').textContent = transports.length;
-            document.getElementById('enCours').textContent = transports.filter(t => t.status === 'transit').length;
-            document.getElementById('livres').textContent = transports.filter(t => t.status === 'delivered').length;
-            document.getElementById('urgents').textContent = transports.filter(t => t.status === 'urgent').length;
+            try {
+                // Récupérer le client_id à partir du username
+                const { data: clientData, error: clientError } = await supabase
+                    .from('clients')
+                    .select('id, client_number')
+                    .eq('client_number', user.username)
+                    .single();
+                
+                if (clientError) throw clientError;
+                
+                // Charger les transports de ce client
+                const { data: transports, error } = await supabase
+                    .from('transport_orders')
+                    .select('*')
+                    .eq('client_number', user.username)
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                // Mettre à jour les stats
+                updateStats(transports);
+                
+                // Afficher les transports
+                updateTransportsList(transports);
+                
+                // Initialiser la carte
+                initMap(transports);
+                
+            } catch (error) {
+                console.error('Erreur chargement:', error);
+                document.getElementById('statsGrid').innerHTML = '<div style="color:red; padding:20px;">Erreur de chargement</div>';
+            }
+        }
+        
+        function updateStats(transports) {
+            const total = transports.length;
+            const enCours = transports.filter(t => t.status === 'transit' || t.status === 'prepared').length;
+            const livres = transports.filter(t => t.status === 'delivered').length;
+            const urgents = transports.filter(t => t.priority === 'urgent' || t.speed === '6h').length;
             
-            // Afficher les transports
+            document.getElementById('statsGrid').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fas fa-box"></i></div>
+                    <div class="stat-info"><h3>${total}</h3><p>Transports total</p></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                    <div class="stat-info"><h3>${enCours}</h3><p>En cours</p></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-info"><h3>${livres}</h3><p>Livrés</p></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                    <div class="stat-info"><h3>${urgents}</h3><p>Urgents</p></div>
+                </div>
+            `;
+        }
+        
+        function updateTransportsList(transports) {
+            if (!transports || transports.length === 0) {
+                document.getElementById('transportsList').innerHTML = '<div style="text-align:center; padding:20px;">Aucun transport</div>';
+                return;
+            }
+            
             let html = '';
-            transports.forEach(t => {
+            transports.slice(0, 5).forEach(t => {
                 let statusClass = 'status-pending';
                 let statusText = 'En attente';
                 
-                if (t.status === 'transit') { statusClass = 'status-transit'; statusText = 'En transit'; }
+                if (t.status === 'transit' || t.status === 'prepared') { statusClass = 'status-transit'; statusText = 'En transit'; }
                 if (t.status === 'delivered') { statusClass = 'status-delivered'; statusText = 'Livré'; }
-                if (t.status === 'urgent') { statusClass = 'status-urgent'; statusText = 'Urgent'; }
+                if (t.priority === 'urgent' || t.speed === '6h') { statusClass = 'status-urgent'; statusText = 'Urgent'; }
+                
+                const date = t.created_at ? new Date(t.created_at).toLocaleDateString('fr-CH') : 'Date inconnue';
                 
                 html += `
                     <div class="transport-item">
-                        <div><strong>${t.id}</strong></div>
-                        <div>${t.date}</div>
-                        <div>${t.pickup}</div>
-                        <div>${t.delivery}</div>
+                        <div><strong>${t.order_number || 'N/A'}</strong></div>
+                        <div>${date}</div>
+                        <div>${t.pickup_city || '?'}</div>
+                        <div>${t.delivery_city || '?'}</div>
                         <div><span class="status-badge ${statusClass}">${statusText}</span></div>
                     </div>
                 `;
             });
-            document.getElementById('transportsList').innerHTML = html;
             
-            // Initialiser la carte
+            document.getElementById('transportsList').innerHTML = html;
+        }
+        
+        function initMap(transports) {
             const map = L.map('client-map').setView([46.8, 8.2], 8);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             
-            // Ajouter des marqueurs
-            const markers = [
-                { lat: 46.52, lng: 6.63, city: 'Lausanne', status: 'transit' },
-                { lat: 46.20, lng: 6.14, city: 'Genève', status: 'urgent' }
-            ];
+            // Filtrer les transports en cours pour la carte
+            const enCours = transports.filter(t => t.status !== 'delivered');
             
-            markers.forEach(m => {
-                let color = '#3b82f6';
-                if (m.status === 'urgent') color = '#ef4444';
-                
-                L.circleMarker([m.lat, m.lng], {
-                    radius: 8,
-                    fillColor: color,
-                    color: '#fff',
-                    weight: 2,
-                    fillOpacity: 0.8
-                }).addTo(map).bindPopup(m.city);
+            enCours.forEach(t => {
+                if (t.delivery_city) {
+                    let lat = 46.8, lng = 8.2;
+                    
+                    // Coordonnées approximatives (à remplacer par du vrai géocodage)
+                    if (t.delivery_city.toLowerCase().includes('lausanne')) { lat = 46.52; lng = 6.63; }
+                    if (t.delivery_city.toLowerCase().includes('geneve')) { lat = 46.20; lng = 6.14; }
+                    
+                    let color = '#3b82f6';
+                    if (t.priority === 'urgent') color = '#ef4444';
+                    
+                    L.circleMarker([lat, lng], {
+                        radius: 8,
+                        fillColor: color,
+                        color: '#fff',
+                        weight: 2,
+                        fillOpacity: 0.8
+                    }).addTo(map).bindPopup(`${t.pickup_city} → ${t.delivery_city}`);
+                }
             });
         }
         
@@ -594,7 +683,8 @@
             document.getElementById('newTransportForm').style.display = 'none';
         }
         
-        function createTransport() {
+        async function createTransport() {
+            const user = JSON.parse(localStorage.getItem('user'));
             const pickup = document.getElementById('pickupCity').value;
             const delivery = document.getElementById('deliveryCity').value;
             
@@ -603,8 +693,36 @@
                 return;
             }
             
-            showNotification('✅ Demande de transport envoyée');
-            hideNewTransportForm();
+            const newTransport = {
+                order_number: 'TR-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 1000000)).padStart(6, '0'),
+                client_number: user.username,
+                pickup_city: pickup,
+                delivery_city: delivery,
+                weight: parseFloat(document.getElementById('weight').value) || 1,
+                parcel_type: document.getElementById('type').value,
+                instructions: document.getElementById('instructions').value,
+                status: 'pending',
+                priority: 'normal',
+                created_at: new Date()
+            };
+            
+            try {
+                const { error } = await supabase
+                    .from('transport_orders')
+                    .insert([newTransport]);
+                
+                if (error) throw error;
+                
+                showNotification('✅ Demande de transport envoyée');
+                hideNewTransportForm();
+                
+                // Recharger les données
+                startApp();
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('❌ Erreur: ' + error.message);
+            }
         }
         
         function showTracking() {
@@ -613,10 +731,6 @@
         
         function showHistory() {
             alert('Historique complet - Fonctionnalité à venir');
-        }
-        
-        function showAllTransports() {
-            alert('Tous les transports - Fonctionnalité à venir');
         }
         
         function showNotification(msg) {
