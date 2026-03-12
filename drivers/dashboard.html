@@ -8,10 +8,7 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- Scanner QR (AJOUTÉ) -->
-    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
-    
-    <!-- Leaflet CSS (optionnel) -->
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     
     <!-- Supabase et Config -->
@@ -82,12 +79,20 @@
         .compteur-valeur { font-size: 32px; font-weight: bold; color: #10b981; }
         .compteur-label { color: #64748b; font-size: 14px; margin-top: 5px; }
         
-        /* SCAN QR */
+        /* SAISIE MANUELLE */
         .scan-section {
             background: white; border-radius: 12px; padding: 20px;
             margin-bottom: 20px; border: 1px solid #e2e8f0;
         }
-        #qr-reader { width: 100%; max-width: 500px; margin: 0 auto; }
+        .manual-input {
+            display: flex; gap: 10px; margin-top: 15px;
+        }
+        .manual-input input {
+            flex: 1; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 16px;
+        }
+        .manual-input button {
+            padding: 12px 24px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer;
+        }
         
         /* LISTE COLIS */
         .colis-list {
@@ -125,7 +130,7 @@
             try {
                 console.log("🚀 Dashboard chauffeur...");
                 
-                // ===== CONFIG =====
+                // ===== VÉRIFICATION CONFIG =====
                 if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
                 const supabase = window.supabase.createClient(
@@ -151,25 +156,37 @@
                 
                 if (chauffeurError) throw chauffeurError;
                 
-                // ===== CHARGEMENT DES COMPTEURS =====
-                const annee = new Date().getFullYear();
-                const { data: compteurs } = await supabase
-                    .from('compteurs')
-                    .select('*')
-                    .eq('chauffeur_id', chauffeur.id)
-                    .eq('annee', annee);
+                // ===== COMPTEURS =====
+                let compteurActuel = null;
+                try {
+                    const { data: compteurs } = await supabase
+                        .from('compteurs')
+                        .select('*')
+                        .eq('chauffeur_id', chauffeur.id);
+                    
+                    if (compteurs && compteurs.length > 0) {
+                        const annee = new Date().getFullYear();
+                        compteurActuel = compteurs.find(c => c.annee === annee);
+                    }
+                } catch(e) {
+                    console.warn("Erreur compteurs:", e);
+                }
                 
-                const compteurActuel = compteurs && compteurs.length > 0 ? compteurs[0] : null;
-                
-                // ===== CHARGEMENT DU POINTAGE DU JOUR =====
-                const today = new Date().toISOString().split('T')[0];
-                const { data: pointages } = await supabase
-                    .from('pointages')
-                    .select('*')
-                    .eq('chauffeur_id', chauffeur.id)
-                    .eq('date', today);
-                
-                const pointage = pointages && pointages.length > 0 ? pointages[0] : null;
+                // ===== POINTAGE =====
+                let pointage = null;
+                try {
+                    const today = new Date().toISOString().split('T')[0];
+                    const { data: pointages } = await supabase
+                        .from('pointages')
+                        .select('*')
+                        .eq('chauffeur_id', chauffeur.id);
+                    
+                    if (pointages && pointages.length > 0) {
+                        pointage = pointages.find(p => p.date === today);
+                    }
+                } catch(e) {
+                    console.warn("Erreur pointage:", e);
+                }
                 
                 // ===== CONSTRUCTION PAGE =====
                 document.getElementById('app').innerHTML = `
@@ -248,10 +265,13 @@
                             </div>
                         </div>
                         
-                        <!-- SCAN QR POUR COLIS -->
+                        <!-- SAISIE MANUELLE (remplace le scanner) -->
                         <div class="scan-section">
-                            <h3><i class="fas fa-qrcode"></i> Scanner un colis</h3>
-                            <div id="qr-reader"></div>
+                            <h3><i class="fas fa-pen"></i> Saisir un colis</h3>
+                            <div class="manual-input">
+                                <input type="text" id="transportNumber" placeholder="Numéro de transport (ex: TR-2026-123456)">
+                                <button onclick="rechercherTransport()">🔍 Valider</button>
+                            </div>
                             <div id="scanResult" style="margin-top:10px;"></div>
                         </div>
                         
@@ -281,37 +301,52 @@
                 window.pointageActuel = pointage;
                 window.supabaseClient = supabase;
                 
-                // ===== INIT SCANNEUR QR =====
-                if (typeof Html5Qrcode !== 'undefined') {
-                    const html5QrCode = new Html5Qrcode("qr-reader");
-                    html5QrCode.start(
-                        { facingMode: "environment" },
-                        { fps: 10, qrbox: 250 },
-                        (decodedText) => {
+                // ===== FONCTION DE RECHERCHE MANUELLE =====
+                window.rechercherTransport = async function() {
+                    const numero = document.getElementById('transportNumber').value.trim();
+                    if (!numero) {
+                        alert('Veuillez entrer un numéro de transport');
+                        return;
+                    }
+                    
+                    try {
+                        const { data, error } = await supabase
+                            .from('transport_orders_simple')
+                            .select('*')
+                            .eq('order_number', numero);
+                        
+                        if (error) throw error;
+                        
+                        if (data && data.length > 0) {
+                            const t = data[0];
+                            window.currentScan = {
+                                order: t.order_number,
+                                client: t.client_number
+                            };
+                            
+                            document.getElementById('modalColisInfo').innerHTML = `
+                                Transport: <strong>${t.order_number}</strong><br>
+                                Client: ${t.client_number || '?'}<br>
+                                Adresse: ${t.delivery_address?.substring(0,50) || '?'}
+                            `;
+                            document.getElementById('livraisonModal').style.display = 'flex';
+                            
                             document.getElementById('scanResult').innerHTML = `
                                 <div style="background:#10b981; color:white; padding:10px; border-radius:4px;">
-                                    ✅ QR scanné: ${decodedText}
+                                    ✅ Transport trouvé
                                 </div>
                             `;
-                            const parts = decodedText.split('|');
-                            if (parts.length >= 2) {
-                                window.currentScan = {
-                                    order: parts[0],
-                                    client: parts[1]
-                                };
-                                document.getElementById('modalColisInfo').innerHTML = `
-                                    Transport: <strong>${parts[0]}</strong><br>
-                                    Client: ${parts[1] || '?'}<br>
-                                    Trajet: ${parts[2] || '?'} → ${parts[3] || '?'}
-                                `;
-                                document.getElementById('livraisonModal').style.display = 'flex';
-                            }
-                        },
-                        () => {}
-                    );
-                } else {
-                    document.getElementById('qr-reader').innerHTML = '<div style="color:#ef4444;">❌ Scanner non disponible</div>';
-                }
+                        } else {
+                            document.getElementById('scanResult').innerHTML = `
+                                <div style="background:#ef4444; color:white; padding:10px; border-radius:4px;">
+                                    ❌ Transport non trouvé
+                                </div>
+                            `;
+                        }
+                    } catch(e) {
+                        alert('Erreur: ' + e.message);
+                    }
+                };
                 
                 // ===== FONCTIONS =====
                 window.pointer = async function(action) {
