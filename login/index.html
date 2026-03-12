@@ -8,6 +8,9 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
         * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
         
@@ -112,10 +115,6 @@
             box-shadow: 0 5px 15px rgba(229,57,53,0.3);
         }
         
-        .btn:active {
-            transform: translateY(0);
-        }
-        
         .links {
             text-align: center;
             margin-top: 25px;
@@ -130,11 +129,6 @@
             font-weight: 600;
         }
         
-        .links a:hover {
-            text-decoration: underline;
-        }
-        
-        /* Message d'erreur */
         .error-message {
             background: #fee2e2;
             color: #991b1b;
@@ -148,26 +142,6 @@
             border-left: 4px solid #e53935;
         }
         
-        .error-message i {
-            font-size: 18px;
-        }
-        
-        /* Loading spinner */
-        .btn.loading {
-            opacity: 0.7;
-            cursor: not-allowed;
-        }
-        
-        .btn.loading i {
-            animation: spin 1s infinite linear;
-        }
-        
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Infos démo */
         .demo-info {
             margin-top: 20px;
             background: #f1f5f9;
@@ -199,7 +173,6 @@
         <h2>Bienvenue</h2>
         <div class="subtitle">Connectez-vous à votre espace</div>
         
-        <!-- Message d'erreur -->
         <div id="errorMessage" class="error-message">
             <i class="fas fa-exclamation-circle"></i>
             <span id="errorText">Identifiant ou mot de passe incorrect</span>
@@ -207,7 +180,7 @@
         
         <div class="form-group">
             <label><i class="fas fa-user"></i> Identifiant</label>
-            <input type="text" id="username" placeholder="Votre identifiant" value="demo">
+            <input type="text" id="username" placeholder="Votre identifiant" value="admin">
         </div>
         
         <div class="form-group">
@@ -218,7 +191,7 @@
         <div class="form-group">
             <label><i class="fas fa-user-tag"></i> Je suis</label>
             <select id="role">
-                <option value="admin">👑 Administrateur (dispatch)</option>
+                <option value="admin">👑 Administrateur</option>
                 <option value="client">👤 Client</option>
                 <option value="staff">🔧 Magasinier</option>
             </select>
@@ -234,57 +207,113 @@
             </a>
         </div>
         
-        <!-- Informations de démonstration -->
         <div class="demo-info">
-            <p><i class="fas fa-info-circle"></i> <strong>Démonstration :</strong></p>
-            <p><i class="fas fa-user"></i> N'importe quel identifiant fonctionne</p>
-            <p><i class="fas fa-key"></i> Mot de passe: 1234</p>
-            <p><i class="fas fa-shield-alt"></i> Choisissez votre rôle</p>
+            <p><i class="fas fa-info-circle"></i> <strong>Comptes de test :</strong></p>
+            <p><i class="fas fa-user"></i> admin / 1234 (Admin)</p>
+            <p><i class="fas fa-user"></i> client1 / 1234 (Client)</p>
+            <p><i class="fas fa-user"></i> staff1 / 1234 (Staff)</p>
         </div>
     </div>
     
     <script>
-async function login() {
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
-    const role = document.getElementById('role').value;
-    
-    if (!username || !password) {
-        showError('Veuillez remplir tous les champs');
-        return;
-    }
-    
-    try {
-        const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('username', username)
-            .eq('password', password)
-            .eq('role', role);
+        // ===== INITIALISATION SUPABASE =====
+        const supabase = window.supabase.createClient(
+            'https://votre-projet.supabase.co',  // 🔴 REMPLACEZ ICI
+            'votre-cle-anon'                       // 🔴 REMPLACEZ ICI
+        );
         
-        if (error) throw error;
+        // ===== VÉRIFICATION SI DÉJÀ CONNECTÉ =====
+        (function() {
+            const user = localStorage.getItem('user');
+            if (user) {
+                const userData = JSON.parse(user);
+                if (userData.loggedIn) {
+                    redirectToRole(userData.role);
+                }
+            }
+        })();
         
-        if (data && data.length > 0) {
-            const user = data[0];
+        // ===== FONCTION DE CONNEXION =====
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const role = document.getElementById('role').value;
             
-            localStorage.setItem('user', JSON.stringify({
-                id: user.id,
-                username: user.username,
-                role: user.role,
-                loggedIn: true
-            }));
+            hideError();
             
-            if (role === 'admin') window.location.href = '../dispatch/';
-            else if (role === 'client') window.location.href = '../client/dashboard.html';
-            else if (role === 'staff') window.location.href = '../staff/';
-        } else {
-            showError('Identifiant, mot de passe ou rôle incorrect');
+            if (!username || !password) {
+                showError('Veuillez remplir tous les champs');
+                return;
+            }
+            
+            try {
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('username', username)
+                    .eq('password', password)
+                    .eq('role', role);
+                
+                if (error) throw error;
+                
+                if (data && data.length > 0) {
+                    const user = data[0];
+                    
+                    localStorage.setItem('user', JSON.stringify({
+                        id: user.id,
+                        username: user.username,
+                        role: user.role,
+                        loggedIn: true
+                    }));
+                    
+                    const btn = document.getElementById('loginBtn');
+                    btn.classList.add('loading');
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connexion...';
+                    
+                    setTimeout(() => {
+                        redirectToRole(role);
+                    }, 500);
+                    
+                } else {
+                    showError('Identifiant, mot de passe ou rôle incorrect');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showError('Erreur de connexion à la base de données');
+            }
         }
-    } catch (error) {
-        console.error('Erreur:', error);
-        showError('Erreur de connexion');
-    }
-}
-</script>
+        
+        function redirectToRole(role) {
+            switch(role) {
+                case 'admin':
+                    window.location.href = '../dispatch/';
+                    break;
+                case 'client':
+                    window.location.href = '../client/dashboard.html';
+                    break;
+                case 'staff':
+                    window.location.href = '../staff/';
+                    break;
+                default:
+                    window.location.href = '../';
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('errorText').textContent = message;
+            document.getElementById('errorMessage').style.display = 'flex';
+        }
+        
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+        
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+    </script>
+    
 </body>
 </html>
