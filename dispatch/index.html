@@ -19,11 +19,19 @@
         .sidebar button { width:100%; padding:10px; margin-bottom:5px; background:#1f2937; color:white; border:none; border-radius:4px; cursor:pointer; }
         .map-container { flex:1; }
         #map { height:100%; width:100%; }
-        .right-panel { width:300px; background:#111; border-left:1px solid #2a2a2a; padding:20px; overflow-y:auto; }
+        .right-panel { width:350px; background:#111; border-left:1px solid #2a2a2a; padding:20px; overflow-y:auto; }
         .transport-item { background:#1f2937; padding:10px; margin-bottom:8px; border-radius:4px; border-left:3px solid #facc15; }
+        .transport-header { display:flex; justify-content:space-between; align-items:center; }
+        .btn-delete { background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; }
         .btn { background:#facc15; color:#111; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; }
         .btn-logout { background:#2a2a2a; color:white; }
         .stats { display:flex; gap:20px; }
+        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; }
+        .modal-box { background:#1f2937; width:90%; max-width:500px; padding:20px; border-radius:8px; border:1px solid #facc15; }
+        .form-group { margin-bottom:15px; }
+        .form-group label { display:block; margin-bottom:5px; color:#aaa; }
+        .form-group input { width:100%; padding:10px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px; }
+        .modal-buttons { display:flex; gap:10px; margin-top:20px; }
     </style>
 </head>
 <body>
@@ -38,31 +46,24 @@
     <script src="config.js"></script>
 
     <script>
-        // ===== ATTENDRE QUE LE DOM SOIT PRÊT =====
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             try {
                 console.log("🚀 Démarrage...");
                 
-                // Vérification Leaflet
-                if (typeof L === 'undefined') {
-                    throw new Error("Leaflet non chargé");
-                }
+                // ===== VÉRIFICATIONS =====
+                if (typeof L === 'undefined') throw new Error("Leaflet non chargé");
+                if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
-                // Vérification config
-                if (!window.SUPABASE_CONFIG) {
-                    throw new Error("config.js manquant");
-                }
-                
-                // Supabase
+                // ===== SUPABASE =====
                 const supabase = window.supabase.createClient(
                     window.SUPABASE_CONFIG.url,
                     window.SUPABASE_CONFIG.key
                 );
                 
-                // Utilisateur (simulé pour test)
+                // ===== UTILISATEUR SIMULÉ =====
                 const userData = { username: 'admin', role: 'admin' };
                 
-                // Construction de la page
+                // ===== CONSTRUCTION PAGE =====
                 document.getElementById('app').innerHTML = `
                     <header>
                         <div><i class="fas fa-map-marked-alt"></i> Léman Dispatch</div>
@@ -91,26 +92,26 @@
                         </div>
                     </div>
                     
-                    <!-- MODAL SIMPLE -->
-                    <div id="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
-                        <div style="background:#1f2937; width:90%; max-width:400px; padding:20px; border-radius:8px;">
-                            <h3 style="margin-bottom:20px;">Nouveau transport</h3>
+                    <!-- MODAL -->
+                    <div id="modal" class="modal">
+                        <div class="modal-box">
+                            <h3 style="margin-bottom:20px;">➕ Nouveau transport</h3>
                             <form onsubmit="event.preventDefault(); saveTransport();">
-                                <div style="margin-bottom:15px;">
-                                    <label style="display:block; margin-bottom:5px;">Client</label>
-                                    <input type="text" id="clientNumber" value="CL2025-001" style="width:100%; padding:8px;">
+                                <div class="form-group">
+                                    <label>Numéro client</label>
+                                    <input type="text" id="clientNumber" value="CL2025-001" required>
                                 </div>
-                                <div style="margin-bottom:15px;">
-                                    <label style="display:block; margin-bottom:5px;">Adresse livraison</label>
-                                    <input type="text" id="deliveryAddress" value="Test" style="width:100%; padding:8px;">
+                                <div class="form-group">
+                                    <label>Adresse livraison</label>
+                                    <input type="text" id="deliveryAddress" placeholder="Rue du Lac 12, 1000 Lausanne" required>
                                 </div>
-                                <div style="margin-bottom:15px;">
-                                    <label style="display:block; margin-bottom:5px;">Poids (kg)</label>
-                                    <input type="number" id="weight" value="1" style="width:100%; padding:8px;">
+                                <div class="form-group">
+                                    <label>Poids (kg)</label>
+                                    <input type="number" id="weight" value="1" step="0.1">
                                 </div>
-                                <div style="display:flex; gap:10px;">
-                                    <button type="button" onclick="closeModal()" style="flex:1; padding:10px;">Annuler</button>
-                                    <button type="submit" style="flex:1; background:#facc15; padding:10px; border:none;">Créer</button>
+                                <div class="modal-buttons">
+                                    <button type="button" onclick="closeModal()" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px;">Annuler</button>
+                                    <button type="submit" style="flex:1; padding:10px; background:#facc15; color:#111; border:none; border-radius:4px;">Créer</button>
                                 </div>
                             </form>
                         </div>
@@ -118,23 +119,25 @@
                 `;
                 
                 // ===== FONCTIONS =====
-                window.logout = function() { 
-                    alert("Déconnexion");
-                };
+                window.logout = function() { alert("Déconnexion"); };
+                window.openModal = function() { document.getElementById('modal').style.display = 'flex'; };
+                window.closeModal = function() { document.getElementById('modal').style.display = 'none'; };
                 
-                window.openModal = function() { 
-                    document.getElementById('modal').style.display = 'flex'; 
-                };
-                
-                window.closeModal = function() { 
-                    document.getElementById('modal').style.display = 'none'; 
-                };
-                
-                // Carte
+                // ===== CARTE =====
                 const map = L.map('map').setView([46.8, 8.2], 8);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                 
-                // Charger transports
+                // ===== SUPPRIMER TRANSPORT =====
+                window.supprimerTransport = async function(id) {
+                    if (!confirm('Supprimer ce transport ?')) return;
+                    try {
+                        const { error } = await supabase.from('transport_orders_simple').delete().eq('id', id);
+                        if (error) throw error;
+                        loadTransports();
+                    } catch(e) { alert('Erreur: ' + e.message); }
+                };
+                
+                // ===== CHARGER TRANSPORTS =====
                 async function loadTransports() {
                     try {
                         const { data } = await supabase.from('transport_orders_simple').select('*');
@@ -142,34 +145,45 @@
                         
                         let html = '';
                         data?.forEach(t => {
-                            html += `<div class="transport-item">${t.client_number} → ${t.delivery_address?.substring(0,20)}</div>`;
+                            html += `
+                                <div class="transport-item">
+                                    <div class="transport-header">
+                                        <span>${t.client_number} → ${t.delivery_address?.substring(0,20)}</span>
+                                        <button class="btn-delete" onclick="supprimerTransport('${t.id}')">🗑️</button>
+                                    </div>
+                                    <div style="font-size:11px; color:#666;">${t.order_number}</div>
+                                </div>
+                            `;
                         });
                         document.getElementById('transportList').innerHTML = html || 'Aucun transport';
-                    } catch(e) {
-                        console.error(e);
-                    }
+                    } catch(e) { console.error(e); }
                 }
                 
+                // ===== CRÉER TRANSPORT =====
                 window.saveTransport = async function() {
                     const transport = {
                         order_number: 'TR-' + Date.now(),
                         client_number: document.getElementById('clientNumber').value,
                         delivery_address: document.getElementById('deliveryAddress').value,
-                        weight: parseFloat(document.getElementById('weight').value),
+                        weight: parseFloat(document.getElementById('weight').value) || 1,
                         status: 'pending',
                         created_at: new Date()
                     };
                     
-                    await supabase.from('transport_orders_simple').insert([transport]);
-                    alert('✅ Créé');
-                    closeModal();
-                    loadTransports();
+                    try {
+                        const { error } = await supabase.from('transport_orders_simple').insert([transport]);
+                        if (error) throw error;
+                        alert('✅ Transport créé');
+                        closeModal();
+                        loadTransports();
+                    } catch(e) { alert('❌ Erreur: ' + e.message); }
                 };
                 
+                // ===== LANCEMENT =====
                 loadTransports();
                 
             } catch(e) {
-                console.error("Erreur:", e);
+                console.error(e);
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
