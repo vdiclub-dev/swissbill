@@ -60,7 +60,6 @@
         .transport-item {
             background: #1f2937; padding: 12px; margin-bottom: 10px;
             border-radius: 6px; border-left: 3px solid #facc15;
-            cursor: pointer;
         }
         .transport-item.urgent { border-left-color: #ef4444; }
         .transport-client { font-weight: bold; color: white; }
@@ -132,6 +131,7 @@
                 // ===== DONNÉES =====
                 let allTransports = [];
                 let map, markers;
+                let modeOptimisation = false;
                 
                 // Dépôt
                 const depot = {
@@ -195,6 +195,8 @@
                 
                 // ===== AFFICHAGE =====
                 function afficherTransports() {
+                    modeOptimisation = false;
+                    
                     document.getElementById('app').innerHTML = `
                         <header>
                             <div class="logo"><i class="fas fa-map-marked-alt"></i> Léman Dispatch</div>
@@ -206,20 +208,20 @@
                                 <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
                                 <button class="btn-logout" onclick="logout()">Déconnexion</button>
                                 <button class="btn" onclick="openModal()">➕ Nouveau</button>
-                                <button class="btn-optimize" onclick="optimiser()">🚀 Optimisation réelle</button>
+                                <button class="btn-optimize" onclick="optimiser()">🚀 Optimiser</button>
                             </div>
                         </header>
                         
                         <div class="container">
                             <div class="sidebar">
-                                <button class="active">🗺️ Dispatch</button>
+                                <button class="active" onclick="loadTransports()">🗺️ Dispatch</button>
                                 <button>📦 Transports</button>
                             </div>
                             
                             <div class="map-container"><div id="map"></div></div>
                             
                             <div class="right-panel">
-                                <h3>📋 Transports à optimiser</h3>
+                                <h3>📋 Transports en attente</h3>
                                 <div id="transportList">
                                     ${allTransports.filter(t => t.status !== 'delivered').map(t => `
                                         <div class="transport-item ${t.speed === '6h' ? 'urgent' : ''}">
@@ -238,13 +240,16 @@
                 
                 // ===== INIT CARTE =====
                 function initMap() {
+                    if (map) map.remove();
                     map = L.map('map').setView([46.8, 8.2], 8);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                     markers = L.markerClusterGroup();
                     map.addLayer(markers);
                     
+                    // Dépôt
                     L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
                     
+                    // Transports
                     allTransports.forEach((t, i) => {
                         if (t.lat && t.lng) {
                             const color = t.speed === '6h' ? '#ef4444' : '#facc15';
@@ -257,7 +262,7 @@
                     });
                 }
                 
-                // ===== OPTIMISATION AVEC DISTANCES RÉELLES =====
+                // ===== OPTIMISATION PAR RÉGION =====
                 window.optimiser = async function() {
                     const nonLivres = allTransports.filter(t => t.status !== 'delivered');
                     if (nonLivres.length === 0) {
@@ -265,13 +270,15 @@
                         return;
                     }
                     
+                    modeOptimisation = true;
+                    
                     document.getElementById('app').innerHTML = `
                         <div class="loader">
                             <i class="fas fa-spinner fa-spin"></i> Calcul des itinéraires...
                         </div>
                     `;
                     
-                    // 1. Obtenir les coordonnées pour chaque transport
+                    // 1. Obtenir les coordonnées
                     const transportsAvecCoords = [];
                     
                     for (const t of nonLivres) {
@@ -286,131 +293,98 @@
                             transportsAvecCoords.push({
                                 ...t,
                                 lat: coords.lat,
-                                lng: coords.lng
+                                lng: coords.lng,
+                                region: determinerRegion(coords.lat, coords.lng)
                             });
                         }
                     }
                     
-                    // 2. Calculer la matrice des distances
-                    const points = [depot, ...transportsAvecCoords];
-                    const matrice = [];
+                    // 2. Grouper par région
+                    const regions = {
+                        'geneve': [],
+                        'lausanne': [],
+                        'berne': [],
+                        'zurich': [],
+                        'bienne': [],
+                        'autres': []
+                    };
                     
-                    for (let i = 0; i < points.length; i++) {
-                        matrice[i] = [];
-                        for (let j = 0; j < points.length; j++) {
-                            if (i === j) {
-                                matrice[i][j] = { distance: 0, duree: 0 };
-                            } else {
-                                const route = await calculerRoute(points[i], points[j]);
-                                matrice[i][j] = route || { distance: 0, duree: 0 };
-                            }
-                        }
-                    }
+                    transportsAvecCoords.forEach(t => {
+                        if (t.region) regions[t.region].push(t);
+                        else regions['autres'].push(t);
+                    });
                     
-                    // 3. Créer les tournées (algorithme du plus proche voisin)
-                    const vehicules = [
-                        { id: 1, capacite: 800, debut: 6*60, fin: 22*60 },
-                        { id: 2, capacite: 500, debut: 6*60, fin: 22*60 },
-                        { id: 3, capacite: 300, debut: 6*60, fin: 22*60 }
-                    ];
-                    
+                    // 3. Créer les tournées
                     const tournees = [];
-                    const indicesUtilises = new Set();
                     
-                    for (let v = 0; v < vehicules.length; v++) {
-                        if (indicesUtilises.size >= transportsAvecCoords.length) break;
+                    // Priorité aux régions avec des urgents
+                    for (let region in regions) {
+                        if (regions[region].length === 0) continue;
+                        
+                        // Trier par urgence
+                        regions[region].sort((a, b) => {
+                            if (a.speed === '6h' && b.speed !== '6h') return -1;
+                            if (a.speed !== '6h' && b.speed === '6h') return 1;
+                            return 0;
+                        });
                         
                         const tournee = {
-                            vehicule: v+1,
-                            capacite: vehicules[v].capacite,
-                            stops: [],
-                            poidsTotal: 0,
-                            distanceTotal: 0,
-                            dureeTotal: 0,
-                            tempsActuel: vehicules[v].debut
+                            region: region,
+                            transports: regions[region],
+                            distance: 0,
+                            duree: 0
                         };
                         
-                        let positionActuelle = 0; // index 0 = dépôt
-                        
-                        while (indicesUtilises.size < transportsAvecCoords.length) {
-                            // Trouver le point non visité le plus proche
-                            let meilleurIndex = -1;
-                            let meilleureDistance = Infinity;
-                            
-                            for (let i = 0; i < transportsAvecCoords.length; i++) {
-                                if (indicesUtilises.has(i)) continue;
-                                
-                                const distance = matrice[positionActuelle][i+1].distance;
-                                const duree = matrice[positionActuelle][i+1].duree;
-                                const poids = transportsAvecCoords[i].weight || 1;
-                                
-                                // Vérifier capacité
-                                if (tournee.poidsTotal + poids > vehicules[v].capacite) continue;
-                                
-                                // Vérifier horaire
-                                const heureArrivee = tournee.tempsActuel + duree;
-                                if (heureArrivee + 15 > vehicules[v].fin) continue;
-                                
-                                if (distance < meilleureDistance) {
-                                    meilleureDistance = distance;
-                                    meilleurIndex = i;
-                                }
+                        // Calculer la distance de la tournée
+                        let precedent = depot;
+                        for (let t of regions[region]) {
+                            const route = await calculerRoute(precedent, t);
+                            if (route) {
+                                tournee.distance += route.distance;
+                                tournee.duree += route.duree + 15; // +15 min de service
                             }
-                            
-                            if (meilleurIndex === -1) break;
-                            
-                            // Ajouter le point à la tournée
-                            const indexMatrice = meilleurIndex + 1;
-                            const distance = matrice[positionActuelle][indexMatrice].distance;
-                            const duree = matrice[positionActuelle][indexMatrice].duree;
-                            
-                            tournee.tempsActuel += duree;
-                            tournee.stops.push({
-                                ...transportsAvecCoords[meilleurIndex],
-                                heureArrivee: tournee.tempsActuel,
-                                distanceDepuisPrecedent: distance
-                            });
-                            
-                            tournee.poidsTotal += transportsAvecCoords[meilleurIndex].weight || 1;
-                            tournee.distanceTotal += distance;
-                            tournee.dureeTotal += duree;
-                            
-                            // Temps de service
-                            tournee.tempsActuel += 15;
-                            tournee.dureeTotal += 15;
-                            
-                            indicesUtilises.add(meilleurIndex);
-                            positionActuelle = indexMatrice;
+                            precedent = t;
                         }
                         
                         // Retour au dépôt
-                        if (tournee.stops.length > 0) {
-                            const distanceRetour = matrice[positionActuelle][0].distance;
-                            const dureeRetour = matrice[positionActuelle][0].duree;
-                            
-                            tournee.distanceTotal += distanceRetour;
-                            tournee.dureeTotal += dureeRetour;
-                            tournee.tempsActuel += dureeRetour;
-                            
-                            tournees.push(tournee);
+                        if (regions[region].length > 0) {
+                            const dernier = regions[region][regions[region].length-1];
+                            const retour = await calculerRoute(dernier, depot);
+                            if (retour) {
+                                tournee.distance += retour.distance;
+                                tournee.duree += retour.duree;
+                            }
                         }
+                        
+                        tournees.push(tournee);
                     }
                     
-                    afficherOptimisation(tournees, transportsAvecCoords.length - indicesUtilises.size);
+                    afficherOptimisation(tournees);
                 };
                 
+                // ===== DÉTERMINER LA RÉGION =====
+                function determinerRegion(lat, lng) {
+                    // Coordonnées approximatives des villes
+                    if (lat > 46.1 && lat < 46.3 && lng > 6.0 && lng < 6.3) return 'geneve';
+                    if (lat > 46.4 && lat < 46.6 && lng > 6.5 && lng < 6.8) return 'lausanne';
+                    if (lat > 46.8 && lat < 47.0 && lng > 7.3 && lng < 7.6) return 'berne';
+                    if (lat > 47.3 && lat < 47.5 && lng > 8.4 && lng < 8.6) return 'zurich';
+                    if (lat > 47.1 && lat < 47.2 && lng > 7.2 && lng < 7.3) return 'bienne';
+                    return 'autres';
+                }
+                
                 // ===== AFFICHAGE RÉSULTATS =====
-                function afficherOptimisation(tournees, restants) {
+                function afficherOptimisation(tournees) {
                     document.getElementById('app').innerHTML = `
                         <header>
-                            <div class="logo"><i class="fas fa-route"></i> Résultat</div>
+                            <div class="logo"><i class="fas fa-route"></i> Tournées optimisées</div>
                             <div class="stats-header">
                                 <div class="stat-item"><span>🚚 Tournées</span><span class="stat-value">${tournees.length}</span></div>
-                                <div class="stat-item"><span>📦 Restants</span><span class="stat-value">${restants}</span></div>
+                                <div class="stat-item"><span>📦 Total</span><span class="stat-value">${allTransports.filter(t => t.status !== 'delivered').length}</span></div>
                             </div>
                             <div class="user-section">
                                 <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
-                                <button class="btn" onclick="loadTransports()">← Retour</button>
+                                <button class="btn" onclick="loadTransports()">← Retour au dispatch</button>
                             </div>
                         </header>
                         
@@ -423,31 +397,24 @@
                             <div class="map-container"><div id="map"></div></div>
                             
                             <div class="right-panel">
-                                <h3>📋 Tournées optimisées</h3>
+                                <h3>📋 Tournées par région</h3>
                                 <div id="tourneesList">
                                     ${tournees.map((t, idx) => `
                                         <div class="tour-item">
                                             <div class="tour-header">
-                                                <span>🚚 Véhicule ${t.vehicule}</span>
-                                                <span>${t.stops.length} arrêts</span>
+                                                <span>🚚 Tournée ${idx+1} - ${t.region}</span>
+                                                <span>${t.transports.length} colis</span>
                                             </div>
                                             <div class="tour-stats">
-                                                <span>📏 ${Math.round(t.distanceTotal)} km</span>
-                                                <span>⚖️ ${t.poidsTotal}/${t.capacite} kg</span>
-                                                <span>⏱️ ${Math.round(t.dureeTotal)} min</span>
+                                                <span>📏 ${Math.round(t.distance)} km</span>
+                                                <span>⏱️ ${Math.round(t.duree)} min</span>
                                             </div>
-                                            ${t.stops.map((s, i) => `
+                                            ${t.transports.map((s, i) => `
                                                 <div class="tour-stop">
                                                     <strong>${i+1}. ${s.destinataire_nom || 'Client'}</strong>
-                                                    <div class="stop-time">
-                                                        🕐 Arrivée: ${formatTime(Math.round(s.heureArrivee))}
-                                                    </div>
+                                                    <div style="font-size:11px; color:#aaa;">${s.speed} | ${s.weight} kg</div>
                                                 </div>
                                             `).join('')}
-                                            <div class="tour-stop">
-                                                <strong>Retour dépôt</strong>
-                                                <div class="stop-time">🕐 ${formatTime(Math.round(t.tempsActuel))}</div>
-                                            </div>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -458,11 +425,11 @@
                     initMap();
                     
                     // Dessiner les routes
-                    const couleurs = ['#3b82f6', '#10b981', '#f59e0b'];
+                    const couleurs = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
                     
                     tournees.forEach((t, index) => {
                         const points = [[depot.lat, depot.lng]];
-                        t.stops.forEach(s => points.push([s.lat, s.lng]));
+                        t.transports.forEach(s => points.push([s.lat, s.lng]));
                         points.push([depot.lat, depot.lng]);
                         
                         L.polyline(points, {
@@ -473,24 +440,17 @@
                     });
                 }
                 
-                // ===== FORMAT HEURE =====
-                function formatTime(minutes) {
-                    const h = Math.floor(minutes / 60);
-                    const m = minutes % 60;
-                    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-                }
-                
                 // ===== MODAL SIMPLE =====
                 window.openModal = function() {
                     document.getElementById('app').innerHTML += `
                         <div id="modal" class="modal" style="display:flex;">
                             <div class="modal-box">
                                 <h3>➕ Nouveau transport</h3>
-                                <input type="text" id="clientNum" placeholder="Client" value="CL2025-001" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <input type="text" id="destNom" placeholder="Destinataire" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <input type="text" id="addr" placeholder="Adresse livraison" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <input type="number" id="pds" placeholder="Poids" value="1" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <select id="vit" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
+                                <input type="text" id="clientNum" placeholder="Client" value="CL2025-001" style="width:100%; padding:10px; margin:10px 0;">
+                                <input type="text" id="destNom" placeholder="Destinataire" style="width:100%; padding:10px; margin:10px 0;">
+                                <input type="text" id="addr" placeholder="Adresse livraison" style="width:100%; padding:10px; margin:10px 0;">
+                                <input type="number" id="pds" placeholder="Poids" value="1" style="width:100%; padding:10px; margin:10px 0;">
+                                <select id="vit" style="width:100%; padding:10px; margin:10px 0;">
                                     <option value="24h">24h</option>
                                     <option value="12h">12h</option>
                                     <option value="6h">6h</option>
