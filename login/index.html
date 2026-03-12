@@ -244,92 +244,47 @@
     </div>
     
     <script>
-        // Vérifier si déjà connecté
-        (function() {
-            const user = localStorage.getItem('user');
-            if (user) {
-                const userData = JSON.parse(user);
-                if (userData.loggedIn) {
-                    // Rediriger automatiquement
-                    redirectToRole(userData.role);
-                }
-            }
-        })();
+async function login() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    const role = document.getElementById('role').value;
+    
+    if (!username || !password) {
+        showError('Veuillez remplir tous les champs');
+        return;
+    }
+    
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .eq('password', password)
+            .eq('role', role);
         
-        function login() {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value.trim();
-            const role = document.getElementById('role').value;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+            const user = data[0];
             
-            // Réinitialiser le message d'erreur
-            hideError();
+            localStorage.setItem('user', JSON.stringify({
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                loggedIn: true
+            }));
             
-            // Validation
-            if (!username || !password) {
-                showError('Veuillez remplir tous les champs');
-                return;
-            }
-            
-            // SIMULATION - À remplacer par Supabase
-            // Pour la démo, on accepte "1234" comme mot de passe
-            if (password === '1234') {
-                // Stocker l'utilisateur
-                const userData = {
-                    username: username,
-                    role: role,
-                    loggedIn: true,
-                    loginTime: new Date().toISOString()
-                };
-                
-                localStorage.setItem('user', JSON.stringify(userData));
-                
-                // Animation du bouton
-                const btn = document.getElementById('loginBtn');
-                btn.classList.add('loading');
-                btn.innerHTML = '<i class="fas fa-spinner"></i> Connexion...';
-                
-                // Simuler un délai réseau
-                setTimeout(() => {
-                    // Rediriger selon le rôle
-                    redirectToRole(role);
-                }, 500);
-                
-            } else {
-                showError('Identifiant ou mot de passe incorrect');
-            }
+            if (role === 'admin') window.location.href = '../dispatch/';
+            else if (role === 'client') window.location.href = '../client/dashboard.html';
+            else if (role === 'staff') window.location.href = '../staff/';
+        } else {
+            showError('Identifiant, mot de passe ou rôle incorrect');
         }
-        
-        function redirectToRole(role) {
-            switch(role) {
-                case 'admin':
-                    window.location.href = '../dispatch/';
-                    break;
-                case 'client':
-                    window.location.href = '../client/dashboard.html';
-                    break;
-                case 'staff':
-                    window.location.href = '../staff/';
-                    break;
-                default:
-                    window.location.href = '../';
-            }
-        }
-        
-        function showError(message) {
-            document.getElementById('errorText').textContent = message;
-            document.getElementById('errorMessage').style.display = 'flex';
-        }
-        
-        function hideError() {
-            document.getElementById('errorMessage').style.display = 'none';
-        }
-        
-        // Permettre la connexion avec la touche Entrée
-        document.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                login();
-            }
-        });
-    </script>
+    } catch (error) {
+        console.error('Erreur:', error);
+        showError('Erreur de connexion');
+    }
+}
+</script>
 </body>
 </html>
