@@ -11,6 +11,10 @@
     <!-- jsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../dispatch/config.js"></script>
+    
     <style>
         * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui, -apple-system, sans-serif; }
         
@@ -355,28 +359,52 @@
             color: #64748b;
             margin-bottom: 30px;
         }
+        
+        .loader {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+        }
+        
+        .loader i {
+            font-size: 30px;
+            color: #e53935;
+            animation: spin 1s infinite linear;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
 
-    <!-- LE CONTENU SERA REMPLACÉ SI NON AUTORISÉ -->
     <div id="app"></div>
 
     <script>
-        // ===== VÉRIFICATION D'AUTHENTIFICATION =====
+        // ===== VÉRIFICATION CONFIG =====
+        if (!window.SUPABASE_CONFIG) {
+            document.body.innerHTML = '<div class="unauthorized"><i class="fas fa-exclamation-triangle"></i><h2>Erreur</h2><p>Fichier de configuration manquant</p></div>';
+            throw new Error("Configuration manquante");
+        }
+        
+        const supabase = window.supabase.createClient(
+            window.SUPABASE_CONFIG.url,
+            window.SUPABASE_CONFIG.key
+        );
+        
+        // ===== VÉRIFICATION AUTHENTIFICATION =====
         (function() {
             const user = localStorage.getItem('user');
             
             if (!user) {
-                // Non connecté
                 document.body.innerHTML = `
                     <div class="unauthorized">
                         <i class="fas fa-lock"></i>
                         <h2>Accès non autorisé</h2>
-                        <p>Vous devez être connecté en tant que magasinier pour accéder à cette page.</p>
-                        <button class="btn" onclick="window.location.href='../login/'">
-                            <i class="fas fa-sign-in-alt"></i> Se connecter
-                        </button>
+                        <p>Vous devez être connecté en tant que magasinier.</p>
+                        <button class="btn" onclick="window.location.href='../login/'">Se connecter</button>
                     </div>
                 `;
                 return;
@@ -384,22 +412,19 @@
             
             const userData = JSON.parse(user);
             
-            // Vérifier le rôle (staff uniquement)
             if (!userData.loggedIn || userData.role !== 'staff') {
                 document.body.innerHTML = `
                     <div class="unauthorized">
                         <i class="fas fa-shield-alt"></i>
                         <h2>Accès restreint</h2>
                         <p>Cette page est réservée aux magasiniers.</p>
-                        <button class="btn" onclick="window.location.href='../'">
-                            <i class="fas fa-home"></i> Retour à l'accueil
-                        </button>
+                        <button class="btn" onclick="window.location.href='../'">Accueil</button>
                     </div>
                 `;
                 return;
             }
             
-            // Utilisateur autorisé - on construit la page
+            // Afficher l'interface
             document.getElementById('app').innerHTML = `
                 <div class="header">
                     <div class="logo">
@@ -418,20 +443,31 @@
                 </div>
                 
                 <div class="container">
-                    <!-- NUMÉRO TRANSPORT AUTO -->
+                    <!-- SÉLECTION TRANSPORT -->
                     <div class="card">
+                        <h2><i class="fas fa-search"></i> Sélectionner un transport</h2>
+                        <div class="form-group">
+                            <label>Transport à préparer</label>
+                            <select id="transportSelect" onchange="chargerTransport()">
+                                <option value="">Choisir un transport...</option>
+                            </select>
+                        </div>
+                        <div id="transportLoader" class="loader" style="display:none;">
+                            <i class="fas fa-spinner fa-spin"></i> Chargement...
+                        </div>
+                    </div>
+                    
+                    <!-- NUMÉRO TRANSPORT -->
+                    <div class="card" id="transportCard" style="display:none;">
                         <div class="transport-number">
-                            <span><i class="fas fa-barcode"></i> Transport N°</span>
-                            <span id="transportNumber">TR-2026-000001</span>
+                            <span><i class="fas fa-barcode"></i> Transport</span>
+                            <span id="transportNumber"></span>
                         </div>
                         
                         <div class="grid-2">
                             <div class="form-group">
                                 <label>Client</label>
-                                <select id="clientSelect">
-                                    <option value="CL2025-001|Dupont Jean|Impasse des Griottes 3, 1462 Yvonand">Dupont Jean</option>
-                                    <option value="CL2025-002|Martin SA|Route de Neuchâtel 8, 1400 Yverdon">Martin SA</option>
-                                </select>
+                                <input type="text" id="clientName" readonly>
                             </div>
                             
                             <div class="form-group">
@@ -442,30 +478,21 @@
                     </div>
                     
                     <!-- ADRESSES -->
-                    <div class="card">
+                    <div class="card" id="addressCard" style="display:none;">
                         <h2><i class="fas fa-map-marker-alt"></i> Adresses</h2>
                         
                         <div class="fixed-address" id="departAddress">
-                            <i class="fas fa-warehouse"></i> <strong>Départ:</strong> Impasse des Griottes 3, 1462 Yvonand
+                            <i class="fas fa-warehouse"></i> <strong>Départ:</strong> 
                         </div>
                         
                         <div class="form-group">
                             <label>Livraison</label>
-                            <select id="deliveryAddress">
-                                <option value="Rue du Lac 12, 1000 Lausanne">Rue du Lac 12, Lausanne</option>
-                                <option value="Place de la Gare 5, 1200 Genève">Place de la Gare 5, Genève</option>
-                                <option value="Grand-Rue 8, 2000 Neuchâtel">Grand-Rue 8, Neuchâtel</option>
-                                <option value="autre">Autre...</option>
-                            </select>
-                        </div>
-                        
-                        <div id="autreAdresse" style="display:none;">
-                            <input type="text" id="nouvelleAdresse" placeholder="Rue, NPA, Ville" class="form-group">
+                            <input type="text" id="deliveryAddress" readonly>
                         </div>
                     </div>
                     
                     <!-- GESTION DES COLIS -->
-                    <div class="card">
+                    <div class="card" id="colisCard" style="display:none;">
                         <div class="colis-header">
                             <h2><i class="fas fa-box"></i> Colis</h2>
                             <button class="btn-add" onclick="ajouterColis()">
@@ -473,10 +500,8 @@
                             </button>
                         </div>
                         
-                        <!-- Liste des colis -->
                         <div id="colisList" class="colis-list"></div>
                         
-                        <!-- Formulaire pour ajouter/modifier un colis -->
                         <div id="colisForm" style="display:none; background:#f8fafc; padding:15px; border-radius:8px; margin-bottom:15px;">
                             <h4 id="formTitle" style="margin-bottom:10px;">Ajouter un colis</h4>
                             
@@ -515,7 +540,6 @@
                             </div>
                         </div>
                         
-                        <!-- RÉCAPITULATIF POIDS ET NOMBRE COLIS -->
                         <div id="recapColis" class="total-info">
                             <span>📊 Récapitulatif</span>
                             <span id="recapText">0 colis • 0 kg</span>
@@ -523,7 +547,7 @@
                     </div>
                     
                     <!-- VITESSE ET INSTRUCTIONS -->
-                    <div class="card">
+                    <div class="card" id="speedCard" style="display:none;">
                         <div class="form-group">
                             <label>Vitesse</label>
                             <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
@@ -540,11 +564,11 @@
                         </div>
                         
                         <button class="btn btn-primary" onclick="genererPDF()">
-                            <i class="fas fa-file-pdf"></i> Générer PDF (preuve)
+                            <i class="fas fa-file-pdf"></i> Générer PDF
                         </button>
                         
-                        <button class="btn btn-success" onclick="envoyer()">
-                            <i class="fas fa-paper-plane"></i> Envoyer au dispatch
+                        <button class="btn btn-success" onclick="validerPreparation()">
+                            <i class="fas fa-check"></i> Valider la préparation
                         </button>
                         
                         <div id="pdfPreview" class="pdf-preview"></div>
@@ -558,294 +582,400 @@
             startApp();
         })();
         
-        // ===== FONCTION DE DÉCONNEXION =====
-        window.logout = function() {
+        // ===== FONCTIONS GLOBALES =====
+        let currentOrderId = null;
+        let colisList = [];
+        let editingIndex = -1;
+        let compteur = 1;
+        
+        function logout() {
             localStorage.removeItem('user');
             window.location.href = '../login/';
+        }
+        
+        async function startApp() {
+            document.getElementById('currentDate').value = new Date().toLocaleDateString('fr-CH');
+            await chargerTransportsDisponibles();
+        }
+        
+        // ===== CHARGER LES TRANSPORTS EN ATTENTE =====
+        async function chargerTransportsDisponibles() {
+            try {
+                document.getElementById('transportLoader').style.display = 'block';
+                
+                const { data, error } = await supabase
+                    .from('transport_orders')
+                    .select('*')
+                    .eq('status', 'pending')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                const select = document.getElementById('transportSelect');
+                let options = '<option value="">Choisir un transport...</option>';
+                
+                data.forEach(t => {
+                    const date = new Date(t.created_at).toLocaleDateString('fr-CH');
+                    options += `<option value="${t.id}">${t.order_number} - ${t.client_name} (${date})</option>`;
+                });
+                
+                select.innerHTML = options;
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('❌ Erreur chargement transports');
+            } finally {
+                document.getElementById('transportLoader').style.display = 'none';
+            }
+        }
+        
+        // ===== CHARGER UN TRANSPORT =====
+        window.chargerTransport = async function() {
+            const orderId = document.getElementById('transportSelect').value;
+            if (!orderId) return;
+            
+            try {
+                const { data, error } = await supabase
+                    .from('transport_orders')
+                    .select('*')
+                    .eq('id', orderId)
+                    .single();
+                
+                if (error) throw error;
+                
+                currentOrderId = data.id;
+                
+                // Afficher les infos
+                document.getElementById('transportNumber').textContent = data.order_number;
+                document.getElementById('clientName').value = data.client_name || '';
+                document.getElementById('departAddress').innerHTML = 
+                    `<i class="fas fa-warehouse"></i> <strong>Départ:</strong> Impasse des Griottes 3, 1462 Yvonand`;
+                document.getElementById('deliveryAddress').value = data.delivery_city || '';
+                document.getElementById('instructions').value = data.instructions || '';
+                
+                if (data.speed) {
+                    const speedOption = document.querySelector(`.speed-option[onclick*="${data.speed}"]`);
+                    if (speedOption) {
+                        document.querySelectorAll('.speed-option').forEach(opt => opt.classList.remove('selected'));
+                        speedOption.classList.add('selected');
+                        document.getElementById('speed').value = data.speed;
+                    }
+                }
+                
+                // Charger les colis existants
+                await chargerColis(orderId);
+                
+                // Afficher toutes les sections
+                document.getElementById('transportCard').style.display = 'block';
+                document.getElementById('addressCard').style.display = 'block';
+                document.getElementById('colisCard').style.display = 'block';
+                document.getElementById('speedCard').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('❌ Erreur chargement transport');
+            }
         };
         
-        // ===== APPLICATION PRINCIPALE =====
-        function startApp() {
-            // ===== NUMÉRO DE TRANSPORT AUTO =====
-            let compteur = 1;
-            
-            function genererNumeroTransport() {
-                const annee = new Date().getFullYear();
-                const numeroFormate = String(compteur).padStart(6, '0');
-                return `TR-${annee}-${numeroFormate}`;
-            }
-            
-            document.getElementById('transportNumber').textContent = genererNumeroTransport();
-            
-            // Date du jour
-            const today = new Date();
-            document.getElementById('currentDate').value = today.toLocaleDateString('fr-CH');
-            
-            // ===== DONNÉES =====
-            let colisList = [];
-            let editingIndex = -1;
-            
-            // ===== CHANGEMENT CLIENT =====
-            document.getElementById('clientSelect').addEventListener('change', function() {
-                const [clientId, clientName, depart] = this.value.split('|');
-                document.getElementById('departAddress').innerHTML = 
-                    `<i class="fas fa-warehouse"></i> <strong>Départ:</strong> ${depart}`;
-            });
-            
-            // ===== GESTION DES COLIS =====
-            window.ajouterColis = function() {
-                editingIndex = -1;
-                document.getElementById('editDescription').value = '';
-                document.getElementById('editWeight').value = '1.0';
-                document.getElementById('editQuantity').value = '1';
-                document.getElementById('editType').value = 'Colis';
-                document.getElementById('formTitle').textContent = 'Ajouter un colis';
-                document.getElementById('colisForm').style.display = 'block';
-            };
-            
-            window.editColis = function(index) {
-                const colis = colisList[index];
-                editingIndex = index;
-                document.getElementById('editDescription').value = colis.description;
-                document.getElementById('editWeight').value = colis.poids;
-                document.getElementById('editQuantity').value = colis.quantite;
-                document.getElementById('editType').value = colis.type;
-                document.getElementById('formTitle').textContent = 'Modifier le colis';
-                document.getElementById('colisForm').style.display = 'block';
-            };
-            
-            window.deleteColis = function(index) {
-                if (confirm('Supprimer ce colis ?')) {
-                    colisList.splice(index, 1);
-                    afficherColis();
-                    showNotification('✅ Colis supprimé');
-                }
-            };
-            
-            window.saveColis = function() {
-                const description = document.getElementById('editDescription').value;
-                const poids = parseFloat(document.getElementById('editWeight').value);
-                const quantite = parseInt(document.getElementById('editQuantity').value);
-                const type = document.getElementById('editType').value;
+        // ===== CHARGER LES COLIS =====
+        async function chargerColis(orderId) {
+            try {
+                const { data, error } = await supabase
+                    .from('parcels')
+                    .select('*')
+                    .eq('order_id', orderId);
                 
-                if (!description) {
-                    alert('Veuillez entrer une description');
-                    return;
-                }
+                if (error) throw error;
                 
-                const colis = {
-                    description: description,
-                    poids: poids,
-                    quantite: quantite,
-                    type: type,
-                    poidsTotal: poids * quantite
-                };
-                
-                if (editingIndex === -1) {
-                    colisList.push(colis);
-                    showNotification('✅ Colis ajouté');
-                } else {
-                    colisList[editingIndex] = colis;
-                    showNotification('✅ Colis modifié');
-                }
-                
-                annulerEdition();
+                colisList = data || [];
                 afficherColis();
-            };
+                
+            } catch (error) {
+                console.error('Erreur chargement colis:', error);
+            }
+        }
+        
+        // ===== GESTION DES COLIS =====
+        window.ajouterColis = function() {
+            editingIndex = -1;
+            document.getElementById('editDescription').value = '';
+            document.getElementById('editWeight').value = '1.0';
+            document.getElementById('editQuantity').value = '1';
+            document.getElementById('editType').value = 'Colis';
+            document.getElementById('formTitle').textContent = 'Ajouter un colis';
+            document.getElementById('colisForm').style.display = 'block';
+        };
+        
+        window.editColis = function(index) {
+            const colis = colisList[index];
+            editingIndex = index;
+            document.getElementById('editDescription').value = colis.description;
+            document.getElementById('editWeight').value = colis.weight;
+            document.getElementById('editQuantity').value = colis.quantity;
+            document.getElementById('editType').value = colis.type;
+            document.getElementById('formTitle').textContent = 'Modifier le colis';
+            document.getElementById('colisForm').style.display = 'block';
+        };
+        
+        window.deleteColis = function(index) {
+            if (confirm('Supprimer ce colis ?')) {
+                colisList.splice(index, 1);
+                afficherColis();
+                showNotification('✅ Colis supprimé');
+            }
+        };
+        
+        window.saveColis = function() {
+            const description = document.getElementById('editDescription').value;
+            const weight = parseFloat(document.getElementById('editWeight').value);
+            const quantity = parseInt(document.getElementById('editQuantity').value);
+            const type = document.getElementById('editType').value;
             
-            window.annulerEdition = function() {
-                document.getElementById('colisForm').style.display = 'none';
-                editingIndex = -1;
-            };
-            
-            function afficherColis() {
-                const listEl = document.getElementById('colisList');
-                let totalColis = 0;
-                let totalPoids = 0;
-                let html = '';
-                
-                colisList.forEach((colis, index) => {
-                    totalColis += colis.quantite;
-                    totalPoids += colis.poidsTotal;
-                    
-                    html += `
-                        <div class="colis-item">
-                            <div class="colis-info">
-                                <span><strong>${colis.description}</strong></span>
-                                <span>${colis.poids}kg x ${colis.quantite}</span>
-                                <span>(${colis.type})</span>
-                                <span style="color:#e53935; font-weight:bold;">= ${colis.poidsTotal}kg</span>
-                            </div>
-                            <div class="colis-actions">
-                                <button class="btn-edit" onclick="editColis(${index})"><i class="fas fa-edit"></i></button>
-                                <button class="btn-delete" onclick="deleteColis(${index})"><i class="fas fa-trash"></i></button>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                if (colisList.length === 0) {
-                    html = '<div style="text-align:center; padding:20px; color:#64748b;">Aucun colis ajouté</div>';
-                }
-                
-                listEl.innerHTML = html;
-                document.getElementById('recapText').innerHTML = `${totalColis} colis • ${totalPoids.toFixed(1)} kg`;
+            if (!description) {
+                alert('Veuillez entrer une description');
+                return;
             }
             
-            // ===== SÉLECTION VITESSE =====
-            window.selectSpeed = function(element, speed) {
-                document.querySelectorAll('.speed-option').forEach(opt => {
-                    opt.classList.remove('selected');
-                });
-                element.classList.add('selected');
-                document.getElementById('speed').value = speed;
+            const colis = {
+                description: description,
+                weight: weight,
+                quantity: quantity,
+                type: type,
+                poidsTotal: weight * quantity
             };
             
-            // ===== GÉNÉRER PDF =====
-            window.genererPDF = function() {
-                const transportId = document.getElementById('transportNumber').textContent;
-                const client = document.getElementById('clientSelect').value.split('|')[1];
-                const depart = document.getElementById('departAddress').textContent.replace('Départ:', '').trim();
-                const livraison = document.getElementById('deliveryAddress').value;
-                const vitesse = document.getElementById('speed').value;
-                const instructions = document.getElementById('instructions').value;
-                const date = document.getElementById('currentDate').value;
+            if (editingIndex === -1) {
+                colisList.push(colis);
+                showNotification('✅ Colis ajouté');
+            } else {
+                colisList[editingIndex] = colis;
+                showNotification('✅ Colis modifié');
+            }
+            
+            annulerEdition();
+            afficherColis();
+        };
+        
+        window.annulerEdition = function() {
+            document.getElementById('colisForm').style.display = 'none';
+            editingIndex = -1;
+        };
+        
+        function afficherColis() {
+            const listEl = document.getElementById('colisList');
+            let totalColis = 0;
+            let totalPoids = 0;
+            let html = '';
+            
+            colisList.forEach((colis, index) => {
+                totalColis += colis.quantity;
+                totalPoids += colis.weight * colis.quantity;
                 
-                let totalColis = 0;
-                let totalPoids = 0;
-                let detailsColis = '';
-                
-                colisList.forEach(c => {
-                    totalColis += c.quantite;
-                    totalPoids += c.poidsTotal;
-                    detailsColis += `
-                        <tr>
-                            <td>${c.description}</td>
-                            <td>${c.poids} kg</td>
-                            <td>${c.quantite}</td>
-                            <td>${c.poidsTotal} kg</td>
-                            <td>${c.type}</td>
-                        </tr>
-                    `;
-                });
-                
-                const qrData = `${transportId}|${client}|${depart}|${livraison}|${totalColis}colis|${totalPoids}kg|${vitesse}`;
-                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
-                
-                document.getElementById('pdfPreview').innerHTML = `
-                    <h3 style="margin-bottom:15px;">📄 BORDEREAU DE TRANSPORT</h3>
-                    <div style="background:white; padding:20px; border-radius:8px; border:1px solid #e2e8f0;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
-                            <div>
-                                <h2 style="color:#e53935;">LÉMAN-COURSES</h2>
-                                <p>Impasse des Griottes 3, 1462 Yvonand</p>
-                            </div>
-                            <div style="text-align:right;">
-                                <h3 style="color:#0f172a;">${transportId}</h3>
-                                <p>Date: ${date}</p>
-                            </div>
+                html += `
+                    <div class="colis-item">
+                        <div class="colis-info">
+                            <span><strong>${colis.description}</strong></span>
+                            <span>${colis.weight}kg x ${colis.quantity}</span>
+                            <span>(${colis.type})</span>
+                            <span style="color:#e53935; font-weight:bold;">= ${(colis.weight * colis.quantity).toFixed(1)}kg</span>
                         </div>
-                        
-                        <div style="text-align:center; margin:20px 0;">
-                            <img src="${qrUrl}" style="width:150px; border:1px solid #000;">
-                            <p style="font-size:12px;">Scan pour prise en charge</p>
-                        </div>
-                        
-                        <div style="margin:20px 0; padding:15px; background:#f8fafc; border-radius:8px;">
-                            <p><strong>Client:</strong> ${client}</p>
-                            <p><strong>Départ:</strong> ${depart}</p>
-                            <p><strong>Livraison:</strong> ${livraison}</p>
-                            <p><strong>Vitesse:</strong> ${vitesse}</p>
-                        </div>
-                        
-                        <h4 style="margin:15px 0;">📦 Détail des colis</h4>
-                        <table style="width:100%; border-collapse:collapse;">
-                            <thead>
-                                <tr style="background:#e53935; color:white;">
-                                    <th style="padding:8px;">Description</th>
-                                    <th>Poids U.</th>
-                                    <th>Qté</th>
-                                    <th>Poids Total</th>
-                                    <th>Type</th>
-                                </tr>
-                            </thead>
-                            <tbody>${detailsColis}</tbody>
-                            <tfoot>
-                                <tr style="background:#0f172a; color:white; font-weight:bold;">
-                                    <td colspan="2" style="padding:8px;">TOTAUX</td>
-                                    <td>${totalColis} colis</td>
-                                    <td>${totalPoids.toFixed(1)} kg</td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                        
-                        ${instructions ? `
-                            <div style="margin-top:15px; padding:10px; background:#fee2e2; border-radius:8px;">
-                                <strong>📝 Instructions:</strong> ${instructions}
-                            </div>
-                        ` : ''}
-                        
-                        <div style="margin-top:30px; display:flex; justify-content:space-between;">
-                            <div><p>Expéditeur: ____________________</p></div>
-                            <div><p>Chauffeur: ____________________</p></div>
-                        </div>
-                        
-                        <div style="margin-top:20px; font-size:11px; color:#64748b; text-align:center;">
-                            Ce document fait office de preuve de prise en charge
+                        <div class="colis-actions">
+                            <button class="btn-edit" onclick="editColis(${index})"><i class="fas fa-edit"></i></button>
+                            <button class="btn-delete" onclick="deleteColis(${index})"><i class="fas fa-trash"></i></button>
                         </div>
                     </div>
                 `;
-                document.getElementById('pdfPreview').style.display = 'block';
-                
-                showNotification('✅ PDF généré');
-                compteur++;
-                document.getElementById('transportNumber').textContent = genererNumeroTransport();
-            };
-            
-            // ===== ENVOYER AU DISPATCH =====
-            window.envoyer = function() {
-                const transport = {
-                    id: document.getElementById('transportNumber').textContent,
-                    client: document.getElementById('clientSelect').value.split('|')[1],
-                    livraison: document.getElementById('deliveryAddress').value,
-                    colis: colisList,
-                    vitesse: document.getElementById('speed').value,
-                    instructions: document.getElementById('instructions').value,
-                    date: document.getElementById('currentDate').value
-                };
-                
-                console.log("✅ Transport préparé:", transport);
-                showNotification('✅ Envoyé au dispatch');
-                
-                if (transport.vitesse === '6h') {
-                    alert('🚨 URGENT 6H !');
-                }
-            };
-            
-            // ===== GESTION ADRESSE =====
-            document.getElementById('deliveryAddress').addEventListener('change', function() {
-                document.getElementById('autreAdresse').style.display = 
-                    this.value === 'autre' ? 'block' : 'none';
             });
             
-            // ===== NOTIFICATION =====
-            function showNotification(msg) {
-                const notif = document.getElementById('notification');
-                notif.textContent = '✅ ' + msg;
-                notif.style.display = 'block';
-                setTimeout(() => { notif.style.display = 'none'; }, 2000);
+            if (colisList.length === 0) {
+                html = '<div style="text-align:center; padding:20px; color:#64748b;">Aucun colis ajouté</div>';
             }
             
-            // Ajouter un exemple
-            colisList.push({
-                description: 'Carton principal',
-                poids: 1.5,
-                quantite: 2,
-                type: 'Fragile',
-                poidsTotal: 3.0
+            listEl.innerHTML = html;
+            document.getElementById('recapText').innerHTML = `${totalColis} colis • ${totalPoids.toFixed(1)} kg`;
+        }
+        
+        // ===== SÉLECTION VITESSE =====
+        window.selectSpeed = function(element, speed) {
+            document.querySelectorAll('.speed-option').forEach(opt => {
+                opt.classList.remove('selected');
             });
-            afficherColis();
+            element.classList.add('selected');
+            document.getElementById('speed').value = speed;
+        };
+        
+        // ===== GÉNÉRER PDF =====
+        window.genererPDF = function() {
+            const transportId = document.getElementById('transportNumber').textContent;
+            const client = document.getElementById('clientName').value;
+            const depart = document.getElementById('departAddress').textContent.replace('Départ:', '').trim();
+            const livraison = document.getElementById('deliveryAddress').value;
+            const vitesse = document.getElementById('speed').value;
+            const instructions = document.getElementById('instructions').value;
+            const date = document.getElementById('currentDate').value;
+            
+            let totalColis = 0;
+            let totalPoids = 0;
+            let detailsColis = '';
+            
+            colisList.forEach(c => {
+                totalColis += c.quantity;
+                totalPoids += c.weight * c.quantity;
+                detailsColis += `
+                    <tr>
+                        <td>${c.description}</td>
+                        <td>${c.weight} kg</td>
+                        <td>${c.quantity}</td>
+                        <td>${(c.weight * c.quantity).toFixed(1)} kg</td>
+                        <td>${c.type}</td>
+                    </tr>
+                `;
+            });
+            
+            const qrData = `${transportId}|${client}|${depart}|${livraison}|${totalColis}colis|${totalPoids.toFixed(1)}kg|${vitesse}`;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+            
+            document.getElementById('pdfPreview').innerHTML = `
+                <h3 style="margin-bottom:15px;">📄 BORDEREAU DE TRANSPORT</h3>
+                <div style="background:white; padding:20px; border-radius:8px; border:1px solid #e2e8f0;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+                        <div>
+                            <h2 style="color:#e53935;">LÉMAN-COURSES</h2>
+                            <p>Impasse des Griottes 3, 1462 Yvonand</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <h3 style="color:#0f172a;">${transportId}</h3>
+                            <p>Date: ${date}</p>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align:center; margin:20px 0;">
+                        <img src="${qrUrl}" style="width:150px; border:1px solid #000;">
+                        <p style="font-size:12px;">Scan pour prise en charge</p>
+                    </div>
+                    
+                    <div style="margin:20px 0; padding:15px; background:#f8fafc; border-radius:8px;">
+                        <p><strong>Client:</strong> ${client}</p>
+                        <p><strong>Départ:</strong> ${depart}</p>
+                        <p><strong>Livraison:</strong> ${livraison}</p>
+                        <p><strong>Vitesse:</strong> ${vitesse}</p>
+                    </div>
+                    
+                    <h4 style="margin:15px 0;">📦 Détail des colis</h4>
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#e53935; color:white;">
+                                <th style="padding:8px;">Description</th>
+                                <th>Poids U.</th>
+                                <th>Qté</th>
+                                <th>Poids Total</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>${detailsColis}</tbody>
+                        <tfoot>
+                            <tr style="background:#0f172a; color:white; font-weight:bold;">
+                                <td colspan="2" style="padding:8px;">TOTAUX</td>
+                                <td>${totalColis} colis</td>
+                                <td>${totalPoids.toFixed(1)} kg</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    
+                    ${instructions ? `
+                        <div style="margin-top:15px; padding:10px; background:#fee2e2; border-radius:8px;">
+                            <strong>📝 Instructions:</strong> ${instructions}
+                        </div>
+                    ` : ''}
+                    
+                    <div style="margin-top:30px; display:flex; justify-content:space-between;">
+                        <div><p>Expéditeur: ____________________</p></div>
+                        <div><p>Chauffeur: ____________________</p></div>
+                    </div>
+                    
+                    <div style="margin-top:20px; font-size:11px; color:#64748b; text-align:center;">
+                        Ce document fait office de preuve de prise en charge
+                    </div>
+                </div>
+            `;
+            document.getElementById('pdfPreview').style.display = 'block';
+            
+            showNotification('✅ PDF généré');
+        };
+        
+        // ===== VALIDER LA PRÉPARATION =====
+        window.validerPreparation = async function() {
+            if (!currentOrderId) {
+                alert('Aucun transport sélectionné');
+                return;
+            }
+            
+            if (colisList.length === 0) {
+                alert('Ajoutez au moins un colis');
+                return;
+            }
+            
+            try {
+                // 1. Mettre à jour le transport
+                const { error: orderError } = await supabase
+                    .from('transport_orders')
+                    .update({
+                        status: 'prepared',
+                        prepared_at: new Date(),
+                        speed: document.getElementById('speed').value,
+                        instructions: document.getElementById('instructions').value
+                    })
+                    .eq('id', currentOrderId);
+                
+                if (orderError) throw orderError;
+                
+                // 2. Sauvegarder les colis
+                for (let colis of colisList) {
+                    const { error: parcelError } = await supabase
+                        .from('parcels')
+                        .insert([{
+                            order_id: currentOrderId,
+                            description: colis.description,
+                            weight: colis.weight,
+                            quantity: colis.quantity,
+                            type: colis.type
+                        }]);
+                    
+                    if (parcelError) throw parcelError;
+                }
+                
+                showNotification('✅ Transport préparé avec succès');
+                
+                if (document.getElementById('speed').value === '6h') {
+                    alert('🚨 URGENT 6H !');
+                }
+                
+                // Réinitialiser
+                currentOrderId = null;
+                colisList = [];
+                afficherColis();
+                
+                document.getElementById('transportCard').style.display = 'none';
+                document.getElementById('addressCard').style.display = 'none';
+                document.getElementById('colisCard').style.display = 'none';
+                document.getElementById('speedCard').style.display = 'none';
+                document.getElementById('pdfPreview').style.display = 'none';
+                
+                await chargerTransportsDisponibles();
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('❌ Erreur: ' + error.message);
+            }
+        };
+        
+        // ===== NOTIFICATION =====
+        function showNotification(msg) {
+            const notif = document.getElementById('notification');
+            notif.textContent = '✅ ' + msg;
+            notif.style.display = 'block';
+            setTimeout(() => { notif.style.display = 'none'; }, 2000);
         }
     </script>
     
