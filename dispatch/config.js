@@ -8,3 +8,7 @@ window.SUPABASE_CONFIG = {
 };
 
 console.log("✅ Configuration prête");
+
+// Ajoutez votre clé OpenRouteService
+window.ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
+
