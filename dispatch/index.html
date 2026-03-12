@@ -26,7 +26,7 @@
         .btn { background:#facc15; color:#111; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; }
         .btn-logout { background:#2a2a2a; color:white; }
         .stats { display:flex; gap:20px; }
-        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; }
+        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:1000; }
         .modal-box { background:#1f2937; width:90%; max-width:500px; padding:20px; border-radius:8px; border:1px solid #facc15; }
         .form-group { margin-bottom:15px; }
         .form-group label { display:block; margin-bottom:5px; color:#aaa; }
@@ -36,9 +36,7 @@
 </head>
 <body>
 
-    <div id="app">
-        <div style="padding:20px;">Chargement...</div>
-    </div>
+    <div id="app"></div>
 
     <!-- SCRIPTS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -46,6 +44,7 @@
     <script src="config.js"></script>
 
     <script>
+        // ===== ATTENDRE QUE LE DOM SOIT PRÊT =====
         document.addEventListener('DOMContentLoaded', async function() {
             try {
                 console.log("🚀 Démarrage...");
@@ -73,8 +72,8 @@
                         </div>
                         <div>
                             <span>${userData.username}</span>
-                            <button class="btn btn-logout" onclick="logout()">Déconnexion</button>
-                            <button class="btn" onclick="openModal()">➕ Nouveau</button>
+                            <button class="btn btn-logout" id="logoutBtn">Déconnexion</button>
+                            <button class="btn" id="newTransportBtn">➕ Nouveau</button>
                         </div>
                     </header>
                     
@@ -96,7 +95,7 @@
                     <div id="modal" class="modal">
                         <div class="modal-box">
                             <h3 style="margin-bottom:20px;">➕ Nouveau transport</h3>
-                            <form onsubmit="event.preventDefault(); saveTransport();">
+                            <form id="transportForm">
                                 <div class="form-group">
                                     <label>Numéro client</label>
                                     <input type="text" id="clientNumber" value="CL2025-001" required>
@@ -110,7 +109,7 @@
                                     <input type="number" id="weight" value="1" step="0.1">
                                 </div>
                                 <div class="modal-buttons">
-                                    <button type="button" onclick="closeModal()" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px;">Annuler</button>
+                                    <button type="button" id="cancelBtn" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px;">Annuler</button>
                                     <button type="submit" style="flex:1; padding:10px; background:#facc15; color:#111; border:none; border-radius:4px;">Créer</button>
                                 </div>
                             </form>
@@ -118,24 +117,25 @@
                     </div>
                 `;
                 
-                // ===== FONCTIONS =====
-                window.logout = function() { alert("Déconnexion"); };
-                window.openModal = function() { document.getElementById('modal').style.display = 'flex'; };
-                window.closeModal = function() { document.getElementById('modal').style.display = 'none'; };
+                // ===== RÉFÉRENCES =====
+                const modal = document.getElementById('modal');
+                const newBtn = document.getElementById('newTransportBtn');
+                const cancelBtn = document.getElementById('cancelBtn');
+                const form = document.getElementById('transportForm');
+                
+                // ===== OUVERTURE / FERMETURE =====
+                newBtn.onclick = function() {
+                    console.log("Ouverture modal");
+                    modal.style.display = 'flex';
+                };
+                
+                cancelBtn.onclick = function() {
+                    modal.style.display = 'none';
+                };
                 
                 // ===== CARTE =====
                 const map = L.map('map').setView([46.8, 8.2], 8);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                
-                // ===== SUPPRIMER TRANSPORT =====
-                window.supprimerTransport = async function(id) {
-                    if (!confirm('Supprimer ce transport ?')) return;
-                    try {
-                        const { error } = await supabase.from('transport_orders_simple').delete().eq('id', id);
-                        if (error) throw error;
-                        loadTransports();
-                    } catch(e) { alert('Erreur: ' + e.message); }
-                };
                 
                 // ===== CHARGER TRANSPORTS =====
                 async function loadTransports() {
@@ -159,8 +159,19 @@
                     } catch(e) { console.error(e); }
                 }
                 
-                // ===== CRÉER TRANSPORT =====
-                window.saveTransport = async function() {
+                // ===== SUPPRIMER =====
+                window.supprimerTransport = async function(id) {
+                    if (!confirm('Supprimer ce transport ?')) return;
+                    try {
+                        await supabase.from('transport_orders_simple').delete().eq('id', id);
+                        loadTransports();
+                    } catch(e) { alert('Erreur: ' + e.message); }
+                };
+                
+                // ===== CRÉER =====
+                form.onsubmit = async function(e) {
+                    e.preventDefault();
+                    
                     const transport = {
                         order_number: 'TR-' + Date.now(),
                         client_number: document.getElementById('clientNumber').value,
@@ -171,10 +182,9 @@
                     };
                     
                     try {
-                        const { error } = await supabase.from('transport_orders_simple').insert([transport]);
-                        if (error) throw error;
+                        await supabase.from('transport_orders_simple').insert([transport]);
                         alert('✅ Transport créé');
-                        closeModal();
+                        modal.style.display = 'none';
                         loadTransports();
                     } catch(e) { alert('❌ Erreur: ' + e.message); }
                 };
