@@ -1,1 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Léman-Courses | Espace chauffeur</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../dispatch/config.js"></script>
+    
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
+        body {
+            background: linear-gradient(135deg, #0f172a, #1e3a8a);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .login-box {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo i {
+            font-size: 60px;
+            color: #10b981;
+            background: #e2f3e5;
+            padding: 15px;
+            border-radius: 50%;
+        }
+        h2 { text-align: center; margin-bottom: 30px; color: #0f172a; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #475569; }
+        .form-group input { width: 100%; padding: 14px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px; }
+        .form-group input:focus { outline: none; border-color: #10b981; }
+        .btn {
+            width: 100%; padding: 14px; background: #10b981; color: white; border: none;
+            border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn:hover { background: #059669; }
+        .error-message {
+            background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px;
+            margin-bottom: 20px; display: none; border-left: 4px solid #ef4444;
+        }
+        .demo-info {
+            margin-top: 20px; background: #f1f5f9; border-radius: 8px; padding: 12px;
+            font-size: 12px; color: #475569;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="logo"><i class="fas fa-truck"></i></div>
+        <h2>Espace chauffeur</h2>
+        
+        <div id="errorMessage" class="error-message">
+            <i class="fas fa-exclamation-circle"></i> <span id="errorText"></span>
+        </div>
+        
+        <div class="form-group">
+            <label>Matricule / Email</label>
+            <input type="text" id="username" value="jean.dupont@leman.ch">
+        </div>
+        <div class="form-group">
+            <label>Mot de passe</label>
+            <input type="password" id="password" value="1234">
+        </div>
+        
+        <button class="btn" onclick="login()">
+            <i class="fas fa-sign-in-alt"></i> Connexion
+        </button>
+        
+        <div class="demo-info">
+            <p><strong>Comptes de test :</strong></p>
+            <p>jean.dupont@leman.ch / 1234</p>
+            <p>pierre.martin@leman.ch / 1234</p>
+            <p>michel.bernard@leman.ch / 1234</p>
+        </div>
+    </div>
 
+    <script>
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            
+            document.getElementById('errorMessage').style.display = 'none';
+            
+            if (!username || !password) {
+                showError('Veuillez remplir tous les champs');
+                return;
+            }
+            
+            try {
+                // Chercher d'abord dans users
+                let { data: users, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('username', username)
+                    .eq('password', password)
+                    .eq('role', 'staff');
+                
+                if (error) throw error;
+                
+                if (!users || users.length === 0) {
+                    // Chercher directement dans chauffeurs
+                    const { data: chauffeurs, error: chauffeurError } = await supabase
+                        .from('chauffeurs')
+                        .select('*')
+                        .eq('email', username);
+                    
+                    if (chauffeurError) throw chauffeurError;
+                    
+                    if (chauffeurs && chauffeurs.length > 0 && password === '1234') {
+                        // Connexion réussie
+                        localStorage.setItem('chauffeur', JSON.stringify({
+                            id: chauffeurs[0].id,
+                            nom: chauffeurs[0].nom,
+                            prenom: chauffeurs[0].prenom,
+                            email: chauffeurs[0].email,
+                            loggedIn: true
+                        }));
+                        window.location.href = 'dashboard.html';
+                        return;
+                    }
+                } else {
+                    // Connexion via users
+                    localStorage.setItem('chauffeur', JSON.stringify({
+                        id: users[0].id,
+                        nom: 'Chauffeur',
+                        prenom: users[0].username,
+                        email: users[0].username,
+                        loggedIn: true
+                    }));
+                    window.location.href = 'dashboard.html';
+                    return;
+                }
+                
+                showError('Identifiant ou mot de passe incorrect');
+                
+            } catch(e) {
+                console.error('Erreur:', e);
+                showError('Erreur de connexion');
+            }
+        }
+        
+        function showError(msg) {
+            document.getElementById('errorText').textContent = msg;
+            document.getElementById('errorMessage').style.display = 'flex';
+        }
+    </script>
+</body>
+</html>
