@@ -57,7 +57,6 @@
             transition: 0.2s;
         }
         .btn-pointage:hover { transform: translateY(-2px); }
-        .btn-pointage:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .btn-debut { background: #10b981; color: white; }
         .btn-pause-debut { background: #f59e0b; color: white; }
         .btn-pause-fin { background: #f59e0b; color: white; }
@@ -138,43 +137,21 @@
                 
                 console.log("✅ Chauffeur connecté:", chauffeurData);
                 
-                // ===== CHARGEMENT DES DONNÉES =====
-                const { data: chauffeur, error: chauffeurError } = await supabase
+                const { data: chauffeur } = await supabase
                     .from('chauffeurs')
                     .select('*')
                     .eq('id', chauffeurData.id)
                     .single();
                 
-                if (chauffeurError) throw chauffeurError;
-                
-                // ===== CHARGEMENT DES COMPTEURS =====
-                let compteurActuel = { conges_restants: 20, compensation_restantes: 0 };
-                try {
-                    const { data: compteurs } = await supabase
-                        .from('compteurs')
-                        .select('*')
-                        .eq('chauffeur_id', chauffeur.id);
-                    
-                    if (compteurs && compteurs.length > 0) {
-                        const annee = new Date().getFullYear();
-                        const found = compteurs.find(c => c.annee === annee);
-                        if (found) {
-                            compteurActuel = found;
-                        }
-                    }
-                } catch(e) {
-                    console.warn("Erreur compteurs:", e);
-                }
-                
-                // ===== GESTION DU POINTAGE EN LOCAL =====
-                let pointageActuel = JSON.parse(localStorage.getItem('pointage_' + chauffeur.id)) || {
+                // ===== POINTAGE SIMPLE =====
+                let pointage = {
                     debut: null,
                     pauseDebut: null,
                     pauseFin: null,
                     fin: null
                 };
                 
-                // ===== CONSTRUCTION PAGE (après avoir chargé les données) =====
+                // ===== CONSTRUCTION PAGE =====
                 document.getElementById('app').innerHTML = `
                     <div class="header">
                         <div class="logo"><i class="fas fa-truck"></i> Léman-Courses</div>
@@ -212,8 +189,8 @@
                         <div class="pointage-section">
                             <h3><i class="fas fa-fingerprint"></i> Pointage du jour</h3>
                             <div style="display: grid; grid-template-columns: repeat(2,1fr); gap:10px; margin:15px 0;">
-                                <div><small>Début: <span id="affDebut">${pointageActuel.debut ? new Date(pointageActuel.debut).toLocaleTimeString() : '--:--'}</span></small></div>
-                                <div><small>Fin: <span id="affFin">${pointageActuel.fin ? new Date(pointageActuel.fin).toLocaleTimeString() : '--:--'}</span></small></div>
+                                <div><small>Début: <span id="affDebut">--:--</span></small></div>
+                                <div><small>Fin: <span id="affFin">--:--</span></small></div>
                                 <div><small>Pause: <span id="affPause">0 min</span></small></div>
                                 <div><small>Total: <span id="affTotal">0h00</span></small></div>
                             </div>
@@ -235,11 +212,11 @@
                         
                         <div class="compteurs-grid">
                             <div class="compteur-card">
-                                <div class="compteur-valeur" id="congesRestants">${compteurActuel.conges_restants || 20}</div>
+                                <div class="compteur-valeur" id="congesRestants">20</div>
                                 <div class="compteur-label">Jours de congés</div>
                             </div>
                             <div class="compteur-card">
-                                <div class="compteur-valeur" id="compensationRestantes">${compteurActuel.compensation_restantes || 0}</div>
+                                <div class="compteur-valeur" id="compensationRestantes">0</div>
                                 <div class="compteur-label">Heures de compensation</div>
                             </div>
                             <div class="compteur-card">
@@ -255,77 +232,62 @@
                     </div>
                 `;
                 
-                // ===== VARIABLES =====
-                window.chauffeurId = chauffeur.id;
-                
-                // ===== FONCTION DE MISE À JOUR =====
-                function mettreAJourAffichage() {
-                    if (pointageActuel.debut) {
-                        document.getElementById('affDebut').textContent = new Date(pointageActuel.debut).toLocaleTimeString();
-                    }
-                    
-                    if (pointageActuel.fin) {
-                        document.getElementById('affFin').textContent = new Date(pointageActuel.fin).toLocaleTimeString();
-                    }
-                    
-                    if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
-                        const dureePause = Math.round((new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 60000);
-                        document.getElementById('affPause').textContent = dureePause + ' min';
-                    } else if (pointageActuel.pauseDebut) {
-                        document.getElementById('affPause').textContent = 'En cours';
-                    }
-                    
-                    if (pointageActuel.debut && pointageActuel.fin) {
-                        let total = (new Date(pointageActuel.fin) - new Date(pointageActuel.debut)) / 3600000;
-                        if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
-                            const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
-                            total -= pause;
-                        }
-                        const heures = Math.floor(total);
-                        const minutes = Math.round((total - heures) * 60);
-                        const totalStr = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
-                        document.getElementById('affTotal').textContent = totalStr;
-                        document.getElementById('heuresAujourdhui').textContent = totalStr;
-                    } else if (pointageActuel.debut && !pointageActuel.fin) {
-                        const maintenant = new Date();
-                        let total = (maintenant - new Date(pointageActuel.debut)) / 3600000;
-                        if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
-                            const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
-                            total -= pause;
-                        } else if (pointageActuel.pauseDebut && !pointageActuel.pauseFin) {
-                            const pause = (maintenant - new Date(pointageActuel.pauseDebut)) / 3600000;
-                            total -= pause;
-                        }
-                        const heures = Math.floor(total);
-                        const minutes = Math.round((total - heures) * 60);
-                        document.getElementById('affTotal').textContent = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
-                    }
-                }
-                
-                // ===== FONCTIONS DE POINTAGE =====
+                // ===== FONCTIONS SIMPLES =====
                 window.pointer = function(action) {
                     const maintenant = new Date();
+                    const heures = maintenant.getHours().toString().padStart(2, '0');
+                    const minutes = maintenant.getMinutes().toString().padStart(2, '0');
+                    const heureStr = heures + ':' + minutes;
                     
-                    if (action === 'debut' && !pointageActuel.debut) {
-                        pointageActuel.debut = maintenant;
-                    }
-                    else if (action === 'pause_debut' && pointageActuel.debut && !pointageActuel.pauseDebut) {
-                        pointageActuel.pauseDebut = maintenant;
-                    }
-                    else if (action === 'pause_fin' && pointageActuel.pauseDebut && !pointageActuel.pauseFin) {
-                        pointageActuel.pauseFin = maintenant;
-                    }
-                    else if (action === 'fin' && pointageActuel.debut && !pointageActuel.fin) {
-                        pointageActuel.fin = maintenant;
-                    }
-                    else {
-                        showMessage('❌ Action impossible');
-                        return;
+                    switch(action) {
+                        case 'debut':
+                            pointage.debut = maintenant;
+                            document.getElementById('affDebut').textContent = heureStr;
+                            break;
+                        case 'pause_debut':
+                            pointage.pauseDebut = maintenant;
+                            document.getElementById('affPause').textContent = 'En cours';
+                            break;
+                        case 'pause_fin':
+                            pointage.pauseFin = maintenant;
+                            if (pointage.pauseDebut) {
+                                const duree = Math.round((maintenant - pointage.pauseDebut) / 60000);
+                                document.getElementById('affPause').textContent = duree + ' min';
+                            }
+                            break;
+                        case 'fin':
+                            pointage.fin = maintenant;
+                            document.getElementById('affFin').textContent = heureStr;
+                            
+                            if (pointage.debut) {
+                                let total = (maintenant - pointage.debut) / 3600000;
+                                if (pointage.pauseDebut && pointage.pauseFin) {
+                                    const pause = (pointage.pauseFin - pointage.pauseDebut) / 3600000;
+                                    total -= pause;
+                                }
+                                const h = Math.floor(total);
+                                const m = Math.round((total - h) * 60);
+                                document.getElementById('affTotal').textContent = h + 'h' + (m < 10 ? '0' + m : m);
+                                document.getElementById('heuresAujourdhui').textContent = h + 'h' + (m < 10 ? '0' + m : m);
+                            }
+                            break;
                     }
                     
-                    localStorage.setItem('pointage_' + window.chauffeurId, JSON.stringify(pointageActuel));
-                    mettreAJourAffichage();
                     showMessage('✅ Pointage enregistré');
+                };
+                
+                // ===== MESSAGE =====
+                function showMessage(texte) {
+                    const msg = document.createElement('div');
+                    msg.className = 'success-message';
+                    msg.innerHTML = texte;
+                    document.body.appendChild(msg);
+                    setTimeout(() => msg.remove(), 2000);
+                }
+                
+                window.logout = function() {
+                    localStorage.removeItem('chauffeur');
+                    window.location.href = 'index.html';
                 };
                 
                 // ===== CHARGEMENT DES COLIS =====
@@ -335,103 +297,40 @@
                             .from('transport_orders_simple')
                             .select('*')
                             .neq('status', 'delivered')
-                            .order('created_at', { ascending: false })
-                            .limit(10);
+                            .limit(5);
                         
                         let html = '';
-                        let livresAujourdhui = 0;
-                        
-                        if (data && data.length > 0) {
-                            data.forEach(t => {
-                                if (t.status === 'delivered') livresAujourdhui++;
-                                
-                                let statutTexte = 'En attente';
-                                let statutClass = 'statut-charge';
-                                
-                                if (t.status === 'transit') {
-                                    statutTexte = 'En route';
-                                    statutClass = 'statut-transit';
-                                }
-                                
-                                html += `
-                                    <div class="colis-item" onclick="changerStatut('${t.id}', '${t.status}')">
-                                        <div class="colis-info">
-                                            <div class="colis-numero">📦 ${t.order_number}</div>
-                                            <div class="colis-adresse">${t.delivery_address?.substring(0, 50) || 'Adresse inconnue'}</div>
-                                            <div style="font-size:11px; color:#aaa; margin-top:4px;">${t.destinataire_nom || 'Destinataire inconnu'}</div>
-                                        </div>
-                                        <span class="colis-statut ${statutClass}">${statutTexte}</span>
+                        data?.forEach(t => {
+                            let statutTexte = t.status === 'transit' ? 'En route' : 'En attente';
+                            let statutClass = t.status === 'transit' ? 'statut-transit' : 'statut-charge';
+                            
+                            html += `
+                                <div class="colis-item" onclick="changerStatut('${t.id}', '${t.status}')">
+                                    <div>
+                                        <strong>${t.order_number}</strong><br>
+                                        <small>${t.delivery_address?.substring(0,30)}</small>
                                     </div>
-                                `;
-                            });
-                        } else {
-                            html = '<div style="text-align:center; padding:20px;">Aucun colis</div>';
-                        }
-                        
-                        document.getElementById('colisList').innerHTML = html;
-                        document.getElementById('colisAujourdhui').textContent = livresAujourdhui;
-                        
+                                    <span class="colis-statut ${statutClass}">${statutTexte}</span>
+                                </div>
+                            `;
+                        });
+                        document.getElementById('colisList').innerHTML = html || 'Aucun colis';
                     } catch(e) {
                         console.error(e);
                     }
                 }
                 
-                // ===== CHANGEMENT DE STATUT =====
-                window.changerStatut = async function(id, statutActuel) {
-                    try {
-                        let nouveauStatut = '';
-                        let message = '';
-                        
-                        if (statutActuel === 'pending') {
-                            nouveauStatut = 'transit';
-                            message = 'Colis pris en charge';
-                        } else if (statutActuel === 'transit') {
-                            nouveauStatut = 'delivered';
-                            message = 'Colis livré avec succès';
-                        } else {
-                            alert('Ce colis est déjà livré');
-                            return;
-                        }
-                        
-                        if (confirm(`Passer ce colis en "${nouveauStatut}" ?`)) {
-                            const { error } = await supabase
-                                .from('transport_orders_simple')
-                                .update({ status: nouveauStatut })
-                                .eq('id', id);
-                            
-                            if (error) throw error;
-                            
-                            showMessage(`✅ ${message}`);
-                            await chargerColis();
-                        }
-                        
-                    } catch(e) {
-                        alert('❌ Erreur: ' + e.message);
-                    }
+                window.changerStatut = async function(id, statut) {
+                    const nouveauStatut = statut === 'pending' ? 'transit' : 'delivered';
+                    await supabase.from('transport_orders_simple').update({ status: nouveauStatut }).eq('id', id);
+                    showMessage('✅ Statut mis à jour');
+                    chargerColis();
                 };
                 
-                // ===== MESSAGE =====
-                function showMessage(texte) {
-                    const msg = document.createElement('div');
-                    msg.className = 'success-message';
-                    msg.innerHTML = texte;
-                    document.body.appendChild(msg);
-                    setTimeout(() => msg.remove(), 3000);
-                }
-                
-                window.logout = function() {
-                    localStorage.removeItem('chauffeur');
-                    window.location.href = 'index.html';
-                };
-                
-                // ===== PREMIER AFFICHAGE =====
-                mettreAJourAffichage();
-                
-                // ===== LANCEMENT =====
-                await chargerColis();
+                chargerColis();
                 
             } catch(e) {
-                console.error("Erreur fatale:", e);
+                console.error("Erreur:", e);
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
