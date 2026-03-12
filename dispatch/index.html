@@ -34,14 +34,16 @@
         .transport-client { font-weight: bold; color: white; }
         .transport-route { font-size: 13px; color: #aaa; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
-        .modal-box { background: #1f2937; border-radius: 10px; width: 90%; max-width: 500px; border: 1px solid #facc15; }
+        .modal-box { background: #1f2937; border-radius: 10px; width: 90%; max-width: 700px; max-height: 80vh; overflow-y: auto; border: 1px solid #facc15; }
         .modal-header { background: #111; padding: 15px 20px; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; }
         .modal-header h3 { color: #facc15; }
         .modal-header button { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
         .modal-content { padding: 20px; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; color: #aaa; margin-bottom: 5px; }
-        .form-group input, .form-group select { width: 100%; padding: 10px; background: #111; border: 1px solid #2a2a2a; color: white; border-radius: 4px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; background: #111; border: 1px solid #2a2a2a; color: white; border-radius: 4px; }
+        .form-row { display: flex; gap: 10px; }
+        .form-row .form-group { flex: 1; }
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .btn-cancel { background: #2a2a2a; color: white; border: none; padding: 12px; border-radius: 4px; cursor: pointer; flex: 1; }
         .btn-save { background: #facc15; color: #111; border: none; padding: 12px; border-radius: 4px; cursor: pointer; flex: 1; }
@@ -55,41 +57,51 @@
 
     <div id="app"></div>
 
-    <!-- SCRIPTS dans le bon ordre -->
+    <!-- SCRIPTS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             console.log("🚀 Démarrage...");
             
-            // Vérification Leaflet
-            if (typeof L === 'undefined') {
-                document.body.innerHTML = '<div style="color:red; padding:20px;">❌ Leaflet non chargé</div>';
-                return;
+            // ===== VÉRIFICATIONS =====
+            if (typeof L === 'undefined') { 
+                document.body.innerHTML = '❌ Leaflet non chargé'; 
+                return; 
             }
             
-            // Vérification config
-            if (!window.SUPABASE_CONFIG) {
-                document.body.innerHTML = '<div style="color:red; padding:20px;">❌ config.js non chargé</div>';
-                return;
+            if (!window.SUPABASE_CONFIG) { 
+                document.body.innerHTML = '❌ config.js non chargé'; 
+                return; 
             }
             
-            // Supabase
+            // ===== SUPABASE =====
             const supabase = window.supabase.createClient(
                 window.SUPABASE_CONFIG.url,
                 window.SUPABASE_CONFIG.key
             );
             
-            // Vérification utilisateur
+            // Test connexion
+            const { error: testError } = await supabase.from('transport_orders').select('count').limit(1);
+            if (testError) {
+                document.body.innerHTML = `<div style="color:red; padding:20px;">❌ Erreur Supabase: ${testError.message}</div>`;
+                return;
+            }
+            
+            // ===== UTILISATEUR =====
             const user = localStorage.getItem('user');
             if (!user) { window.location.href = '../login/'; return; }
-            const userData = JSON.parse(user);
-            if (!userData.loggedIn || userData.role !== 'admin') { window.location.href = '../'; return; }
             
-            // Construction de la page
+            const userData = JSON.parse(user);
+            if (!userData.loggedIn || userData.role !== 'admin') { 
+                window.location.href = '../'; 
+                return; 
+            }
+            
+            // ===== CONSTRUCTION PAGE =====
             document.getElementById('app').innerHTML = `
                 <header>
                     <div class="logo"><i class="fas fa-map-marked-alt"></i> Léman Dispatch</div>
@@ -121,118 +133,128 @@
                     </div>
                 </div>
 
-           <!-- MODAL DE CRÉATION DE TRANSPORT -->
-<div id="modal" class="modal">
-    <div class="modal-box" style="max-width: 700px;">
-        <div class="modal-header"><h3>➕ Nouveau transport</h3><button onclick="closeModal()">✖</button></div>
-        <div class="modal-content">
-            <form onsubmit="event.preventDefault(); saveTransport();">
-                
-                <!-- Client -->
-                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                    <h4 style="color:#facc15; margin-bottom:15px;">👤 Client</h4>
-                    <div class="form-group">
-                        <label>Numéro client</label>
-                        <input type="text" id="clientNumber" placeholder="CL2025-001" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Nom client</label>
-                        <input type="text" id="clientName" placeholder="Jean Dupont" required>
-                    </div>
-                </div>
-                
-                <!-- Adresses -->
-                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                    <h4 style="color:#facc15; margin-bottom:15px;">📍 Adresses</h4>
-                    <div class="form-group">
-                        <label>Adresse de ramassage *</label>
-                        <input type="text" id="pickupAddress" required value="Impasse des Griottes 3, 1462 Yvonand">
-                    </div>
-                    <div class="form-group">
-                        <label>Adresse de livraison *</label>
-                        <input type="text" id="deliveryAddress" required>
-                    </div>
-                </div>
-                
-                <!-- Colis -->
-                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                    <h4 style="color:#facc15; margin-bottom:15px;">📦 Colis</h4>
-                    <div class="form-row" style="display:flex; gap:10px;">
-                        <div style="flex:1;">
-                            <label>Poids (kg)</label>
-                            <input type="number" id="weight" value="1" step="0.1">
+                <!-- MODAL -->
+                <div id="modal" class="modal">
+                    <div class="modal-box">
+                        <div class="modal-header"><h3>➕ Nouveau transport</h3><button onclick="closeModal()">✖</button></div>
+                        <div class="modal-content">
+                            <form onsubmit="event.preventDefault(); saveTransport();">
+                                
+                                <!-- Client -->
+                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                                    <h4 style="color:#facc15; margin-bottom:15px;">👤 Client</h4>
+                                    <div class="form-group">
+                                        <label>Numéro client</label>
+                                        <input type="text" id="clientNumber" placeholder="CL2025-001" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Nom client</label>
+                                        <input type="text" id="clientName" placeholder="Jean Dupont" required>
+                                    </div>
+                                </div>
+                                
+                                <!-- Adresses -->
+                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                                    <h4 style="color:#facc15; margin-bottom:15px;">📍 Adresses</h4>
+                                    <div class="form-group">
+                                        <label>Adresse de ramassage *</label>
+                                        <input type="text" id="pickupAddress" required value="Impasse des Griottes 3, 1462 Yvonand">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Adresse de livraison *</label>
+                                        <input type="text" id="deliveryAddress" required>
+                                    </div>
+                                </div>
+                                
+                                <!-- Colis -->
+                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                                    <h4 style="color:#facc15; margin-bottom:15px;">📦 Colis</h4>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Poids (kg)</label>
+                                            <input type="number" id="weight" value="1" step="0.1">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Quantité</label>
+                                            <input type="number" id="quantity" value="1" min="1">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Type de colis</label>
+                                        <select id="packageType">
+                                            <option value="Colis">📦 Colis standard</option>
+                                            <option value="Fragile">⚠️ Fragile</option>
+                                            <option value="Palette">📦 Palette</option>
+                                            <option value="Document">📄 Document</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Service -->
+                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                                    <h4 style="color:#facc15; margin-bottom:15px;">⚡ Service</h4>
+                                    <div class="form-group">
+                                        <label>Type de service</label>
+                                        <select id="serviceType">
+                                            <option value="standard">Standard</option>
+                                            <option value="express">Express</option>
+                                            <option value="urgent">Urgent</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Vitesse</label>
+                                        <select id="speed">
+                                            <option value="6h">6h (Urgent)</option>
+                                            <option value="12h">12h (Express)</option>
+                                            <option value="24h">24h (Standard)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Livraison de nuit</label>
+                                        <select id="nightDelivery">
+                                            <option value="false">Non</option>
+                                            <option value="true">Oui</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Instructions -->
+                                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
+                                    <div class="form-group">
+                                        <label>Instructions spéciales</label>
+                                        <textarea id="instructions" rows="2" placeholder="Fragile, code d'accès..."></textarea>
+                                    </div>
+                                </div>
+                                
+                                <!-- Boutons -->
+                                <div class="modal-buttons">
+                                    <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
+                                    <button type="submit" class="btn-save">Créer le transport</button>
+                                </div>
+                            </form>
                         </div>
-                        <div style="flex:1;">
-                            <label>Quantité</label>
-                            <input type="number" id="quantity" value="1" min="1">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Type de colis</label>
-                        <select id="packageType">
-                            <option value="Colis">📦 Colis standard</option>
-                            <option value="Fragile">⚠️ Fragile</option>
-                            <option value="Palette">📦 Palette</option>
-                            <option value="Document">📄 Document</option>
-                        </select>
                     </div>
                 </div>
-                
-                <!-- Service -->
-                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                    <h4 style="color:#facc15; margin-bottom:15px;">⚡ Service</h4>
-                    <div class="form-group">
-                        <label>Type de service</label>
-                        <select id="serviceType">
-                            <option value="standard">Standard</option>
-                            <option value="express">Express</option>
-                            <option value="urgent">Urgent</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Vitesse</label>
-                        <select id="speed">
-                            <option value="6h">6h (Urgent)</option>
-                            <option value="12h">12h (Express)</option>
-                            <option value="24h">24h (Standard)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Livraison de nuit</label>
-                        <select id="nightDelivery">
-                            <option value="false">Non</option>
-                            <option value="true">Oui</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- Instructions -->
-                <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px;">
-                    <div class="form-group">
-                        <label>Instructions spéciales</label>
-                        <textarea id="instructions" rows="2" placeholder="Fragile, code d'accès..."></textarea>
-                    </div>
-                </div>
-                
-                <!-- Boutons -->
-                <div class="modal-buttons" style="display:flex; gap:10px;">
-                    <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
-                    <button type="submit" class="btn-save">Créer le transport</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+            `;
             
-            // Variables
+            // ===== VARIABLES =====
             let map, markers;
             
-            // Fonctions de base
-            window.logout = function() { localStorage.removeItem('user'); window.location.href = '../login/'; };
-            window.openModal = function() { document.getElementById('modal').style.display = 'flex'; };
-            window.closeModal = function() { document.getElementById('modal').style.display = 'none'; };
+            // ===== FONCTIONS DE BASE =====
+            window.logout = function() { 
+                localStorage.removeItem('user'); 
+                window.location.href = '../login/'; 
+            };
             
-            // Carte
+            window.openModal = function() { 
+                document.getElementById('modal').style.display = 'flex'; 
+            };
+            
+            window.closeModal = function() { 
+                document.getElementById('modal').style.display = 'none'; 
+            };
+            
+            // ===== CARTE =====
             function initMap() {
                 try {
                     map = L.map('map').setView([46.8, 8.2], 8);
@@ -240,26 +262,37 @@
                     markers = L.markerClusterGroup();
                     map.addLayer(markers);
                     loadTransports();
-                } catch(e) { console.error("Erreur carte:", e); }
+                } catch(e) {
+                    console.error("Erreur carte:", e);
+                }
             }
             
-            // Chargement des transports
+            // ===== CHARGER LES TRANSPORTS =====
             async function loadTransports() {
                 try {
-                    const { data } = await supabase.from('transport_orders').select('*').order('created_at', { ascending: false });
+                    const { data, error } = await supabase
+                        .from('transport_orders')
+                        .select('*')
+                        .order('created_at', { ascending: false });
                     
+                    if (error) throw error;
+                    
+                    // Stats
                     document.getElementById('totalCount').textContent = data?.length || 0;
-                    document.getElementById('urgentCount').textContent = data?.filter(t => t.priority === 'urgent').length || 0;
+                    document.getElementById('urgentCount').textContent = data?.filter(t => t.priority === 'urgent' || t.speed === '6h').length || 0;
                     
+                    // Liste
                     let html = '';
                     data?.slice(0, 5).forEach(t => {
-                        html += `<div class="transport-item ${t.priority === 'urgent' ? 'urgent' : ''}">
+                        const isUrgent = t.priority === 'urgent' || t.speed === '6h';
+                        html += `<div class="transport-item ${isUrgent ? 'urgent' : ''}">
                             <div class="transport-client">${t.client_name || 'Sans client'}</div>
-                            <div class="transport-route">${t.pickup_address || '?'} → ${t.delivery_address || '?'}</div>
+                            <div class="transport-route">${t.pickup_address?.substring(0,30) || '?'} → ${t.delivery_address?.substring(0,30) || '?'}</div>
                         </div>`;
                     });
-                    document.getElementById('transportList').innerHTML = html || '<div>Aucun transport</div>';
+                    document.getElementById('transportList').innerHTML = html || '<div style="padding:20px;">Aucun transport</div>';
                     
+                    // Marqueurs
                     if (markers) {
                         markers.clearLayers();
                         data?.forEach((t, i) => {
@@ -267,63 +300,69 @@
                             L.marker([lat, lng]).addTo(markers);
                         });
                     }
-                } catch(e) { console.error("Erreur chargement:", e); }
+                } catch(e) {
+                    console.error("Erreur chargement:", e);
+                }
             }
+            
+            // ===== SAUVEGARDER TRANSPORT =====
             window.saveTransport = async function() {
-    // Générer un numéro de transport
-    const year = new Date().getFullYear();
-    const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-    const orderNumber = `TR-${year}-${random}`;
-    
-    const transport = {
-        order_number: orderNumber,
-        client_number: document.getElementById('clientNumber').value,
-        client_name: document.getElementById('clientName').value,
-        pickup_address: document.getElementById('pickupAddress').value,
-        delivery_address: document.getElementById('deliveryAddress').value,
-        weight: parseFloat(document.getElementById('weight').value) || 1,
-        quantity: parseInt(document.getElementById('quantity').value) || 1,
-        package_type: document.getElementById('packageType').value,
-        service_type: document.getElementById('serviceType').value,
-        speed: document.getElementById('speed').value,
-        night_delivery: document.getElementById('nightDelivery').value === 'true',
-        instructions: document.getElementById('instructions').value,
-        status: 'pending',
-        priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
-        created_at: new Date()
-    };
-    
-    if (!transport.client_number || !transport.client_name || !transport.delivery_address) {
-        alert('Veuillez remplir tous les champs obligatoires');
-        return;
-    }
-    
-    try {
-        const { data, error } = await supabase
-            .from('transport_orders')
-            .insert([transport])
-            .select();
-        
-        if (error) throw error;
-        
-        console.log("✅ Transport créé:", data);
-        alert(`✅ Transport ${orderNumber} créé avec succès !`);
-        closeModal();
-        
-        // Reset form
-        document.getElementById('clientNumber').value = '';
-        document.getElementById('clientName').value = '';
-        document.getElementById('deliveryAddress').value = '';
-        document.getElementById('instructions').value = '';
-        
-        loadTransports();
-        
-    } catch(e) {
-        console.error('❌ Erreur:', e);
-        alert('❌ Erreur: ' + e.message);
-    }
-};
-          
+                const year = new Date().getFullYear();
+                const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+                const orderNumber = `TR-${year}-${random}`;
+                
+                const transport = {
+                    order_number: orderNumber,
+                    client_number: document.getElementById('clientNumber').value,
+                    client_name: document.getElementById('clientName').value,
+                    pickup_address: document.getElementById('pickupAddress').value,
+                    delivery_address: document.getElementById('deliveryAddress').value,
+                    weight: parseFloat(document.getElementById('weight').value) || 1,
+                    quantity: parseInt(document.getElementById('quantity').value) || 1,
+                    package_type: document.getElementById('packageType').value,
+                    service_type: document.getElementById('serviceType').value,
+                    speed: document.getElementById('speed').value,
+                    night_delivery: document.getElementById('nightDelivery').value === 'true',
+                    instructions: document.getElementById('instructions').value,
+                    status: 'pending',
+                    priority: document.getElementById('speed').value === '6h' ? 'urgent' : 'normal',
+                    created_at: new Date()
+                };
+                
+                if (!transport.client_number || !transport.client_name || !transport.delivery_address) {
+                    alert('Veuillez remplir tous les champs obligatoires');
+                    return;
+                }
+                
+                try {
+                    const { data, error } = await supabase
+                        .from('transport_orders')
+                        .insert([transport])
+                        .select();
+                    
+                    if (error) throw error;
+                    
+                    alert(`✅ Transport ${orderNumber} créé avec succès !`);
+                    closeModal();
+                    
+                    // Reset
+                    document.getElementById('clientNumber').value = '';
+                    document.getElementById('clientName').value = '';
+                    document.getElementById('deliveryAddress').value = '';
+                    document.getElementById('instructions').value = '';
+                    
+                    loadTransports();
+                    
+                } catch(e) {
+                    console.error('Erreur:', e);
+                    alert('❌ Erreur: ' + e.message);
+                }
+            };
+            
+            // ===== LANCEMENT =====
+            initMap();
+            setInterval(loadTransports, 30000);
+        });
     </script>
     
 </body>
