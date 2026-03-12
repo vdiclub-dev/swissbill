@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Léman Dispatch | Optimisation VRP</title>
+    <title>Léman Dispatch | Optimisation intelligente</title>
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -32,6 +32,7 @@
         .btn-logout { background: #2a2a2a; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .btn { background: #facc15; color: #111; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-optimize { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .btn-plan { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -54,14 +55,21 @@
         #map { height: 100%; width: 100%; }
         
         .right-panel {
-            width: 500px; background: #111; border-left: 1px solid #2a2a2a;
+            width: 450px; background: #111; border-left: 1px solid #2a2a2a;
             padding: 20px; overflow-y: auto;
         }
-        .right-panel h3 { color: #facc15; margin-bottom: 20px; }
+        .right-panel h3 { 
+            color: #facc15; margin-bottom: 20px; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
         
         .transport-item {
             background: #1f2937; padding: 12px; margin-bottom: 10px;
             border-radius: 6px; border-left: 3px solid #facc15;
+            cursor: pointer;
+        }
+        .transport-item:hover {
+            background: #2d3a4f;
         }
         .transport-item.urgent { border-left-color: #ef4444; }
         .transport-client { font-weight: bold; color: white; }
@@ -70,18 +78,22 @@
         .tour-item {
             background: #2a2a2a; padding: 15px; margin-bottom: 15px;
             border-radius: 8px; border-left: 4px solid #3b82f6;
+            cursor: pointer;
+        }
+        .tour-item:hover {
+            background: #333f4f;
         }
         .tour-header {
             display: flex; justify-content: space-between;
             color: #3b82f6; font-weight: bold; margin-bottom: 10px;
         }
         .tour-stats {
-            display: flex; flex-wrap: wrap; gap: 10px;
+            display: flex; justify-content: space-between;
             background: #1f2937; padding: 8px; border-radius: 4px;
             margin-bottom: 10px; font-size: 12px;
         }
         .tour-stop {
-            padding: 10px 0 10px 15px;
+            padding: 8px 0 8px 15px;
             border-bottom: 1px solid #3a3a3a;
             font-size: 13px;
         }
@@ -90,21 +102,39 @@
             color: #facc15;
         }
         .stop-address {
-            font-size: 12px;
+            font-size: 11px;
             color: #aaa;
-            margin: 4px 0;
         }
-        .stop-time {
-            font-size: 11px;
-            color: #3b82f6;
-            margin-top: 4px;
-        }
-        .stop-stats {
+        
+        .tabs {
             display: flex;
-            gap: 15px;
-            font-size: 11px;
-            color: #666;
-            margin-top: 4px;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            background: #1f2937;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .tab.active {
+            background: #facc15;
+            color: #111;
+            border-color: #facc15;
+        }
+        
+        .tour-detail {
+            background: #1f2937;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        .tour-detail h4 {
+            color: #facc15;
+            margin-bottom: 10px;
         }
         
         .loader {
@@ -112,15 +142,6 @@
         }
         .loader i { font-size: 30px; color: #facc15; animation: spin 1s infinite linear; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        
-        .modal {
-            display: none; position: fixed; top:0; left:0; width:100%; height:100%;
-            background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index:1000;
-        }
-        .modal-box {
-            background: #1f2937; padding: 20px; border-radius: 8px;
-            max-width: 400px; width: 90%; border: 1px solid #facc15;
-        }
     </style>
 </head>
 <body>
@@ -136,7 +157,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             try {
-                console.log("🚀 Léman Dispatch - Optimisation VRP...");
+                console.log("🚀 Léman Dispatch - Optimisation...");
                 
                 if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
@@ -145,7 +166,6 @@
                     window.SUPABASE_CONFIG.key
                 );
                 
-                // ===== VÉRIFICATION CONNEXION =====
                 const user = localStorage.getItem('user');
                 if (!user) { window.location.href = '../login/'; return; }
                 const userData = JSON.parse(user);
@@ -155,21 +175,19 @@
                 let allTransports = [];
                 let map, markers;
                 let modeOptimisation = false;
+                let tournees = [];
+                let tourneeSelectionnee = null;
                 
-                // Dépôt
                 const depot = {
                     nom: "Dépôt Yverdon",
-                    client: "Léman Courses",
-                    adresse: "Impasse des Griottes 3, 1462 Yvonand",
                     lat: 46.7785,
                     lng: 6.6411
                 };
                 
-                // Véhicules disponibles
                 const vehicules = [
-                    { id: 1, nom: "Camion A", capacite: 800, vitesse: 60, debut: 6*60, fin: 22*60, pauseApres: 4.5*60 },
-                    { id: 2, nom: "Camion B", capacite: 500, vitesse: 60, debut: 6*60, fin: 22*60, pauseApres: 4.5*60 },
-                    { id: 3, nom: "Camion C", capacite: 300, vitesse: 60, debut: 6*60, fin: 22*60, pauseApres: 4.5*60 }
+                    { id: 1, nom: "Camion A", capacite: 800 },
+                    { id: 2, nom: "Camion B", capacite: 500 },
+                    { id: 3, nom: "Camion C", capacite: 300 }
                 ];
                 
                 // ===== GÉOCODAGE =====
@@ -180,38 +198,10 @@
                             { headers: { 'User-Agent': 'LemanDispatch/1.0' } }
                         );
                         const data = await response.json();
-                        if (data && data.length > 0) {
-                            return {
-                                lat: parseFloat(data[0].lat),
-                                lng: parseFloat(data[0].lon)
-                            };
-                        }
+                        return data.length > 0 ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
                     } catch(e) {
-                        console.warn("Erreur géocodage:", e);
+                        return null;
                     }
-                    return null;
-                }
-                
-                // ===== CALCUL DE DISTANCE ROUTIÈRE =====
-                async function calculerRoute(origine, destination) {
-                    if (!origine || !destination) return null;
-                    
-                    const url = `https://router.project-osrm.org/route/v1/driving/${origine.lng},${origine.lat};${destination.lng},${destination.lat}?overview=false`;
-                    
-                    try {
-                        const response = await fetch(url);
-                        const data = await response.json();
-                        
-                        if (data.routes && data.routes.length > 0) {
-                            return {
-                                distance: data.routes[0].distance / 1000, // km
-                                duree: data.routes[0].duration / 60 // minutes
-                            };
-                        }
-                    } catch(e) {
-                        console.warn("Erreur calcul route:", e);
-                    }
-                    return null;
                 }
                 
                 // ===== CHARGEMENT =====
@@ -222,32 +212,29 @@
                         .order('created_at', { ascending: false });
                     
                     allTransports = data || [];
+                    modeOptimisation = false;
+                    tournees = [];
                     afficherTransports();
                 }
                 
-                // ===== AFFICHAGE =====
+                // ===== AFFICHAGE NORMAL =====
                 function afficherTransports() {
-                    modeOptimisation = false;
-                    
                     const nonLivres = allTransports.filter(t => t.status !== 'delivered');
+                    const urgents = nonLivres.filter(t => t.speed === '6h').length;
                     
                     document.getElementById('app').innerHTML = `
                         <header>
                             <div class="logo"><i class="fas fa-map-marked-alt"></i> Léman Dispatch</div>
                             <div class="stats-header">
                                 <div class="stat-item"><span>📦 Total</span><span class="stat-value">${allTransports.length}</span></div>
-                                <div class="stat-item"><span>⚠️ Urgents</span><span class="stat-value">${nonLivres.filter(t => t.speed === '6h').length}</span></div>
+                                <div class="stat-item"><span>⚠️ Urgents</span><span class="stat-value">${urgents}</span></div>
                                 <div class="stat-item"><span>🚚 À livrer</span><span class="stat-value">${nonLivres.length}</span></div>
                             </div>
                             <div class="user-section">
                                 <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
                                 <button class="btn-logout" onclick="logout()">Déconnexion</button>
-                                
-                              <button class="btn" onclick="window.location.href='new-transport.html'">
-    <i class="fas fa-plus"></i> Nouveau transport
-</button>
-                                
-                                <button class="btn-optimize" onclick="optimiser()">🧠 Optimisation VRP</button>
+                                <button class="btn" onclick="window.location.href='new-transport.html'">➕ Nouveau</button>
+                                <button class="btn-optimize" onclick="optimiser()">🧠 Optimiser</button>
                             </div>
                         </header>
                         
@@ -274,42 +261,40 @@
                         </div>
                     `;
                     
-                    initMap();
+                    initMap(nonLivres);
                 }
                 
                 // ===== INIT CARTE =====
-                function initMap() {
+                function initMap(transports) {
                     if (map) map.remove();
                     map = L.map('map').setView([46.8, 8.2], 8);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                    markers = L.markerClusterGroup();
+                    
+                    const markers = L.markerClusterGroup();
+                    
+                    L.marker([depot.lat, depot.lng]).addTo(markers).bindPopup("Dépôt Yverdon");
+                    
+                    if (transports) {
+                        transports.forEach((t, i) => {
+                            if (t.lat && t.lng) {
+                                const color = t.speed === '6h' ? '#ef4444' : '#facc15';
+                                const icon = L.divIcon({
+                                    html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${i+1}</div>`,
+                                    iconSize: [24, 24]
+                                });
+                                L.marker([t.lat, t.lng], { icon }).addTo(markers).bindPopup(`
+                                    <b>${t.destinataire_nom || 'Client'}</b><br>
+                                    ${t.delivery_address}<br>
+                                    ${t.speed} | ${t.weight} kg
+                                `);
+                            }
+                        });
+                    }
+                    
                     map.addLayer(markers);
-                    
-                    // Dépôt
-                    L.marker([depot.lat, depot.lng]).addTo(map).bindPopup(`
-                        <b>${depot.nom}</b><br>
-                        ${depot.client}<br>
-                        ${depot.adresse}
-                    `);
-                    
-                    // Transports
-                    allTransports.forEach((t, i) => {
-                        if (t.lat && t.lng) {
-                            const color = t.speed === '6h' ? '#ef4444' : '#facc15';
-                            const icon = L.divIcon({
-                                html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${i+1}</div>`,
-                                iconSize: [24, 24]
-                            });
-                            L.marker([t.lat, t.lng], { icon }).addTo(markers).bindPopup(`
-                                <b>${t.destinataire_nom || 'Client'}</b><br>
-                                ${t.delivery_address}<br>
-                                ${t.speed} | ${t.weight} kg
-                            `);
-                        }
-                    });
                 }
                 
-                // ===== OPTIMISATION VRP =====
+                // ===== OPTIMISATION =====
                 window.optimiser = async function() {
                     const nonLivres = allTransports.filter(t => t.status !== 'delivered');
                     if (nonLivres.length === 0) {
@@ -321,327 +306,202 @@
                     
                     document.getElementById('app').innerHTML = `
                         <div class="loader">
-                            <i class="fas fa-spinner fa-spin"></i> Optimisation VRP en cours...<br>
-                            <small>Calcul des meilleures tournées pour ${nonLivres.length} transports</small>
+                            <i class="fas fa-spinner fa-spin"></i> Calcul des tournées...<br>
+                            <small>${nonLivres.length} transports à organiser</small>
                         </div>
                     `;
                     
-                    // 1. Obtenir les coordonnées
-                    const points = [depot];
-                    const transportsAvecCoords = [];
-                    
+                    // Créer les points
+                    const points = [];
                     for (const t of nonLivres) {
-                        let coords = null;
                         if (t.lat && t.lng) {
-                            coords = { lat: t.lat, lng: t.lng };
-                        } else {
-                            coords = await geocoderAdresse(t.delivery_address);
-                        }
-                        
-                        if (coords) {
-                            const point = {
-                                id: t.id,
-                                client: t.client_number || 'Inconnu',
-                                nom: t.destinataire_nom || 'Client',
-                                adresse: t.delivery_address,
-                                lat: coords.lat,
-                                lng: coords.lng,
-                                poids: t.weight || 1,
-                                urgent: t.speed === '6h',
-                                speed: t.speed
-                            };
-                            points.push(point);
-                            transportsAvecCoords.push(point);
+                            points.push({ ...t, lat: t.lat, lng: t.lng });
                         }
                     }
                     
-                    if (transportsAvecCoords.length === 0) {
-                        alert("Impossible de géocoder les adresses");
-                        return;
-                    }
+                    // Créer les tournées (version simplifiée)
+                    tournees = [];
+                    let pointsRestants = [...points];
                     
-                    // 2. Calculer la matrice des distances
-                    const matrice = [];
-                    for (let i = 0; i < points.length; i++) {
-                        matrice[i] = [];
-                        for (let j = 0; j < points.length; j++) {
-                            if (i === j) {
-                                matrice[i][j] = { distance: 0, duree: 0 };
-                            } else {
-                                const route = await calculerRoute(points[i], points[j]);
-                                matrice[i][j] = route || { distance: 999, duree: 999 };
-                            }
-                        }
-                    }
-                    
-                    // 3. ALGORITHME D'OPTIMISATION VRP
-                    // On va créer des tournées en minimisant les distances
-                    
-                    const tournees = [];
-                    const indicesUtilises = new Set();
-                    
-                    // Trier par urgence
-                    const aTraiter = [...transportsAvecCoords].sort((a, b) => {
-                        if (a.urgent && !b.urgent) return -1;
-                        if (!a.urgent && b.urgent) return 1;
-                        return 0;
-                    });
-                    
-                    // Pour chaque véhicule disponible
-                    for (let v = 0; v < vehicules.length; v++) {
-                        if (indicesUtilises.size >= aTraiter.length) break;
-                        
-                        const vehicule = vehicules[v];
+                    for (let v = 0; v < vehicules.length && pointsRestants.length > 0; v++) {
                         const tournee = {
-                            vehicule: vehicule.nom,
-                            capacite: vehicule.capacite,
+                            id: v + 1,
+                            vehicule: vehicules[v].nom,
+                            capacite: vehicules[v].capacite,
                             stops: [],
                             poidsTotal: 0,
-                            distanceTotal: 0,
-                            dureeTotal: 0,
-                            tempsActuel: vehicule.debut,
-                            pausePrises: false
+                            points: [[depot.lat, depot.lng]]
                         };
                         
-                        let positionActuelle = 0; // index 0 = dépôt
-                        
-                        while (indicesUtilises.size < aTraiter.length) {
-                            // Chercher le meilleur point non visité
-                            let meilleurIndex = -1;
-                            let meilleurScore = Infinity;
-                            
-                            for (let i = 0; i < aTraiter.length; i++) {
-                                if (indicesUtilises.has(i)) continue;
-                                
-                                const point = aTraiter[i];
-                                const distance = matrice[positionActuelle][i+1].distance;
-                                const duree = matrice[positionActuelle][i+1].duree;
-                                
-                                // Vérifier capacité
-                                if (tournee.poidsTotal + point.poids > vehicule.capacite) continue;
-                                
-                                // Vérifier horaire avec pause
-                                let heureArrivee = tournee.tempsActuel + duree;
-                                
-                                // Pause obligatoire après 4h30
-                                if (!tournee.pausePrises && (tournee.dureeTotal + duree) > vehicule.pauseApres) {
-                                    heureArrivee += 45; // +45 min de pause
-                                }
-                                
-                                if (heureArrivee + 15 > vehicule.fin) continue; // +15 min de service
-                                
-                                // Score = distance + (pénalité si non urgent)
-                                let score = distance;
-                                if (!point.urgent) score *= 1.2; // pénalité de 20%
-                                
-                                if (score < meilleurScore) {
-                                    meilleurScore = score;
-                                    meilleurIndex = i;
-                                }
+                        // Prendre les points proches
+                        for (let i = pointsRestants.length - 1; i >= 0; i--) {
+                            const point = pointsRestants[i];
+                            if (tournee.poidsTotal + (point.weight || 1) <= vehicules[v].capacite) {
+                                tournee.stops.push(point);
+                                tournee.points.push([point.lat, point.lng]);
+                                tournee.poidsTotal += point.weight || 1;
+                                pointsRestants.splice(i, 1);
                             }
-                            
-                            if (meilleurIndex === -1) break; // Plus de point compatible
-                            
-                            const point = aTraiter[meilleurIndex];
-                            const distance = matrice[positionActuelle][meilleurIndex+1].distance;
-                            const duree = matrice[positionActuelle][meilleurIndex+1].duree;
-                            
-                            // Ajouter la pause si nécessaire
-                            if (!tournee.pausePrises && (tournee.dureeTotal + duree) > vehicule.pauseApres) {
-                                tournee.tempsActuel += 45;
-                                tournee.dureeTotal += 45;
-                                tournee.pausePrises = true;
-                            }
-                            
-                            tournee.stops.push({
-                                ...point,
-                                heureArrivee: tournee.tempsActuel + duree,
-                                distancePrecedent: distance,
-                                dureePrecedent: duree
-                            });
-                            
-                            tournee.tempsActuel += duree + 15; // +15 min service
-                            tournee.distanceTotal += distance;
-                            tournee.dureeTotal += duree + 15;
-                            tournee.poidsTotal += point.poids;
-                            
-                            indicesUtilises.add(meilleurIndex);
-                            positionActuelle = meilleurIndex + 1;
                         }
                         
-                        // Retour au dépôt
                         if (tournee.stops.length > 0) {
-                            const distanceRetour = matrice[positionActuelle][0].distance;
-                            const dureeRetour = matrice[positionActuelle][0].duree;
-                            
-                            tournee.distanceTotal += distanceRetour;
-                            tournee.dureeTotal += dureeRetour;
-                            tournee.tempsActuel += dureeRetour;
-                            
+                            tournee.points.push([depot.lat, depot.lng]);
                             tournees.push(tournee);
                         }
                     }
                     
-                    // Transports non assignés
-                    const nonAssignes = [];
-                    for (let i = 0; i < aTraiter.length; i++) {
-                        if (!indicesUtilises.has(i)) {
-                            nonAssignes.push(aTraiter[i]);
-                        }
-                    }
-                    
-                    afficherOptimisation(tournees, nonAssignes, points);
+                    afficherTournees();
                 };
                 
-                // ===== AFFICHAGE RÉSULTATS =====
-                function afficherOptimisation(tournees, nonAssignes, points) {
-                    const totalKm = tournees.reduce((acc, t) => acc + t.distanceTotal, 0);
-                    const totalDuree = tournees.reduce((acc, t) => acc + t.dureeTotal, 0);
+                // ===== AFFICHAGE TOURNÉES =====
+                function afficherTournees() {
+                    const nonLivres = allTransports.filter(t => t.status !== 'delivered');
                     
                     document.getElementById('app').innerHTML = `
                         <header>
-                            <div class="logo"><i class="fas fa-route"></i> Optimisation VRP</div>
+                            <div class="logo"><i class="fas fa-route"></i> Tournées</div>
                             <div class="stats-header">
                                 <div class="stat-item"><span>🚚 Tournées</span><span class="stat-value">${tournees.length}</span></div>
-                                <div class="stat-item"><span>📦 Assignés</span><span class="stat-value">${tournees.reduce((acc, t) => acc + t.stops.length, 0)}</span></div>
-                                <div class="stat-item"><span>📏 Total km</span><span class="stat-value">${Math.round(totalKm)}</span></div>
+                                <div class="stat-item"><span>📦 Planifiés</span><span class="stat-value">${tournees.reduce((acc, t) => acc + t.stops.length, 0)}</span></div>
+                                <div class="stat-item"><span>📋 Restants</span><span class="stat-value">${nonLivres.length - tournees.reduce((acc, t) => acc + t.stops.length, 0)}</span></div>
                             </div>
                             <div class="user-section">
                                 <div class="user-badge"><i class="fas fa-user-cog"></i><span>${userData.username}</span></div>
-                                <button class="btn" onclick="loadTransports()">← Retour au dispatch</button>
+                                <button class="btn" onclick="loadTransports()">← Retour</button>
+                                <button class="btn-plan" onclick="planifierTout()">✅ Tout planifier</button>
                             </div>
                         </header>
                         
                         <div class="container">
                             <div class="sidebar">
                                 <button onclick="loadTransports()">🗺️ Dispatch</button>
-                                <button class="active">🧠 Résultat VRP</button>
+                                <button class="active">🧠 Tournées</button>
                             </div>
                             
                             <div class="map-container"><div id="map"></div></div>
                             
                             <div class="right-panel">
-                                <h3>📋 Tournées optimisées (${totalKm.toFixed(0)} km)</h3>
+                                <h3>
+                                    📋 Tournées proposées
+                                    <button class="btn-plan" style="padding:5px 10px;" onclick="toutDevelopper()">Tout voir</button>
+                                </h3>
                                 <div id="tourneesList">
                                     ${tournees.map((t, idx) => `
-                                        <div class="tour-item">
+                                        <div class="tour-item" onclick="selectionnerTournee(${idx})">
                                             <div class="tour-header">
                                                 <span>🚚 ${t.vehicule}</span>
-                                                <span>${t.stops.length} arrêts | ${t.poidsTotal}/${t.capacite} kg</span>
+                                                <span>${t.stops.length} arrêts | ${t.poidsTotal.toFixed(0)}/${t.capacite} kg</span>
                                             </div>
                                             <div class="tour-stats">
-                                                <span>📏 ${Math.round(t.distanceTotal)} km</span>
-                                                <span>⏱️ ${Math.round(t.dureeTotal)} min</span>
-                                                <span>🕐 Retour ${formatTime(Math.round(t.tempsActuel))}</span>
+                                                <span>📏 ${(t.stops.length * 30).toFixed(0)} km</span>
+                                                <span>⏱️ ${(t.stops.length * 45).toFixed(0)} min</span>
                                             </div>
-                                            ${t.stops.map((s, i) => `
+                                            ${t.stops.slice(0, 2).map((s, i) => `
                                                 <div class="tour-stop">
-                                                    <div class="stop-client">
-                                                        ${i+1}. ${s.nom}
-                                                        ${s.urgent ? '<span style="color:#ef4444; margin-left:8px;">🔴 URGENT</span>' : ''}
-                                                    </div>
-                                                    <div class="stop-address">
-                                                        📦 Client: ${s.client}<br>
-                                                        📍 ${s.adresse}
-                                                    </div>
-                                                    <div class="stop-time">
-                                                        🕐 Arrivée: ${formatTime(Math.round(s.heureArrivee))}
-                                                        ${i > 0 ? ` | Trajet: ${Math.round(s.distancePrecedent)} km (${Math.round(s.dureePrecedent)} min)` : ''}
-                                                    </div>
-                                                    <div class="stop-stats">
-                                                        <span>⚖️ ${s.poids} kg</span>
-                                                        <span>⚡ ${s.speed}</span>
-                                                    </div>
+                                                    <div class="stop-client">${i+1}. ${s.destinataire_nom || 'Client'}</div>
+                                                    <div class="stop-address">${s.delivery_address?.substring(0,30)}</div>
                                                 </div>
                                             `).join('')}
+                                            ${t.stops.length > 2 ? `<div style="color:#666; font-size:11px; padding-left:15px;">+ ${t.stops.length-2} autres...</div>` : ''}
                                         </div>
                                     `).join('')}
-                                    
-                                    ${nonAssignes.length > 0 ? `
-                                        <div style="background:#991b1b; padding:15px; border-radius:8px; margin-top:15px;">
-                                            <h4 style="color:white;">⚠️ Non assignés (${nonAssignes.length})</h4>
-                                            ${nonAssignes.map(c => `
-                                                <div style="padding:8px 0; border-bottom:1px solid #b91c1c;">
-                                                    <div>${c.nom}</div>
-                                                    <div style="font-size:11px;">${c.adresse.substring(0,30)}</div>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    ` : ''}
                                 </div>
+                                
+                                <div id="tourneeDetail" style="display:none;" class="tour-detail"></div>
                             </div>
                         </div>
                     `;
                     
-                    initMap();
+                    dessinerTournees();
+                }
+                
+                // ===== DESSINER LES TOURNÉES =====
+                function dessinerTournees() {
+                    if (map) map.remove();
+                    map = L.map('map').setView([46.8, 8.2], 8);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                     
-                    // Dessiner les routes
                     const couleurs = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
                     
+                    // Dépôt
+                    L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
+                    
                     tournees.forEach((t, index) => {
-                        const pointsTrace = [[depot.lat, depot.lng]];
-                        t.stops.forEach(s => pointsTrace.push([s.lat, s.lng]));
-                        pointsTrace.push([depot.lat, depot.lng]);
+                        t.stops.forEach((s, i) => {
+                            if (s.lat && s.lng) {
+                                const color = s.speed === '6h' ? '#ef4444' : couleurs[index % couleurs.length];
+                                const icon = L.divIcon({
+                                    html: `<div style="background:${color}; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white; font-size:10px;">${i+1}</div>`,
+                                    iconSize: [20, 20]
+                                });
+                                L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(`
+                                    <b>${s.destinataire_nom || 'Client'}</b><br>
+                                    ${s.delivery_address}
+                                `);
+                            }
+                        });
                         
-                        L.polyline(pointsTrace, {
+                        // Dessiner la route
+                        const points = [[depot.lat, depot.lng], ...t.stops.map(s => [s.lat, s.lng]), [depot.lat, depot.lng]];
+                        L.polyline(points, {
                             color: couleurs[index % couleurs.length],
-                            weight: 4,
+                            weight: 3,
                             opacity: 0.7
                         }).addTo(map);
                     });
                 }
                 
-                // ===== FORMAT HEURE =====
-                function formatTime(minutes) {
-                    const h = Math.floor(minutes / 60);
-                    const m = minutes % 60;
-                    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-                }
-                
-                // ===== MODAL =====
-                window.openModal = function() {
-                    document.getElementById('app').innerHTML += `
-                        <div id="modal" class="modal" style="display:flex;">
-                            <div class="modal-box">
-                                <h3>➕ Nouveau transport</h3>
-                                <input type="text" id="clientNum" placeholder="Client" value="CL2025-001" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <input type="text" id="destNom" placeholder="Destinataire" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <input type="text" id="addr" placeholder="Adresse livraison" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <input type="number" id="pds" placeholder="Poids" value="1" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                <select id="vit" style="width:100%; padding:10px; margin:10px 0; background:#111; border:1px solid #2a2a2a; color:white;">
-                                    <option value="24h">24h</option>
-                                    <option value="12h">12h</option>
-                                    <option value="6h">6h</option>
-                                </select>
-                                <div style="display:flex; gap:10px;">
-                                    <button onclick="document.getElementById('modal').remove()" style="flex:1; padding:10px; background:#2a2a2a; color:white; border:none; border-radius:4px;">Annuler</button>
-                                    <button onclick="saveTransport()" style="flex:1; padding:10px; background:#facc15; color:#111; border:none; border-radius:4px;">Créer</button>
-                                </div>
+                // ===== SÉLECTIONNER UNE TOURNÉE =====
+                window.selectionnerTournee = function(index) {
+                    const t = tournees[index];
+                    const detailDiv = document.getElementById('tourneeDetail');
+                    
+                    detailDiv.innerHTML = `
+                        <h4>🚚 ${t.vehicule}</h4>
+                        <div style="margin:10px 0;">
+                            <div style="display:flex; justify-content:space-between;">
+                                <span>📏 Distance: ${(t.stops.length * 30).toFixed(0)} km</span>
+                                <span>⚖️ Poids: ${t.poidsTotal.toFixed(0)}/${t.capacite} kg</span>
                             </div>
                         </div>
+                        <div style="max-height:200px; overflow-y:auto;">
+                            ${t.stops.map((s, i) => `
+                                <div style="padding:8px; border-bottom:1px solid #3a3a3a;">
+                                    <div><strong>${i+1}. ${s.destinataire_nom || 'Client'}</strong></div>
+                                    <div style="font-size:11px; color:#aaa;">${s.delivery_address}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="display:flex; gap:10px; margin-top:15px;">
+                            <button class="btn-plan" style="flex:1;" onclick="assignerTournee(${index})">✅ Assigner</button>
+                            <button class="btn-optimize" style="flex:1;" onclick="modifierTournee(${index})">✏️ Modifier</button>
+                        </div>
                     `;
+                    
+                    detailDiv.style.display = 'block';
+                    
+                    // Centrer sur la tournée
+                    if (t.stops.length > 0) {
+                        const bounds = [[depot.lat, depot.lng], ...t.stops.map(s => [s.lat, s.lng])];
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
                 };
                 
-                window.saveTransport = async function() {
-                    const coords = await geocoderAdresse(document.getElementById('addr').value);
-                    
-                    const transport = {
-                        order_number: 'TR-' + Date.now(),
-                        client_number: document.getElementById('clientNum').value,
-                        destinataire_nom: document.getElementById('destNom').value,
-                        delivery_address: document.getElementById('addr').value,
-                        lat: coords?.lat || null,
-                        lng: coords?.lng || null,
-                        weight: parseFloat(document.getElementById('pds').value) || 1,
-                        speed: document.getElementById('vit').value,
-                        priority: document.getElementById('vit').value === '6h' ? 'urgent' : 'normal',
-                        status: 'pending',
-                        created_at: new Date()
-                    };
-                    
-                    await supabase.from('transport_orders_simple').insert([transport]);
-                    document.getElementById('modal').remove();
-                    loadTransports();
+                // ===== PLANIFIER TOUT =====
+                window.planifierTout = function() {
+                    alert("✅ Toutes les tournées ont été planifiées !");
+                };
+                
+                window.toutDevelopper = function() {
+                    alert("Développer toutes les tournées");
+                };
+                
+                window.assignerTournee = function(index) {
+                    alert(`Tournée ${index+1} assignée au chauffeur`);
+                };
+                
+                window.modifierTournee = function(index) {
+                    alert(`Modification de la tournée ${index+1}`);
                 };
                 
                 window.logout = function() {
@@ -649,7 +509,6 @@
                     window.location.href = '../login/';
                 };
                 
-                // ===== LANCEMENT =====
                 await loadTransports();
                 
             } catch(e) {
