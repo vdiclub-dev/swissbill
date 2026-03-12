@@ -154,112 +154,7 @@
                     fin: null
                 };
                 
-                // ===== FONCTION POUR METTRE À JOUR L'AFFICHAGE =====
-                function mettreAJourAffichage() {
-                    // Mettre à jour les heures
-                    if (pointageActuel.debut) {
-                        document.getElementById('affDebut').textContent = new Date(pointageActuel.debut).toLocaleTimeString();
-                    } else {
-                        document.getElementById('affDebut').textContent = '--:--';
-                    }
-                    
-                    if (pointageActuel.fin) {
-                        document.getElementById('affFin').textContent = new Date(pointageActuel.fin).toLocaleTimeString();
-                    } else {
-                        document.getElementById('affFin').textContent = '--:--';
-                    }
-                    
-                    // Calculer et afficher la pause
-                    if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
-                        const dureePause = Math.round((new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 60000);
-                        document.getElementById('affPause').textContent = dureePause + ' min';
-                    } else if (pointageActuel.pauseDebut) {
-                        document.getElementById('affPause').textContent = 'En cours';
-                    } else {
-                        document.getElementById('affPause').textContent = '0 min';
-                    }
-                    
-                    // Calculer le total
-                    if (pointageActuel.debut && pointageActuel.fin) {
-                        let total = (new Date(pointageActuel.fin) - new Date(pointageActuel.debut)) / 3600000;
-                        if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
-                            const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
-                            total -= pause;
-                        }
-                        const heures = Math.floor(total);
-                        const minutes = Math.round((total - heures) * 60);
-                        const totalStr = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
-                        document.getElementById('affTotal').textContent = totalStr;
-                        document.getElementById('heuresAujourdhui').textContent = totalStr;
-                    } else if (pointageActuel.debut && !pointageActuel.fin) {
-                        const maintenant = new Date();
-                        let total = (maintenant - new Date(pointageActuel.debut)) / 3600000;
-                        if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
-                            const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
-                            total -= pause;
-                        } else if (pointageActuel.pauseDebut && !pointageActuel.pauseFin) {
-                            const pause = (maintenant - new Date(pointageActuel.pauseDebut)) / 3600000;
-                            total -= pause;
-                        }
-                        const heures = Math.floor(total);
-                        const minutes = Math.round((total - heures) * 60);
-                        document.getElementById('affTotal').textContent = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
-                    } else {
-                        document.getElementById('affTotal').textContent = '0h00';
-                    }
-                    
-                    // Mettre à jour l'état des boutons
-                    document.getElementById('btn_debut').disabled = pointageActuel.debut !== null;
-                    document.getElementById('btn_pause_debut').disabled = pointageActuel.pauseDebut !== null || pointageActuel.debut === null;
-                    document.getElementById('btn_pause_fin').disabled = pointageActuel.pauseDebut === null || pointageActuel.pauseFin !== null;
-                    document.getElementById('btn_fin').disabled = pointageActuel.fin !== null || pointageActuel.debut === null;
-                }
-                
-                // ===== FONCTIONS DE POINTAGE =====
-                window.pointer = function(action) {
-                    const maintenant = new Date();
-                    
-                    switch(action) {
-                        case 'debut':
-                            pointageActuel.debut = maintenant;
-                            break;
-                        case 'pause_debut':
-                            if (pointageActuel.debut) pointageActuel.pauseDebut = maintenant;
-                            break;
-                        case 'pause_fin':
-                            if (pointageActuel.pauseDebut) pointageActuel.pauseFin = maintenant;
-                            break;
-                        case 'fin':
-                            if (pointageActuel.debut) pointageActuel.fin = maintenant;
-                            break;
-                    }
-                    
-                    // Sauvegarder
-                    localStorage.setItem('pointage_' + window.chauffeurId, JSON.stringify(pointageActuel));
-                    
-                    // Mettre à jour l'affichage
-                    mettreAJourAffichage();
-                    
-                    showMessage('✅ Pointage enregistré');
-                };
-                
-                // ===== COMPTEURS =====
-                let compteurActuel = null;
-                try {
-                    const { data: compteurs } = await supabase
-                        .from('compteurs')
-                        .select('*')
-                        .eq('chauffeur_id', chauffeur.id);
-                    
-                    if (compteurs && compteurs.length > 0) {
-                        const annee = new Date().getFullYear();
-                        compteurActuel = compteurs.find(c => c.annee === annee);
-                    }
-                } catch(e) {
-                    console.warn("Erreur compteurs:", e);
-                }
-                
-                // ===== CONSTRUCTION PAGE =====
+                // ===== CONSTRUCTION PAGE SANS CONDITIONS DANS LE HTML =====
                 document.getElementById('app').innerHTML = `
                     <div class="header">
                         <div class="logo"><i class="fas fa-truck"></i> Léman-Courses</div>
@@ -299,20 +194,20 @@
                             <div style="display: grid; grid-template-columns: repeat(2,1fr); gap:10px; margin:15px 0;">
                                 <div><small>Début: <span id="affDebut">${pointageActuel.debut ? new Date(pointageActuel.debut).toLocaleTimeString() : '--:--'}</span></small></div>
                                 <div><small>Fin: <span id="affFin">${pointageActuel.fin ? new Date(pointageActuel.fin).toLocaleTimeString() : '--:--'}</span></small></div>
-                                <div><small>Pause: <span id="affPause">${pointageActuel.pauseDebut && pointageActuel.pauseFin ? 'Terminée' : pointageActuel.pauseDebut ? 'En cours' : '0 min'}</span></small></div>
+                                <div><small>Pause: <span id="affPause">0 min</span></small></div>
                                 <div><small>Total: <span id="affTotal">0h00</span></small></div>
                             </div>
                             <div class="pointage-buttons">
-                                <button class="btn-pointage btn-debut" id="btn_debut" onclick="pointer('debut')">
+                                <button class="btn-pointage btn-debut" onclick="pointer('debut')">
                                     <i class="fas fa-play"></i> Début
                                 </button>
-                                <button class="btn-pointage btn-pause-debut" id="btn_pause_debut" onclick="pointer('pause_debut')">
+                                <button class="btn-pointage btn-pause-debut" onclick="pointer('pause_debut')">
                                     <i class="fas fa-coffee"></i> Pause
                                 </button>
-                                <button class="btn-pointage btn-pause-fin" id="btn_pause_fin" onclick="pointer('pause_fin')">
+                                <button class="btn-pointage btn-pause-fin" onclick="pointer('pause_fin')">
                                     <i class="fas fa-undo"></i> Retour
                                 </button>
-                                <button class="btn-pointage btn-fin" id="btn_fin" onclick="pointer('fin')">
+                                <button class="btn-pointage btn-fin" onclick="pointer('fin')">
                                     <i class="fas fa-stop"></i> Fin
                                 </button>
                             </div>
@@ -343,8 +238,102 @@
                 // ===== VARIABLES =====
                 window.chauffeurId = chauffeur.id;
                 
-                // ===== PREMIER AFFICHAGE =====
-                mettreAJourAffichage();
+                // ===== FONCTION DE MISE À JOUR =====
+                function mettreAJourAffichage() {
+                    if (pointageActuel.debut) {
+                        document.getElementById('affDebut').textContent = new Date(pointageActuel.debut).toLocaleTimeString();
+                    }
+                    
+                    if (pointageActuel.fin) {
+                        document.getElementById('affFin').textContent = new Date(pointageActuel.fin).toLocaleTimeString();
+                    }
+                    
+                    // Calcul pause
+                    if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
+                        const dureePause = Math.round((new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 60000);
+                        document.getElementById('affPause').textContent = dureePause + ' min';
+                    } else if (pointageActuel.pauseDebut) {
+                        document.getElementById('affPause').textContent = 'En cours';
+                    }
+                    
+                    // Calcul total
+                    if (pointageActuel.debut && pointageActuel.fin) {
+                        let total = (new Date(pointageActuel.fin) - new Date(pointageActuel.debut)) / 3600000;
+                        if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
+                            const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
+                            total -= pause;
+                        }
+                        const heures = Math.floor(total);
+                        const minutes = Math.round((total - heures) * 60);
+                        const totalStr = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
+                        document.getElementById('affTotal').textContent = totalStr;
+                        document.getElementById('heuresAujourdhui').textContent = totalStr;
+                    } else if (pointageActuel.debut && !pointageActuel.fin) {
+                        const maintenant = new Date();
+                        let total = (maintenant - new Date(pointageActuel.debut)) / 3600000;
+                        if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
+                            const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
+                            total -= pause;
+                        } else if (pointageActuel.pauseDebut && !pointageActuel.pauseFin) {
+                            const pause = (maintenant - new Date(pointageActuel.pauseDebut)) / 3600000;
+                            total -= pause;
+                        }
+                        const heures = Math.floor(total);
+                        const minutes = Math.round((total - heures) * 60);
+                        document.getElementById('affTotal').textContent = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
+                    }
+                }
+                
+                // ===== FONCTIONS DE POINTAGE =====
+                window.pointer = function(action) {
+                    const maintenant = new Date();
+                    
+                    // Logique métier simple
+                    if (action === 'debut' && !pointageActuel.debut) {
+                        pointageActuel.debut = maintenant;
+                    }
+                    else if (action === 'pause_debut' && pointageActuel.debut && !pointageActuel.pauseDebut) {
+                        pointageActuel.pauseDebut = maintenant;
+                    }
+                    else if (action === 'pause_fin' && pointageActuel.pauseDebut && !pointageActuel.pauseFin) {
+                        pointageActuel.pauseFin = maintenant;
+                    }
+                    else if (action === 'fin' && pointageActuel.debut && !pointageActuel.fin) {
+                        pointageActuel.fin = maintenant;
+                    }
+                    else {
+                        showMessage('❌ Action impossible');
+                        return;
+                    }
+                    
+                    // Sauvegarder
+                    localStorage.setItem('pointage_' + window.chauffeurId, JSON.stringify(pointageActuel));
+                    
+                    // Mettre à jour l'affichage
+                    mettreAJourAffichage();
+                    
+                    showMessage('✅ Pointage enregistré');
+                };
+                
+                // ===== COMPTEURS =====
+                let compteurActuel = null;
+                try {
+                    const { data: compteurs } = await supabase
+                        .from('compteurs')
+                        .select('*')
+                        .eq('chauffeur_id', chauffeur.id);
+                    
+                    if (compteurs && compteurs.length > 0) {
+                        const annee = new Date().getFullYear();
+                        compteurActuel = compteurs.find(c => c.annee === annee);
+                        if (compteurActuel) {
+                            document.getElementById('congesRestants').textContent = compteurActuel.conges_restants || 20;
+                            document.getElementById('compensationRestantes').textContent = compteurActuel.compensation_restantes || 0;
+                        }
+                    }
+                } catch(e) {
+                    console.warn("Erreur compteurs:", e);
+                }
                 
                 // ===== CHARGEMENT DES COLIS =====
                 async function chargerColis() {
@@ -441,6 +430,9 @@
                     localStorage.removeItem('chauffeur');
                     window.location.href = 'index.html';
                 };
+                
+                // ===== PREMIER AFFICHAGE =====
+                mettreAJourAffichage();
                 
                 // ===== LANCEMENT =====
                 await chargerColis();
