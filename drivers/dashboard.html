@@ -8,9 +8,6 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    
     <!-- Supabase et Config -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../dispatch/config.js"></script>
@@ -79,41 +76,70 @@
         .compteur-valeur { font-size: 32px; font-weight: bold; color: #10b981; }
         .compteur-label { color: #64748b; font-size: 14px; margin-top: 5px; }
         
-        /* SAISIE MANUELLE */
-        .scan-section {
-            background: white; border-radius: 12px; padding: 20px;
-            margin-bottom: 20px; border: 1px solid #e2e8f0;
-        }
-        .manual-input {
-            display: flex; gap: 10px; margin-top: 15px;
-        }
-        .manual-input input {
-            flex: 1; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 16px;
-        }
-        .manual-input button {
-            padding: 12px 24px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer;
-        }
-        
-        /* LISTE COLIS */
+        /* LISTE COLIS (cliquable) */
         .colis-list {
             background: white; border-radius: 12px; padding: 20px;
             margin-bottom: 20px; border: 1px solid #e2e8f0;
         }
         .colis-item {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 10px; border-bottom: 1px solid #e2e8f0;
+            padding: 15px; border-bottom: 1px solid #e2e8f0;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .colis-item:hover {
+            background: #f8fafc;
+            transform: translateX(5px);
         }
         .colis-item:last-child { border-bottom: none; }
-        .colis-statut {
-            padding: 4px 12px; border-radius: 20px; font-size: 12px;
+        .colis-info {
+            flex: 1;
         }
-        .statut-charge { background: #fef3c7; color: #92400e; }
-        .statut-livre { background: #dcfce7; color: #166534; }
+        .colis-numero {
+            font-weight: bold;
+            color: #0f172a;
+        }
+        .colis-adresse {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+        .colis-statut {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .statut-charge {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .statut-livre {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .statut-transit {
+            background: #dbeafe;
+            color: #1e40af;
+        }
         
-        /* MODAL */
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%;
-                background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; }
-        .modal-box { background: white; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%; }
+        /* MESSAGE SUCCÈS */
+        .success-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            animation: slideIn 0.3s;
+            z-index: 1000;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
         
         @media (max-width: 768px) {
             .pointage-buttons { grid-template-columns: repeat(2, 1fr); }
@@ -186,6 +212,108 @@
                     }
                 } catch(e) {
                     console.warn("Erreur pointage:", e);
+                }
+                
+                // ===== CHARGEMENT DES COLIS =====
+                async function chargerColis() {
+                    try {
+                        // Charger les colis en cours (status = 'pending' ou 'transit')
+                        const { data } = await supabase
+                            .from('transport_orders_simple')
+                            .select('*')
+                            .in('status', ['pending', 'transit'])
+                            .order('created_at', { ascending: false })
+                            .limit(10);
+                        
+                        let html = '';
+                        
+                        if (data && data.length > 0) {
+                            data.forEach(t => {
+                                let statutTexte = 'En charge';
+                                let statutClass = 'statut-charge';
+                                
+                                if (t.status === 'transit') {
+                                    statutTexte = 'En route';
+                                    statutClass = 'statut-transit';
+                                }
+                                
+                                html += `
+                                    <div class="colis-item" onclick="prendreColis('${t.id}', '${t.status}')">
+                                        <div class="colis-info">
+                                            <div class="colis-numero">📦 ${t.order_number}</div>
+                                            <div class="colis-adresse">${t.delivery_address?.substring(0, 50) || 'Adresse inconnue'}</div>
+                                            <div style="font-size:11px; color:#aaa; margin-top:4px;">${t.destinataire_nom || 'Destinataire inconnu'}</div>
+                                        </div>
+                                        <span class="colis-statut ${statutClass}">${statutTexte}</span>
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            html = '<div style="text-align:center; padding:20px; color:#64748b;">Aucun colis à livrer</div>';
+                        }
+                        
+                        document.getElementById('colisList').innerHTML = html;
+                        
+                    } catch(e) {
+                        console.error(e);
+                        document.getElementById('colisList').innerHTML = '<div style="color:#ef4444;">Erreur de chargement</div>';
+                    }
+                }
+                
+                // ===== FONCTION POUR PRENDRE UN COLIS =====
+                window.prendreColis = async function(id, statutActuel) {
+                    try {
+                        if (statutActuel === 'pending') {
+                            // Première prise : "En route"
+                            if (confirm('Prendre ce colis en charge ?')) {
+                                const { error } = await supabase
+                                    .from('transport_orders_simple')
+                                    .update({ 
+                                        status: 'transit',
+                                        pris_en_charge: new Date()
+                                    })
+                                    .eq('id', id);
+                                
+                                if (error) throw error;
+                                
+                                showMessage('✅ Colis pris en charge', '#10b981');
+                            }
+                        } else if (statutActuel === 'transit') {
+                            // Deuxième clic : "Livré"
+                            if (confirm('Marquer ce colis comme livré ?')) {
+                                const { error } = await supabase
+                                    .from('transport_orders_simple')
+                                    .update({ 
+                                        status: 'delivered',
+                                        delivered_at: new Date()
+                                    })
+                                    .eq('id', id);
+                                
+                                if (error) throw error;
+                                
+                                showMessage('✅ Colis livré avec succès', '#10b981');
+                            }
+                        }
+                        
+                        // Recharger la liste
+                        chargerColis();
+                        
+                    } catch(e) {
+                        alert('❌ Erreur: ' + e.message);
+                    }
+                };
+                
+                // ===== MESSAGE DE SUCCÈS =====
+                function showMessage(texte, couleur) {
+                    const msg = document.createElement('div');
+                    msg.className = 'success-message';
+                    msg.style.backgroundColor = couleur;
+                    msg.innerHTML = texte;
+                    document.body.appendChild(msg);
+                    
+                    setTimeout(() => {
+                        msg.remove();
+                    }, 3000);
                 }
                 
                 // ===== CONSTRUCTION PAGE =====
@@ -265,90 +393,23 @@
                             </div>
                         </div>
                         
-                        <!-- SAISIE MANUELLE (remplace le scanner) -->
-                        <div class="scan-section">
-                            <h3><i class="fas fa-pen"></i> Saisir un colis</h3>
-                            <div class="manual-input">
-                                <input type="text" id="transportNumber" placeholder="Numéro de transport (ex: TR-2026-123456)">
-                                <button onclick="rechercherTransport()">🔍 Valider</button>
-                            </div>
-                            <div id="scanResult" style="margin-top:10px;"></div>
-                        </div>
-                        
-                        <!-- COLIS À LIVRER -->
+                        <!-- LISTE DES COLIS (cliquable) -->
                         <div class="colis-list">
-                            <h3><i class="fas fa-box"></i> Mes colis</h3>
+                            <h3><i class="fas fa-box"></i> Mes colis à livrer</h3>
                             <div id="colisList">Chargement...</div>
-                        </div>
-                    </div>
-                    
-                    <!-- MODAL CONFIRMATION LIVRAISON -->
-                    <div id="livraisonModal" class="modal">
-                        <div class="modal-box">
-                            <h3 style="margin-bottom:15px;">Confirmer la livraison</h3>
-                            <p id="modalColisInfo"></p>
-                            <div style="display:flex; gap:10px; margin-top:20px;">
-                                <button class="btn-pointage" style="flex:1; background:#10b981;" onclick="confirmerLivraison()">✓ Confirmer</button>
-                                <button class="btn-pointage" style="flex:1; background:#ef4444;" onclick="fermerModal()">✕ Annuler</button>
+                            <div style="margin-top:15px; font-size:12px; color:#64748b; text-align:center;">
+                                👆 Cliquez sur un colis pour le prendre en charge ou le livrer
                             </div>
                         </div>
                     </div>
                 `;
                 
                 // ===== VARIABLES GLOBALES =====
-                window.currentScan = null;
                 window.chauffeurId = chauffeur.id;
                 window.pointageActuel = pointage;
                 window.supabaseClient = supabase;
                 
-                // ===== FONCTION DE RECHERCHE MANUELLE =====
-                window.rechercherTransport = async function() {
-                    const numero = document.getElementById('transportNumber').value.trim();
-                    if (!numero) {
-                        alert('Veuillez entrer un numéro de transport');
-                        return;
-                    }
-                    
-                    try {
-                        const { data, error } = await supabase
-                            .from('transport_orders_simple')
-                            .select('*')
-                            .eq('order_number', numero);
-                        
-                        if (error) throw error;
-                        
-                        if (data && data.length > 0) {
-                            const t = data[0];
-                            window.currentScan = {
-                                order: t.order_number,
-                                client: t.client_number
-                            };
-                            
-                            document.getElementById('modalColisInfo').innerHTML = `
-                                Transport: <strong>${t.order_number}</strong><br>
-                                Client: ${t.client_number || '?'}<br>
-                                Adresse: ${t.delivery_address?.substring(0,50) || '?'}
-                            `;
-                            document.getElementById('livraisonModal').style.display = 'flex';
-                            
-                            document.getElementById('scanResult').innerHTML = `
-                                <div style="background:#10b981; color:white; padding:10px; border-radius:4px;">
-                                    ✅ Transport trouvé
-                                </div>
-                            `;
-                        } else {
-                            document.getElementById('scanResult').innerHTML = `
-                                <div style="background:#ef4444; color:white; padding:10px; border-radius:4px;">
-                                    ❌ Transport non trouvé
-                                </div>
-                            `;
-                        }
-                    } catch(e) {
-                        alert('Erreur: ' + e.message);
-                    }
-                };
-                
-                // ===== FONCTIONS =====
+                // ===== FONCTIONS DE POINTAGE =====
                 window.pointer = async function(action) {
                     const now = new Date();
                     const updates = {};
@@ -385,48 +446,13 @@
                     }
                 };
                 
-                window.confirmerLivraison = function() {
-                    alert(`✅ Transport ${window.currentScan?.order || ''} marqué comme livré`);
-                    document.getElementById('livraisonModal').style.display = 'none';
-                };
-                
-                window.fermerModal = function() {
-                    document.getElementById('livraisonModal').style.display = 'none';
-                };
-                
                 window.logout = function() {
                     localStorage.removeItem('chauffeur');
                     window.location.href = 'index.html';
                 };
                 
-                // ===== CHARGEMENT DES COLIS =====
-                async function chargerColis() {
-                    try {
-                        const { data } = await supabase
-                            .from('transport_orders_simple')
-                            .select('*')
-                            .eq('status', 'pending')
-                            .limit(5);
-                        
-                        let html = '';
-                        data?.forEach(t => {
-                            html += `
-                                <div class="colis-item">
-                                    <div>
-                                        <strong>${t.order_number}</strong><br>
-                                        <small>${t.delivery_address?.substring(0,30)}</small>
-                                    </div>
-                                    <span class="colis-statut statut-charge">En charge</span>
-                                </div>
-                            `;
-                        });
-                        document.getElementById('colisList').innerHTML = html || 'Aucun colis';
-                    } catch(e) {
-                        console.error(e);
-                    }
-                }
-                
-                chargerColis();
+                // ===== LANCEMENT =====
+                await chargerColis();
                 
             } catch(e) {
                 console.error("Erreur fatale:", e);
