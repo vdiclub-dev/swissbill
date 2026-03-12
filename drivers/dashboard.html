@@ -159,9 +159,14 @@
                     // Mettre à jour les heures
                     if (pointageActuel.debut) {
                         document.getElementById('affDebut').textContent = new Date(pointageActuel.debut).toLocaleTimeString();
+                    } else {
+                        document.getElementById('affDebut').textContent = '--:--';
                     }
+                    
                     if (pointageActuel.fin) {
                         document.getElementById('affFin').textContent = new Date(pointageActuel.fin).toLocaleTimeString();
+                    } else {
+                        document.getElementById('affFin').textContent = '--:--';
                     }
                     
                     // Calculer et afficher la pause
@@ -171,24 +176,22 @@
                     } else if (pointageActuel.pauseDebut) {
                         document.getElementById('affPause').textContent = 'En cours';
                     } else {
-                        document.getElementById('affPause').textContent = '--:--';
+                        document.getElementById('affPause').textContent = '0 min';
                     }
                     
                     // Calculer le total
                     if (pointageActuel.debut && pointageActuel.fin) {
-                        let total = (new Date(pointageActuel.fin) - new Date(pointageActuel.debut)) / 3600000; // en heures
+                        let total = (new Date(pointageActuel.fin) - new Date(pointageActuel.debut)) / 3600000;
                         if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
                             const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
                             total -= pause;
                         }
                         const heures = Math.floor(total);
                         const minutes = Math.round((total - heures) * 60);
-                        document.getElementById('affTotal').textContent = heures + 'h' + (minutes < 10 ? '0' : '') + minutes;
-                        
-                        // Mettre à jour les stats
-                        document.getElementById('heuresAujourdhui').textContent = heures + 'h' + (minutes < 10 ? '0' : '') + minutes;
+                        const totalStr = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
+                        document.getElementById('affTotal').textContent = totalStr;
+                        document.getElementById('heuresAujourdhui').textContent = totalStr;
                     } else if (pointageActuel.debut && !pointageActuel.fin) {
-                        // Calcul en temps réel
                         const maintenant = new Date();
                         let total = (maintenant - new Date(pointageActuel.debut)) / 3600000;
                         if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
@@ -200,8 +203,16 @@
                         }
                         const heures = Math.floor(total);
                         const minutes = Math.round((total - heures) * 60);
-                        document.getElementById('affTotal').textContent = heures + 'h' + (minutes < 10 ? '0' : '') + minutes;
+                        document.getElementById('affTotal').textContent = heures + 'h' + (minutes < 10 ? '0' + minutes : minutes);
+                    } else {
+                        document.getElementById('affTotal').textContent = '0h00';
                     }
+                    
+                    // Mettre à jour l'état des boutons
+                    document.getElementById('btn_debut').disabled = pointageActuel.debut !== null;
+                    document.getElementById('btn_pause_debut').disabled = pointageActuel.pauseDebut !== null || pointageActuel.debut === null;
+                    document.getElementById('btn_pause_fin').disabled = pointageActuel.pauseDebut === null || pointageActuel.pauseFin !== null;
+                    document.getElementById('btn_fin').disabled = pointageActuel.fin !== null || pointageActuel.debut === null;
                 }
                 
                 // ===== FONCTIONS DE POINTAGE =====
@@ -213,13 +224,13 @@
                             pointageActuel.debut = maintenant;
                             break;
                         case 'pause_debut':
-                            pointageActuel.pauseDebut = maintenant;
+                            if (pointageActuel.debut) pointageActuel.pauseDebut = maintenant;
                             break;
                         case 'pause_fin':
-                            pointageActuel.pauseFin = maintenant;
+                            if (pointageActuel.pauseDebut) pointageActuel.pauseFin = maintenant;
                             break;
                         case 'fin':
-                            pointageActuel.fin = maintenant;
+                            if (pointageActuel.debut) pointageActuel.fin = maintenant;
                             break;
                     }
                     
@@ -228,12 +239,6 @@
                     
                     // Mettre à jour l'affichage
                     mettreAJourAffichage();
-                    
-                    // Désactiver les boutons
-                    document.getElementById('btn_debut').disabled = pointageActuel.debut ? true : false;
-                    document.getElementById('btn_pause_debut').disabled = pointageActuel.pauseDebut ? true : false;
-                    document.getElementById('btn_pause_fin').disabled = !pointageActuel.pauseDebut || pointageActuel.pauseFin ? true : false;
-                    document.getElementById('btn_fin').disabled = pointageActuel.fin ? true : false;
                     
                     showMessage('✅ Pointage enregistré');
                 };
@@ -294,20 +299,20 @@
                             <div style="display: grid; grid-template-columns: repeat(2,1fr); gap:10px; margin:15px 0;">
                                 <div><small>Début: <span id="affDebut">${pointageActuel.debut ? new Date(pointageActuel.debut).toLocaleTimeString() : '--:--'}</span></small></div>
                                 <div><small>Fin: <span id="affFin">${pointageActuel.fin ? new Date(pointageActuel.fin).toLocaleTimeString() : '--:--'}</span></small></div>
-                                <div><small>Pause: <span id="affPause">--:--</span></small></div>
-                                <div><small>Total: <span id="affTotal">--h--</span></small></div>
+                                <div><small>Pause: <span id="affPause">${pointageActuel.pauseDebut && pointageActuel.pauseFin ? 'Terminée' : pointageActuel.pauseDebut ? 'En cours' : '0 min'}</span></small></div>
+                                <div><small>Total: <span id="affTotal">0h00</span></small></div>
                             </div>
                             <div class="pointage-buttons">
-                                <button class="btn-pointage btn-debut" id="btn_debut" onclick="pointer('debut')" ${pointageActuel.debut ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-debut" id="btn_debut" onclick="pointer('debut')">
                                     <i class="fas fa-play"></i> Début
                                 </button>
-                                <button class="btn-pointage btn-pause-debut" id="btn_pause_debut" onclick="pointer('pause_debut')" ${pointageActuel.pauseDebut ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-pause-debut" id="btn_pause_debut" onclick="pointer('pause_debut')">
                                     <i class="fas fa-coffee"></i> Pause
                                 </button>
-                                <button class="btn-pointage btn-pause-fin" id="btn_pause_fin" onclick="pointer('pause_fin')" ${!pointageActuel.pauseDebut || pointageActuel.pauseFin ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-pause-fin" id="btn_pause_fin" onclick="pointer('pause_fin')">
                                     <i class="fas fa-undo"></i> Retour
                                 </button>
-                                <button class="btn-pointage btn-fin" id="btn_fin" onclick="pointer('fin')" ${pointageActuel.fin ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-fin" id="btn_fin" onclick="pointer('fin')">
                                     <i class="fas fa-stop"></i> Fin
                                 </button>
                             </div>
@@ -364,9 +369,6 @@
                                 if (t.status === 'transit') {
                                     statutTexte = 'En route';
                                     statutClass = 'statut-transit';
-                                } else if (t.status === 'delivered') {
-                                    statutTexte = 'Livré';
-                                    statutClass = 'statut-livre';
                                 }
                                 
                                 html += `
