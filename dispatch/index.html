@@ -12,13 +12,12 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
     
-    <!-- Supabase et Config (dans le bon ordre) -->
+    <!-- Supabase et Config -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
     
     <style>
-        /* Votre CSS existant */
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
         body { background: #111; height: 100vh; overflow: hidden; color: white; }
         header { background: #111; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #facc15; height: 70px; }
         .logo { font-size: 24px; font-weight: bold; color: #facc15; display: flex; align-items: center; gap: 10px; }
@@ -44,7 +43,7 @@
         .modal-header h3 { color: #facc15; }
         .modal-content { padding: 20px; }
         .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; color: #aaa; }
+        .form-group label { display: block; color: #aaa; margin-bottom: 5px; }
         .form-group input, .form-group select { width: 100%; padding: 10px; background: #111; border: 1px solid #2a2a2a; color: white; border-radius: 4px; }
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .btn-cancel { background: #2a2a2a; color: white; border: none; padding: 12px; border-radius: 4px; cursor: pointer; flex: 1; }
@@ -52,7 +51,7 @@
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
         .stat-value { background: #2a2a2a; padding: 4px 10px; border-radius: 20px; color: #facc15; }
-        .loader { text-align: center; padding: 20px; }
+        .loader { text-align: center; padding: 20px; color: #aaa; }
     </style>
 </head>
 <body>
@@ -60,210 +59,258 @@
     <div id="app"></div>
 
     <script>
-        // ===== VÉRIFICATION CONFIG =====
-        if (!window.SUPABASE_CONFIG) {
-            document.body.innerHTML = '<div style="color:red; padding:20px;">❌ config.js non chargé</div>';
-            throw new Error("Configuration manquante");
-        }
-        
-        // ===== UNE SEULE DÉCLARATION DE SUPABASE =====
-        const supabase = window.supabase.createClient(
-            window.SUPABASE_CONFIG.url,
-            window.SUPABASE_CONFIG.key
-        );
-        
-        console.log("✅ Supabase prêt");
-        
-        // ===== VÉRIFICATION AUTHENTIFICATION =====
-        const user = localStorage.getItem('user');
-        
-        if (!user) {
-            window.location.href = '../login/';
-            throw new Error("Non connecté");
-        }
-        
-        const userData = JSON.parse(user);
-        
-        if (!userData.loggedIn || userData.role !== 'admin') {
-            window.location.href = '../';
-            throw new Error("Accès refusé");
-        }
-        
-        // ===== CONSTRUCTION DE LA PAGE =====
-        document.getElementById('app').innerHTML = `
-            <header>
-                <div class="logo">
-                    <i class="fas fa-map-marked-alt"></i> Léman Dispatch
-                </div>
-                
-                <div class="stats-header">
-                    <div class="stat-item">
-                        <span>📦 Total</span>
-                        <span class="stat-value" id="totalCount">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span>⚠️ Urgents</span>
-                        <span class="stat-value" id="urgentCount">0</span>
-                    </div>
-                </div>
-                
-                <div class="user-section">
-                    <div class="user-badge">
-                        <i class="fas fa-user-cog"></i>
-                        <span>${userData.username}</span>
-                    </div>
-                    <button class="btn-logout" onclick="logout()">
-                        <i class="fas fa-sign-out-alt"></i> Déconnexion
-                    </button>
-                    <button class="btn" onclick="openModal()">➕ Créer transport</button>
-                </div>
-            </header>
-
-            <div class="container">
-                <div class="sidebar">
-                    <button class="active">🗺️ Dispatch</button>
-                    <button>📦 Transports</button>
-                    <button>👤 Clients</button>
-                    <button>🚚 Chauffeurs</button>
-                    <button>💰 Factures</button>
-                    <button onclick="window.location.href='generate-qr.html'">📱 QR codes</button>
-                </div>
-                
-                <div class="map-container">
-                    <div id="map"></div>
-                </div>
-                
-                <div class="right-panel">
-                    <h3>📋 Derniers transports</h3>
-                    <div id="transportList">
-                        <div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="modal" class="modal">
-                <div class="modal-box">
-                    <div class="modal-header">
-                        <h3>➕ Nouveau transport</h3>
-                        <button onclick="closeModal()">✖</button>
-                    </div>
-                    <div class="modal-content">
-                        <form onsubmit="event.preventDefault(); saveTransport();">
-                            <div class="form-group">
-                                <label>Nom client *</label>
-                                <input type="text" id="clientName" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Ville ramassage *</label>
-                                <input type="text" id="pickupCity" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Ville livraison *</label>
-                                <input type="text" id="deliveryCity" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Poids (kg)</label>
-                                <input type="number" id="weight" value="1">
-                            </div>
-                            <div class="form-group">
-                                <label>Priorité</label>
-                                <select id="priority">
-                                    <option value="normal">Normal</option>
-                                    <option value="urgent">Urgent</option>
-                                </select>
-                            </div>
-                            <div class="modal-buttons">
-                                <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
-                                <button type="submit" class="btn-save">Créer</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // ===== FONCTIONS =====
-        let map;
-        let markers;
-        
-        function logout() {
-            localStorage.removeItem('user');
-            window.location.href = '../login/';
-        }
-        
-        window.openModal = function() {
-            document.getElementById('modal').style.display = 'flex';
-        };
-        
-        window.closeModal = function() {
-            document.getElementById('modal').style.display = 'none';
-        };
-        
-        // Carte
-        function initMap() {
-            map = L.map('map').setView([46.8, 8.2], 8);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            markers = L.markerClusterGroup();
-            map.addLayer(markers);
-            loadTransports();
-        }
-        
-        async function loadTransports() {
-            try {
-                const { data } = await supabase.from('transport_orders').select('*');
-                document.getElementById('totalCount').textContent = data?.length || 0;
-                document.getElementById('urgentCount').textContent = data?.filter(t => t.priority === 'urgent').length || 0;
-                
-                let html = '';
-                data?.slice(0, 5).forEach(t => {
-                    html += `
-                        <div class="transport-item">
-                            <div class="transport-client">${t.client_name || 'Sans client'}</div>
-                            <div class="transport-route">${t.pickup_city || '?'} → ${t.delivery_city || '?'}</div>
-                        </div>
-                    `;
-                });
-                document.getElementById('transportList').innerHTML = html || '<div>Aucun transport</div>';
-                
-                markers.clearLayers();
-                data?.forEach((t, i) => {
-                    if (t.delivery_city) {
-                        let lat = 46.8, lng = 8.2;
-                        if (t.delivery_city.includes('Lausanne')) { lat = 46.52; lng = 6.63; }
-                        if (t.delivery_city.includes('Genève')) { lat = 46.20; lng = 6.14; }
-                        L.marker([lat, lng]).addTo(markers);
-                    }
-                });
-            } catch(e) {
-                console.error(e);
-            }
-        }
-        
-        window.saveTransport = async function() {
-            const transport = {
-                client_name: document.getElementById('clientName').value,
-                pickup_city: document.getElementById('pickupCity').value,
-                delivery_city: document.getElementById('deliveryCity').value,
-                weight: parseFloat(document.getElementById('weight').value) || 1,
-                priority: document.getElementById('priority').value,
-                status: 'pending',
-                created_at: new Date()
-            };
+        // ===== ATTENDRE QUE TOUT SOIT CHARGÉ =====
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("🚀 Démarrage...");
             
-            if (!transport.client_name || !transport.pickup_city || !transport.delivery_city) {
-                alert('Champs obligatoires');
+            // ===== VÉRIFICATION CONFIG =====
+            if (!window.SUPABASE_CONFIG) {
+                document.body.innerHTML = '<div style="color:red; padding:20px;">❌ config.js non chargé</div>';
                 return;
             }
             
-            await supabase.from('transport_orders').insert([transport]);
-            alert('✅ Créé');
-            closeModal();
-            loadTransports();
-        };
-        
-        // Démarrage
-        initMap();
-        setInterval(loadTransports, 30000);
+            // ===== UNE SEULE DÉCLARATION DE SUPABASE =====
+            const supabase = window.supabase.createClient(
+                window.SUPABASE_CONFIG.url,
+                window.SUPABASE_CONFIG.key
+            );
+            
+            console.log("✅ Supabase prêt");
+            
+            // ===== VÉRIFICATION AUTHENTIFICATION =====
+            const user = localStorage.getItem('user');
+            
+            if (!user) {
+                window.location.href = '../login/';
+                return;
+            }
+            
+            const userData = JSON.parse(user);
+            
+            if (!userData.loggedIn || userData.role !== 'admin') {
+                window.location.href = '../';
+                return;
+            }
+            
+            // ===== CONSTRUCTION DE LA PAGE =====
+            document.getElementById('app').innerHTML = `
+                <header>
+                    <div class="logo">
+                        <i class="fas fa-map-marked-alt"></i> Léman Dispatch
+                    </div>
+                    
+                    <div class="stats-header">
+                        <div class="stat-item">
+                            <span>📦 Total</span>
+                            <span class="stat-value" id="totalCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>⚠️ Urgents</span>
+                            <span class="stat-value" id="urgentCount">0</span>
+                        </div>
+                    </div>
+                    
+                    <div class="user-section">
+                        <div class="user-badge">
+                            <i class="fas fa-user-cog"></i>
+                            <span>${userData.username}</span>
+                        </div>
+                        <button class="btn-logout" onclick="logout()">
+                            <i class="fas fa-sign-out-alt"></i> Déconnexion
+                        </button>
+                        <button class="btn" onclick="openModal()">➕ Créer transport</button>
+                    </div>
+                </header>
+
+                <div class="container">
+                    <div class="sidebar">
+                        <button class="active">🗺️ Dispatch</button>
+                        <button>📦 Transports</button>
+                        <button>👤 Clients</button>
+                        <button>🚚 Chauffeurs</button>
+                        <button>💰 Factures</button>
+                        <button onclick="window.location.href='generate-qr.html'">📱 QR codes</button>
+                    </div>
+                    
+                    <div class="map-container">
+                        <div id="map"></div>
+                    </div>
+                    
+                    <div class="right-panel">
+                        <h3>📋 Derniers transports</h3>
+                        <div id="transportList">
+                            <div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="modal" class="modal">
+                    <div class="modal-box">
+                        <div class="modal-header">
+                            <h3>➕ Nouveau transport</h3>
+                            <button onclick="closeModal()">✖</button>
+                        </div>
+                        <div class="modal-content">
+                            <form onsubmit="event.preventDefault(); saveTransport();">
+                                <div class="form-group">
+                                    <label>Nom client *</label>
+                                    <input type="text" id="clientName" required placeholder="Jean Dupont">
+                                </div>
+                                <div class="form-group">
+                                    <label>Ville ramassage *</label>
+                                    <input type="text" id="pickupCity" required placeholder="Lausanne">
+                                </div>
+                                <div class="form-group">
+                                    <label>Ville livraison *</label>
+                                    <input type="text" id="deliveryCity" required placeholder="Genève">
+                                </div>
+                                <div class="form-group">
+                                    <label>Poids (kg)</label>
+                                    <input type="number" id="weight" value="1" step="0.1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Priorité</label>
+                                    <select id="priority">
+                                        <option value="normal">Normal</option>
+                                        <option value="urgent">Urgent</option>
+                                    </select>
+                                </div>
+                                <div class="modal-buttons">
+                                    <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
+                                    <button type="submit" class="btn-save">Créer</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // ===== FONCTIONS =====
+            let map;
+            let markers;
+            
+            window.logout = function() {
+                localStorage.removeItem('user');
+                window.location.href = '../login/';
+            };
+            
+            window.openModal = function() {
+                document.getElementById('modal').style.display = 'flex';
+            };
+            
+            window.closeModal = function() {
+                document.getElementById('modal').style.display = 'none';
+            };
+            
+            // Initialisation carte
+            function initMap() {
+                try {
+                    map = L.map('map').setView([46.8, 8.2], 8);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19
+                    }).addTo(map);
+                    
+                    markers = L.markerClusterGroup();
+                    map.addLayer(markers);
+                    
+                    loadTransports();
+                } catch(e) {
+                    console.error("Erreur carte:", e);
+                }
+            }
+            
+            async function loadTransports() {
+                try {
+                    const { data, error } = await supabase
+                        .from('transport_orders')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) throw error;
+                    
+                    // Stats
+                    document.getElementById('totalCount').textContent = data?.length || 0;
+                    document.getElementById('urgentCount').textContent = data?.filter(t => t.priority === 'urgent').length || 0;
+                    
+                    // Liste
+                    let html = '';
+                    data?.slice(0, 5).forEach(t => {
+                        html += `
+                            <div class="transport-item ${t.priority === 'urgent' ? 'urgent' : ''}">
+                                <div class="transport-client">${t.client_name || 'Sans client'}</div>
+                                <div class="transport-route">${t.pickup_city || '?'} → ${t.delivery_city || '?'}</div>
+                            </div>
+                        `;
+                    });
+                    document.getElementById('transportList').innerHTML = html || '<div style="padding:20px;">Aucun transport</div>';
+                    
+                    // Carte
+                    markers.clearLayers();
+                    data?.forEach((t, i) => {
+                        if (t.delivery_city) {
+                            let lat = 46.8, lng = 8.2;
+                            const city = t.delivery_city.toLowerCase();
+                            if (city.includes('lausanne')) { lat = 46.52; lng = 6.63; }
+                            if (city.includes('geneve')) { lat = 46.20; lng = 6.14; }
+                            if (city.includes('yverdon')) { lat = 46.78; lng = 6.64; }
+                            
+                            let color = '#facc15';
+                            if (t.priority === 'urgent') color = '#ef4444';
+                            
+                            const icon = L.divIcon({
+                                html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${i+1}</div>`,
+                                iconSize: [24, 24]
+                            });
+                            
+                            L.marker([lat, lng], { icon }).addTo(markers);
+                        }
+                    });
+                    
+                } catch(e) {
+                    console.error("Erreur chargement:", e);
+                    document.getElementById('transportList').innerHTML = '<div style="color:#ef4444; padding:20px;">Erreur</div>';
+                }
+            }
+            
+            window.saveTransport = async function() {
+                const transport = {
+                    client_name: document.getElementById('clientName').value,
+                    pickup_city: document.getElementById('pickupCity').value,
+                    delivery_city: document.getElementById('deliveryCity').value,
+                    weight: parseFloat(document.getElementById('weight').value) || 1,
+                    priority: document.getElementById('priority').value,
+                    status: 'pending',
+                    created_at: new Date()
+                };
+                
+                if (!transport.client_name || !transport.pickup_city || !transport.delivery_city) {
+                    alert('Champs obligatoires');
+                    return;
+                }
+                
+                try {
+                    const { error } = await supabase.from('transport_orders').insert([transport]);
+                    if (error) throw error;
+                    
+                    alert('✅ Transport créé');
+                    closeModal();
+                    
+                    document.getElementById('clientName').value = '';
+                    document.getElementById('pickupCity').value = '';
+                    document.getElementById('deliveryCity').value = '';
+                    
+                    loadTransports();
+                    
+                } catch(e) {
+                    console.error('Erreur:', e);
+                    alert('❌ Erreur création');
+                }
+            };
+            
+            // Lancement
+            initMap();
+            setInterval(loadTransports, 30000);
+        });
     </script>
     
 </body>
