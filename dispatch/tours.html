@@ -8,17 +8,11 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- Leaflet CSS -->
+    <!-- Leaflet CSS (doit être avant tout) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     
-    <!-- Drag & Drop -->
+    <!-- Drag & Drop CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
-    
-    <!-- Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
@@ -135,10 +129,6 @@
             border-left-color: #ef4444;
         }
         
-        .transport-card.dragging {
-            opacity: 0.5;
-        }
-        
         .transport-client {
             font-weight: bold;
             color: white;
@@ -197,7 +187,19 @@
 </head>
 <body>
 
-    <div id="app">Chargement...</div>
+    <div id="app">
+        <div class="loader">
+            <i class="fas fa-spinner fa-spin"></i>
+            Chargement...
+        </div>
+    </div>
+
+    <!-- SCRIPTS DANS LE BON ORDRE -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
@@ -215,6 +217,11 @@
                 if (!user) { window.location.href = '../login/'; return; }
                 const userData = JSON.parse(user);
                 if (userData.role !== 'admin') { window.location.href = '../'; return; }
+                
+                // ===== VÉRIFICATION LEAFLET =====
+                if (typeof L === 'undefined') {
+                    throw new Error("Leaflet n'est pas chargé");
+                }
                 
                 // ===== DONNÉES =====
                 let allTransports = [];
@@ -236,7 +243,7 @@
                     
                     allTransports = data || [];
                     
-                    // Charger les tournées sauvegardées (à implémenter)
+                    // Charger les tournées sauvegardées
                     tours = [
                         {
                             id: 1,
@@ -396,14 +403,11 @@
                             const transportId = ui.draggable.data('id');
                             const tourId = $(this).data('tour-id');
                             
-                            // Déplacer la carte visuellement
                             const clone = ui.draggable.clone();
                             $(this).append(clone);
                             
-                            // Supprimer l'original
                             ui.draggable.remove();
                             
-                            // Réinitialiser le draggable sur le clone
                             clone.draggable({
                                 revert: "invalid",
                                 helper: "clone",
@@ -412,7 +416,6 @@
                                 zIndex: 1000
                             });
                             
-                            // Mettre à jour les données
                             ajouterTransportATournee(transportId, tourId);
                         }
                     });
@@ -425,7 +428,6 @@
                     
                     L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
                     
-                    // Ajouter les marqueurs des transports en attente
                     $(".transport-card").each(function() {
                         const lat = $(this).data('lat');
                         const lng = $(this).data('lng');
@@ -438,11 +440,9 @@
                 // ===== FONCTIONS =====
                 window.ajouterTransportATournee = function(transportId, tourId) {
                     console.log(`Transport ${transportId} ajouté à la tournée ${tourId}`);
-                    // Ici, mettre à jour Supabase
                 };
                 
                 window.optimiser = function() {
-                    // Prendre tous les transports en attente et les répartir
                     const pendingCards = $("#pendingTransports .transport-card");
                     
                     if (pendingCards.length === 0) {
@@ -450,7 +450,6 @@
                         return;
                     }
                     
-                    // Répartir équitablement
                     let index = 0;
                     pendingCards.each(function() {
                         const tourId = tours[index % tours.length].id;
@@ -473,7 +472,6 @@
                 };
                 
                 window.optimiserTournee = function(tourId) {
-                    // Optimiser l'ordre des arrêts dans une tournée
                     alert(`Optimisation de la tournée ${tourId}...`);
                 };
                 
