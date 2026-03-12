@@ -54,12 +54,14 @@
         .btn-pointage {
             padding: 15px; border: none; border-radius: 8px; font-weight: bold;
             cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+            transition: 0.2s;
         }
+        .btn-pointage:hover { transform: translateY(-2px); }
+        .btn-pointage:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .btn-debut { background: #10b981; color: white; }
         .btn-pause-debut { background: #f59e0b; color: white; }
         .btn-pause-fin { background: #f59e0b; color: white; }
         .btn-fin { background: #ef4444; color: white; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .compteurs-grid {
             display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;
@@ -144,6 +146,66 @@
                 
                 if (chauffeurError) throw chauffeurError;
                 
+                // ===== GESTION DU POINTAGE EN LOCAL =====
+                let pointageActuel = JSON.parse(localStorage.getItem('pointage_' + chauffeur.id)) || {
+                    debut: null,
+                    pauseDebut: null,
+                    pauseFin: null,
+                    fin: null
+                };
+                
+                // ===== FONCTIONS DE POINTAGE =====
+                window.pointer = function(action) {
+                    const maintenant = new Date();
+                    const heure = maintenant.toLocaleTimeString();
+                    
+                    switch(action) {
+                        case 'debut':
+                            pointageActuel.debut = maintenant;
+                            document.getElementById('affDebut').textContent = heure;
+                            break;
+                        case 'pause_debut':
+                            pointageActuel.pauseDebut = maintenant;
+                            document.getElementById('affPause').textContent = heure;
+                            break;
+                        case 'pause_fin':
+                            pointageActuel.pauseFin = maintenant;
+                            // Calculer la durée de pause
+                            if (pointageActuel.pauseDebut) {
+                                const duree = Math.round((maintenant - new Date(pointageActuel.pauseDebut)) / 60000);
+                                document.getElementById('affPause').textContent = duree + ' min';
+                            }
+                            break;
+                        case 'fin':
+                            pointageActuel.fin = maintenant;
+                            document.getElementById('affFin').textContent = heure;
+                            
+                            // Calculer le total
+                            if (pointageActuel.debut) {
+                                let total = (maintenant - new Date(pointageActuel.debut)) / 3600000; // en heures
+                                if (pointageActuel.pauseDebut && pointageActuel.pauseFin) {
+                                    const pause = (new Date(pointageActuel.pauseFin) - new Date(pointageActuel.pauseDebut)) / 3600000;
+                                    total -= pause;
+                                }
+                                const heures = Math.floor(total);
+                                const minutes = Math.round((total - heures) * 60);
+                                document.getElementById('affTotal').textContent = heures + 'h' + (minutes < 10 ? '0' : '') + minutes;
+                            }
+                            break;
+                    }
+                    
+                    // Sauvegarder
+                    localStorage.setItem('pointage_' + chauffeur.id, JSON.stringify(pointageActuel));
+                    
+                    // Désactiver le bouton
+                    document.querySelectorAll('.btn-pointage').forEach(btn => {
+                        if (btn.id !== 'btn_' + action) btn.disabled = false;
+                    });
+                    document.getElementById('btn_' + action).disabled = true;
+                    
+                    showMessage('✅ Pointage enregistré');
+                };
+                
                 // ===== COMPTEURS =====
                 let compteurActuel = null;
                 try {
@@ -158,22 +220,6 @@
                     }
                 } catch(e) {
                     console.warn("Erreur compteurs:", e);
-                }
-                
-                // ===== POINTAGE =====
-                let pointage = null;
-                try {
-                    const today = new Date().toISOString().split('T')[0];
-                    const { data: pointages } = await supabase
-                        .from('pointages')
-                        .select('*')
-                        .eq('chauffeur_id', chauffeur.id);
-                    
-                    if (pointages && pointages.length > 0) {
-                        pointage = pointages.find(p => p.date === today);
-                    }
-                } catch(e) {
-                    console.warn("Erreur pointage:", e);
                 }
                 
                 // ===== CONSTRUCTION PAGE =====
@@ -214,22 +260,22 @@
                         <div class="pointage-section">
                             <h3><i class="fas fa-fingerprint"></i> Pointage du jour</h3>
                             <div style="display: grid; grid-template-columns: repeat(2,1fr); gap:10px; margin:15px 0;">
-                                <div><small>Début: <span id="affDebut">${pointage?.debut_travail ? new Date(pointage.debut_travail).toLocaleTimeString() : '--:--'}</span></small></div>
-                                <div><small>Fin: <span id="affFin">${pointage?.fin_travail ? new Date(pointage.fin_travail).toLocaleTimeString() : '--:--'}</span></small></div>
-                                <div><small>Pause: <span id="affPause">--:--</span></small></div>
-                                <div><small>Total: <span id="affTotal">0h00</span></small></div>
+                                <div><small>Début: <span id="affDebut">${pointageActuel.debut ? new Date(pointageActuel.debut).toLocaleTimeString() : '--:--'}</span></small></div>
+                                <div><small>Fin: <span id="affFin">${pointageActuel.fin ? new Date(pointageActuel.fin).toLocaleTimeString() : '--:--'}</span></small></div>
+                                <div><small>Pause: <span id="affPause">${pointageActuel.pauseFin ? 'Terminée' : pointageActuel.pauseDebut ? 'En cours' : '--:--'}</span></small></div>
+                                <div><small>Total: <span id="affTotal">--h--</span></small></div>
                             </div>
                             <div class="pointage-buttons">
-                                <button class="btn-pointage btn-debut" onclick="pointer('debut')" ${pointage?.debut_travail ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-debut" id="btn_debut" onclick="pointer('debut')" ${pointageActuel.debut ? 'disabled' : ''}>
                                     <i class="fas fa-play"></i> Début
                                 </button>
-                                <button class="btn-pointage btn-pause-debut" onclick="pointer('pause_debut')" ${pointage?.debut_pause ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-pause-debut" id="btn_pause_debut" onclick="pointer('pause_debut')" ${pointageActuel.pauseDebut ? 'disabled' : ''}>
                                     <i class="fas fa-coffee"></i> Pause
                                 </button>
-                                <button class="btn-pointage btn-pause-fin" onclick="pointer('pause_fin')" ${!pointage?.debut_pause || pointage?.fin_pause ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-pause-fin" id="btn_pause_fin" onclick="pointer('pause_fin')" ${!pointageActuel.pauseDebut || pointageActuel.pauseFin ? 'disabled' : ''}>
                                     <i class="fas fa-undo"></i> Retour
                                 </button>
-                                <button class="btn-pointage btn-fin" onclick="pointer('fin')" ${pointage?.fin_travail ? 'disabled' : ''}>
+                                <button class="btn-pointage btn-fin" id="btn_fin" onclick="pointer('fin')" ${pointageActuel.fin ? 'disabled' : ''}>
                                     <i class="fas fa-stop"></i> Fin
                                 </button>
                             </div>
@@ -253,21 +299,16 @@
                         <div class="colis-list">
                             <h3><i class="fas fa-box"></i> Mes colis à livrer</h3>
                             <div id="colisList">Chargement...</div>
-                            <div style="margin-top:15px; font-size:12px; color:#64748b; text-align:center;">
-                                👆 Cliquez sur un colis pour changer son statut
-                            </div>
                         </div>
                     </div>
                 `;
                 
                 // ===== VARIABLES =====
                 window.chauffeurId = chauffeur.id;
-                window.pointageActuel = pointage;
                 
                 // ===== CHARGEMENT DES COLIS =====
                 async function chargerColis() {
                     try {
-                        // Charger tous les colis non livrés
                         const { data } = await supabase
                             .from('transport_orders_simple')
                             .select('*')
@@ -277,14 +318,10 @@
                         
                         let html = '';
                         let livresAujourdhui = 0;
-                        const aujourdhui = new Date().toISOString().split('T')[0];
                         
                         if (data && data.length > 0) {
                             data.forEach(t => {
-                                // Compter les livrés aujourd'hui (via le champ updated_at si disponible)
-                                if (t.status === 'delivered') {
-                                    livresAujourdhui++;
-                                }
+                                if (t.status === 'delivered') livresAujourdhui++;
                                 
                                 let statutTexte = 'En attente';
                                 let statutClass = 'statut-charge';
@@ -309,7 +346,7 @@
                                 `;
                             });
                         } else {
-                            html = '<div style="text-align:center; padding:20px;">Aucun colis à livrer</div>';
+                            html = '<div style="text-align:center; padding:20px;">Aucun colis</div>';
                         }
                         
                         document.getElementById('colisList').innerHTML = html;
@@ -362,35 +399,6 @@
                     document.body.appendChild(msg);
                     setTimeout(() => msg.remove(), 3000);
                 }
-                
-                // ===== POINTAGE =====
-                window.pointer = async function(action) {
-                    const now = new Date();
-                    const updates = {};
-                    
-                    switch(action) {
-                        case 'debut': updates.debut_travail = now; break;
-                        case 'pause_debut': updates.debut_pause = now; break;
-                        case 'pause_fin': updates.fin_pause = now; break;
-                        case 'fin': updates.fin_travail = now; break;
-                    }
-                    
-                    try {
-                        if (window.pointageActuel) {
-                            await supabase.from('pointages').update(updates).eq('id', window.pointageActuel.id);
-                        } else {
-                            const { data } = await supabase.from('pointages').insert([{
-                                chauffeur_id: window.chauffeurId,
-                                date: new Date().toISOString().split('T')[0],
-                                ...updates
-                            }]).select();
-                            window.pointageActuel = data[0];
-                        }
-                        location.reload();
-                    } catch(e) {
-                        alert('Erreur: ' + e.message);
-                    }
-                };
                 
                 window.logout = function() {
                     localStorage.removeItem('chauffeur');
