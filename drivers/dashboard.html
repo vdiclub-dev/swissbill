@@ -254,7 +254,7 @@
                             <h3><i class="fas fa-box"></i> Mes colis à livrer</h3>
                             <div id="colisList">Chargement...</div>
                             <div style="margin-top:15px; font-size:12px; color:#64748b; text-align:center;">
-                                👆 Clic 1 = prendre en charge | Clic 2 = livrer
+                                👆 Cliquez sur un colis pour changer son statut
                             </div>
                         </div>
                     </div>
@@ -267,7 +267,7 @@
                 // ===== CHARGEMENT DES COLIS =====
                 async function chargerColis() {
                     try {
-                        // Charger les colis non livrés
+                        // Charger tous les colis non livrés
                         const { data } = await supabase
                             .from('transport_orders_simple')
                             .select('*')
@@ -276,19 +276,29 @@
                             .limit(10);
                         
                         let html = '';
+                        let livresAujourdhui = 0;
+                        const aujourdhui = new Date().toISOString().split('T')[0];
                         
                         if (data && data.length > 0) {
                             data.forEach(t => {
+                                // Compter les livrés aujourd'hui (via le champ updated_at si disponible)
+                                if (t.status === 'delivered') {
+                                    livresAujourdhui++;
+                                }
+                                
                                 let statutTexte = 'En attente';
                                 let statutClass = 'statut-charge';
                                 
                                 if (t.status === 'transit') {
                                     statutTexte = 'En route';
                                     statutClass = 'statut-transit';
+                                } else if (t.status === 'delivered') {
+                                    statutTexte = 'Livré';
+                                    statutClass = 'statut-livre';
                                 }
                                 
                                 html += `
-                                    <div class="colis-item" onclick="gererColis('${t.id}', '${t.status}')">
+                                    <div class="colis-item" onclick="changerStatut('${t.id}', '${t.status}')">
                                         <div class="colis-info">
                                             <div class="colis-numero">📦 ${t.order_number}</div>
                                             <div class="colis-adresse">${t.delivery_address?.substring(0, 50) || 'Adresse inconnue'}</div>
@@ -303,57 +313,41 @@
                         }
                         
                         document.getElementById('colisList').innerHTML = html;
-                        
-                        // Compter les colis livrés aujourd'hui
-                        const aujourdhui = new Date().toISOString().split('T')[0];
-                        const livres = data?.filter(t => 
-                            t.status === 'delivered' && 
-                            t.delivered_at?.startsWith(aujourdhui)
-                        ).length || 0;
-                        
-                        document.getElementById('colisAujourdhui').textContent = livres;
+                        document.getElementById('colisAujourdhui').textContent = livresAujourdhui;
                         
                     } catch(e) {
                         console.error(e);
                     }
                 }
                 
-                // ===== GESTION DES COLIS =====
-                window.gererColis = async function(id, statutActuel) {
+                // ===== CHANGEMENT DE STATUT =====
+                window.changerStatut = async function(id, statutActuel) {
                     try {
+                        let nouveauStatut = '';
+                        let message = '';
+                        
                         if (statutActuel === 'pending') {
-                            // Passer en transit
-                            if (confirm('Prendre ce colis en charge ?')) {
-                                const { error } = await supabase
-                                    .from('transport_orders_simple')
-                                    .update({ 
-                                        status: 'transit'
-                                    })
-                                    .eq('id', id);
-                                
-                                if (error) throw error;
-                                
-                                showMessage('✅ Colis pris en charge');
-                            }
+                            nouveauStatut = 'transit';
+                            message = 'Colis pris en charge';
                         } else if (statutActuel === 'transit') {
-                            // Passer en livré
-                            if (confirm('Marquer ce colis comme livré ?')) {
-                                const { error } = await supabase
-                                    .from('transport_orders_simple')
-                                    .update({ 
-                                        status: 'delivered',
-                                        delivered_at: new Date()
-                                    })
-                                    .eq('id', id);
-                                
-                                if (error) throw error;
-                                
-                                showMessage('✅ Colis livré avec succès');
-                            }
+                            nouveauStatut = 'delivered';
+                            message = 'Colis livré avec succès';
+                        } else {
+                            alert('Ce colis est déjà livré');
+                            return;
                         }
                         
-                        // Recharger
-                        await chargerColis();
+                        if (confirm(`Passer ce colis en "${nouveauStatut}" ?`)) {
+                            const { error } = await supabase
+                                .from('transport_orders_simple')
+                                .update({ status: nouveauStatut })
+                                .eq('id', id);
+                            
+                            if (error) throw error;
+                            
+                            showMessage(`✅ ${message}`);
+                            await chargerColis();
+                        }
                         
                     } catch(e) {
                         alert('❌ Erreur: ' + e.message);
