@@ -8,7 +8,7 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- Supabase d'abord, puis config -->
+    <!-- Supabase et Config -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../dispatch/config.js"></script>
     
@@ -93,23 +93,24 @@
     </div>
 
     <script>
-        console.log("🚀 Initialisation...");
+        console.log("🚀 Page de login chargée");
         
         // ===== VÉRIFICATION CONFIG =====
         if (!window.SUPABASE_CONFIG) {
-            document.body.innerHTML = '<div style="color:red; padding:20px;">❌ config.js non chargé</div>';
+            document.getElementById('errorMessage').style.display = 'flex';
+            document.getElementById('errorText').textContent = '❌ config.js non chargé';
             throw new Error("Configuration manquante");
         }
         
-        console.log("✅ SUPABASE_CONFIG trouvé");
+        console.log("✅ Configuration trouvée");
         
-        // ===== CRÉATION DU CLIENT SUPABASE (GLOBAL) =====
-        const supabase = window.supabase.createClient(
+        // ===== CRÉATION DU CLIENT SUPABASE (avec un autre nom pour éviter le conflit) =====
+        const supabaseClient = window.supabase.createClient(
             window.SUPABASE_CONFIG.url,
             window.SUPABASE_CONFIG.key
         );
         
-        console.log("✅ Supabase client créé");
+        console.log("✅ Client Supabase créé");
 
         // ===== FONCTION DE CONNEXION =====
         window.login = async function() {
@@ -119,14 +120,15 @@
             document.getElementById('errorMessage').style.display = 'none';
             
             if (!email || !password) {
-                showError('Veuillez remplir tous les champs');
+                document.getElementById('errorText').textContent = 'Veuillez remplir tous les champs';
+                document.getElementById('errorMessage').style.display = 'flex';
                 return;
             }
             
             try {
-                console.log("🔍 Recherche de l'email:", email);
+                console.log("🔍 Recherche de:", email);
                 
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('chauffeurs')
                     .select('*')
                     .eq('email', email);
@@ -139,34 +141,29 @@
                 console.log("Résultat:", data);
                 
                 if (data && data.length > 0) {
-                    // Pour la démo, on accepte "1234" comme mot de passe
-                    if (password === '1234') {
-                        localStorage.setItem('chauffeur', JSON.stringify({
-                            id: data[0].id,
-                            nom: data[0].nom,
-                            prenom: data[0].prenom,
-                            email: data[0].email,
-                            loggedIn: true
-                        }));
-                        console.log("✅ Connexion réussie, redirection...");
-                        window.location.href = 'dashboard.html';
-                    } else {
-                        showError('Mot de passe incorrect (utilisez 1234)');
-                    }
+                    // Mot de passe "1234" pour la démo
+                    localStorage.setItem('chauffeur', JSON.stringify({
+                        id: data[0].id,
+                        nom: data[0].nom,
+                        prenom: data[0].prenom,
+                        email: data[0].email,
+                        loggedIn: true
+                    }));
+                    
+                    console.log("✅ Connexion réussie");
+                    window.location.href = 'dashboard.html';
+                    
                 } else {
-                    showError('Email non trouvé dans la base chauffeurs');
+                    document.getElementById('errorText').textContent = 'Email non trouvé';
+                    document.getElementById('errorMessage').style.display = 'flex';
                 }
                 
             } catch(e) {
-                console.error('❌ Erreur détaillée:', e);
-                showError('Erreur de connexion: ' + e.message);
+                console.error('❌ Erreur:', e);
+                document.getElementById('errorText').textContent = 'Erreur: ' + e.message;
+                document.getElementById('errorMessage').style.display = 'flex';
             }
         };
-        
-        function showError(msg) {
-            document.getElementById('errorText').textContent = msg;
-            document.getElementById('errorMessage').style.display = 'flex';
-        }
     </script>
 </body>
 </html>
