@@ -1,1 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Léman-Courses | Mon espace chauffeur</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Scanner QR -->
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../dispatch/config.js"></script>
+    
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
+        body { background: #f1f5f9; min-height: 100vh; }
+        
+        /* HEADER */
+        .header {
+            background: #0f172a; color: white; padding: 15px 30px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 3px solid #10b981;
+        }
+        .logo { font-size: 22px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+        .logo i { color: #10b981; }
+        .user-section { display: flex; align-items: center; gap: 20px; }
+        .user-badge { background: #1e293b; padding: 8px 16px; border-radius: 50px; display: flex; align-items: center; gap: 8px; }
+        .user-badge i { color: #10b981; }
+        .btn-logout { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
+        
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; }
+        
+        /* CARTES STATISTIQUES */
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px; margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white; padding: 20px; border-radius: 12px;
+            display: flex; align-items: center; gap: 15px; border: 1px solid #e2e8f0;
+        }
+        .stat-icon {
+            width: 50px; height: 50px; background: #e2f3e5; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; color: #10b981; font-size: 24px;
+        }
+        .stat-info h3 { font-size: 24px; margin-bottom: 4px; }
+        .stat-info p { color: #64748b; font-size: 14px; }
+        
+        /* POINTAGE */
+        .pointage-section {
+            background: white; border-radius: 12px; padding: 20px;
+            margin-bottom: 20px; border: 1px solid #e2e8f0;
+        }
+        .pointage-buttons {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px;
+        }
+        .btn-pointage {
+            padding: 15px; border: none; border-radius: 8px; font-weight: bold;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-debut { background: #10b981; color: white; }
+        .btn-pause-debut { background: #f59e0b; color: white; }
+        .btn-pause-fin { background: #f59e0b; color: white; }
+        .btn-fin { background: #ef4444; color: white; }
+        
+        /* COMPTEURS */
+        .compteurs-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;
+        }
+        .compteur-card {
+            background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0;
+            text-align: center;
+        }
+        .compteur-valeur { font-size: 32px; font-weight: bold; color: #10b981; }
+        .compteur-label { color: #64748b; font-size: 14px; margin-top: 5px; }
+        
+        /* SCAN QR */
+        .scan-section {
+            background: white; border-radius: 12px; padding: 20px;
+            margin-bottom: 20px; border: 1px solid #e2e8f0;
+        }
+        #qr-reader { width: 100%; max-width: 500px; margin: 0 auto; }
+        
+        /* LISTE COLIS */
+        .colis-list {
+            background: white; border-radius: 12px; padding: 20px;
+            margin-bottom: 20px; border: 1px solid #e2e8f0;
+        }
+        .colis-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px; border-bottom: 1px solid #e2e8f0;
+        }
+        .colis-item:last-child { border-bottom: none; }
+        .colis-statut {
+            padding: 4px 12px; border-radius: 20px; font-size: 12px;
+        }
+        .statut-charge { background: #fef3c7; color: #92400e; }
+        .statut-livre { background: #dcfce7; color: #166534; }
+        
+        /* MODAL */
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+                background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; }
+        .modal-box { background: white; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%; }
+        
+        @media (max-width: 768px) {
+            .pointage-buttons { grid-template-columns: repeat(2, 1fr); }
+            .compteurs-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
 
+    <div id="app"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                // ===== CONFIG =====
+                if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
+                const supabase = window.supabase.createClient(
+                    window.SUPABASE_CONFIG.url,
+                    window.SUPABASE_CONFIG.key
+                );
+                
+                // ===== VÉRIFICATION CONNEXION =====
+                const chauffeurData = JSON.parse(localStorage.getItem('chauffeur'));
+                if (!chauffeurData || !chauffeurData.loggedIn) {
+                    window.location.href = 'index.html';
+                    return;
+                }
+                
+                // ===== CHARGEMENT DES DONNÉES =====
+                const { data: chauffeur, error } = await supabase
+                    .from('chauffeurs')
+                    .select('*')
+                    .eq('email', chauffeurData.email)
+                    .single();
+                
+                if (error) throw error;
+                
+                // ===== CHARGEMENT DES COMPTEURS =====
+                const { data: compteurs } = await supabase
+                    .from('compteurs')
+                    .select('*')
+                    .eq('chauffeur_id', chauffeur.id)
+                    .eq('annee', new Date().getFullYear())
+                    .single();
+                
+                // ===== CHARGEMENT DU POINTAGE DU JOUR =====
+                const today = new Date().toISOString().split('T')[0];
+                const { data: pointage } = await supabase
+                    .from('pointages')
+                    .select('*')
+                    .eq('chauffeur_id', chauffeur.id)
+                    .eq('date', today)
+                    .single();
+                
+                // ===== CONSTRUCTION PAGE =====
+                document.getElementById('app').innerHTML = `
+                    <div class="header">
+                        <div class="logo"><i class="fas fa-truck"></i> Léman-Courses</div>
+                        <div class="user-section">
+                            <div class="user-badge"><i class="fas fa-user"></i> ${chauffeur.prenom} ${chauffeur.nom}</div>
+                            <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
+                        </div>
+                    </div>
+                    
+                    <div class="container">
+                        <!-- STATS DU JOUR -->
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                                <div class="stat-info">
+                                    <h3 id="heuresAujourdhui">0h00</h3>
+                                    <p>Aujourd'hui</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon"><i class="fas fa-box"></i></div>
+                                <div class="stat-info">
+                                    <h3 id="colisAujourdhui">0</h3>
+                                    <p>Colis livrés</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon"><i class="fas fa-route"></i></div>
+                                <div class="stat-info">
+                                    <h3 id="kmAujourdhui">0</h3>
+                                    <p>Kilomètres</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- POINTAGE -->
+                        <div class="pointage-section">
+                            <h3><i class="fas fa-fingerprint"></i> Pointage du jour</h3>
+                            <div style="display: grid; grid-template-columns: repeat(2,1fr); gap:10px; margin:15px 0;">
+                                <div><small>Début: <span id="affDebut">${pointage?.debut_travail ? new Date(pointage.debut_travail).toLocaleTimeString() : '--:--'}</span></small></div>
+                                <div><small>Fin: <span id="affFin">${pointage?.fin_travail ? new Date(pointage.fin_travail).toLocaleTimeString() : '--:--'}</span></small></div>
+                                <div><small>Pause: <span id="affPause">--:--</span></small></div>
+                                <div><small>Total: <span id="affTotal">0h00</span></small></div>
+                            </div>
+                            <div class="pointage-buttons">
+                                <button class="btn-pointage btn-debut" onclick="pointer('debut')" ${pointage?.debut_travail ? 'disabled' : ''}>
+                                    <i class="fas fa-play"></i> Début
+                                </button>
+                                <button class="btn-pointage btn-pause-debut" onclick="pointer('pause_debut')" ${pointage?.debut_pause ? 'disabled' : ''}>
+                                    <i class="fas fa-coffee"></i> Pause
+                                </button>
+                                <button class="btn-pointage btn-pause-fin" onclick="pointer('pause_fin')" ${!pointage?.debut_pause || pointage?.fin_pause ? 'disabled' : ''}>
+                                    <i class="fas fa-undo"></i> Retour
+                                </button>
+                                <button class="btn-pointage btn-fin" onclick="pointer('fin')" ${pointage?.fin_travail ? 'disabled' : ''}>
+                                    <i class="fas fa-stop"></i> Fin
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- COMPTEURS PERSONNELS -->
+                        <div class="compteurs-grid">
+                            <div class="compteur-card">
+                                <div class="compteur-valeur" id="congesRestants">${compteurs?.conges_restants || 20}</div>
+                                <div class="compteur-label">Jours de congés</div>
+                            </div>
+                            <div class="compteur-card">
+                                <div class="compteur-valeur" id="compensationRestantes">${compteurs?.compensation_restantes || 0}</div>
+                                <div class="compteur-label">Heures de compensation</div>
+                            </div>
+                            <div class="compteur-card">
+                                <div class="compteur-valeur" id="heuresMois">0h</div>
+                                <div class="compteur-label">Heures ce mois</div>
+                            </div>
+                        </div>
+                        
+                        <!-- SCAN QR POUR COLIS -->
+                        <div class="scan-section">
+                            <h3><i class="fas fa-qrcode"></i> Scanner un colis</h3>
+                            <div id="qr-reader"></div>
+                            <div id="scanResult" style="margin-top:10px;"></div>
+                        </div>
+                        
+                        <!-- COLIS À LIVRER -->
+                        <div class="colis-list">
+                            <h3><i class="fas fa-box"></i> Mes colis</h3>
+                            <div id="colisList">Chargement...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- MODAL CONFIRMATION LIVRAISON -->
+                    <div id="livraisonModal" class="modal">
+                        <div class="modal-box">
+                            <h3 style="margin-bottom:15px;">Confirmer la livraison</h3>
+                            <p id="modalColisInfo"></p>
+                            <div style="display:flex; gap:10px; margin-top:20px;">
+                                <button class="btn-pointage" style="flex:1; background:#10b981;" onclick="confirmerLivraison()">✓ Confirmer</button>
+                                <button class="btn-pointage" style="flex:1; background:#ef4444;" onclick="fermerModal()">✕ Annuler</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // ===== VARIABLES GLOBALES =====
+                window.currentScan = null;
+                window.chauffeurId = chauffeur.id;
+                window.pointageActuel = pointage;
+                
+                // ===== INIT SCANNEUR QR =====
+                const html5QrCode = new Html5Qrcode("qr-reader");
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: 250 },
+                    (decodedText) => {
+                        document.getElementById('scanResult').innerHTML = `
+                            <div style="background:#10b981; color:white; padding:10px; border-radius:4px;">
+                                ✅ QR scanné: ${decodedText}
+                            </div>
+                        `;
+                        // Format attendu: TR-2401|CL2025-001|Lausanne|Genève
+                        const parts = decodedText.split('|');
+                        if (parts.length >= 2) {
+                            window.currentScan = {
+                                order: parts[0],
+                                client: parts[1]
+                            };
+                            document.getElementById('modalColisInfo').innerHTML = `
+                                Transport: <strong>${parts[0]}</strong><br>
+                                Client: ${parts[1] || '?'}<br>
+                                Trajet: ${parts[2] || '?'} → ${parts[3] || '?'}
+                            `;
+                            document.getElementById('livraisonModal').style.display = 'flex';
+                        }
+                    },
+                    () => {}
+                );
+                
+                // ===== FONCTIONS =====
+                window.pointer = async function(action) {
+                    const now = new Date();
+                    const updates = {};
+                    
+                    switch(action) {
+                        case 'debut':
+                            updates.debut_travail = now;
+                            break;
+                        case 'pause_debut':
+                            updates.debut_pause = now;
+                            break;
+                        case 'pause_fin':
+                            updates.fin_pause = now;
+                            break;
+                        case 'fin':
+                            updates.fin_travail = now;
+                            break;
+                    }
+                    
+                    if (window.pointageActuel) {
+                        // Mise à jour
+                        await supabase.from('pointages').update(updates).eq('id', window.pointageActuel.id);
+                    } else {
+                        // Création
+                        const { data } = await supabase.from('pointages').insert([{
+                            chauffeur_id: window.chauffeurId,
+                            date: new Date().toISOString().split('T')[0],
+                            ...updates
+                        }]).select();
+                        window.pointageActuel = data[0];
+                    }
+                    
+                    location.reload();
+                };
+                
+                window.confirmerLivraison = async function() {
+                    alert(`✅ Transport ${window.currentScan.order} marqué comme livré`);
+                    document.getElementById('livraisonModal').style.display = 'none';
+                };
+                
+                window.fermerModal = function() {
+                    document.getElementById('livraisonModal').style.display = 'none';
+                };
+                
+                window.logout = function() {
+                    localStorage.removeItem('chauffeur');
+                    window.location.href = 'index.html';
+                };
+                
+                // ===== CHARGEMENT DES COLIS =====
+                async function chargerColis() {
+                    const { data } = await supabase
+                        .from('transport_orders_simple')
+                        .select('*')
+                        .eq('status', 'pending')
+                        .limit(5);
+                    
+                    let html = '';
+                    data?.forEach(t => {
+                        html += `
+                            <div class="colis-item">
+                                <div>
+                                    <strong>${t.order_number}</strong><br>
+                                    <small>${t.delivery_address?.substring(0,30)}</small>
+                                </div>
+                                <span class="colis-statut statut-charge">En charge</span>
+                            </div>
+                        `;
+                    });
+                    document.getElementById('colisList').innerHTML = html || 'Aucun colis';
+                }
+                
+                chargerColis();
+                
+            } catch(e) {
+                console.error(e);
+                document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
+            }
+        });
+    </script>
+    
+</body>
+</html>
