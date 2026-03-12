@@ -1,787 +1,391 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Léman Dispatch | Admin</title>
-    
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
-    
-    <style>
-        /* ===== DESIGN SOMBRE ===== */
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-        
-        body { 
-            background: #111; 
-            height: 100vh; 
-            overflow: hidden; 
-            color: white;
-        }
-        
-        /* HEADER */
-        header {
-            background: #111;
-            padding: 15px 25px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #facc15;
-            height: 70px;
-        }
-        
-        .logo {
-            font-size: 24px;
-            font-weight: bold;
-            color: #facc15;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .logo i {
-            font-size: 28px;
-        }
-        
-        .user-section {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-        
-        .user-badge {
-            background: #1f2937;
-            padding: 8px 16px;
-            border-radius: 50px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-        }
-        
-        .user-badge i {
-            color: #facc15;
-        }
-        
-        .btn-logout {
-            background: #2a2a2a;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            transition: 0.2s;
-        }
-        
-        .btn-logout:hover {
-            background: #e53935;
-        }
-        
-        .btn {
-            background: #facc15;
-            color: #111;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 16px;
-            transition: 0.2s;
-        }
-        
-        .btn:hover {
-            background: #eab308;
-        }
-        
-        .stats-header {
-            display: flex;
-            gap: 20px;
-            font-size: 14px;
-        }
-        
-        .stat-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .stat-value {
-            background: #2a2a2a;
-            padding: 4px 10px;
-            border-radius: 20px;
-            color: #facc15;
-            font-weight: bold;
-        }
-        
-        /* LAYOUT */
-        .container {
-            display: flex;
-            height: calc(100vh - 70px);
-        }
-        
-        /* SIDEBAR */
-        .sidebar {
-            width: 220px;
-            background: #111;
-            padding: 20px;
-            border-right: 1px solid #2a2a2a;
-        }
-        
-        .sidebar button {
-            width: 100%;
-            padding: 12px;
-            margin-bottom: 8px;
-            background: #1f2937;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            text-align: left;
-            transition: 0.2s;
-        }
-        
-        .sidebar button:hover {
-            background: #facc15;
-            color: #111;
-        }
-        
-        .sidebar button.active {
-            background: #facc15;
-            color: #111;
-        }
-        
-        /* CARTE */
-        .map-container {
-            flex: 1;
-            position: relative;
-        }
-        
-        #map {
-            height: 100%;
-            width: 100%;
-        }
-        
-        /* PANEL DROIT */
-        .right-panel {
-            width: 320px;
-            background: #111;
-            border-left: 1px solid #2a2a2a;
-            padding: 20px;
-            overflow-y: auto;
-        }
-        
-        .right-panel h3 {
-            color: #facc15;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        /* LISTE TRANSPORTS */
-        .transport-item {
-            background: #1f2937;
-            padding: 12px;
-            margin-bottom: 10px;
-            border-radius: 6px;
-            border-left: 3px solid #facc15;
-            transition: 0.2s;
-            cursor: pointer;
-        }
-        
-        .transport-item:hover {
-            transform: translateX(2px);
-            border-left-width: 5px;
-        }
-        
-        .transport-item.urgent {
-            border-left-color: #ef4444;
-        }
-        
-        .transport-client {
-            font-weight: bold;
-            color: white;
-            margin-bottom: 5px;
-        }
-        
-        .transport-route {
-            font-size: 13px;
-            color: #aaa;
-        }
-        
-        .transport-distance {
-            font-size: 12px;
-            color: #facc15;
-            margin-top: 5px;
-        }
-        
-        /* MODAL */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal-box {
-            background: #1f2937;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 500px;
-            max-height: 80vh;
-            overflow-y: auto;
-            border: 1px solid #facc15;
-        }
-        
-        .modal-header {
-            background: #111;
-            padding: 15px 20px;
-            border-bottom: 1px solid #2a2a2a;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .modal-header h3 { color: #facc15; }
-        .modal-header button { 
-            background: none; 
-            border: none; 
-            color: #888; 
-            font-size: 24px; 
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        
-        .modal-header button:hover {
-            color: #facc15;
-        }
-        
-        .modal-content {
-            padding: 20px;
-        }
-        
-        /* FORMULAIRE */
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #aaa;
-            font-size: 13px;
-        }
-        
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            background: #111;
-            border: 1px solid #2a2a2a;
-            color: white;
-            border-radius: 4px;
-            transition: 0.2s;
-        }
-        
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #facc15;
-        }
-        
-        .form-row {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .form-row .form-group {
-            flex: 1;
-        }
-        
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        
-        .modal-buttons button {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
-        }
-        
-        .btn-cancel {
-            background: #2a2a2a;
-            color: white;
-        }
-        
-        .btn-cancel:hover {
-            background: #3a3a3a;
-        }
-        
-        .btn-save {
-            background: #facc15;
-            color: #111;
-        }
-        
-        .btn-save:hover {
-            background: #eab308;
-        }
-        
-        /* Message non autorisé */
-        .unauthorized {
-            text-align: center;
-            padding: 50px;
-            background: #1f2937;
-            border-radius: 15px;
-            max-width: 500px;
-            margin: 100px auto;
-            border: 1px solid #facc15;
-        }
-        
-        .unauthorized i {
-            font-size: 60px;
-            color: #facc15;
-            margin-bottom: 20px;
-        }
-        
-        .unauthorized h2 {
-            margin-bottom: 10px;
-            color: white;
-        }
-        
-        .unauthorized p {
-            color: #aaa;
-            margin-bottom: 30px;
-        }
-        
-        .loader {
-            text-align: center;
-            padding: 20px;
-            color: #aaa;
-        }
-        
-        .loader i {
-            font-size: 30px;
-            color: #facc15;
-            animation: spin 1s infinite linear;
-        }
-        
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-    </style>
-</head>
-<body>
+<!-- Scripts dans le bon ordre -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 
-    <div id="app"></div>
-
-    <!-- Scripts dans le bon ordre -->
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
+<script>
+    // ===== VÉRIFICATION CONFIG =====
+    if (!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="color:red; padding:20px;">❌ Fichier config.js manquant</div>';
+        throw new Error("Configuration manquante");
+    }
     
-    <script>
-        // ===== VÉRIFICATION CONFIG =====
-        if (!window.SUPABASE_CONFIG) {
-            document.body.innerHTML = '<div class="unauthorized"><i class="fas fa-exclamation-triangle"></i><h2>Erreur</h2><p>Fichier de configuration manquant</p></div>';
-            throw new Error("Configuration manquante");
-        }
+    // ===== TEST SUPABASE =====
+    console.log("📦 Supabase disponible:", typeof window.supabase !== 'undefined');
+    
+    if (typeof window.supabase === 'undefined') {
+        document.body.innerHTML = '<div style="color:red; padding:20px;">❌ Supabase non chargé</div>';
+        throw new Error("Supabase non chargé");
+    }
+    
+    // ===== CRÉER LE CLIENT SUPABASE =====
+    const supabase = window.supabase.createClient(
+        window.SUPABASE_CONFIG.url,
+        window.SUPABASE_CONFIG.key
+    );
+    
+    console.log("✅ Supabase client créé");
+    
+    // ===== VÉRIFICATION AUTHENTIFICATION =====
+    (function() {
+        const user = localStorage.getItem('user');
         
-        // ===== VÉRIFICATION AUTHENTIFICATION =====
-        (function() {
-            const user = localStorage.getItem('user');
-            
-            if (!user) {
-                document.body.innerHTML = `
-                    <div class="unauthorized">
-                        <i class="fas fa-lock"></i>
-                        <h2>Accès non autorisé</h2>
-                        <p>Vous devez être connecté en tant qu'administrateur.</p>
-                        <button class="btn" onclick="window.location.href='../login/'">Se connecter</button>
-                    </div>
-                `;
-                return;
-            }
-            
-            const userData = JSON.parse(user);
-            
-            if (!userData.loggedIn || userData.role !== 'admin') {
-                document.body.innerHTML = `
-                    <div class="unauthorized">
-                        <i class="fas fa-shield-alt"></i>
-                        <h2>Accès restreint</h2>
-                        <p>Cette page est réservée aux administrateurs.</p>
-                        <button class="btn" onclick="window.location.href='../'">Accueil</button>
-                    </div>
-                `;
-                return;
-            }
-            
-            // Afficher le dispatch
-            document.getElementById('app').innerHTML = `
-                <header>
-                    <div class="logo">
-                        <i class="fas fa-map-marked-alt"></i> Léman Dispatch
-                    </div>
-                    
-                    <div class="stats-header" id="statsHeader">
-                        <div class="stat-item">
-                            <span>📦 Total</span>
-                            <span class="stat-value" id="totalCount">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span>⚠️ Urgents</span>
-                            <span class="stat-value" id="urgentCount">0</span>
-                        </div>
-                    </div>
-                    
-                    <div class="user-section">
-                        <div class="user-badge">
-                            <i class="fas fa-user-cog"></i>
-                            <span>${userData.username}</span>
-                        </div>
-                        <button class="btn-logout" onclick="logout()">
-                            <i class="fas fa-sign-out-alt"></i> Déconnexion
-                        </button>
-                        <button class="btn" onclick="openModal()">➕ Créer transport</button>
-                    </div>
-                </header>
-
-                <div class="container">
-                    <div class="sidebar">
-                        <button class="active"><i class="fas fa-map-marked-alt"></i> Dispatch</button>
-                        <button><i class="fas fa-box"></i> Transports</button>
-                        <button><i class="fas fa-users"></i> Clients</button>
-                        <button><i class="fas fa-truck"></i> Chauffeurs</button>
-                        <button><i class="fas fa-file-invoice"></i> Factures</button>
-                        <button onclick="window.location.href='generate-qr.html'"><i class="fas fa-qrcode"></i> QR codes</button>
-                    </div>
-                    
-                    <div class="map-container">
-                        <div id="map"></div>
-                    </div>
-                    
-                    <div class="right-panel">
-                        <h3><i class="fas fa-list"></i> Derniers transports</h3>
-                        <div id="transportList">
-                            <div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="modal" class="modal">
-                    <div class="modal-box">
-                        <div class="modal-header">
-                            <h3>➕ Nouveau transport</h3>
-                            <button onclick="closeModal()">✖</button>
-                        </div>
-                        <div class="modal-content">
-                            <form onsubmit="event.preventDefault(); saveTransport();">
-                                <div class="form-group">
-                                    <label>Nom client *</label>
-                                    <input type="text" id="clientName" required placeholder="Jean Dupont">
-                                </div>
-                                
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>Téléphone</label>
-                                        <input type="tel" id="clientPhone" placeholder="079 123 45 67">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Email</label>
-                                        <input type="email" id="clientEmail" placeholder="client@email.com">
-                                    </div>
-                                </div>
-                                
-                                <h4 style="color:#facc15; margin:15px 0 10px;">📍 Ramassage</h4>
-                                
-                                <div class="form-group">
-                                    <label>Ville *</label>
-                                    <input type="text" id="pickupCity" required placeholder="Lausanne">
-                                </div>
-                                
-                                <h4 style="color:#facc15; margin:15px 0 10px;">🎯 Livraison</h4>
-                                
-                                <div class="form-group">
-                                    <label>Ville *</label>
-                                    <input type="text" id="deliveryCity" required placeholder="Genève">
-                                </div>
-                                
-                                <h4 style="color:#facc15; margin:15px 0 10px;">📦 Colis</h4>
-                                
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>Poids (kg)</label>
-                                        <input type="number" id="weight" value="1" step="0.1">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Priorité</label>
-                                        <select id="priority">
-                                            <option value="normal">Normal</option>
-                                            <option value="urgent">Urgent</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label>Instructions</label>
-                                    <textarea id="instructions" rows="2" placeholder="Fragile, code d'accès..."></textarea>
-                                </div>
-                                
-                                <div class="modal-buttons">
-                                    <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
-                                    <button type="submit" class="btn-save">Créer le transport</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+        if (!user) {
+            document.body.innerHTML = `
+                <div style="text-align:center; padding:50px; background:#1f2937; margin:100px auto; max-width:500px; border-radius:15px;">
+                    <i class="fas fa-lock" style="font-size:60px; color:#facc15;"></i>
+                    <h2 style="color:white; margin:20px 0;">Accès non autorisé</h2>
+                    <p style="color:#aaa;">Vous devez être connecté en tant qu'administrateur.</p>
+                    <button onclick="window.location.href='../login/'" style="background:#facc15; color:#111; border:none; padding:12px 24px; border-radius:6px; font-weight:bold; cursor:pointer;">Se connecter</button>
                 </div>
             `;
-            
-            // Démarrer l'application
-            startApp();
-        })();
-        
-        // ===== FONCTIONS PRINCIPALES =====
-        let map;
-        let markers;
-        let mapInitialized = false;
-        
-        function logout() {
-            localStorage.removeItem('user');
-            window.location.href = '../login/';
+            return;
         }
         
-        function startApp() {
-            console.log("🚀 Léman Dispatch démarré");
-            
-            // Attendre que tout soit chargé
-            setTimeout(function() {
-                try {
-                    // UNE SEULE INSTANCE DE SUPABASE
-                    const supabase = window.supabase.createClient(
-                        window.SUPABASE_CONFIG.url,
-                        window.SUPABASE_CONFIG.key
-                    );
-                    
-                    // Rendre supabase disponible pour toutes les fonctions
-                    window.supabaseClient = supabase;
-                    
-                    initMap();
-                    
-                } catch(error) {
-                    console.error("❌ Erreur Supabase:", error);
-                    document.getElementById('transportList').innerHTML = '<div style="color:#ef4444; padding:20px;">Erreur de connexion Supabase</div>';
-                }
-            }, 100);
-            
-            // ===== INITIALISATION CARTE =====
-            function initMap() {
-                try {
-                    map = L.map('map').setView([46.8, 8.2], 8);
-                    
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        maxZoom: 19,
-                        attribution: '© OpenStreetMap'
-                    }).addTo(map);
-                    
-                    markers = L.markerClusterGroup();
-                    map.addLayer(markers);
-                    
-                    mapInitialized = true;
-                    console.log("✅ Carte initialisée");
-                    
-                    loadTransports();
-                    
-                } catch(error) {
-                    console.error("❌ Erreur carte:", error);
-                }
-            }
-            
-            // ===== CHARGER LES TRANSPORTS =====
-            async function loadTransports() {
-                try {
-                    const { data, error } = await window.supabaseClient
-                        .from('transport_orders')
-                        .select('*')
-                        .order('created_at', { ascending: false });
-                    
-                    if (error) throw error;
-                    
-                    console.log(`📦 ${data.length} transports chargés`);
-                    
-                    updateStats(data);
-                    updateTransportList(data);
-                    
-                    if (mapInitialized && markers) {
-                        updateMap(data);
-                    }
-                    
-                } catch(error) {
-                    console.error("Erreur chargement:", error);
-                    document.getElementById('transportList').innerHTML = '<div style="color:#ef4444; padding:20px;">Erreur de chargement</div>';
-                }
-            }
-            
-            // ===== METTRE À JOUR LA CARTE =====
-            function updateMap(transports) {
-                markers.clearLayers();
-                
-                if (!transports || transports.length === 0) return;
-                
-                const bounds = [];
-                
-                transports.forEach((transport, index) => {
-                    if (!transport.delivery_city) return;
-                    
-                    let lat = 46.8, lng = 8.2;
-                    const city = transport.delivery_city.toLowerCase();
-                    
-                    if (city.includes('lausanne')) { lat = 46.52; lng = 6.63; }
-                    else if (city.includes('geneve')) { lat = 46.20; lng = 6.14; }
-                    else if (city.includes('yverdon')) { lat = 46.78; lng = 6.64; }
-                    else if (city.includes('berne')) { lat = 46.95; lng = 7.45; }
-                    else if (city.includes('zurich')) { lat = 47.37; lng = 8.54; }
-                    
-                    let color = '#facc15';
-                    if (transport.priority === 'urgent' || transport.speed === '6h') color = '#ef4444';
-                    if (transport.status === 'delivered') color = '#10b981';
-                    
-                    const icon = L.divIcon({
-                        html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${index+1}</div>`,
-                        className: '',
-                        iconSize: [24, 24]
-                    });
-                    
-                    const marker = L.marker([lat, lng], { icon });
-                    
-                    marker.bindPopup(`
-                        <b>${transport.client_name || 'Sans client'}</b><br>
-                        📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}<br>
-                        ${transport.distance_km ? `📏 ${transport.distance_km} km` : ''}
-                        ${transport.priority === 'urgent' ? '<br>⚠️ URGENT' : ''}
-                    `);
-                    
-                    markers.addLayer(marker);
-                    bounds.push([lat, lng]);
-                });
-                
-                if (bounds.length > 0) {
-                    map.fitBounds(bounds, { padding: [30, 30] });
-                }
-            }
-            
-            // ===== METTRE À JOUR LA LISTE =====
-            function updateTransportList(transports) {
-                const listEl = document.getElementById('transportList');
-                
-                if (!transports || transports.length === 0) {
-                    listEl.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">Aucun transport</div>';
-                    return;
-                }
-                
-                let html = '';
-                transports.slice(0, 10).forEach(transport => {
-                    const date = transport.created_at ? new Date(transport.created_at).toLocaleDateString('fr-CH') : '';
-                    
-                    html += `
-                        <div class="transport-item ${transport.priority === 'urgent' ? 'urgent' : ''}">
-                            <div class="transport-client">${transport.client_name || 'Sans client'}</div>
-                            <div class="transport-route">📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}</div>
-                            <div class="transport-route" style="font-size:11px;">📅 ${date}</div>
-                            ${transport.distance_km ? `<div class="transport-distance">📏 ${transport.distance_km} km</div>` : ''}
-                        </div>
-                    `;
-                });
-                
-                listEl.innerHTML = html;
-            }
-            
-            // ===== METTRE À JOUR LES STATS =====
-            function updateStats(transports) {
-                const total = transports.length;
-                const urgent = transports.filter(t => t.priority === 'urgent' || t.speed === '6h').length;
-                
-                document.getElementById('totalCount').textContent = total;
-                document.getElementById('urgentCount').textContent = urgent;
-            }
-            
-            // ===== FONCTIONS MODAL =====
-            window.openModal = function() {
-                document.getElementById('modal').style.display = 'flex';
-            };
-            
-            window.closeModal = function() {
-                document.getElementById('modal').style.display = 'none';
-            };
-            
-            window.saveTransport = async function() {
-                const transport = {
-                    order_number: 'TR-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 1000000)).padStart(6, '0'),
-                    client_name: document.getElementById('clientName').value,
-                    client_phone: document.getElementById('clientPhone').value,
-                    client_email: document.getElementById('clientEmail').value,
-                    pickup_city: document.getElementById('pickupCity').value,
-                    delivery_city: document.getElementById('deliveryCity').value,
-                    weight: parseFloat(document.getElementById('weight').value) || 1,
-                    priority: document.getElementById('priority').value,
-                    instructions: document.getElementById('instructions').value,
-                    status: 'pending',
-                    created_at: new Date()
-                };
-                
-                if (!transport.client_name || !transport.pickup_city || !transport.delivery_city) {
-                    alert('Veuillez remplir tous les champs obligatoires');
-                    return;
-                }
-                
-                try {
-                    const { error } = await window.supabaseClient.from('transport_orders').insert([transport]);
-                    
-                    if (error) throw error;
-                    
-                    alert('✅ Transport créé avec succès !');
-                    closeModal();
-                    
-                    document.getElementById('clientName').value = '';
-                    document.getElementById('clientPhone').value = '';
-                    document.getElementById('clientEmail').value = '';
-                    document.getElementById('pickupCity').value = '';
-                    document.getElementById('deliveryCity').value = '';
-                    document.getElementById('weight').value = '1';
-                    document.getElementById('instructions').value = '';
-                    
-                    loadTransports();
-                    
-                } catch (error) {
-                    console.error('Erreur:', error);
-                    alert('❌ Erreur: ' + error.message);
-                }
-            };
-            
-            // ===== RAFRAÎCHISSEMENT AUTO =====
-            setInterval(loadTransports, 30000);
+        const userData = JSON.parse(user);
+        
+        if (!userData.loggedIn || userData.role !== 'admin') {
+            document.body.innerHTML = `
+                <div style="text-align:center; padding:50px; background:#1f2937; margin:100px auto; max-width:500px; border-radius:15px;">
+                    <i class="fas fa-shield-alt" style="font-size:60px; color:#facc15;"></i>
+                    <h2 style="color:white; margin:20px 0;">Accès restreint</h2>
+                    <p style="color:#aaa;">Cette page est réservée aux administrateurs.</p>
+                    <button onclick="window.location.href='../'" style="background:#facc15; color:#111; border:none; padding:12px 24px; border-radius:6px; font-weight:bold; cursor:pointer;">Accueil</button>
+                </div>
+            `;
+            return;
         }
-    </script>
+        
+        // ===== CONSTRUIRE LA PAGE =====
+        document.getElementById('app').innerHTML = `
+            <header>
+                <div class="logo">
+                    <i class="fas fa-map-marked-alt"></i> Léman Dispatch
+                </div>
+                
+                <div class="stats-header">
+                    <div class="stat-item">
+                        <span>📦 Total</span>
+                        <span class="stat-value" id="totalCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>⚠️ Urgents</span>
+                        <span class="stat-value" id="urgentCount">0</span>
+                    </div>
+                </div>
+                
+                <div class="user-section">
+                    <div class="user-badge">
+                        <i class="fas fa-user-cog"></i>
+                        <span>${userData.username}</span>
+                    </div>
+                    <button class="btn-logout" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i> Déconnexion
+                    </button>
+                    <button class="btn" onclick="openModal()">➕ Créer transport</button>
+                </div>
+            </header>
+
+            <div class="container">
+                <div class="sidebar">
+                    <button class="active"><i class="fas fa-map-marked-alt"></i> Dispatch</button>
+                    <button><i class="fas fa-box"></i> Transports</button>
+                    <button><i class="fas fa-users"></i> Clients</button>
+                    <button><i class="fas fa-truck"></i> Chauffeurs</button>
+                    <button><i class="fas fa-file-invoice"></i> Factures</button>
+                    <button onclick="window.location.href='generate-qr.html'"><i class="fas fa-qrcode"></i> QR codes</button>
+                </div>
+                
+                <div class="map-container">
+                    <div id="map"></div>
+                </div>
+                
+                <div class="right-panel">
+                    <h3><i class="fas fa-list"></i> Derniers transports</h3>
+                    <div id="transportList">
+                        <div class="loader"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="modal" class="modal">
+                <div class="modal-box">
+                    <div class="modal-header">
+                        <h3>➕ Nouveau transport</h3>
+                        <button onclick="closeModal()">✖</button>
+                    </div>
+                    <div class="modal-content">
+                        <form onsubmit="event.preventDefault(); saveTransport();">
+                            <div class="form-group">
+                                <label>Nom client *</label>
+                                <input type="text" id="clientName" required placeholder="Jean Dupont">
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Téléphone</label>
+                                    <input type="tel" id="clientPhone" placeholder="079 123 45 67">
+                                </div>
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="email" id="clientEmail" placeholder="client@email.com">
+                                </div>
+                            </div>
+                            
+                            <h4 style="color:#facc15; margin:15px 0 10px;">📍 Ramassage</h4>
+                            
+                            <div class="form-group">
+                                <label>Ville *</label>
+                                <input type="text" id="pickupCity" required placeholder="Lausanne">
+                            </div>
+                            
+                            <h4 style="color:#facc15; margin:15px 0 10px;">🎯 Livraison</h4>
+                            
+                            <div class="form-group">
+                                <label>Ville *</label>
+                                <input type="text" id="deliveryCity" required placeholder="Genève">
+                            </div>
+                            
+                            <h4 style="color:#facc15; margin:15px 0 10px;">📦 Colis</h4>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Poids (kg)</label>
+                                    <input type="number" id="weight" value="1" step="0.1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Priorité</label>
+                                    <select id="priority">
+                                        <option value="normal">Normal</option>
+                                        <option value="urgent">Urgent</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Instructions</label>
+                                <textarea id="instructions" rows="2" placeholder="Fragile, code d'accès..."></textarea>
+                            </div>
+                            
+                            <div class="modal-buttons">
+                                <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
+                                <button type="submit" class="btn-save">Créer le transport</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // ===== LANCER L'APPLICATION =====
+        startApp();
+    })();
     
-</body>
-</html>
+    // ===== FONCTIONS PRINCIPALES =====
+    let map;
+    let markers;
+    let mapInitialized = false;
+    
+    function logout() {
+        localStorage.removeItem('user');
+        window.location.href = '../login/';
+    }
+    
+    function startApp() {
+        console.log("🚀 Léman Dispatch démarré");
+        
+        try {
+            initMap();
+        } catch(error) {
+            console.error("❌ Erreur démarrage:", error);
+        }
+    }
+    
+    // ===== INITIALISATION CARTE =====
+    function initMap() {
+        try {
+            map = L.map('map').setView([46.8, 8.2], 8);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            
+            markers = L.markerClusterGroup();
+            map.addLayer(markers);
+            
+            mapInitialized = true;
+            console.log("✅ Carte initialisée");
+            
+            loadTransports();
+            
+        } catch(error) {
+            console.error("❌ Erreur carte:", error);
+        }
+    }
+    
+    // ===== CHARGER LES TRANSPORTS =====
+    async function loadTransports() {
+        try {
+            const { data, error } = await supabase
+                .from('transport_orders')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            
+            console.log(`📦 ${data.length} transports chargés`);
+            
+            updateStats(data);
+            updateTransportList(data);
+            
+            if (mapInitialized && markers) {
+                updateMap(data);
+            }
+            
+        } catch(error) {
+            console.error("Erreur chargement:", error);
+            document.getElementById('transportList').innerHTML = '<div style="color:#ef4444; padding:20px;">Erreur de chargement</div>';
+        }
+    }
+    
+    // ===== METTRE À JOUR LA CARTE =====
+    function updateMap(transports) {
+        markers.clearLayers();
+        
+        if (!transports || transports.length === 0) return;
+        
+        const bounds = [];
+        
+        transports.forEach((transport, index) => {
+            if (!transport.delivery_city) return;
+            
+            let lat = 46.8, lng = 8.2;
+            const city = transport.delivery_city.toLowerCase();
+            
+            if (city.includes('lausanne')) { lat = 46.52; lng = 6.63; }
+            else if (city.includes('geneve')) { lat = 46.20; lng = 6.14; }
+            else if (city.includes('yverdon')) { lat = 46.78; lng = 6.64; }
+            else if (city.includes('berne')) { lat = 46.95; lng = 7.45; }
+            else if (city.includes('zurich')) { lat = 47.37; lng = 8.54; }
+            
+            let color = '#facc15';
+            if (transport.priority === 'urgent' || transport.speed === '6h') color = '#ef4444';
+            if (transport.status === 'delivered') color = '#10b981';
+            
+            const icon = L.divIcon({
+                html: `<div style="background:${color}; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; border:2px solid white;">${index+1}</div>`,
+                className: '',
+                iconSize: [24, 24]
+            });
+            
+            const marker = L.marker([lat, lng], { icon });
+            
+            marker.bindPopup(`
+                <b>${transport.client_name || 'Sans client'}</b><br>
+                📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}<br>
+                ${transport.distance_km ? `📏 ${transport.distance_km} km` : ''}
+                ${transport.priority === 'urgent' ? '<br>⚠️ URGENT' : ''}
+            `);
+            
+            markers.addLayer(marker);
+            bounds.push([lat, lng]);
+        });
+        
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [30, 30] });
+        }
+    }
+    
+    // ===== METTRE À JOUR LA LISTE =====
+    function updateTransportList(transports) {
+        const listEl = document.getElementById('transportList');
+        
+        if (!transports || transports.length === 0) {
+            listEl.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">Aucun transport</div>';
+            return;
+        }
+        
+        let html = '';
+        transports.slice(0, 10).forEach(transport => {
+            const date = transport.created_at ? new Date(transport.created_at).toLocaleDateString('fr-CH') : '';
+            
+            html += `
+                <div class="transport-item ${transport.priority === 'urgent' ? 'urgent' : ''}">
+                    <div class="transport-client">${transport.client_name || 'Sans client'}</div>
+                    <div class="transport-route">📍 ${transport.pickup_city || '?'} → ${transport.delivery_city || '?'}</div>
+                    <div class="transport-route" style="font-size:11px;">📅 ${date}</div>
+                    ${transport.distance_km ? `<div class="transport-distance">📏 ${transport.distance_km} km</div>` : ''}
+                </div>
+            `;
+        });
+        
+        listEl.innerHTML = html;
+    }
+    
+    // ===== METTRE À JOUR LES STATS =====
+    function updateStats(transports) {
+        const total = transports.length;
+        const urgent = transports.filter(t => t.priority === 'urgent' || t.speed === '6h').length;
+        
+        document.getElementById('totalCount').textContent = total;
+        document.getElementById('urgentCount').textContent = urgent;
+    }
+    
+    // ===== FONCTIONS MODAL =====
+    window.openModal = function() {
+        document.getElementById('modal').style.display = 'flex';
+    };
+    
+    window.closeModal = function() {
+        document.getElementById('modal').style.display = 'none';
+    };
+    
+    window.saveTransport = async function() {
+        const transport = {
+            order_number: 'TR-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 1000000)).padStart(6, '0'),
+            client_name: document.getElementById('clientName').value,
+            client_phone: document.getElementById('clientPhone').value,
+            client_email: document.getElementById('clientEmail').value,
+            pickup_city: document.getElementById('pickupCity').value,
+            delivery_city: document.getElementById('deliveryCity').value,
+            weight: parseFloat(document.getElementById('weight').value) || 1,
+            priority: document.getElementById('priority').value,
+            instructions: document.getElementById('instructions').value,
+            status: 'pending',
+            created_at: new Date()
+        };
+        
+        if (!transport.client_name || !transport.pickup_city || !transport.delivery_city) {
+            alert('Veuillez remplir tous les champs obligatoires');
+            return;
+        }
+        
+        try {
+            const { error } = await supabase.from('transport_orders').insert([transport]);
+            
+            if (error) throw error;
+            
+            alert('✅ Transport créé avec succès !');
+            closeModal();
+            
+            document.getElementById('clientName').value = '';
+            document.getElementById('clientPhone').value = '';
+            document.getElementById('clientEmail').value = '';
+            document.getElementById('pickupCity').value = '';
+            document.getElementById('deliveryCity').value = '';
+            document.getElementById('weight').value = '1';
+            document.getElementById('instructions').value = '';
+            
+            loadTransports();
+            
+        } catch (error) {
+            console.error('Erreur:', error);
+            alert('❌ Erreur: ' + error.message);
+        }
+    };
+    
+    // ===== RAFRAÎCHISSEMENT AUTO =====
+    setInterval(loadTransports, 30000);
+</script>
