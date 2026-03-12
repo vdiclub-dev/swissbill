@@ -84,7 +84,7 @@
                     created_at: new Date()
                 };
                 
-                console.log("Envoi vers transport_orders_simple:", transport);
+                console.log("Envoi:", transport);
                 
                 const response = await fetch(`${window.SUPABASE_CONFIG.url}/rest/v1/transport_orders_simple`, {
                     method: 'POST',
@@ -96,22 +96,49 @@
                     body: JSON.stringify(transport)
                 });
                 
-                const data = await response.json();
-                
+                // Vérifier le statut de la réponse
                 if (!response.ok) {
-                    throw new Error(JSON.stringify(data, null, 2));
+                    // Essayer de lire l'erreur
+                    const errorText = await response.text();
+                    let errorMessage;
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = JSON.stringify(errorJson, null, 2);
+                    } catch {
+                        errorMessage = errorText;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${errorMessage}`);
+                }
+                
+                // Si la réponse est vide (c'est normal), on considère que c'est un succès
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    try {
+                        const data = await response.json();
+                        console.log("Réponse:", data);
+                    } catch (e) {
+                        // Pas de JSON, mais c'est OK
+                        console.log("Réponse vide (normal)");
+                    }
                 }
                 
                 document.getElementById('result').innerHTML = `
-                    <h3 class="success">✅ Transport créé !</h3>
-                    <p>N°: ${orderNumber}</p>
+                    <h3 class="success">✅ Transport créé avec succès !</h3>
+                    <p><strong>N°:</strong> ${orderNumber}</p>
+                    <p><strong>Client:</strong> ${transport.client_number}</p>
+                    <p><strong>Livraison:</strong> ${transport.delivery_address}</p>
+                    <p><strong>Service:</strong> ${transport.service_type} - ${transport.speed}</p>
                 `;
                 
+                // Reset du formulaire
+                document.getElementById('clientNumber').value = '';
+                document.getElementById('deliveryAddress').value = '';
+                
             } catch(e) {
-                console.error('Erreur:', e);
+                console.error('Erreur complète:', e);
                 document.getElementById('result').innerHTML = `
                     <h3 class="error">❌ Erreur</h3>
-                    <pre style="color:#ef4444;">${e.message}</pre>
+                    <pre style="color:#ef4444; white-space:pre-wrap;">${e.message}</pre>
                 `;
             }
         });
