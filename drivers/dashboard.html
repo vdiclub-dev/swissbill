@@ -8,10 +8,13 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- Scanner QR -->
+    <!-- Scanner QR (AJOUTÉ) -->
     <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
     
-    <!-- Supabase -->
+    <!-- Leaflet CSS (optionnel) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    
+    <!-- Supabase et Config -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../dispatch/config.js"></script>
     
@@ -66,6 +69,7 @@
         .btn-pause-debut { background: #f59e0b; color: white; }
         .btn-pause-fin { background: #f59e0b; color: white; }
         .btn-fin { background: #ef4444; color: white; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         /* COMPTEURS */
         .compteurs-grid {
@@ -114,13 +118,16 @@
 </head>
 <body>
 
-    <div id="app"></div>
+    <div id="app">Chargement...</div>
 
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             try {
+                console.log("🚀 Dashboard chauffeur...");
+                
                 // ===== CONFIG =====
                 if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
+                
                 const supabase = window.supabase.createClient(
                     window.SUPABASE_CONFIG.url,
                     window.SUPABASE_CONFIG.key
@@ -133,31 +140,36 @@
                     return;
                 }
                 
+                console.log("✅ Chauffeur connecté:", chauffeurData);
+                
                 // ===== CHARGEMENT DES DONNÉES =====
-                const { data: chauffeur, error } = await supabase
+                const { data: chauffeur, error: chauffeurError } = await supabase
                     .from('chauffeurs')
                     .select('*')
-                    .eq('email', chauffeurData.email)
+                    .eq('id', chauffeurData.id)
                     .single();
                 
-                if (error) throw error;
+                if (chauffeurError) throw chauffeurError;
                 
                 // ===== CHARGEMENT DES COMPTEURS =====
+                const annee = new Date().getFullYear();
                 const { data: compteurs } = await supabase
                     .from('compteurs')
                     .select('*')
                     .eq('chauffeur_id', chauffeur.id)
-                    .eq('annee', new Date().getFullYear())
-                    .single();
+                    .eq('annee', annee);
+                
+                const compteurActuel = compteurs && compteurs.length > 0 ? compteurs[0] : null;
                 
                 // ===== CHARGEMENT DU POINTAGE DU JOUR =====
                 const today = new Date().toISOString().split('T')[0];
-                const { data: pointage } = await supabase
+                const { data: pointages } = await supabase
                     .from('pointages')
                     .select('*')
                     .eq('chauffeur_id', chauffeur.id)
-                    .eq('date', today)
-                    .single();
+                    .eq('date', today);
+                
+                const pointage = pointages && pointages.length > 0 ? pointages[0] : null;
                 
                 // ===== CONSTRUCTION PAGE =====
                 document.getElementById('app').innerHTML = `
@@ -223,11 +235,11 @@
                         <!-- COMPTEURS PERSONNELS -->
                         <div class="compteurs-grid">
                             <div class="compteur-card">
-                                <div class="compteur-valeur" id="congesRestants">${compteurs?.conges_restants || 20}</div>
+                                <div class="compteur-valeur" id="congesRestants">${compteurActuel?.conges_restants || 20}</div>
                                 <div class="compteur-label">Jours de congés</div>
                             </div>
                             <div class="compteur-card">
-                                <div class="compteur-valeur" id="compensationRestantes">${compteurs?.compensation_restantes || 0}</div>
+                                <div class="compteur-valeur" id="compensationRestantes">${compteurActuel?.compensation_restantes || 0}</div>
                                 <div class="compteur-label">Heures de compensation</div>
                             </div>
                             <div class="compteur-card">
@@ -267,35 +279,39 @@
                 window.currentScan = null;
                 window.chauffeurId = chauffeur.id;
                 window.pointageActuel = pointage;
+                window.supabaseClient = supabase;
                 
                 // ===== INIT SCANNEUR QR =====
-                const html5QrCode = new Html5Qrcode("qr-reader");
-                html5QrCode.start(
-                    { facingMode: "environment" },
-                    { fps: 10, qrbox: 250 },
-                    (decodedText) => {
-                        document.getElementById('scanResult').innerHTML = `
-                            <div style="background:#10b981; color:white; padding:10px; border-radius:4px;">
-                                ✅ QR scanné: ${decodedText}
-                            </div>
-                        `;
-                        // Format attendu: TR-2401|CL2025-001|Lausanne|Genève
-                        const parts = decodedText.split('|');
-                        if (parts.length >= 2) {
-                            window.currentScan = {
-                                order: parts[0],
-                                client: parts[1]
-                            };
-                            document.getElementById('modalColisInfo').innerHTML = `
-                                Transport: <strong>${parts[0]}</strong><br>
-                                Client: ${parts[1] || '?'}<br>
-                                Trajet: ${parts[2] || '?'} → ${parts[3] || '?'}
+                if (typeof Html5Qrcode !== 'undefined') {
+                    const html5QrCode = new Html5Qrcode("qr-reader");
+                    html5QrCode.start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: 250 },
+                        (decodedText) => {
+                            document.getElementById('scanResult').innerHTML = `
+                                <div style="background:#10b981; color:white; padding:10px; border-radius:4px;">
+                                    ✅ QR scanné: ${decodedText}
+                                </div>
                             `;
-                            document.getElementById('livraisonModal').style.display = 'flex';
-                        }
-                    },
-                    () => {}
-                );
+                            const parts = decodedText.split('|');
+                            if (parts.length >= 2) {
+                                window.currentScan = {
+                                    order: parts[0],
+                                    client: parts[1]
+                                };
+                                document.getElementById('modalColisInfo').innerHTML = `
+                                    Transport: <strong>${parts[0]}</strong><br>
+                                    Client: ${parts[1] || '?'}<br>
+                                    Trajet: ${parts[2] || '?'} → ${parts[3] || '?'}
+                                `;
+                                document.getElementById('livraisonModal').style.display = 'flex';
+                            }
+                        },
+                        () => {}
+                    );
+                } else {
+                    document.getElementById('qr-reader').innerHTML = '<div style="color:#ef4444;">❌ Scanner non disponible</div>';
+                }
                 
                 // ===== FONCTIONS =====
                 window.pointer = async function(action) {
@@ -317,24 +333,25 @@
                             break;
                     }
                     
-                    if (window.pointageActuel) {
-                        // Mise à jour
-                        await supabase.from('pointages').update(updates).eq('id', window.pointageActuel.id);
-                    } else {
-                        // Création
-                        const { data } = await supabase.from('pointages').insert([{
-                            chauffeur_id: window.chauffeurId,
-                            date: new Date().toISOString().split('T')[0],
-                            ...updates
-                        }]).select();
-                        window.pointageActuel = data[0];
+                    try {
+                        if (window.pointageActuel) {
+                            await supabase.from('pointages').update(updates).eq('id', window.pointageActuel.id);
+                        } else {
+                            const { data } = await supabase.from('pointages').insert([{
+                                chauffeur_id: window.chauffeurId,
+                                date: new Date().toISOString().split('T')[0],
+                                ...updates
+                            }]).select();
+                            window.pointageActuel = data[0];
+                        }
+                        location.reload();
+                    } catch(e) {
+                        alert('Erreur: ' + e.message);
                     }
-                    
-                    location.reload();
                 };
                 
-                window.confirmerLivraison = async function() {
-                    alert(`✅ Transport ${window.currentScan.order} marqué comme livré`);
+                window.confirmerLivraison = function() {
+                    alert(`✅ Transport ${window.currentScan?.order || ''} marqué comme livré`);
                     document.getElementById('livraisonModal').style.display = 'none';
                 };
                 
@@ -349,31 +366,35 @@
                 
                 // ===== CHARGEMENT DES COLIS =====
                 async function chargerColis() {
-                    const { data } = await supabase
-                        .from('transport_orders_simple')
-                        .select('*')
-                        .eq('status', 'pending')
-                        .limit(5);
-                    
-                    let html = '';
-                    data?.forEach(t => {
-                        html += `
-                            <div class="colis-item">
-                                <div>
-                                    <strong>${t.order_number}</strong><br>
-                                    <small>${t.delivery_address?.substring(0,30)}</small>
+                    try {
+                        const { data } = await supabase
+                            .from('transport_orders_simple')
+                            .select('*')
+                            .eq('status', 'pending')
+                            .limit(5);
+                        
+                        let html = '';
+                        data?.forEach(t => {
+                            html += `
+                                <div class="colis-item">
+                                    <div>
+                                        <strong>${t.order_number}</strong><br>
+                                        <small>${t.delivery_address?.substring(0,30)}</small>
+                                    </div>
+                                    <span class="colis-statut statut-charge">En charge</span>
                                 </div>
-                                <span class="colis-statut statut-charge">En charge</span>
-                            </div>
-                        `;
-                    });
-                    document.getElementById('colisList').innerHTML = html || 'Aucun colis';
+                            `;
+                        });
+                        document.getElementById('colisList').innerHTML = html || 'Aucun colis';
+                    } catch(e) {
+                        console.error(e);
+                    }
                 }
                 
                 chargerColis();
                 
             } catch(e) {
-                console.error(e);
+                console.error("Erreur fatale:", e);
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
