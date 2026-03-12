@@ -2,70 +2,224 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Réparation login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion | Léman-Courses</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../dispatch/config.js"></script>
+    
     <style>
-        body { background:#111; color:white; padding:20px; font-family:system-ui; }
-        .success { color:#10b981; }
-        .error { color:#ef4444; }
-        pre { background:#1f2937; padding:10px; border-radius:4px; }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
+        body {
+            background: linear-gradient(135deg, #0f172a, #1e3a8a);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .login-box {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo i {
+            font-size: 60px;
+            color: #e53935;
+            background: #fee2e2;
+            padding: 15px;
+            border-radius: 50%;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #0f172a;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #475569;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #e53935;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #e53935;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn:hover {
+            background: #c62828;
+        }
+        .links {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .links a {
+            color: #e53935;
+            text-decoration: none;
+        }
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .demo-info {
+            margin-top: 20px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            color: #475569;
+        }
     </style>
 </head>
 <body>
-    <h1>🔧 Diagnostic de connexion</h1>
-    <div id="result"></div>
+    <div class="login-box">
+        <div class="logo">
+            <i class="fas fa-truck"></i>
+        </div>
+        
+        <h2>Bienvenue</h2>
+        
+        <div id="errorMessage" class="error-message">
+            <i class="fas fa-exclamation-circle"></i> <span id="errorText">Identifiant ou mot de passe incorrect</span>
+        </div>
+        
+        <div class="form-group">
+            <label>Identifiant</label>
+            <input type="text" id="username" value="admin">
+        </div>
+        
+        <div class="form-group">
+            <label>Mot de passe</label>
+            <input type="password" id="password" value="1234">
+        </div>
+        
+        <div class="form-group">
+            <label>Je suis</label>
+            <select id="role">
+                <option value="admin">👑 Administrateur</option>
+                <option value="client">👤 Client</option>
+                <option value="staff">🔧 Magasinier</option>
+            </select>
+        </div>
+        
+        <button class="btn" onclick="login()">
+            <i class="fas fa-sign-in-alt"></i> Se connecter
+        </button>
+        
+        <div class="demo-info">
+            <p><strong>Comptes de test :</strong></p>
+            <p>admin / 1234 (Admin)</p>
+            <p>client1 / 1234 (Client)</p>
+            <p>staff1 / 1234 (Staff)</p>
+        </div>
+    </div>
 
     <script>
-        (async function() {
+        // ===== ATTENDRE QUE TOUT SOIT CHARGÉ =====
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!window.SUPABASE_CONFIG) {
+                alert("❌ Erreur: config.js non chargé");
+            }
+        });
+
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const role = document.getElementById('role').value;
+            
+            document.getElementById('errorMessage').style.display = 'none';
+            
+            if (!username || !password) {
+                showError('Veuillez remplir tous les champs');
+                return;
+            }
+            
             try {
-                if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
+                const supabase = window.supabase.createClient(
+                    window.SUPABASE_CONFIG.url,
+                    window.SUPABASE_CONFIG.key
+                );
                 
-                const res = await fetch(`${window.SUPABASE_CONFIG.url}/rest/v1/users?select=username,password,role`, {
-                    headers: {
-                        'apikey': window.SUPABASE_CONFIG.key,
-                        'Authorization': `Bearer ${window.SUPABASE_CONFIG.key}`
-                    }
-                });
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('username', username)
+                    .eq('password', password)
+                    .eq('role', role);
                 
-                const users = await res.json();
+                if (error) throw error;
                 
-                let html = '<h2>📋 Utilisateurs existants :</h2><pre>' + JSON.stringify(users, null, 2) + '</pre>';
-                
-                // Vérifier si admin existe
-                const admin = users.find(u => u.username === 'admin');
-                
-                if (admin) {
-                    html += '<p class="success">✅ Admin existe déjà</p>';
-                } else {
-                    // Créer admin
-                    const createRes = await fetch(`${window.SUPABASE_CONFIG.url}/rest/v1/users`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'apikey': window.SUPABASE_CONFIG.key,
-                            'Authorization': `Bearer ${window.SUPABASE_CONFIG.key}`
-                        },
-                        body: JSON.stringify({
-                            username: 'admin',
-                            password: '1234',
-                            role: 'admin'
-                        })
-                    });
+                if (data && data.length > 0) {
+                    const user = data[0];
                     
-                    if (createRes.ok) {
-                        html += '<p class="success">✅ Admin créé avec succès !</p>';
-                    } else {
-                        const err = await createRes.json();
-                        html += '<p class="error">❌ Erreur création: ' + JSON.stringify(err) + '</p>';
-                    }
+                    localStorage.setItem('user', JSON.stringify({
+                        id: user.id,
+                        username: user.username,
+                        role: user.role,
+                        loggedIn: true
+                    }));
+                    
+                    // Redirection
+                    if (role === 'admin') window.location.href = '../dispatch/';
+                    else if (role === 'client') window.location.href = '../client/dashboard.html';
+                    else if (role === 'staff') window.location.href = '../staff/';
+                    
+                } else {
+                    showError('Identifiant, mot de passe ou rôle incorrect');
                 }
                 
-                document.getElementById('result').innerHTML = html;
-                
-            } catch(e) {
-                document.getElementById('result').innerHTML = '<p class="error">❌ ' + e.message + '</p>';
+            } catch (error) {
+                console.error('Erreur:', error);
+                showError('Erreur de connexion: ' + error.message);
             }
-        })();
+        }
+        
+        function showError(message) {
+            document.getElementById('errorText').textContent = message;
+            document.getElementById('errorMessage').style.display = 'block';
+        }
     </script>
+    
 </body>
 </html>
