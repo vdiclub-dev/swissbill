@@ -72,12 +72,12 @@
         </div>
         
         <div class="form-group">
-            <label>Matricule / Email</label>
-            <input type="text" id="username" value="jean.dupont@leman.ch">
+            <label>Email</label>
+            <input type="email" id="email" value="jean.dupont@leman.ch" placeholder="votre@email.ch">
         </div>
         <div class="form-group">
             <label>Mot de passe</label>
-            <input type="password" id="password" value="1234">
+            <input type="password" id="password" value="1234" placeholder="****">
         </div>
         
         <button class="btn" onclick="login()">
@@ -85,7 +85,7 @@
         </button>
         
         <div class="demo-info">
-            <p><strong>Comptes de test :</strong></p>
+            <p><strong>Comptes de démonstration :</strong></p>
             <p>jean.dupont@leman.ch / 1234</p>
             <p>pierre.martin@leman.ch / 1234</p>
             <p>michel.bernard@leman.ch / 1234</p>
@@ -94,66 +94,42 @@
 
     <script>
         async function login() {
-            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value.trim();
             
             document.getElementById('errorMessage').style.display = 'none';
             
-            if (!username || !password) {
+            if (!email || !password) {
                 showError('Veuillez remplir tous les champs');
                 return;
             }
             
             try {
-                // Chercher d'abord dans users
-                let { data: users, error } = await supabase
-                    .from('users')
+                // Vérifier dans la table chauffeurs directement
+                const { data, error } = await supabase
+                    .from('chauffeurs')
                     .select('*')
-                    .eq('username', username)
-                    .eq('password', password)
-                    .eq('role', 'staff');
+                    .eq('email', email);
                 
                 if (error) throw error;
                 
-                if (!users || users.length === 0) {
-                    // Chercher directement dans chauffeurs
-                    const { data: chauffeurs, error: chauffeurError } = await supabase
-                        .from('chauffeurs')
-                        .select('*')
-                        .eq('email', username);
-                    
-                    if (chauffeurError) throw chauffeurError;
-                    
-                    if (chauffeurs && chauffeurs.length > 0 && password === '1234') {
-                        // Connexion réussie
-                        localStorage.setItem('chauffeur', JSON.stringify({
-                            id: chauffeurs[0].id,
-                            nom: chauffeurs[0].nom,
-                            prenom: chauffeurs[0].prenom,
-                            email: chauffeurs[0].email,
-                            loggedIn: true
-                        }));
-                        window.location.href = 'dashboard.html';
-                        return;
-                    }
-                } else {
-                    // Connexion via users
+                if (data && data.length > 0) {
+                    // Connexion réussie (on ignore le mot de passe pour la démo)
                     localStorage.setItem('chauffeur', JSON.stringify({
-                        id: users[0].id,
-                        nom: 'Chauffeur',
-                        prenom: users[0].username,
-                        email: users[0].username,
+                        id: data[0].id,
+                        nom: data[0].nom,
+                        prenom: data[0].prenom,
+                        email: data[0].email,
                         loggedIn: true
                     }));
                     window.location.href = 'dashboard.html';
-                    return;
+                } else {
+                    showError('Email non trouvé dans la base chauffeurs');
                 }
-                
-                showError('Identifiant ou mot de passe incorrect');
                 
             } catch(e) {
                 console.error('Erreur:', e);
-                showError('Erreur de connexion');
+                showError('Erreur de connexion: ' + e.message);
             }
         }
         
