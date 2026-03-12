@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <title>Créer transport</title>
     
-    <!-- Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Pas de Supabase JS, on va utiliser fetch directement -->
     <script src="config.js"></script>
     
     <style>
@@ -53,46 +52,50 @@
                     throw new Error("config.js non chargé");
                 }
                 
-                const supabase = window.supabase.createClient(
-                    window.SUPABASE_CONFIG.url,
-                    window.SUPABASE_CONFIG.key
-                );
-                
                 const year = new Date().getFullYear();
                 const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
                 const orderNumber = `TR-${year}-${random}`;
                 
-                // UNIQUEMENT les colonnes essentielles
+                // Données minimales
                 const transport = {
                     order_number: orderNumber,
                     client_number: document.getElementById('clientNumber').value,
                     delivery_address: document.getElementById('deliveryAddress').value,
                     weight: parseFloat(document.getElementById('weight').value) || 1,
                     status: 'pending',
-                    created_at: new Date()
+                    created_at: new Date().toISOString()
                 };
                 
-                console.log("Tentative d'insertion:", transport);
+                console.log("Envoi:", transport);
                 
-                const { data, error } = await supabase
-                    .from('transport_orders')
-                    .insert(transport);
+                // Appel direct à l'API REST Supabase
+                const response = await fetch(`${window.SUPABASE_CONFIG.url}/rest/v1/transport_orders`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': window.SUPABASE_CONFIG.key,
+                        'Authorization': `Bearer ${window.SUPABASE_CONFIG.key}`
+                    },
+                    body: JSON.stringify(transport)
+                });
                 
-                if (error) throw error;
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(JSON.stringify(errorData, null, 2));
+                }
+                
+                const data = await response.json();
                 
                 document.getElementById('result').innerHTML = `
                     <h3 class="success">✅ Transport créé !</h3>
                     <p>N°: ${orderNumber}</p>
-                    <p>Client: ${transport.client_number}</p>
-                    <p>Livraison: ${transport.delivery_address}</p>
                 `;
                 
             } catch(e) {
                 console.error('Erreur:', e);
                 document.getElementById('result').innerHTML = `
                     <h3 class="error">❌ Erreur</h3>
-                    <p>${e.message}</p>
-                    <p style="font-size:12px; color:#aaa;">Vérifiez la console (F12)</p>
+                    <pre style="color:#ef4444; font-size:12px;">${e.message}</pre>
                 `;
             }
         });
