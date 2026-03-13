@@ -1,5 +1,4 @@
-// REMPLACEZ le contenu de /js/routing.js par ceci :
-
+// /js/routing.js - VERSION CORRECTE
 const routeCache = new Map();
 
 export function calculerDistanceVolOiseau(lat1, lng1, lat2, lng2) {
@@ -32,7 +31,7 @@ export async function calculerDistanceRoute(origine, destination) {
             const route = data.routes[0];
             const result = {
                 distance: route.distance / 1000,
-                duree: route.duration / 60  // temps en minutes
+                duree: route.duration / 60
             };
             routeCache.set(key, result);
             return result;
@@ -64,3 +63,5 @@ export async function calculerMatriceDistances(points) {
     }
     return matrice;
 }
+
+console.log("✅ Module routing.js chargé");
