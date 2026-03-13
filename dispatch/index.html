@@ -548,45 +548,49 @@
                     if (!tour) return;
                     
                     currentTourId = tourId;
-                    const stats = calculerStatsTournee(tour.transports);
-                    
-                    document.getElementById('modalTourTitle').innerHTML = `🚚 ${tour.nom}`;
-                    
-                    let transportsHTML = '';
-                    tour.transports.forEach((t, index) => {
-                        transportsHTML += `
-                            <div class="modal-transport-item ${t.speed === '6h' ? 'urgent' : ''}">
-                                <div class="modal-transport-info">
-                                    <div style="display:flex; gap:20px; margin-bottom:5px;">
-                                        <span style="color:#facc15; font-weight:bold;">#${index + 1}</span>
-                                        <span style="color:#9ca3af;"><i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}</span>
-                                    </div>
-                                    <div style="font-weight:bold; font-size:16px; margin-bottom:5px;">
-                                        👤 ${t.destinataire_nom || 'Client'}
-                                    </div>
-                                    <div style="font-size:12px; color:#aaa; margin-bottom:5px;">
-                                        📍 ${t.delivery_address || ''}
-                                    </div>
-                                    <div style="display:flex; gap:15px; font-size:12px; color:#9ca3af;">
-                                        <span>⚡ ${t.speed || '24h'}</span>
-                                        <span>⚖️ ${t.weight || 1} kg</span>
-                                    </div>
-                                </div>
-                                <div class="modal-transport-actions">
-                                    <button class="btn-move btn-small" onclick="deplacerTransport('${t.id}', -1)" title="Monter">
-                                        <i class="fas fa-arrow-up"></i>
-                                    </button>
-                                    <button class="btn-move btn-small" onclick="deplacerTransport('${t.id}', 1)" title="Descendre">
-                                        <i class="fas fa-arrow-down"></i>
-                                    </button>
-                                    <button class="btn-delete btn-small" onclick="retirerTransport('${t.id}')" title="Retirer">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    
+                    // ===== CALCUL STATS TOURNÉE AVEC VRAIES ROUTES =====
+async function calculerStatsTourneeReelle(transports) {
+    if (!transports || transports.length === 0) {
+        return { distance: 0, duree: 0, poids: 0 };
+    }
+    
+    let distance = 0;
+    let duree = 0;
+    let poids = 0;
+    let precedent = depot;
+    
+    for (const t of transports) {
+        if (t.lat && t.lng) {
+            // Distance routière réelle
+            const trajet = await calculerDistanceRoute(precedent, t);
+            distance += trajet;
+            
+            // Temps estimé (vitesse moyenne 50 km/h + péages/ville)
+            duree += (trajet / 45) * 60 + 20; // plus réaliste
+            poids += t.weight || 1;
+            precedent = t;
+        } else {
+            // Fallback si pas de coordonnées
+            distance += 30;
+            duree += 45;
+            poids += t.weight || 1;
+        }
+    }
+    
+    // Retour au dépôt
+    if (transports.length > 0 && transports[transports.length-1].lat) {
+        const dernier = transports[transports.length - 1];
+        const retour = await calculerDistanceRoute(dernier, depot);
+        distance += retour;
+        duree += (retour / 45) * 60;
+    }
+    
+    return { 
+        distance: Math.round(distance), 
+        duree: Math.round(duree),
+        poids: Math.round(poids)
+    };
+}
                     document.getElementById('modalTourContent').innerHTML = `
                         <div class="modal-stats">
                             <div class="modal-stat-item">
