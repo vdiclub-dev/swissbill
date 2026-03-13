@@ -639,7 +639,7 @@ window.geocoderTournee = async function(tourId) {
     afficherPage();
 };
 
-// ===== REMPLACER L'ANCIENNE OPTIMISATION PAR CELLE-CI =====
+// ===== OPTIMISATION IA AMÉLIORÉE =====
 window.optimiserTournee = async function(tourId) {
     const tour = tours.find(t => t.id === tourId);
     if (!tour || tour.transports.length === 0) return;
@@ -673,6 +673,107 @@ window.optimiserTournee = async function(tourId) {
             }
         }
     }
+    
+    // 2. Filtrer les transports avec coordonnées
+    const transportsAvecCoords = tour.transports.filter(t => t.lat && t.lng);
+    
+    if (transportsAvecCoords.length === 0) {
+        showMessage("❌ Impossible de géocoder les adresses", "#ef4444");
+        return;
+    }
+    
+    // 3. Séparer urgents et normaux
+    const urgents = transportsAvecCoords.filter(t => t.speed === '6h');
+    const normaux = transportsAvecCoords.filter(t => t.speed !== '6h');
+    
+    // 4. Calculer la matrice des distances
+    const points = [depot, ...transportsAvecCoords];
+    const matrice = [];
+    
+    showMessage("🧮 Calcul des distances routières...", "#3b82f6");
+    
+    for (let i = 0; i < points.length; i++) {
+        matrice[i] = [];
+        for (let j = 0; j < points.length; j++) {
+            if (i === j) {
+                matrice[i][j] = 0;
+            } else {
+                const dist = await calculerDistanceRoute(points[i], points[j]);
+                matrice[i][j] = dist;
+            }
+        }
+    }
+    
+    // 5. ALGORITHME D'OPTIMISATION AMÉLIORÉ
+    let meilleurItineraire = null;
+    let meilleureDistance = Infinity;
+    
+    // Essayer plusieurs points de départ pour trouver le meilleur itinéraire
+    const pointsDepart = urgents.length > 0 
+        ? urgents.map(u => points.findIndex(p => p.id === u.id))
+        : [1, 2, 3]; // Essayer les 3 premiers points
+    
+    for (let depart of pointsDepart) {
+        if (depart === undefined) continue;
+        
+        let itineraire = [];
+        let visites = new Set();
+        let distanceTotale = 0;
+        let positionActuelle = 0; // Dépôt
+        
+        // Ajouter le point de départ
+        itineraire.push(points[depart]);
+        visites.add(depart);
+        distanceTotale += matrice[0][depart];
+        positionActuelle = depart;
+        
+        // Ajouter les autres points par plus proche voisin
+        while (visites.size < points.length - 1) {
+            let prochain = -1;
+            let distMin = Infinity;
+            
+            for (let i = 1; i < points.length; i++) {
+                if (!visites.has(i)) {
+                    if (matrice[positionActuelle][i] < distMin) {
+                        distMin = matrice[positionActuelle][i];
+                        prochain = i;
+                    }
+                }
+            }
+            
+            if (prochain !== -1) {
+                itineraire.push(points[prochain]);
+                visites.add(prochain);
+                distanceTotale += distMin;
+                positionActuelle = prochain;
+            } else {
+                break;
+            }
+        }
+        
+        // Retour au dépôt
+        distanceTotale += matrice[positionActuelle][0];
+        
+        // Garder le meilleur itinéraire
+        if (distanceTotale < meilleureDistance) {
+            meilleureDistance = distanceTotale;
+            meilleurItineraire = itineraire;
+        }
+    }
+    
+    // 6. Si on a un résultat, l'appliquer
+    if (meilleurItineraire) {
+        tour.transports = meilleurItineraire;
+        
+        const nouvellesStats = await calculerStatsTourneeReelle(meilleurItineraire);
+        showMessage(`✅ Tournée optimisée : ${nouvellesStats.distance} km`, "#10b981");
+    } else {
+        showMessage("❌ Échec de l'optimisation", "#ef4444");
+    }
+    
+    ouvrirTournee(tourId);
+    afficherPage();
+};
     
     // 2. Filtrer les transports avec coordonnées
     const transportsAvecCoords = tour.transports.filter(t => t.lat && t.lng);
