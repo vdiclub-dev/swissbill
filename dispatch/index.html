@@ -11,6 +11,9 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     
+    <!-- Resizable -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    
     <!-- Drag & Drop -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
     
@@ -38,6 +41,7 @@
         .btn-success { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         .btn-delete { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .btn-pdf { background: #8b5cf6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .btn-edit { background: #3b82f6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -51,7 +55,7 @@
         
         /* PANEL GAUCHE - TOURNÉES */
         .tours-panel {
-            width: 500px;  /* Plus large */
+            width: 500px;
             background: #111;
             border-right: 1px solid #2a2a2a;
             padding: 20px;
@@ -88,6 +92,24 @@
             font-weight: bold;
             color: #facc15;
             font-size: 16px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        
+        .tour-title:hover {
+            background: #2a2a2a;
+        }
+        
+        .tour-title-input {
+            background: #111;
+            color: white;
+            border: 1px solid #facc15;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            width: 200px;
         }
         
         .tour-stats {
@@ -142,20 +164,22 @@
             margin-top: 10px;
         }
         
-        /* CARTE CENTRALE - MOINS LARGE */
+        /* CARTE CENTRALE - RESIZABLE */
         .map-container {
-            width: 40%;  /* Réduit à 40% */
-            min-width: 400px;
+            width: 40%;
+            min-width: 300px;
+            max-width: 60%;
             position: relative;
+            border-right: 1px solid #2a2a2a;
+            resize: horizontal;
+            overflow: auto;
         }
         #map { height: 100%; width: 100%; }
         
         /* PANEL DROIT - EN ATTENTE */
         .pending-panel {
-            width: 30%;  /* Le reste */
-            min-width: 300px;
+            flex: 1;
             background: #111;
-            border-left: 1px solid #2a2a2a;
             padding: 20px;
             overflow-y: auto;
         }
@@ -219,21 +243,16 @@
             color: white;
         }
         
-        .transport-adresse-complete {
-            font-size: 12px;
-            color: #facc15;
-            margin: 5px 0;
-        }
-        
-        .transport-npa-ville {
-            font-size: 11px;
-            color: #aaa;
-        }
-        
         .transport-address {
             font-size: 12px;
             color: #aaa;
             margin: 4px 0;
+        }
+        
+        .transport-npa-ville {
+            font-size: 11px;
+            color: #facc15;
+            margin-top: 2px;
         }
         
         .transport-meta {
@@ -329,6 +348,7 @@
                 ];
                 let chauffeurs = [];
                 let map;
+                let mapMarkers = [];
                 
                 const depot = {
                     nom: "Dépôt Yverdon",
@@ -362,8 +382,6 @@
                 // ===== EXTRAIRE NPA ET VILLE =====
                 function extraireNpaVille(adresse) {
                     if (!adresse) return { npa: '', ville: '' };
-                    
-                    // Format: Rue 12, 1000 Lausanne
                     const parts = adresse.split(',');
                     if (parts.length >= 2) {
                         const lastPart = parts[parts.length-1].trim();
@@ -404,7 +422,7 @@
                     }
                     
                     return { 
-                        distance: Math.round(distance), 
+                        distance: Math.round(distance * 10) / 10, 
                         duree: Math.round(duree),
                         poids: Math.round(poids)
                     };
@@ -420,28 +438,50 @@
                     const { jsPDF } = window.jspdf;
                     const doc = new jsPDF();
                     
+                    // En-tête
                     doc.setFontSize(20);
                     doc.setTextColor(250, 204, 21);
-                    doc.text(`Tournée: ${tour.nom}`, 20, 20);
+                    doc.text(`🚚 ${tour.nom}`, 20, 20);
                     
                     doc.setFontSize(12);
                     doc.setTextColor(255, 255, 255);
-                    doc.text(`Date: ${new Date().toLocaleDateString('fr-CH')}`, 20, 30);
-                    doc.text(`Distance: ${stats.distance} km`, 20, 40);
-                    doc.text(`Durée: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 20, 50);
-                    doc.text(`Poids total: ${stats.poids} kg`, 20, 60);
+                    doc.text(`Date: ${new Date().toLocaleDateString('fr-CH')}`, 20, 35);
                     
-                    doc.text("Arrêts:", 20, 75);
+                    // Stats
+                    doc.setFontSize(14);
+                    doc.text(`📊 Récapitulatif`, 20, 50);
                     
-                    let y = 85;
+                    doc.setFontSize(12);
+                    doc.text(`Distance totale: ${stats.distance} km`, 25, 65);
+                    doc.text(`Durée totale: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 25, 75);
+                    doc.text(`Poids total: ${stats.poids} kg`, 25, 85);
+                    doc.text(`Nombre d'arrêts: ${tour.transports.length}`, 25, 95);
+                    
+                    // Liste des arrêts
+                    doc.setFontSize(14);
+                    doc.text(`📋 Détail des livraisons`, 20, 115);
+                    
+                    let y = 130;
                     tour.transports.forEach((t, i) => {
+                        if (y > 270) {
+                            doc.addPage();
+                            y = 20;
+                        }
+                        
+                        doc.setFontSize(11);
+                        doc.setTextColor(250, 204, 21);
+                        doc.text(`${i+1}. ${t.destinataire_nom || 'Client'}`, 20, y);
+                        
                         doc.setFontSize(10);
-                        doc.text(`${i+1}. ${t.destinataire_nom || 'Client'}`, 25, y);
-                        doc.text(`   ${t.delivery_address || ''}`, 25, y+5);
-                        y += 15;
+                        doc.setTextColor(200, 200, 200);
+                        doc.text(`   📦 Expéditeur: ${t.client_number || 'Inconnu'}`, 20, y+5);
+                        doc.text(`   📍 ${t.delivery_address || ''}`, 20, y+10);
+                        doc.text(`   ⚡ ${t.speed || '24h'} | ⚖️ ${t.weight || 1} kg`, 20, y+15);
+                        
+                        y += 25;
                     });
                     
-                    doc.save(`tournee-${tour.nom}.pdf`);
+                    doc.save(`tournee-${tour.nom.replace(/\s+/g, '_')}.pdf`);
                 };
                 
                 // ===== CHARGEMENT =====
@@ -455,6 +495,16 @@
                     await loadChauffeurs();
                     afficherPage();
                 }
+                
+                // ===== RENOMMER TOURNÉE =====
+                window.renommerTournee = function(tourId, element) {
+                    const tour = tours.find(t => t.id === tourId);
+                    const nouveauNom = prompt("Nouveau nom pour la tournée:", tour.nom);
+                    if (nouveauNom && nouveauNom.trim()) {
+                        tour.nom = nouveauNom.trim();
+                        afficherPage();
+                    }
+                };
                 
                 // ===== AFFICHAGE =====
                 function afficherPage() {
@@ -498,8 +548,13 @@
                                     return `
                                         <div class="tour-card" style="border-left-color: ${tour.couleur};">
                                             <div class="tour-header">
-                                                <span class="tour-title">🚚 ${tour.nom}</span>
+                                                <span class="tour-title" ondblclick="renommerTournee(${tour.id}, this)">
+                                                    🚚 ${tour.nom}
+                                                </span>
                                                 <div>
+                                                    <button class="btn-edit btn-small" onclick="renommerTournee(${tour.id})">
+                                                        <i class="fas fa-pen"></i>
+                                                    </button>
                                                     <button class="btn-pdf btn-small" onclick="genererPDF(${tour.id})">
                                                         <i class="fas fa-file-pdf"></i>
                                                     </button>
@@ -568,8 +623,8 @@
                                 }).join('')}
                             </div>
                             
-                            <!-- CARTE CENTRALE - MOINS LARGE -->
-                            <div class="map-container">
+                            <!-- CARTE CENTRALE - RESIZABLE -->
+                            <div class="map-container" id="mapContainer">
                                 <div id="map"></div>
                             </div>
                             
@@ -617,6 +672,13 @@
                         </div>
                     `;
                     
+                    // Rendre la carte redimensionnable
+                    $("#mapContainer").resizable({
+                        handles: "e",
+                        minWidth: 300,
+                        maxWidth: 800
+                    });
+                    
                     initMap(enAttente);
                     initDragAndDrop();
                 }
@@ -624,6 +686,9 @@
                 // ===== INIT CARTE =====
                 function initMap(transports) {
                     if (map) map.remove();
+                    mapMarkers.forEach(m => map.removeLayer(m));
+                    mapMarkers = [];
+                    
                     map = L.map('map').setView([46.8, 8.2], 8);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                     
@@ -633,16 +698,21 @@
                         transports.forEach(t => {
                             if (t.lat && t.lng && t.lat !== 0 && t.lng !== 0) {
                                 const color = t.speed === '6h' ? '#ef4444' : '#facc15';
-                                const icon = L.divIcon({
-                                    html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white;"></div>`,
-                                    className: '',
-                                    iconSize: [16, 16]
-                                });
-                                L.marker([t.lat, t.lng], { icon }).addTo(map).bindPopup(`
+                                const marker = L.circleMarker([t.lat, t.lng], {
+                                    radius: 8,
+                                    fillColor: color,
+                                    color: '#fff',
+                                    weight: 2,
+                                    fillOpacity: 0.8
+                                }).addTo(map);
+                                
+                                marker.bindPopup(`
                                     <b>${t.destinataire_nom || 'Client'}</b><br>
                                     ${t.delivery_address}<br>
                                     Expéditeur: ${t.client_number}
                                 `);
+                                
+                                mapMarkers.push(marker);
                             }
                         });
                     }
