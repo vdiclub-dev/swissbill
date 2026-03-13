@@ -453,50 +453,190 @@
                     chauffeurs = data || [];
                 }
                 
-                // ===== GÉNÉRER PDF =====
-                window.genererPDF = function(tourId) {
-                    const tour = tours.find(t => t.id === tourId);
-                    if (!tour || tour.transports.length === 0) return;
-                    
-                    const stats = calculerStatsTournee(tour.transports, depot, calculerDistanceVolOiseau);
-                    
-                    const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF();
-                    
-                    doc.setFont("helvetica", "bold");
-                    doc.setFontSize(24);
-                    doc.setTextColor(0, 0, 0);
-                    doc.text(`🚚 ${tour.nom}`, 20, 20);
-                    
-                    doc.setFont("helvetica", "bold");
-                    doc.setFontSize(14);
-                    doc.text(`Date: ${new Date().toLocaleDateString('fr-CH')}`, 20, 35);
-                    
-                    doc.setFont("helvetica", "bold");
-                    doc.setFontSize(12);
-                    doc.text(`Récapitulatif:`, 20, 50);
-                    
-                    doc.setFont("helvetica", "normal");
-                    doc.text(`Distance totale: ${stats.distance} km`, 25, 60);
-                    doc.text(`Durée totale: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 25, 70);
-                    doc.text(`Poids total: ${stats.poids} kg`, 25, 80);
-                    
-                    doc.setFont("helvetica", "bold");
-                    doc.text(`Détail des livraisons:`, 20, 100);
-                    
-                    let y = 110;
-                    tour.transports.forEach((t, i) => {
-                        doc.setFont("helvetica", "bold");
-                        doc.text(`${i+1}. ${t.destinataire_nom || 'Client'}`, 20, y);
-                        
-                        doc.setFont("helvetica", "normal");
-                        doc.text(`   📦 ${t.client_number || 'Inconnu'}`, 20, y+5);
-                        doc.text(`   📍 ${t.delivery_address || ''}`, 20, y+10);
-                        y += 20;
-                    });
-                    
-                    doc.save(`tournee-${tour.nom.replace(/\s+/g, '_')}.pdf`);
-                };
+              // ===== GÉNÉRER PDF PROFESSIONNEL =====
+window.genererPDF = async function(tourId) {
+    const tour = tours.find(t => t.id === tourId);
+    if (!tour || tour.transports.length === 0) return;
+    
+    // Calculer les stats réelles avec OSRM
+    const stats = await calculerStatsTournee(tour.transports, depot, calculerDistanceRoute);
+    
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = 20;
+    
+    // ===== EN-TÊTE =====
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(250, 204, 21); // #facc15
+    doc.text("LÉMAN-COURSES", 105, y, { align: "center" });
+    y += 8;
+    
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Impasse des Griottes 3, 1462 Yvonand", 105, y, { align: "center" });
+    doc.text("Tél: +41 79 870 04 88", 105, y+5, { align: "center" });
+    
+    // ===== TITRE TOURNÉE =====
+    y += 15;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`🚚 ${tour.nom}`, 20, y);
+    
+    // Date
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Date: ${new Date().toLocaleDateString('fr-CH')}`, 150, y);
+    
+    // ===== RÉCAPITULATIF =====
+    y += 10;
+    doc.setFillColor(240, 240, 240);
+    doc.rect(20, y, 170, 25, 'F');
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text("RÉCAPITULATIF DE LA TOURNÉE", 25, y+7);
+    
+    doc.setFontSize(10);
+    doc.text(`Distance totale: ${stats.distance} km`, 25, y+15);
+    doc.text(`Durée totale: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 90, y+15);
+    doc.text(`Poids total: ${stats.poids} kg`, 150, y+15);
+    
+    // ===== DÉTAIL DES ARRÊTS =====
+    y += 35;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(250, 204, 21);
+    doc.text("📋 DÉTAIL DES LIVRAISONS", 20, y);
+    
+    // En-tête du tableau
+    y += 8;
+    doc.setFillColor(50, 50, 50);
+    doc.rect(20, y, 170, 8, 'F');
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text("N°", 22, y+5);
+    doc.text("Client", 35, y+5);
+    doc.text("Adresse", 70, y+5);
+    doc.text("Km", 140, y+5);
+    doc.text("Arrivée", 160, y+5);
+    
+    // Ligne de séparation
+    y += 8;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, 190, y);
+    
+    // Calcul des km cumulés
+    let kmCumule = 0;
+    let tempsCumule = 0;
+    let position = depot;
+    
+    for (let i = 0; i < tour.transports.length; i++) {
+        const t = tour.transports[i];
+        
+        // Calcul du trajet depuis le point précédent
+        let trajetKm = 0;
+        let trajetMin = 0;
+        
+        if (t.lat && t.lng && position.lat && position.lng) {
+            const route = await calculerDistanceRoute(position, t);
+            trajetKm = route.distance;
+            trajetMin = route.duree;
+        } else {
+            trajetKm = 30;
+            trajetMin = 40;
+        }
+        
+        kmCumule += trajetKm;
+        tempsCumule += trajetMin + 5; // +5 min service
+        
+        // Heure d'arrivée (départ à 8h00)
+        const heureDepart = 8 * 60; // 8h00 en minutes
+        const heureArrivee = heureDepart + tempsCumule - 5; // avant service
+        const h = Math.floor(heureArrivee / 60);
+        const m = heureArrivee % 60;
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(0, 0, 0);
+        
+        // Numéro
+        doc.text(`${i+1}`, 22, y+5);
+        
+        // Client
+        let client = t.destinataire_nom || 'Client';
+        if (client.length > 15) client = client.substring(0, 12) + '...';
+        doc.text(client, 35, y+5);
+        
+        // Adresse
+        let adr = t.delivery_address || '';
+        if (adr.length > 25) adr = adr.substring(0, 22) + '...';
+        doc.text(adr, 70, y+5);
+        
+        // Km
+        doc.text(`${Math.round(kmCumule)}`, 142, y+5);
+        
+        // Heure
+        doc.text(`${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`, 160, y+5);
+        
+        // Ligne de séparation
+        y += 6;
+        doc.setDrawColor(230, 230, 230);
+        doc.line(20, y, 190, y);
+        y += 2;
+        
+        position = t;
+        
+        // Nouvelle page si nécessaire
+        if (y > 270) {
+            doc.addPage();
+            y = 20;
+        }
+    }
+    
+    // Retour au dépôt
+    if (tour.transports.length > 0) {
+        const dernier = tour.transports[tour.transports.length - 1];
+        let trajetRetourKm = 0;
+        let trajetRetourMin = 0;
+        
+        if (dernier.lat && dernier.lng) {
+            const route = await calculerDistanceRoute(dernier, depot);
+            trajetRetourKm = route.distance;
+            trajetRetourMin = route.duree;
+        } else {
+            trajetRetourKm = 30;
+            trajetRetourMin = 40;
+        }
+        
+        kmCumule += trajetRetourKm;
+        tempsCumule += trajetRetourMin;
+        
+        const heureRetour = 8 * 60 + tempsCumule;
+        const h = Math.floor(heureRetour / 60);
+        const m = heureRetour % 60;
+        
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(100, 100, 100);
+        doc.text("Retour dépôt", 35, y+5);
+        doc.text(`${Math.round(kmCumule)}`, 142, y+5);
+        doc.text(`${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`, 160, y+5);
+        y += 6;
+    }
+    
+    // ===== PIED DE PAGE =====
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Document généré par Léman Dispatch", 105, 280, { align: "center" });
+    
+    doc.save(`tournee-${tour.nom.replace(/\s+/g, '_')}.pdf`);
+};
                 
                 // ===== OUVRIR TOURNÉE EN GRAND =====
                 window.ouvrirTournee = async function(tourId) {
