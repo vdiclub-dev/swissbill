@@ -442,7 +442,67 @@
                     lat: 46.7785,
                     lng: 6.6411
                 };
-                
+                // ===== CHARGER LA TOURNÉE ASSIGNÉE =====
+async function loadTournee() {
+    try {
+        console.log("🔍 Recherche de tournée pour le chauffeur", chauffeurData.id);
+        
+        // Date d'aujourd'hui
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Chercher une tournée assignée à ce chauffeur
+        const { data: tournees, error } = await supabase
+            .from('tournees')
+            .select(`
+                *,
+                stops (*)
+            `)
+            .eq('chauffeur_id', chauffeurData.id)
+            .eq('date', today)
+            .eq('statut', 'pending')
+            .maybeSingle();
+        
+        if (error && error.code !== 'PGRST116') {
+            console.error("❌ Erreur chargement:", error);
+        }
+        
+        if (tournees) {
+            console.log("✅ Tournée trouvée:", tournees.nom);
+            
+            tourneeActive = {
+                id: tournees.id,
+                nom: tournees.nom,
+                chauffeur: tournees.chauffeur_id,
+                stats: {
+                    distance: tournees.distance_km || 0,
+                    duree: tournees.duree_min || 0,
+                    poids: tournees.poids_kg || 0
+                },
+                stops: tournees.stops || []
+            };
+            
+            // Afficher la notification
+            setTimeout(() => {
+                const notif = document.getElementById('notifBar');
+                if (notif) {
+                    notif.style.display = 'flex';
+                    notif.querySelector('.notif-content span').innerHTML = 
+                        `${tournees.nom} - ${tournees.stops?.length || 0} livraisons`;
+                }
+            }, 1000);
+            
+        } else {
+            console.log("ℹ️ Aucune tournée trouvée");
+            tourneeActive = null;
+        }
+        
+        afficherPage();
+        
+    } catch(e) {
+        console.error("❌ Erreur loadTournee:", e);
+        afficherPage();
+    }
+}
                 // ===== CHARGEMENT CHAUFFEURS =====
                 async function loadChauffeurs() {
                     const { data } = await supabase
@@ -1132,6 +1192,8 @@ window.genererPDF = async function(tourId) {
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
+        // ===== LANCEMENT =====
+await loadTournee();  // ← REMPLACEZ loadData() ou autre
     </script>
     
 </body>
