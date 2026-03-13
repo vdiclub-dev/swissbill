@@ -8,10 +8,7 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    
-    <!-- Resizable & Drag & Drop -->
+    <!-- Drag & Drop -->
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
@@ -40,7 +37,6 @@
         .btn-success { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         .btn-delete { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .btn-pdf { background: #8b5cf6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
-        .btn-edit { background: #3b82f6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -54,7 +50,7 @@
         
         /* PANEL GAUCHE - TOURNÉES */
         .tours-panel {
-            width: 500px;
+            flex: 1;
             background: #111;
             border-right: 1px solid #2a2a2a;
             padding: 20px;
@@ -92,12 +88,6 @@
             color: #facc15;
             font-size: 16px;
             cursor: pointer;
-            padding: 5px;
-            border-radius: 4px;
-        }
-        
-        .tour-title:hover {
-            background: #2a2a2a;
         }
         
         .tour-stats {
@@ -135,33 +125,11 @@
             border-radius: 4px;
         }
         
-        .tour-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 10px;
-        }
-        
-        /* CARTE CENTRALE - RESIZABLE */
-        .map-container {
-            width: 40%;
-            min-width: 300px;
-            max-width: 60%;
-            position: relative;
-            border-right: 1px solid #2a2a2a;
-            overflow: hidden;
-        }
-        .ui-resizable-e {
-            width: 8px;
-            background: #2a2a2a;
-            cursor: col-resize;
-        }
-        #map { height: 100%; width: 100%; }
-        
         /* PANEL DROIT - EN ATTENTE */
         .pending-panel {
-            flex: 1;
+            width: 400px;
             background: #111;
+            border-left: 1px solid #2a2a2a;
             padding: 20px;
             overflow-y: auto;
         }
@@ -201,16 +169,10 @@
             border-left-color: #ef4444;
         }
         
-        .transport-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-        
         .transport-expediteur {
             font-size: 11px;
             color: #9ca3af;
+            margin-bottom: 4px;
         }
         
         .transport-expediteur i {
@@ -342,11 +304,6 @@
         </div>
     </div>
 
-    <!-- SCRIPTS -->
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
-
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             try {
@@ -371,7 +328,6 @@
                     { id: 2, nom: "Tournée Genève", couleur: '#10b981', transports: [] },
                     { id: 3, nom: "Tournée Berne", couleur: '#f59e0b', transports: [] }
                 ];
-                let map;
                 
                 const depot = {
                     lat: 46.7785,
@@ -380,7 +336,7 @@
                 
                 // ===== CALCUL DE DISTANCE =====
                 function calculerDistance(lat1, lng1, lat2, lng2) {
-                    if (!lat1 || !lng1 || !lat2 || !lng2) return 0;
+                    if (!lat1 || !lng1 || !lat2 || !lng2) return 30; // Valeur par défaut
                     const R = 6371;
                     const dLat = (lat2 - lat1) * Math.PI / 180;
                     const dLon = (lng2 - lng1) * Math.PI / 180;
@@ -409,17 +365,17 @@
                             duree += (trajet / 50) * 60 + 15;
                             poids += t.weight || 1;
                             precedent = t;
+                        } else {
+                            // Valeur par défaut si pas de coordonnées
+                            distance += 30;
+                            duree += 45 + 15;
+                            poids += t.weight || 1;
                         }
                     });
                     
-                    if (transports.length > 0) {
-                        const dernier = transports[transports.length - 1];
-                        if (dernier.lat && dernier.lng) {
-                            const retour = calculerDistance(dernier.lat, dernier.lng, depot.lat, depot.lng);
-                            distance += retour;
-                            duree += (retour / 50) * 60;
-                        }
-                    }
+                    // Retour au dépôt
+                    distance += 30;
+                    duree += 36;
                     
                     return { 
                         distance: Math.round(distance), 
@@ -448,6 +404,13 @@
                     doc.text(`Distance: ${stats.distance} km`, 20, 45);
                     doc.text(`Durée: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 20, 55);
                     doc.text(`Poids: ${stats.poids} kg`, 20, 65);
+                    
+                    doc.text("Arrêts:", 20, 80);
+                    let y = 90;
+                    tour.transports.forEach((t, i) => {
+                        doc.text(`${i+1}. ${t.destinataire_nom || 'Client'}`, 25, y);
+                        y += 10;
+                    });
                     
                     doc.save(`tournee-${tour.nom}.pdf`);
                 };
@@ -495,6 +458,14 @@
                             <label style="color:#aaa;">Poids (kg)</label>
                             <input type="number" id="editPoids" value="${t.weight || 1}" style="width:100%; padding:8px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
                         </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="color:#aaa;">Vitesse</label>
+                            <select id="editSpeed" style="width:100%; padding:8px; background:#111; border:1px solid #2a2a2a; color:white;">
+                                <option value="24h" ${t.speed === '24h' ? 'selected' : ''}>24h</option>
+                                <option value="12h" ${t.speed === '12h' ? 'selected' : ''}>12h</option>
+                                <option value="6h" ${t.speed === '6h' ? 'selected' : ''}>6h</option>
+                            </select>
+                        </div>
                         <div class="modal-actions">
                             <button class="btn" onclick="document.getElementById('editModal').style.display='none'" style="flex:1;">Annuler</button>
                             <button class="btn-success" onclick="sauvegarderEdition('${t.id}')" style="flex:2;">Sauvegarder</button>
@@ -511,7 +482,8 @@
                             client_number: document.getElementById('editClient').value,
                             destinataire_nom: document.getElementById('editDest').value,
                             delivery_address: document.getElementById('editAddr').value,
-                            weight: parseFloat(document.getElementById('editPoids').value)
+                            weight: parseFloat(document.getElementById('editPoids').value),
+                            speed: document.getElementById('editSpeed').value
                         })
                         .eq('id', id);
                     
@@ -545,7 +517,7 @@
                         </header>
                         
                         <div class="container">
-                            <!-- PANEL GAUCHE -->
+                            <!-- PANEL GAUCHE - TOURNÉES -->
                             <div class="tours-panel">
                                 <div class="panel-header">
                                     <h2><i class="fas fa-route"></i> Tournées</h2>
@@ -588,7 +560,7 @@
                                             <div class="tour-list" data-tour-id="${tour.id}">
                                                 ${tour.transports.map(t => `
                                                     <div class="transport-card" ondblclick="ouvrirEdition('${t.id}')" data-id="${t.id}">
-                                                        <div class="transport-header">
+                                                        <div class="transport-header" style="display:flex; justify-content:space-between;">
                                                             <span class="transport-expediteur">
                                                                 <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
                                                             </span>
@@ -602,6 +574,10 @@
                                                         <div class="transport-address">
                                                             📍 ${(t.delivery_address || '').substring(0,40)}
                                                         </div>
+                                                        <div class="transport-meta">
+                                                            <span>⚡ ${t.speed || '24h'}</span>
+                                                            <span>⚖️ ${t.weight || 1} kg</span>
+                                                        </div>
                                                     </div>
                                                 `).join('')}
                                             </div>
@@ -610,12 +586,7 @@
                                 }).join('')}
                             </div>
                             
-                            <!-- CARTE -->
-                            <div class="map-container" id="mapContainer">
-                                <div id="map"></div>
-                            </div>
-                            
-                            <!-- PANEL DROIT -->
+                            <!-- PANEL DROIT - EN ATTENTE -->
                             <div class="pending-panel">
                                 <div class="pending-header">
                                     <h2><i class="fas fa-clock"></i> En attente</h2>
@@ -626,9 +597,7 @@
                                     ${enAttente.map(t => `
                                         <div class="transport-card ${t.speed === '6h' ? 'urgent' : ''}" 
                                              ondblclick="ouvrirEdition('${t.id}')"
-                                             data-id="${t.id}"
-                                             data-lat="${t.lat || 0}"
-                                             data-lng="${t.lng || 0}">
+                                             data-id="${t.id}">
                                             <div class="transport-expediteur">
                                                 <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
                                             </div>
@@ -637,6 +606,10 @@
                                             </div>
                                             <div class="transport-address">
                                                 📍 ${(t.delivery_address || '').substring(0,40)}
+                                            </div>
+                                            <div class="transport-meta">
+                                                <span>⚡ ${t.speed || '24h'}</span>
+                                                <span>⚖️ ${t.weight || 1} kg</span>
                                             </div>
                                             <button class="btn-delete-transport" onclick="supprimerTransport('${t.id}'); event.stopPropagation();">
                                                 <i class="fas fa-trash"></i> Supprimer
@@ -648,46 +621,7 @@
                         </div>
                     `;
                     
-                    // Rendre la carte redimensionnable
-                    $("#mapContainer").resizable({
-                        handles: "e",
-                        minWidth: 300,
-                        maxWidth: 800,
-                        resize: function() {
-                            if (map) map.invalidateSize();
-                        }
-                    });
-                    
-                    initMap(enAttente);
                     initDragAndDrop();
-                }
-                
-                // ===== INIT CARTE =====
-                function initMap(transports) {
-                    if (map) map.remove();
-                    
-                    map = L.map('map').setView([46.8, 8.2], 8);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                    
-                    L.marker([depot.lat, depot.lng]).addTo(map).bindPopup("Dépôt Yverdon");
-                    
-                    if (transports && transports.length > 0) {
-                        transports.forEach(t => {
-                            if (t.lat && t.lng) {
-                                const color = t.speed === '6h' ? '#ef4444' : '#facc15';
-                                L.circleMarker([t.lat, t.lng], {
-                                    radius: 8,
-                                    fillColor: color,
-                                    color: '#fff',
-                                    weight: 2,
-                                    fillOpacity: 0.9
-                                }).addTo(map).bindPopup(`
-                                    <b>${t.destinataire_nom || 'Client'}</b><br>
-                                    ${t.delivery_address}
-                                `);
-                            }
-                        });
-                    }
                 }
                 
                 // ===== DRAG & DROP =====
