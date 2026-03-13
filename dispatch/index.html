@@ -1077,7 +1077,147 @@ async function calculerStatsTourneeReelle(transports) {
                 document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
             }
         });
+// ===== OPTIMISATION IA AVEC DISTANCES RÉELLES =====
+window.optimiserTournee = async function(tourId) {
+    const tour = tours.find(t => t.id === tourId);
+    if (!tour || tour.transports.length === 0) return;
+    
+    showMessage("🔄 Optimisation en cours...", "#3b82f6");
+    
+    // 1. Calculer les distances entre tous les points
+    const points = [depot, ...tour.transports.filter(t => t.lat && t.lng)];
+    
+    // Créer une matrice des distances
+    const matrice = [];
+    for (let i = 0; i < points.length; i++) {
+        matrice[i] = [];
+        for (let j = 0; j < points.length; j++) {
+            if (i === j) {
+                matrice[i][j] = 0;
+            } else {
+                const dist = await calculerDistanceRoute(points[i], points[j]);
+                matrice[i][j] = dist;
+            }
+        }
+    }
+    
+    // 2. Séparer urgents et normaux
+    const urgents = tour.transports.filter(t => t.speed === '6h');
+    const normaux = tour.transports.filter(t => t.speed !== '6h');
+    
+    // 3. Construire l'itinéraire optimal (algorithme du plus proche voisin)
+    let itineraire = [];
+    let visites = new Set();
+    let positionActuelle = 0; // index 0 = dépôt
+    
+    // D'abord traiter les urgents
+    if (urgents.length > 0) {
+        // Trouver l'urgent le plus proche du dépôt
+        let plusProcheUrgent = -1;
+        let distMinUrgent = Infinity;
         
+        for (let i = 0; i < urgents.length; i++) {
+            const idx = points.findIndex(p => p.id === urgents[i].id);
+            if (matrice[0][idx] < distMinUrgent) {
+                distMinUrgent = matrice[0][idx];
+                plusProcheUrgent = idx;
+            }
+        }
+        
+        if (plusProcheUrgent !== -1) {
+            itineraire.push(points[plusProcheUrgent]);
+            visites.add(plusProcheUrgent);
+            positionActuelle = plusProcheUrgent;
+        }
+        
+        // Ajouter les autres urgents
+        while (visites.size < urgents.length + 1) { // +1 pour le dépôt déjà visité
+            let prochain = -1;
+            let distMin = Infinity;
+            
+            for (let i = 1; i < points.length; i++) {
+                if (!visites.has(i)) {
+                    if (matrice[positionActuelle][i] < distMin) {
+                        distMin = matrice[positionActuelle][i];
+                        prochain = i;
+                    }
+                }
+            }
+            
+            if (prochain !== -1) {
+                itineraire.push(points[prochain]);
+                visites.add(prochain);
+                positionActuelle = prochain;
+            } else {
+                break;
+            }
+        }
+    }
+    
+    // Ajouter les normaux
+    for (const normal of normaux) {
+        const idx = points.findIndex(p => p.id === normal.id);
+        if (!visites.has(idx)) {
+            // Trouver la meilleure position pour insérer ce point
+            let meilleurePosition = itineraire.length;
+            let gainMinimal = Infinity;
+            
+            for (let pos = 0; pos <= itineraire.length; pos++) {
+                let avant = pos === 0 ? depot : itineraire[pos-1];
+                let apres = pos === itineraire.length ? depot : itineraire[pos];
+                
+                const avantIdx = points.findIndex(p => p.id === avant.id);
+                const apresIdx = points.findIndex(p => p.id === apres.id);
+                
+                const distActuelle = matrice[avantIdx][apresIdx];
+                const distNouvelle = matrice[avantIdx][idx] + matrice[idx][apresIdx];
+                const gain = distNouvelle - distActuelle;
+                
+                if (gain < gainMinimal) {
+                    gainMinimal = gain;
+                    meilleurePosition = pos;
+                }
+            }
+            
+            itineraire.splice(meilleurePosition, 0, normal);
+        }
+    }
+    
+    tour.transports = itineraire;
+    
+    // Recalculer les stats avec les vraies distances
+    const nouvellesStats = await calculerStatsTourneeReelle(itineraire);
+    
+    showMessage(`✅ Tournée optimisée : ${nouvellesStats.distance} km`, "#10b981");
+    ouvrirTournee(tourId);
+    afficherPage();
+};
+        // ===== FONCTION PRINCIPALE DE MISE À JOUR DES STATS =====
+async function mettreAJourStatsTournee(tourId) {
+    const tour = tours.find(t => t.id === tourId);
+    if (!tour) return;
+    
+    const stats = await calculerStatsTourneeReelle(tour.transports);
+    
+    // Mettre à jour l'affichage
+    const statsDiv = document.querySelector(`#tour-${tourId} .tour-stats`);
+    if (statsDiv) {
+        statsDiv.innerHTML = `
+            <div class="tour-stat-item">
+                <div class="tour-stat-value">${stats.distance} km</div>
+                <div class="tour-stat-label">Distance</div>
+            </div>
+            <div class="tour-stat-item">
+                <div class="tour-stat-value">${Math.floor(stats.duree/60)}h${stats.duree%60}</div>
+                <div class="tour-stat-label">Durée</div>
+            </div>
+            <div class="tour-stat-item">
+                <div class="tour-stat-value">${stats.poids} kg</div>
+                <div class="tour-stat-label">Charge</div>
+            </div>
+        `;
+    }
+}
     </script>
     
 </body>
