@@ -336,7 +336,9 @@
     
     console.log("✅ Supabase client prêt pour inscription");
     
-    // ===== FONCTIONS =====
+    // Variable pour tracker la dernière tentative
+    let lastAttemptTime = 0;
+    
     window.fillDemoData = function() {
         document.getElementById('company_name').value = 'Dupont SA';
         document.getElementById('contact_name').value = 'Jean Dupont';
@@ -390,6 +392,14 @@
             return;
         }
         
+        // Vérifier le rate limiting
+        const now = Date.now();
+        if (now - lastAttemptTime < 30000) { // 30 secondes minimum entre les tentatives
+            const waitTime = Math.ceil((30000 - (now - lastAttemptTime)) / 1000);
+            showError(`Veuillez attendre ${waitTime} secondes avant de réessayer`);
+            return;
+        }
+        
         try {
             // Désactiver le bouton
             submitBtn.disabled = true;
@@ -423,7 +433,9 @@
                 return;
             }
             
-            // 3. Créer l'utilisateur dans Auth
+            // 3. Créer l'utilisateur dans Auth avec un délai
+            lastAttemptTime = Date.now();
+            
             const { data: authData, error: authError } = await supabaseClient.auth.signUp({
                 email: email,
                 password: password,
@@ -437,8 +449,11 @@
             });
             
             if (authError) {
-                if (authError.message.includes('already registered')) {
-                    showError('Cet email est déjà utilisé dans Auth');
+                if (authError.message.includes('rate limit')) {
+                    showError('Trop de tentatives. Veuillez attendre 5-10 minutes avant de réessayer.');
+                    lastAttemptTime = now - 25000; // Réduire le temps d'attente pour la prochaine fois
+                } else if (authError.message.includes('already registered')) {
+                    showError('Cet email est déjà utilisé');
                 } else {
                     throw authError;
                 }
@@ -456,7 +471,7 @@
             // 4. Attendre un peu que l'utilisateur soit bien créé
             await new Promise(resolve => setTimeout(resolve, 1000));
             
-            // 5. Insérer dans la table clients (SANS user_id si la colonne n'existe pas)
+            // 5. Insérer dans la table clients
             const clientData = {
                 id: authData.user.id,
                 client_number: clientNumber,
@@ -470,7 +485,6 @@
                 default_pickup_address: document.getElementById('default_pickup_address').value || 'Impasse des Griottes 3, 1462 Yvonand'
             };
             
-            // Essayer d'abord sans user_id
             const { error: clientError } = await supabaseClient
                 .from('clients')
                 .insert([clientData]);
@@ -478,21 +492,17 @@
             if (clientError) {
                 console.error('❌ Erreur insertion client:', clientError);
                 
-                // Si l'erreur est due à une colonne manquante, essayer une version simplifiée
-                if (clientError.message.includes('user_id')) {
-                    console.log("Tentative sans user_id...");
-                    delete clientData.user_id;
-                    
-                    const { error: retryError } = await supabaseClient
-                        .from('clients')
-                        .insert([clientData]);
-                    
-                    if (retryError) {
-                        throw retryError;
-                    }
-                } else {
-                    throw clientError;
+                // Si erreur, on nettoie l'utilisateur Auth
+                try {
+                    await supabaseClient.auth.admin.deleteUser(authData.user.id);
+                } catch (e) {
+                    console.error("Impossible de nettoyer l'utilisateur:", e);
                 }
+                
+                showError('Erreur: ' + (clientError.message || 'Erreur lors de la création du profil'));
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Créer mon compte';
+                return;
             }
             
             console.log("✅ Client inséré avec succès");
