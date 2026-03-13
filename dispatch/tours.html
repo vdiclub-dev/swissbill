@@ -14,6 +14,9 @@
     <!-- Drag & Drop -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
     
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
@@ -34,6 +37,7 @@
         .btn { background: #facc15; color: #111; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-success { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         .btn-delete { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .btn-pdf { background: #8b5cf6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -47,7 +51,7 @@
         
         /* PANEL GAUCHE - TOURNÉES */
         .tours-panel {
-            width: 400px;
+            width: 500px;  /* Plus large */
             background: #111;
             border-right: 1px solid #2a2a2a;
             padding: 20px;
@@ -113,7 +117,7 @@
         
         .tour-list {
             min-height: 50px;
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
             padding: 5px;
             margin: 10px 0;
@@ -138,16 +142,18 @@
             margin-top: 10px;
         }
         
-        /* CARTE CENTRALE */
+        /* CARTE CENTRALE - MOINS LARGE */
         .map-container {
-            flex: 1;
+            width: 40%;  /* Réduit à 40% */
+            min-width: 400px;
             position: relative;
         }
         #map { height: 100%; width: 100%; }
         
         /* PANEL DROIT - EN ATTENTE */
         .pending-panel {
-            width: 400px;
+            width: 30%;  /* Le reste */
+            min-width: 300px;
             background: #111;
             border-left: 1px solid #2a2a2a;
             padding: 20px;
@@ -207,16 +213,21 @@
             margin-right: 4px;
         }
         
-        .transport-client {
+        .transport-destinataire {
             font-weight: bold;
             font-size: 15px;
             color: white;
         }
         
-        .transport-destinataire {
-            font-size: 14px;
+        .transport-adresse-complete {
+            font-size: 12px;
             color: #facc15;
             margin: 5px 0;
+        }
+        
+        .transport-npa-ville {
+            font-size: 11px;
+            color: #aaa;
         }
         
         .transport-address {
@@ -231,6 +242,8 @@
             font-size: 11px;
             color: #9ca3af;
             margin-top: 8px;
+            padding-top: 5px;
+            border-top: 1px solid #2a2a2a;
         }
         
         .remove-from-tour {
@@ -251,6 +264,7 @@
             cursor: pointer;
             font-size: 11px;
             margin-top: 8px;
+            width: 100%;
         }
         
         .drop-target {
@@ -265,8 +279,6 @@
             border: none;
             cursor: pointer;
         }
-        
-        .btn-optimize { background: #3b82f6; color: white; }
         
         .loader {
             text-align: center; padding: 30px; color: #aaa;
@@ -317,7 +329,6 @@
                 ];
                 let chauffeurs = [];
                 let map;
-                let markers = [];
                 
                 const depot = {
                     nom: "Dépôt Yverdon",
@@ -346,6 +357,22 @@
                              Math.sin(dLon/2) * Math.sin(dLon/2);
                     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                     return R * c;
+                }
+                
+                // ===== EXTRAIRE NPA ET VILLE =====
+                function extraireNpaVille(adresse) {
+                    if (!adresse) return { npa: '', ville: '' };
+                    
+                    // Format: Rue 12, 1000 Lausanne
+                    const parts = adresse.split(',');
+                    if (parts.length >= 2) {
+                        const lastPart = parts[parts.length-1].trim();
+                        const match = lastPart.match(/(\d{4})\s+(.+)/);
+                        if (match) {
+                            return { npa: match[1], ville: match[2] };
+                        }
+                    }
+                    return { npa: '', ville: '' };
                 }
                 
                 // ===== CALCUL STATS TOURNÉE =====
@@ -382,6 +409,40 @@
                         poids: Math.round(poids)
                     };
                 }
+                
+                // ===== GÉNÉRER PDF TOURNÉE =====
+                window.genererPDF = function(tourId) {
+                    const tour = tours.find(t => t.id === tourId);
+                    if (!tour || tour.transports.length === 0) return;
+                    
+                    const stats = calculerStatsTournee(tour.transports);
+                    
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    
+                    doc.setFontSize(20);
+                    doc.setTextColor(250, 204, 21);
+                    doc.text(`Tournée: ${tour.nom}`, 20, 20);
+                    
+                    doc.setFontSize(12);
+                    doc.setTextColor(255, 255, 255);
+                    doc.text(`Date: ${new Date().toLocaleDateString('fr-CH')}`, 20, 30);
+                    doc.text(`Distance: ${stats.distance} km`, 20, 40);
+                    doc.text(`Durée: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 20, 50);
+                    doc.text(`Poids total: ${stats.poids} kg`, 20, 60);
+                    
+                    doc.text("Arrêts:", 20, 75);
+                    
+                    let y = 85;
+                    tour.transports.forEach((t, i) => {
+                        doc.setFontSize(10);
+                        doc.text(`${i+1}. ${t.destinataire_nom || 'Client'}`, 25, y);
+                        doc.text(`   ${t.delivery_address || ''}`, 25, y+5);
+                        y += 15;
+                    });
+                    
+                    doc.save(`tournee-${tour.nom}.pdf`);
+                };
                 
                 // ===== CHARGEMENT =====
                 async function loadData() {
@@ -438,9 +499,14 @@
                                         <div class="tour-card" style="border-left-color: ${tour.couleur};">
                                             <div class="tour-header">
                                                 <span class="tour-title">🚚 ${tour.nom}</span>
-                                                <button class="btn-delete btn-small" onclick="supprimerTournee(${tour.id})">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
+                                                <div>
+                                                    <button class="btn-pdf btn-small" onclick="genererPDF(${tour.id})">
+                                                        <i class="fas fa-file-pdf"></i>
+                                                    </button>
+                                                    <button class="btn-delete btn-small" onclick="supprimerTournee(${tour.id})">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
                                             </div>
                                             
                                             <div class="tour-stats">
@@ -459,28 +525,34 @@
                                             </div>
                                             
                                             <div class="tour-list" data-tour-id="${tour.id}">
-                                                ${tour.transports.map(t => `
-                                                    <div class="transport-card" data-id="${t.id}">
-                                                        <div class="transport-header">
-                                                            <span class="transport-expediteur">
-                                                                <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
-                                                            </span>
-                                                            <button class="remove-from-tour" onclick="enleverDeTournee('${t.id}')">
-                                                                <i class="fas fa-times"></i>
-                                                            </button>
+                                                ${tour.transports.map(t => {
+                                                    const { npa, ville } = extraireNpaVille(t.delivery_address);
+                                                    return `
+                                                        <div class="transport-card" data-id="${t.id}">
+                                                            <div class="transport-header">
+                                                                <span class="transport-expediteur">
+                                                                    <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
+                                                                </span>
+                                                                <button class="remove-from-tour" onclick="enleverDeTournee('${t.id}')">
+                                                                    <i class="fas fa-times"></i>
+                                                                </button>
+                                                            </div>
+                                                            <div class="transport-destinataire">
+                                                                👤 ${t.destinataire_nom || 'Destinataire inconnu'}
+                                                            </div>
+                                                            <div class="transport-address">
+                                                                📍 ${t.delivery_address || ''}
+                                                            </div>
+                                                            <div class="transport-npa-ville">
+                                                                ${npa} ${ville}
+                                                            </div>
+                                                            <div class="transport-meta">
+                                                                <span>⚡ ${t.speed || '24h'}</span>
+                                                                <span>⚖️ ${t.weight || 1} kg</span>
+                                                            </div>
                                                         </div>
-                                                        <div class="transport-destinataire">
-                                                            👤 ${t.destinataire_nom || 'Destinataire inconnu'}
-                                                        </div>
-                                                        <div class="transport-address">
-                                                            📍 ${(t.delivery_address || '').substring(0,40)}
-                                                        </div>
-                                                        <div class="transport-meta">
-                                                            <span>⚡ ${t.speed || '24h'}</span>
-                                                            <span>⚖️ ${t.weight || 1} kg</span>
-                                                        </div>
-                                                    </div>
-                                                `).join('')}
+                                                    `;
+                                                }).join('')}
                                             </div>
                                             
                                             <select class="chauffeur-select" onchange="assignerChauffeur(${tour.id}, this.value)">
@@ -496,7 +568,7 @@
                                 }).join('')}
                             </div>
                             
-                            <!-- CARTE CENTRALE -->
+                            <!-- CARTE CENTRALE - MOINS LARGE -->
                             <div class="map-container">
                                 <div id="map"></div>
                             </div>
@@ -509,31 +581,37 @@
                                 </div>
                                 
                                 <div class="pending-list" id="pendingList">
-                                    ${enAttente.map(t => `
-                                        <div class="transport-card ${t.speed === '6h' ? 'urgent' : ''}" 
-                                             data-id="${t.id}"
-                                             data-lat="${t.lat || 0}"
-                                             data-lng="${t.lng || 0}">
-                                            <div class="transport-header">
-                                                <span class="transport-expediteur">
-                                                    <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
-                                                </span>
+                                    ${enAttente.map(t => {
+                                        const { npa, ville } = extraireNpaVille(t.delivery_address);
+                                        return `
+                                            <div class="transport-card ${t.speed === '6h' ? 'urgent' : ''}" 
+                                                 data-id="${t.id}"
+                                                 data-lat="${t.lat || 0}"
+                                                 data-lng="${t.lng || 0}">
+                                                <div class="transport-header">
+                                                    <span class="transport-expediteur">
+                                                        <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
+                                                    </span>
+                                                </div>
+                                                <div class="transport-destinataire">
+                                                    👤 ${t.destinataire_nom || 'Destinataire inconnu'}
+                                                </div>
+                                                <div class="transport-address">
+                                                    📍 ${t.delivery_address || ''}
+                                                </div>
+                                                <div class="transport-npa-ville">
+                                                    ${npa} ${ville}
+                                                </div>
+                                                <div class="transport-meta">
+                                                    <span>⚡ ${t.speed || '24h'}</span>
+                                                    <span>⚖️ ${t.weight || 1} kg</span>
+                                                </div>
+                                                <button class="btn-delete-transport" onclick="supprimerTransport('${t.id}')">
+                                                    <i class="fas fa-trash"></i> Supprimer
+                                                </button>
                                             </div>
-                                            <div class="transport-destinataire">
-                                                👤 ${t.destinataire_nom || 'Destinataire inconnu'}
-                                            </div>
-                                            <div class="transport-address">
-                                                📍 ${(t.delivery_address || '').substring(0,40)}
-                                            </div>
-                                            <div class="transport-meta">
-                                                <span>⚡ ${t.speed || '24h'}</span>
-                                                <span>⚖️ ${t.weight || 1} kg</span>
-                                            </div>
-                                            <button class="btn-delete-transport" onclick="supprimerTransport('${t.id}')">
-                                                <i class="fas fa-trash"></i> Supprimer
-                                            </button>
-                                        </div>
-                                    `).join('')}
+                                        `;
+                                    }).join('')}
                                 </div>
                             </div>
                         </div>
@@ -553,7 +631,7 @@
                     
                     if (transports) {
                         transports.forEach(t => {
-                            if (t.lat && t.lng) {
+                            if (t.lat && t.lng && t.lat !== 0 && t.lng !== 0) {
                                 const color = t.speed === '6h' ? '#ef4444' : '#facc15';
                                 const icon = L.divIcon({
                                     html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white;"></div>`,
@@ -653,15 +731,7 @@
                     const tour = tours.find(t => t.id === tourId);
                     if (tour) {
                         tour.chauffeur = chauffeurId || null;
-                        
-                        // Si un chauffeur est assigné, mettre à jour dans Supabase
-                        if (chauffeurId) {
-                            // Ici, vous pouvez sauvegarder l'assignation
-                            alert(`✅ Tournée assignée au chauffeur`);
-                            
-                            // Le transport apparaîtra dans la page du chauffeur
-                            // car on filtrera par chauffeur_id
-                        }
+                        alert(chauffeurId ? "✅ Chauffeur assigné" : "Chauffeur retiré");
                     }
                 };
                 
