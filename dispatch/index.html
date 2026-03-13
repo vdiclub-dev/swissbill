@@ -37,6 +37,7 @@
         .btn-success { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         .btn-delete { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .btn-pdf { background: #8b5cf6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .btn-assign { background: #3b82f6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -48,7 +49,7 @@
             overflow: hidden;
         }
         
-        /* PANEL GAUCHE - TOURNÉES (60% de la page) */
+        /* PANEL GAUCHE - TOURNÉES */
         .tours-panel {
             width: 60%;
             background: #111;
@@ -74,6 +75,12 @@
             padding: 15px;
             margin-bottom: 20px;
             border-left: 4px solid #3b82f6;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        
+        .tour-card:hover {
+            background: #2d3a4f;
         }
         
         .tour-header {
@@ -88,6 +95,12 @@
             color: #facc15;
             font-size: 16px;
             cursor: pointer;
+        }
+        
+        .tour-chauffeur {
+            font-size: 12px;
+            color: #10b981;
+            margin-top: 5px;
         }
         
         .tour-stats {
@@ -125,7 +138,7 @@
             border-radius: 4px;
         }
         
-        /* PANEL DROIT - EN ATTENTE (40% de la page) */
+        /* PANEL DROIT - EN ATTENTE */
         .pending-panel {
             width: 40%;
             background: #111;
@@ -237,12 +250,12 @@
             cursor: pointer;
         }
         
-        /* MODAL */
+        /* MODAL TOURNÉE EN GRAND */
         .modal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.95);
             align-items: center;
             justify-content: center;
             z-index: 2000;
@@ -251,9 +264,11 @@
         .modal-box {
             background: #1f2937;
             width: 90%;
-            max-width: 500px;
-            padding: 20px;
-            border-radius: 8px;
+            max-width: 1000px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 25px;
+            border-radius: 10px;
             border: 2px solid #facc15;
         }
         
@@ -261,25 +276,79 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a2a2a;
         }
         
-        .modal-header h3 {
+        .modal-header h2 {
             color: #facc15;
+            font-size: 24px;
         }
         
         .modal-close {
             background: none;
             border: none;
             color: white;
-            font-size: 24px;
+            font-size: 30px;
             cursor: pointer;
         }
         
-        .modal-actions {
+        .modal-close:hover {
+            color: #facc15;
+        }
+        
+        .modal-stats {
             display: flex;
-            gap: 10px;
+            gap: 30px;
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .modal-stat-item {
+            text-align: center;
+        }
+        
+        .modal-stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #facc15;
+        }
+        
+        .modal-stat-label {
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        .modal-transport-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
             margin-top: 20px;
+        }
+        
+        .modal-transport-card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 3px solid #facc15;
+        }
+        
+        .modal-transport-card.urgent {
+            border-left-color: #ef4444;
+        }
+        
+        .modal-chauffeur-select {
+            background: #111;
+            color: white;
+            border: 1px solid #2a2a2a;
+            padding: 10px;
+            border-radius: 4px;
+            width: 100%;
+            margin-top: 15px;
+            font-size: 14px;
         }
         
         .loader {
@@ -298,14 +367,25 @@
         </div>
     </div>
 
-    <!-- MODAL D'ÉDITION -->
+    <!-- MODAL D'ÉDITION TRANSPORT -->
     <div id="editModal" class="modal">
-        <div class="modal-box">
+        <div class="modal-box" style="max-width:500px;">
             <div class="modal-header">
                 <h3>✏️ Modifier le transport</h3>
                 <button class="modal-close" onclick="document.getElementById('editModal').style.display='none'">✖</button>
             </div>
             <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <!-- MODAL TOURNÉE EN GRAND -->
+    <div id="tourModal" class="modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2 id="modalTourTitle">🚚 Tournée</h2>
+                <button class="modal-close" onclick="document.getElementById('tourModal').style.display='none'">✖</button>
+            </div>
+            <div id="modalTourContent"></div>
         </div>
     </div>
 
@@ -329,15 +409,26 @@
                 // ===== DONNÉES =====
                 let allTransports = [];
                 let tours = [
-                    { id: 1, nom: "Tournée Lausanne", couleur: '#3b82f6', transports: [] },
-                    { id: 2, nom: "Tournée Genève", couleur: '#10b981', transports: [] },
-                    { id: 3, nom: "Tournée Berne", couleur: '#f59e0b', transports: [] }
+                    { id: 1, nom: "Tournée Lausanne", couleur: '#3b82f6', chauffeur: null, transports: [] },
+                    { id: 2, nom: "Tournée Genève", couleur: '#10b981', chauffeur: null, transports: [] },
+                    { id: 3, nom: "Tournée Berne", couleur: '#f59e0b', chauffeur: null, transports: [] }
                 ];
+                let chauffeurs = [];
                 
                 const depot = {
                     lat: 46.7785,
                     lng: 6.6411
                 };
+                
+                // ===== CHARGEMENT CHAUFFEURS =====
+                async function loadChauffeurs() {
+                    const { data } = await supabase
+                        .from('chauffeurs')
+                        .select('*')
+                        .eq('actif', true);
+                    
+                    chauffeurs = data || [];
+                }
                 
                 // ===== CALCUL DE DISTANCE =====
                 function calculerDistance(lat1, lng1, lat2, lng2) {
@@ -395,18 +486,15 @@
                     const { jsPDF } = window.jspdf;
                     const doc = new jsPDF();
                     
-                    // Titre principal en gras
                     doc.setFont("helvetica", "bold");
                     doc.setFontSize(24);
                     doc.setTextColor(0, 0, 0);
                     doc.text(`🚚 ${tour.nom}`, 20, 20);
                     
-                    // Sous-titre
                     doc.setFont("helvetica", "bold");
                     doc.setFontSize(14);
                     doc.text(`Date: ${new Date().toLocaleDateString('fr-CH')}`, 20, 35);
                     
-                    // Statistiques en gras
                     doc.setFont("helvetica", "bold");
                     doc.setFontSize(12);
                     doc.text(`Récapitulatif:`, 20, 50);
@@ -416,7 +504,6 @@
                     doc.text(`Durée totale: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 25, 70);
                     doc.text(`Poids total: ${stats.poids} kg`, 25, 80);
                     
-                    // Liste des arrêts en gras
                     doc.setFont("helvetica", "bold");
                     doc.text(`Détail des livraisons:`, 20, 100);
                     
@@ -434,6 +521,87 @@
                     doc.save(`tournee-${tour.nom.replace(/\s+/g, '_')}.pdf`);
                 };
                 
+                // ===== OUVRIR TOURNÉE EN GRAND =====
+                window.ouvrirTournee = function(tourId) {
+                    const tour = tours.find(t => t.id === tourId);
+                    if (!tour) return;
+                    
+                    const stats = calculerStatsTournee(tour.transports);
+                    
+                    document.getElementById('modalTourTitle').innerHTML = `🚚 ${tour.nom}`;
+                    
+                    let transportsHTML = '';
+                    tour.transports.forEach(t => {
+                        transportsHTML += `
+                            <div class="modal-transport-card ${t.speed === '6h' ? 'urgent' : ''}">
+                                <div style="font-size:12px; color:#9ca3af; margin-bottom:5px;">
+                                    <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
+                                </div>
+                                <div style="font-weight:bold; font-size:16px; margin-bottom:5px;">
+                                    👤 ${t.destinataire_nom || 'Client'}
+                                </div>
+                                <div style="font-size:12px; color:#aaa; margin-bottom:5px;">
+                                    📍 ${t.delivery_address || ''}
+                                </div>
+                                <div style="display:flex; gap:15px; font-size:12px; color:#9ca3af;">
+                                    <span>⚡ ${t.speed || '24h'}</span>
+                                    <span>⚖️ ${t.weight || 1} kg</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    document.getElementById('modalTourContent').innerHTML = `
+                        <div class="modal-stats">
+                            <div class="modal-stat-item">
+                                <div class="modal-stat-value">${stats.distance} km</div>
+                                <div class="modal-stat-label">Distance</div>
+                            </div>
+                            <div class="modal-stat-item">
+                                <div class="modal-stat-value">${Math.floor(stats.duree/60)}h${stats.duree%60}</div>
+                                <div class="modal-stat-label">Durée</div>
+                            </div>
+                            <div class="modal-stat-item">
+                                <div class="modal-stat-value">${stats.poids} kg</div>
+                                <div class="modal-stat-label">Charge</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom:20px;">
+                            <label style="color:#facc15; font-weight:bold;">Chauffeur assigné</label>
+                            <select class="modal-chauffeur-select" onchange="assignerChauffeur(${tour.id}, this.value)">
+                                <option value="">Aucun chauffeur</option>
+                                ${chauffeurs.map(c => `
+                                    <option value="${c.id}" ${tour.chauffeur === c.id ? 'selected' : ''}>
+                                        ${c.prenom} ${c.nom}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        
+                        <h3 style="color:#facc15; margin:20px 0 10px;">📋 Livraisons (${tour.transports.length})</h3>
+                        <div class="modal-transport-list">
+                            ${transportsHTML}
+                        </div>
+                    `;
+                    
+                    document.getElementById('tourModal').style.display = 'flex';
+                };
+                
+                // ===== ASSIGNER CHAUFFEUR =====
+                window.assignerChauffeur = async function(tourId, chauffeurId) {
+                    const tour = tours.find(t => t.id === tourId);
+                    if (tour) {
+                        tour.chauffeur = chauffeurId || null;
+                        
+                        // Mettre à jour dans Supabase (à créer table tournees plus tard)
+                        alert(chauffeurId ? "✅ Chauffeur assigné" : "Chauffeur retiré");
+                        
+                        // Mettre à jour l'affichage
+                        afficherPage();
+                    }
+                };
+                
                 // ===== CHARGEMENT =====
                 async function loadData() {
                     const { data } = await supabase
@@ -442,11 +610,13 @@
                         .order('created_at', { ascending: false });
                     
                     allTransports = data || [];
+                    await loadChauffeurs();
                     afficherPage();
                 }
                 
                 // ===== RENOMMER =====
-                window.renommerTournee = function(tourId) {
+                window.renommerTournee = function(tourId, event) {
+                    event.stopPropagation();
                     const tour = tours.find(t => t.id === tourId);
                     const nouveauNom = prompt("Nouveau nom:", tour.nom);
                     if (nouveauNom) {
@@ -455,7 +625,7 @@
                     }
                 };
                 
-                // ===== OUVRIR MODAL =====
+                // ===== OUVRIR MODAL ÉDITION TRANSPORT =====
                 window.ouvrirEdition = function(transportId) {
                     const t = allTransports.find(t => t.id === transportId);
                     if (!t) return;
@@ -485,7 +655,7 @@
                                 <option value="6h" ${t.speed === '6h' ? 'selected' : ''}>6h</option>
                             </select>
                         </div>
-                        <div class="modal-actions">
+                        <div class="modal-actions" style="display:flex; gap:10px; margin-top:20px;">
                             <button class="btn" onclick="document.getElementById('editModal').style.display='none'" style="flex:1;">Annuler</button>
                             <button class="btn-success" onclick="sauvegarderEdition('${t.id}')" style="flex:2;">Sauvegarder</button>
                         </div>
@@ -536,7 +706,7 @@
                         </header>
                         
                         <div class="container">
-                            <!-- PANEL GAUCHE - TOURNÉES (60%) -->
+                            <!-- PANEL GAUCHE - TOURNÉES -->
                             <div class="tours-panel">
                                 <div class="panel-header">
                                     <h2><i class="fas fa-route"></i> Tournées</h2>
@@ -545,21 +715,28 @@
                                 
                                 ${tours.map(tour => {
                                     const stats = calculerStatsTournee(tour.transports);
+                                    const chauffeur = chauffeurs.find(c => c.id === tour.chauffeur);
                                     return `
-                                        <div class="tour-card" style="border-left-color: ${tour.couleur};">
+                                        <div class="tour-card" ondblclick="ouvrirTournee(${tour.id})">
                                             <div class="tour-header">
-                                                <span class="tour-title" onclick="renommerTournee(${tour.id})">
+                                                <span class="tour-title" onclick="renommerTournee(${tour.id}, event)">
                                                     🚚 ${tour.nom}
                                                 </span>
                                                 <div>
-                                                    <button class="btn-pdf btn-small" onclick="genererPDF(${tour.id})">
+                                                    <button class="btn-pdf btn-small" onclick="event.stopPropagation(); genererPDF(${tour.id})">
                                                         <i class="fas fa-file-pdf"></i>
                                                     </button>
-                                                    <button class="btn-delete btn-small" onclick="supprimerTournee(${tour.id})">
+                                                    <button class="btn-delete btn-small" onclick="event.stopPropagation(); supprimerTournee(${tour.id})">
                                                         <i class="fas fa-trash"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            
+                                            ${tour.chauffeur ? `
+                                                <div class="tour-chauffeur">
+                                                    <i class="fas fa-user"></i> Chauffeur: ${chauffeur?.prenom} ${chauffeur?.nom}
+                                                </div>
+                                            ` : ''}
                                             
                                             <div class="tour-stats">
                                                 <div class="tour-stat-item">
@@ -578,7 +755,7 @@
                                             
                                             <div class="tour-list" data-tour-id="${tour.id}">
                                                 ${tour.transports.map(t => `
-                                                    <div class="transport-card" ondblclick="ouvrirEdition('${t.id}')" data-id="${t.id}">
+                                                    <div class="transport-card" ondblclick="ouvrirEdition('${t.id}'); event.stopPropagation();" data-id="${t.id}">
                                                         <div class="transport-expediteur">
                                                             <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
                                                         </div>
@@ -603,7 +780,7 @@
                                 }).join('')}
                             </div>
                             
-                            <!-- PANEL DROIT - EN ATTENTE (40%) -->
+                            <!-- PANEL DROIT - EN ATTENTE -->
                             <div class="pending-panel">
                                 <div class="pending-header">
                                     <h2><i class="fas fa-clock"></i> En attente</h2>
@@ -673,14 +850,17 @@
                         id: newId,
                         nom: `Tournée ${newId}`,
                         couleur: couleurs[newId % couleurs.length],
+                        chauffeur: null,
                         transports: []
                     });
                     afficherPage();
                 };
                 
                 window.supprimerTournee = function(tourId) {
-                    tours = tours.filter(t => t.id !== tourId);
-                    afficherPage();
+                    if (confirm("Supprimer cette tournée ?")) {
+                        tours = tours.filter(t => t.id !== tourId);
+                        afficherPage();
+                    }
                 };
                 
                 window.ajouterATournee = function(transportId, tourId) {
