@@ -11,6 +11,14 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     
+    <!-- Resizable & Drag & Drop -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
@@ -31,6 +39,8 @@
         .btn { background: #facc15; color: #111; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-success { background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         .btn-delete { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .btn-pdf { background: #8b5cf6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .btn-edit { background: #3b82f6; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         
         .stats-header { display: flex; gap: 20px; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -81,6 +91,13 @@
             font-weight: bold;
             color: #facc15;
             font-size: 16px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        
+        .tour-title:hover {
+            background: #2a2a2a;
         }
         
         .tour-stats {
@@ -118,18 +135,33 @@
             border-radius: 4px;
         }
         
-        /* CARTE CENTRALE */
+        .tour-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        /* CARTE CENTRALE - RESIZABLE */
         .map-container {
-            flex: 1;
+            width: 40%;
+            min-width: 300px;
+            max-width: 60%;
             position: relative;
+            border-right: 1px solid #2a2a2a;
+            overflow: hidden;
+        }
+        .ui-resizable-e {
+            width: 8px;
+            background: #2a2a2a;
+            cursor: col-resize;
         }
         #map { height: 100%; width: 100%; }
         
         /* PANEL DROIT - EN ATTENTE */
         .pending-panel {
-            width: 400px;
+            flex: 1;
             background: #111;
-            border-left: 1px solid #2a2a2a;
             padding: 20px;
             overflow-y: auto;
         }
@@ -156,17 +188,34 @@
             border-radius: 6px;
             padding: 12px;
             margin-bottom: 10px;
+            cursor: move;
             border-left: 3px solid #facc15;
+            transition: 0.2s;
+        }
+        
+        .transport-card:hover {
+            background: #2d3a4f;
         }
         
         .transport-card.urgent {
             border-left-color: #ef4444;
         }
         
+        .transport-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
         .transport-expediteur {
             font-size: 11px;
             color: #9ca3af;
-            margin-bottom: 4px;
+        }
+        
+        .transport-expediteur i {
+            color: #facc15;
+            margin-right: 4px;
         }
         
         .transport-destinataire {
@@ -188,6 +237,14 @@
             color: #9ca3af;
         }
         
+        .remove-from-tour {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
         .btn-delete-transport {
             background: #ef4444;
             color: white;
@@ -198,6 +255,64 @@
             font-size: 11px;
             margin-top: 8px;
             width: 100%;
+        }
+        
+        .drop-target {
+            border: 2px dashed #facc15;
+            background: #2d3a4f;
+        }
+        
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+        }
+        
+        /* MODAL */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        
+        .modal-box {
+            background: #1f2937;
+            width: 90%;
+            max-width: 500px;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #facc15;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .modal-header h3 {
+            color: #facc15;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
         }
         
         .loader {
@@ -216,6 +331,17 @@
         </div>
     </div>
 
+    <!-- MODAL D'ÉDITION -->
+    <div id="editModal" class="modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>✏️ Modifier le transport</h3>
+                <button class="modal-close" onclick="document.getElementById('editModal').style.display='none'">✖</button>
+            </div>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
     <!-- SCRIPTS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -224,11 +350,9 @@
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             try {
-                console.log("🚀 Léman Dispatch - Démarrage...");
+                console.log("🚀 Léman Dispatch - Tournées...");
                 
-                if (!window.SUPABASE_CONFIG) {
-                    throw new Error("config.js manquant");
-                }
+                if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
                 
                 const supabase = window.supabase.createClient(
                     window.SUPABASE_CONFIG.url,
@@ -240,7 +364,7 @@
                 const userData = JSON.parse(user);
                 if (userData.role !== 'admin') { window.location.href = '../'; return; }
                 
-                // ===== DONNÉES SIMPLIFIÉES =====
+                // ===== DONNÉES =====
                 let allTransports = [];
                 let tours = [
                     { id: 1, nom: "Tournée Lausanne", couleur: '#3b82f6', transports: [] },
@@ -304,6 +428,30 @@
                     };
                 }
                 
+                // ===== GÉNÉRER PDF =====
+                window.genererPDF = function(tourId) {
+                    const tour = tours.find(t => t.id === tourId);
+                    if (!tour || tour.transports.length === 0) return;
+                    
+                    const stats = calculerStatsTournee(tour.transports);
+                    
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    
+                    doc.setFontSize(20);
+                    doc.setTextColor(250, 204, 21);
+                    doc.text(`🚚 ${tour.nom}`, 20, 20);
+                    
+                    doc.setFontSize(12);
+                    doc.setTextColor(255, 255, 255);
+                    doc.text(`Date: ${new Date().toLocaleDateString('fr-CH')}`, 20, 35);
+                    doc.text(`Distance: ${stats.distance} km`, 20, 45);
+                    doc.text(`Durée: ${Math.floor(stats.duree/60)}h${stats.duree%60}`, 20, 55);
+                    doc.text(`Poids: ${stats.poids} kg`, 20, 65);
+                    
+                    doc.save(`tournee-${tour.nom}.pdf`);
+                };
+                
                 // ===== CHARGEMENT =====
                 async function loadData() {
                     const { data } = await supabase
@@ -314,6 +462,62 @@
                     allTransports = data || [];
                     afficherPage();
                 }
+                
+                // ===== RENOMMER =====
+                window.renommerTournee = function(tourId) {
+                    const tour = tours.find(t => t.id === tourId);
+                    const nouveauNom = prompt("Nouveau nom:", tour.nom);
+                    if (nouveauNom) {
+                        tour.nom = nouveauNom;
+                        afficherPage();
+                    }
+                };
+                
+                // ===== OUVRIR MODAL =====
+                window.ouvrirEdition = function(transportId) {
+                    const t = allTransports.find(t => t.id === transportId);
+                    if (!t) return;
+                    
+                    document.getElementById('modalContent').innerHTML = `
+                        <div style="margin-bottom:15px;">
+                            <label style="color:#aaa;">Numéro client</label>
+                            <input type="text" id="editClient" value="${t.client_number || ''}" style="width:100%; padding:8px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="color:#aaa;">Destinataire</label>
+                            <input type="text" id="editDest" value="${t.destinataire_nom || ''}" style="width:100%; padding:8px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="color:#aaa;">Adresse</label>
+                            <input type="text" id="editAddr" value="${t.delivery_address || ''}" style="width:100%; padding:8px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="color:#aaa;">Poids (kg)</label>
+                            <input type="number" id="editPoids" value="${t.weight || 1}" style="width:100%; padding:8px; background:#111; border:1px solid #2a2a2a; color:white; border-radius:4px;">
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn" onclick="document.getElementById('editModal').style.display='none'" style="flex:1;">Annuler</button>
+                            <button class="btn-success" onclick="sauvegarderEdition('${t.id}')" style="flex:2;">Sauvegarder</button>
+                        </div>
+                    `;
+                    
+                    document.getElementById('editModal').style.display = 'flex';
+                };
+                
+                window.sauvegarderEdition = async function(id) {
+                    await supabase
+                        .from('transport_orders_simple')
+                        .update({
+                            client_number: document.getElementById('editClient').value,
+                            destinataire_nom: document.getElementById('editDest').value,
+                            delivery_address: document.getElementById('editAddr').value,
+                            weight: parseFloat(document.getElementById('editPoids').value)
+                        })
+                        .eq('id', id);
+                    
+                    document.getElementById('editModal').style.display = 'none';
+                    loadData();
+                };
                 
                 // ===== AFFICHAGE =====
                 function afficherPage() {
@@ -344,7 +548,7 @@
                             <!-- PANEL GAUCHE -->
                             <div class="tours-panel">
                                 <div class="panel-header">
-                                    <h2>🚚 Tournées</h2>
+                                    <h2><i class="fas fa-route"></i> Tournées</h2>
                                     <button class="btn-success btn-small" onclick="ajouterTournee()">➕ Nouvelle</button>
                                 </div>
                                 
@@ -353,10 +557,17 @@
                                     return `
                                         <div class="tour-card" style="border-left-color: ${tour.couleur};">
                                             <div class="tour-header">
-                                                <span class="tour-title">🚚 ${tour.nom}</span>
-                                                <button class="btn-delete btn-small" onclick="supprimerTournee(${tour.id})">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
+                                                <span class="tour-title" onclick="renommerTournee(${tour.id})">
+                                                    🚚 ${tour.nom}
+                                                </span>
+                                                <div>
+                                                    <button class="btn-pdf btn-small" onclick="genererPDF(${tour.id})">
+                                                        <i class="fas fa-file-pdf"></i>
+                                                    </button>
+                                                    <button class="btn-delete btn-small" onclick="supprimerTournee(${tour.id})">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
                                             </div>
                                             
                                             <div class="tour-stats">
@@ -374,21 +585,22 @@
                                                 </div>
                                             </div>
                                             
-                                            <div class="tour-list">
+                                            <div class="tour-list" data-tour-id="${tour.id}">
                                                 ${tour.transports.map(t => `
-                                                    <div class="transport-card">
-                                                        <div class="transport-expediteur">
-                                                            <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
+                                                    <div class="transport-card" ondblclick="ouvrirEdition('${t.id}')" data-id="${t.id}">
+                                                        <div class="transport-header">
+                                                            <span class="transport-expediteur">
+                                                                <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
+                                                            </span>
+                                                            <button class="remove-from-tour" onclick="enleverDeTournee('${t.id}'); event.stopPropagation();">
+                                                                <i class="fas fa-times"></i>
+                                                            </button>
                                                         </div>
                                                         <div class="transport-destinataire">
                                                             👤 ${t.destinataire_nom || 'Client'}
                                                         </div>
                                                         <div class="transport-address">
                                                             📍 ${(t.delivery_address || '').substring(0,40)}
-                                                        </div>
-                                                        <div class="transport-meta">
-                                                            <span>⚡ ${t.speed || '24h'}</span>
-                                                            <span>⚖️ ${t.weight || 1} kg</span>
                                                         </div>
                                                     </div>
                                                 `).join('')}
@@ -399,20 +611,24 @@
                             </div>
                             
                             <!-- CARTE -->
-                            <div class="map-container">
+                            <div class="map-container" id="mapContainer">
                                 <div id="map"></div>
                             </div>
                             
                             <!-- PANEL DROIT -->
                             <div class="pending-panel">
                                 <div class="pending-header">
-                                    <h2>⏳ En attente</h2>
+                                    <h2><i class="fas fa-clock"></i> En attente</h2>
                                     <span class="stat-value">${enAttente.length}</span>
                                 </div>
                                 
-                                <div class="pending-list">
+                                <div class="pending-list" id="pendingList">
                                     ${enAttente.map(t => `
-                                        <div class="transport-card ${t.speed === '6h' ? 'urgent' : ''}">
+                                        <div class="transport-card ${t.speed === '6h' ? 'urgent' : ''}" 
+                                             ondblclick="ouvrirEdition('${t.id}')"
+                                             data-id="${t.id}"
+                                             data-lat="${t.lat || 0}"
+                                             data-lng="${t.lng || 0}">
                                             <div class="transport-expediteur">
                                                 <i class="fas fa-user"></i> ${t.client_number || 'Inconnu'}
                                             </div>
@@ -422,11 +638,7 @@
                                             <div class="transport-address">
                                                 📍 ${(t.delivery_address || '').substring(0,40)}
                                             </div>
-                                            <div class="transport-meta">
-                                                <span>⚡ ${t.speed || '24h'}</span>
-                                                <span>⚖️ ${t.weight || 1} kg</span>
-                                            </div>
-                                            <button class="btn-delete-transport" onclick="supprimerTransport('${t.id}')">
+                                            <button class="btn-delete-transport" onclick="supprimerTransport('${t.id}'); event.stopPropagation();">
                                                 <i class="fas fa-trash"></i> Supprimer
                                             </button>
                                         </div>
@@ -436,7 +648,18 @@
                         </div>
                     `;
                     
+                    // Rendre la carte redimensionnable
+                    $("#mapContainer").resizable({
+                        handles: "e",
+                        minWidth: 300,
+                        maxWidth: 800,
+                        resize: function() {
+                            if (map) map.invalidateSize();
+                        }
+                    });
+                    
                     initMap(enAttente);
+                    initDragAndDrop();
                 }
                 
                 // ===== INIT CARTE =====
@@ -467,6 +690,30 @@
                     }
                 }
                 
+                // ===== DRAG & DROP =====
+                function initDragAndDrop() {
+                    $(".transport-card").draggable({
+                        revert: "invalid",
+                        helper: "clone",
+                        cursor: "move",
+                        opacity: 0.7,
+                        zIndex: 1000
+                    });
+                    
+                    $(".tour-list").droppable({
+                        accept: ".transport-card",
+                        hoverClass: "drop-target",
+                        drop: function(event, ui) {
+                            const transportId = ui.draggable.data('id');
+                            const tourId = $(this).data('tour-id');
+                            
+                            if (!tourId) return;
+                            
+                            ajouterATournee(transportId, tourId);
+                        }
+                    });
+                }
+                
                 // ===== FONCTIONS =====
                 window.ajouterTournee = function() {
                     const newId = tours.length + 1;
@@ -482,6 +729,26 @@
                 
                 window.supprimerTournee = function(tourId) {
                     tours = tours.filter(t => t.id !== tourId);
+                    afficherPage();
+                };
+                
+                window.ajouterATournee = function(transportId, tourId) {
+                    const transport = allTransports.find(t => t.id === transportId);
+                    const tour = tours.find(t => t.id === parseInt(tourId));
+                    
+                    if (transport && tour) {
+                        tours.forEach(t => {
+                            t.transports = t.transports.filter(t => t.id !== transportId);
+                        });
+                        tour.transports.push(transport);
+                        afficherPage();
+                    }
+                };
+                
+                window.enleverDeTournee = function(transportId) {
+                    tours.forEach(tour => {
+                        tour.transports = tour.transports.filter(t => t.id !== transportId);
+                    });
                     afficherPage();
                 };
                 
