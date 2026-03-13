@@ -341,7 +341,7 @@
     function fillDemoData() {
         document.getElementById('civility').value = 'M.';
         document.getElementById('name').value = 'Dupont Jean';
-        document.getElementById('email').value = 'jean.dupont@email.ch';
+        document.getElementById('email').value = 'jean.dupont' + Math.floor(Math.random() * 1000) + '@email.ch';
         document.getElementById('phone').value = '079 123 45 67';
         document.getElementById('address').value = 'Rue du Simplon 12';
         document.getElementById('npa').value = '1000';
@@ -355,9 +355,6 @@
         document.getElementById('errorText').textContent = message;
         document.getElementById('errorMessage').style.display = 'flex';
         document.getElementById('successMessage').style.display = 'none';
-        setTimeout(() => {
-            document.getElementById('errorMessage').style.display = 'none';
-        }, 5000);
     }
     
     function showSuccess(message) {
@@ -398,31 +395,43 @@
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création en cours...';
             
-            // 1. Vérifier si l'email existe déjà dans Auth
-            const { data: existingUsers } = await supabase.auth.admin.listUsers();
-            const emailExists = existingUsers?.users?.some(u => u.email === email);
+            // 1. Vérifier si le numéro client existe déjà
+            const { data: existingClient, error: checkError } = await supabase
+                .from('clients')
+                .select('client_number')
+                .eq('client_number', clientNumber);
             
-            if (emailExists) {
-                showError('Cet email est déjà utilisé');
+            if (checkError) throw checkError;
+            
+            if (existingClient && existingClient.length > 0) {
+                showError('Ce numéro client est déjà utilisé');
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Créer mon compte';
                 return;
             }
             
-            // 2. Créer l'utilisateur dans Supabase Auth (avec email/mot de passe)
+            // 2. Créer l'utilisateur dans Supabase Auth
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: email,
                 password: password,
                 options: {
                     data: {
                         client_number: clientNumber,
-                        full_name: document.getElementById('name').value,
-                        civility: document.getElementById('civility').value
+                        full_name: document.getElementById('name').value
                     }
                 }
             });
             
-            if (authError) throw authError;
+            if (authError) {
+                if (authError.message.includes('already registered')) {
+                    showError('Cet email est déjà utilisé');
+                } else {
+                    throw authError;
+                }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Créer mon compte';
+                return;
+            }
             
             // 3. Ajouter dans la table clients
             const { error: clientError } = await supabase
@@ -441,10 +450,18 @@
                     default_pickup_address: 'Impasse des Griottes 3, 1462 Yvonand'
                 }]);
             
-            if (clientError) throw clientError;
+            if (clientError) {
+                // Si erreur dans clients, on nettoie l'utilisateur Auth
+                await supabase.auth.admin.deleteUser(authData.user.id);
+                throw clientError;
+            }
             
             // Succès !
             showSuccess('✅ Compte créé avec succès ! Vérifiez votre email pour confirmer votre compte.');
+            
+            // Réactiver le bouton
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Créer mon compte';
             
             // Rediriger vers la page de connexion après 3 secondes
             setTimeout(() => {
