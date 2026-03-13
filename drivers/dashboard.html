@@ -217,7 +217,12 @@
             object-fit: cover;
             border-radius: 8px;
         }
-        
+/* Ajoutez ce CSS */
+input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #ef4444;
+}
         .signature-canvas {
             width: 100%;
             height: 150px;
@@ -503,6 +508,118 @@
                                 </div>
                             `}
                         </div>
+                        // ===== MODAL DE REFUS =====
+window.refuserTournee = function() {
+    document.getElementById('notifBar').style.display = 'none';
+    
+    // Créer le modal de refus
+    const modalHtml = `
+        <div id="refusModal" class="modal" style="display:flex;">
+            <div class="modal-box" style="max-width:400px;">
+                <h3 style="margin-bottom:15px; color:#0f172a;">❌ Refuser la tournée</h3>
+                
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:8px; font-weight:bold;">Raison du refus :</label>
+                    
+                    <div style="margin-bottom:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                            <input type="radio" name="refusReason" value="maladie" checked>
+                            <span>🦠 Maladie / Pas disponible</span>
+                        </label>
+                    </div>
+                    
+                    <div style="margin-bottom:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                            <input type="radio" name="refusReason" value="vehicule">
+                            <span>🔧 Problème véhicule</span>
+                        </label>
+                    </div>
+                    
+                    <div style="margin-bottom:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                            <input type="radio" name="refusReason" value="horaire">
+                            <span>⏰ Horaire incompatible</span>
+                        </label>
+                    </div>
+                    
+                    <div style="margin-bottom:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                            <input type="radio" name="refusReason" value="charge">
+                            <span>⚖️ Charge trop lourde</span>
+                        </label>
+                    </div>
+                    
+                    <div style="margin-bottom:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                            <input type="radio" name="refusReason" value="autre">
+                            <span>📝 Autre raison</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="autreRaisonDiv" style="display:none; margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:5px;">Précisez :</label>
+                    <input type="text" id="autreRaison" placeholder="Votre raison..." style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:4px;">
+                </div>
+                
+                <div class="modal-actions" style="display:flex; gap:10px;">
+                    <button class="btn btn-secondary" onclick="annulerRefus()" style="flex:1;">Annuler</button>
+                    <button class="btn btn-primary" onclick="confirmerRefus()" style="flex:1; background:#ef4444;">Confirmer refus</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Ajouter le modal à la page
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Gestion de l'affichage du champ "Autre"
+    document.querySelectorAll('input[name="refusReason"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            document.getElementById('autreRaisonDiv').style.display = 
+                this.value === 'autre' ? 'block' : 'none';
+        });
+    });
+};
+
+// ===== ANNULER REFUS =====
+window.annulerRefus = function() {
+    document.getElementById('refusModal').remove();
+    // Remontrer la notification
+    document.getElementById('notifBar').style.display = 'flex';
+};
+
+// ===== CONFIRMER REFUS =====
+window.confirmerRefus = async function() {
+    const raison = document.querySelector('input[name="refusReason"]:checked')?.value;
+    let raisonTexte = '';
+    
+    switch(raison) {
+        case 'maladie': raisonTexte = 'Maladie / Pas disponible'; break;
+        case 'vehicule': raisonTexte = 'Problème véhicule'; break;
+        case 'horaire': raisonTexte = 'Horaire incompatible'; break;
+        case 'charge': raisonTexte = 'Charge trop lourde'; break;
+        case 'autre': raisonTexte = document.getElementById('autreRaison')?.value || 'Autre raison'; break;
+        default: raisonTexte = 'Raison non spécifiée';
+    }
+    
+    // Envoyer le refus à Supabase
+    await supabase
+        .from('refus_tournees')
+        .insert([{
+            chauffeur_id: chauffeurData.id,
+            tournee_id: tourneeActive?.id,
+            raison: raisonTexte,
+            date: new Date()
+        }]);
+    
+    showMessage('✅ Refus enregistré', '#ef4444');
+    document.getElementById('refusModal').remove();
+    
+    // La tournée est retirée
+    tourneeActive = null;
+    afficherPage();
+};
                     `;
                     
                     initMap();
