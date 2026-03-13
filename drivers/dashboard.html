@@ -284,474 +284,415 @@ input[type="radio"] {
         </div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', async function() {
-            try {
-                console.log("🚀 Espace chauffeur...");
+  <script>
+    document.addEventListener('DOMContentLoaded', async function() {
+        try {
+            console.log("🚀 Espace chauffeur...");
+            
+            if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
+            
+            const supabase = window.supabase.createClient(
+                window.SUPABASE_CONFIG.url,
+                window.SUPABASE_CONFIG.key
+            );
+            
+            const chauffeurData = JSON.parse(localStorage.getItem('chauffeur'));
+            if (!chauffeurData || !chauffeurData.loggedIn) {
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            // ===== DONNÉES =====
+            let tourneeActive = null;
+            let intervalGPS = null;
+            let signatureCanvas = null;
+            let signatureContext = null;
+            let isDrawing = false;
+            let photoData = null;
+            let currentStopId = null;
+            
+            const depot = {
+                lat: 46.7785,
+                lng: 6.6411
+            };
+            
+            // ===== INIT CANVAS SIGNATURE =====
+            function initSignature() {
+                signatureCanvas = document.getElementById('signatureCanvas');
+                if (!signatureCanvas) return;
                 
-                if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
+                signatureContext = signatureCanvas.getContext('2d');
+                signatureContext.strokeStyle = '#0f172a';
+                signatureContext.lineWidth = 2;
                 
-                const supabase = window.supabase.createClient(
-                    window.SUPABASE_CONFIG.url,
-                    window.SUPABASE_CONFIG.key
-                );
-                
-                const chauffeurData = JSON.parse(localStorage.getItem('chauffeur'));
-                if (!chauffeurData || !chauffeurData.loggedIn) {
-                    window.location.href = 'index.html';
-                    return;
-                }
-                
-                // ===== DONNÉES =====
-                let tourneeActive = null;
-                let intervalGPS = null;
-                let signatureCanvas = null;
-                let signatureContext = null;
-                let isDrawing = false;
-                let photoData = null;
-                let currentStopId = null;
-                
-                const depot = {
-                    lat: 46.7785,
-                    lng: 6.6411
-                };
-                
-                // ===== INIT CANVAS SIGNATURE =====
-                function initSignature() {
-                    signatureCanvas = document.getElementById('signatureCanvas');
-                    if (!signatureCanvas) return;
-                    
-                    signatureContext = signatureCanvas.getContext('2d');
-                    signatureContext.strokeStyle = '#0f172a';
-                    signatureContext.lineWidth = 2;
-                    
-                    signatureCanvas.addEventListener('mousedown', startDrawing);
-                    signatureCanvas.addEventListener('mousemove', draw);
-                    signatureCanvas.addEventListener('mouseup', stopDrawing);
-                    signatureCanvas.addEventListener('mouseleave', stopDrawing);
-                }
-                
-                function startDrawing(e) {
-                    isDrawing = true;
-                    const rect = signatureCanvas.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    signatureContext.beginPath();
-                    signatureContext.moveTo(x, y);
-                }
-                
-                function draw(e) {
-                    if (!isDrawing) return;
-                    e.preventDefault();
-                    const rect = signatureCanvas.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    signatureContext.lineTo(x, y);
-                    signatureContext.stroke();
-                }
-                
-                function stopDrawing() {
-                    isDrawing = false;
-                }
-                
-                // ===== PRENDRE PHOTO =====
-                window.prendrePhoto = function() {
-                    // Simuler appareil photo
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/*';
-                    input.onchange = function(e) {
-                        const file = e.target.files[0];
-                        const reader = new FileReader();
-                        reader.onload = function(event) {
-                            photoData = event.target.result;
-                            const preview = document.getElementById('photoPreview');
-                            preview.innerHTML = `<img src="${photoData}" style="width:100%; height:100%; object-fit:cover;">`;
-                            preview.classList.add('has-photo');
-                        };
-                        reader.readAsDataURL(file);
+                signatureCanvas.addEventListener('mousedown', startDrawing);
+                signatureCanvas.addEventListener('mousemove', draw);
+                signatureCanvas.addEventListener('mouseup', stopDrawing);
+                signatureCanvas.addEventListener('mouseleave', stopDrawing);
+            }
+            
+            function startDrawing(e) {
+                isDrawing = true;
+                const rect = signatureCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                signatureContext.beginPath();
+                signatureContext.moveTo(x, y);
+            }
+            
+            function draw(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+                const rect = signatureCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                signatureContext.lineTo(x, y);
+                signatureContext.stroke();
+            }
+            
+            function stopDrawing() {
+                isDrawing = false;
+            }
+            
+            // ===== PRENDRE PHOTO =====
+            window.prendrePhoto = function() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = function(e) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        photoData = event.target.result;
+                        const preview = document.getElementById('photoPreview');
+                        preview.innerHTML = `<img src="${photoData}" style="width:100%; height:100%; object-fit:cover;">`;
+                        preview.classList.add('has-photo');
                     };
-                    input.click();
+                    reader.readAsDataURL(file);
                 };
-                
-                // ===== OUVRIR MODAL LIVRAISON =====
-                window.ouvrirModalLivraison = function(stopId) {
-                    currentStopId = stopId;
-                    document.getElementById('proofModal').style.display = 'flex';
-                    setTimeout(initSignature, 100);
-                };
-                
-                window.fermerModal = function() {
-                    document.getElementById('proofModal').style.display = 'none';
-                };
-                
-                window.validerLivraison = async function() {
-                    // Marquer l'arrêt comme livré
-                    if (currentStopId) {
-                        // Mettre à jour le statut
-                        const stop = tourneeActive?.stops?.find(s => s.id === currentStopId);
-                        if (stop) {
-                            stop.status = 'completed';
-                            showMessage('✅ Livraison validée');
-                        }
+                input.click();
+            };
+            
+            // ===== OUVRIR MODAL LIVRAISON =====
+            window.ouvrirModalLivraison = function(stopId) {
+                currentStopId = stopId;
+                document.getElementById('proofModal').style.display = 'flex';
+                setTimeout(initSignature, 100);
+            };
+            
+            window.fermerModal = function() {
+                document.getElementById('proofModal').style.display = 'none';
+            };
+            
+            window.validerLivraison = async function() {
+                if (currentStopId) {
+                    const stop = tourneeActive?.stops?.find(s => s.id === currentStopId);
+                    if (stop) {
+                        stop.status = 'completed';
+                        showMessage('✅ Livraison validée');
                     }
-                    
-                    fermerModal();
-                    afficherPage();
-                };
-                
-                // ===== DÉMARRER GPS =====
-                function demarrerGPS() {
-                    if (navigator.geolocation) {
-                        intervalGPS = setInterval(() => {
-                            navigator.geolocation.getCurrentPosition(async (position) => {
-                                const { latitude, longitude } = position.coords;
+                }
+                fermerModal();
+                afficherPage();
+            };
+            
+            // ===== DÉMARRER GPS =====
+            function demarrerGPS() {
+                if (navigator.geolocation) {
+                    intervalGPS = setInterval(() => {
+                        navigator.geolocation.getCurrentPosition(async (position) => {
+                            const { latitude, longitude } = position.coords;
+                            
+                            await supabase
+                                .from('driver_positions')
+                                .upsert({
+                                    chauffeur_id: chauffeurData.id,
+                                    lat: latitude,
+                                    lng: longitude,
+                                    updated_at: new Date()
+                                });
                                 
-                                // Envoyer position à Supabase
-                                await supabase
-                                    .from('driver_positions')
-                                    .upsert({
-                                        chauffeur_id: chauffeurData.id,
-                                        lat: latitude,
-                                        lng: longitude,
-                                        updated_at: new Date()
-                                    });
-                                    
-                                console.log(`📍 Position mise à jour: ${latitude}, ${longitude}`);
-                            });
-                        }, 10000); // Toutes les 10 secondes
-                    }
+                            console.log(`📍 Position mise à jour: ${latitude}, ${longitude}`);
+                        });
+                    }, 10000);
                 }
+            }
+            
+            // ===== CHARGER TOURNÉE =====
+            async function loadTournee() {
+                tourneeActive = {
+                    id: 1,
+                    nom: "Tournée Lausanne",
+                    chauffeur: chauffeurData.id,
+                    stats: { distance: 156, duree: 270, poids: 124 },
+                    stops: [
+                        { id: 's1', nom: 'Dupont Jean', adresse: 'Rue du Lac 12, Lausanne', heure: '08:45', status: 'pending' },
+                        { id: 's2', nom: 'Martin SA', adresse: 'Place de la Gare 5, Genève', heure: '09:30', status: 'pending' },
+                        { id: 's3', nom: 'Bernard & Cie', adresse: 'Grand-Rue 8, Berne', heure: '10:15', status: 'pending' }
+                    ]
+                };
                 
-                // ===== CHARGER TOURNÉE =====
-                async function loadTournee() {
-                    // Simuler une tournée (à remplacer par Supabase)
-                    tourneeActive = {
-                        id: 1,
-                        nom: "Tournée Lausanne",
-                        chauffeur: chauffeurData.id,
-                        stats: { distance: 156, duree: 270, poids: 124 },
-                        stops: [
-                            { id: 's1', nom: 'Dupont Jean', adresse: 'Rue du Lac 12, Lausanne', heure: '08:45', status: 'pending' },
-                            { id: 's2', nom: 'Martin SA', adresse: 'Place de la Gare 5, Genève', heure: '09:30', status: 'pending' },
-                            { id: 's3', nom: 'Bernard & Cie', adresse: 'Grand-Rue 8, Berne', heure: '10:15', status: 'pending' }
-                        ]
-                    };
+                afficherPage();
+            }
+            
+            // ===== AFFICHAGE =====
+            function afficherPage() {
+                document.getElementById('app').innerHTML = `
+                    <div class="header">
+                        <div class="logo"><i class="fas fa-truck"></i> Léman-Courses</div>
+                        <div class="user-section">
+                            <div class="user-badge"><i class="fas fa-user"></i> ${chauffeurData.prenom} ${chauffeurData.nom}</div>
+                            <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
+                        </div>
+                    </div>
                     
-                    afficherPage();
-                }
-                
-                // ===== AFFICHAGE =====
-                function afficherPage() {
-                    document.getElementById('app').innerHTML = `
-                        <div class="header">
-                            <div class="logo"><i class="fas fa-truck"></i> Léman-Courses</div>
-                            <div class="user-section">
-                                <div class="user-badge"><i class="fas fa-user"></i> ${chauffeurData.prenom} ${chauffeurData.nom}</div>
-                                <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
+                    <div class="container">
+                        <!-- NOTIFICATION NOUVELLE TOURNÉE -->
+                        <div class="notif-bar" id="notifBar">
+                            <div class="notif-content">
+                                <strong>🔔 Nouvelle tournée assignée !</strong><br>
+                                <span>Tournée Lausanne - 3 livraisons</span>
+                            </div>
+                            <div class="notif-actions">
+                                <button class="notif-btn accept" onclick="accepterTournee()">Accepter</button>
+                                <button class="notif-btn decline" onclick="refuserTournee()">❌ Refuser</button>
                             </div>
                         </div>
                         
-                        <div class="container">
-                            <!-- NOTIFICATION NOUVELLE TOURNÉE -->
-                            <div class="notif-bar" id="notifBar">
-                                <div class="notif-content">
-                                    <strong>🔔 Nouvelle tournée assignée !</strong><br>
-                                    <span>Tournée Lausanne - 3 livraisons</span>
-                                </div>
-                                <div class="notif-actions">
-                                    <button class="notif-btn accept" onclick="accepterTournee()">Accepter</button>
-                                   // Dans la notification, remplacez le bouton decline par :
-                                   <button class="notif-btn decline" onclick="refuserTournee()">❌ Refuser</button>
-                                </div>
-                            </div>
-                            
-                            <!-- CARTE DE SUIVI -->
-                            <div class="map-section">
-                                <h3><i class="fas fa-map-marked-alt"></i> Ma position</h3>
-                                <div id="driver-map"></div>
-                            </div>
-                            
-                            <!-- TOURNÉE ACTIVE -->
-                            ${tourneeActive ? `
-                                <div class="tour-card">
-                                    <div class="tour-header">
-                                        <span class="tour-title">🚚 ${tourneeActive.nom}</span>
-                                        <div class="tour-stats">
-                                            <span><i class="fas fa-road"></i> ${tourneeActive.stats.distance} km</span>
-                                            <span><i class="fas fa-clock"></i> ${Math.floor(tourneeActive.stats.duree/60)}h${tourneeActive.stats.duree%60}</span>
-                                            <span><i class="fas fa-weight"></i> ${tourneeActive.stats.poids} kg</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="stop-list">
-                                        ${tourneeActive.stops.map((stop, index) => `
-                                            <div class="stop-item ${stop.status === 'completed' ? 'completed' : ''}" 
-                                                 onclick="${stop.status !== 'completed' ? `ouvrirModalLivraison('${stop.id}')` : ''}">
-                                                <div class="stop-number">${index + 1}</div>
-                                                <div class="stop-info">
-                                                    <div class="stop-name">${stop.nom}</div>
-                                                    <div class="stop-address">📍 ${stop.adresse}</div>
-                                                </div>
-                                                <div class="stop-time">🕐 ${stop.heure}</div>
-                                                <div class="stop-status status-${stop.status}">
-                                                    ${stop.status === 'completed' ? 'Livré' : 'En attente'}
-                                                </div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            ` : `
-                                <div style="text-align:center; padding:40px; background:white; border-radius:12px;">
-                                    <i class="fas fa-clock" style="font-size:50px; color:#94a3b8;"></i>
-                                    <h3 style="margin:15px 0; color:#0f172a;">Aucune tournée en cours</h3>
-                                    <p style="color:#64748b;">Vous serez notifié dès qu'une tournée vous sera assignée.</p>
-                                </div>
-                            `}
+                        <!-- CARTE DE SUIVI -->
+                        <div class="map-section">
+                            <h3><i class="fas fa-map-marked-alt"></i> Ma position</h3>
+                            <div id="driver-map"></div>
                         </div>
-                        // ===== MODAL DE REFUS =====
-window.refuserTournee = function() {
-    document.getElementById('notifBar').style.display = 'none';
-    
-    // Créer le modal de refus
-    const modalHtml = `
-        <div id="refusModal" class="modal" style="display:flex;">
-            <div class="modal-box" style="max-width:400px;">
-                <h3 style="margin-bottom:15px; color:#0f172a;">❌ Refuser la tournée</h3>
+                        
+                        <!-- TOURNÉE ACTIVE -->
+                        ${tourneeActive ? `
+                            <div class="tour-card">
+                                <div class="tour-header">
+                                    <span class="tour-title">🚚 ${tourneeActive.nom}</span>
+                                    <div class="tour-stats">
+                                        <span><i class="fas fa-road"></i> ${tourneeActive.stats.distance} km</span>
+                                        <span><i class="fas fa-clock"></i> ${Math.floor(tourneeActive.stats.duree/60)}h${tourneeActive.stats.duree%60}</span>
+                                        <span><i class="fas fa-weight"></i> ${tourneeActive.stats.poids} kg</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="stop-list">
+                                    ${tourneeActive.stops.map((stop, index) => `
+                                        <div class="stop-item ${stop.status === 'completed' ? 'completed' : ''}" 
+                                             onclick="${stop.status !== 'completed' ? `ouvrirModalLivraison('${stop.id}')` : ''}">
+                                            <div class="stop-number">${index + 1}</div>
+                                            <div class="stop-info">
+                                                <div class="stop-name">${stop.nom}</div>
+                                                <div class="stop-address">📍 ${stop.adresse}</div>
+                                            </div>
+                                            <div class="stop-time">🕐 ${stop.heure}</div>
+                                            <div class="stop-status status-${stop.status}">
+                                                ${stop.status === 'completed' ? 'Livré' : 'En attente'}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : `
+                            <div style="text-align:center; padding:40px; background:white; border-radius:12px;">
+                                <i class="fas fa-clock" style="font-size:50px; color:#94a3b8;"></i>
+                                <h3 style="margin:15px 0; color:#0f172a;">Aucune tournée en cours</h3>
+                                <p style="color:#64748b;">Vous serez notifié dès qu'une tournée vous sera assignée.</p>
+                            </div>
+                        `}
+                    </div>
+                `;
                 
-                <div style="margin-bottom:15px;">
-                    <label style="display:block; margin-bottom:8px; font-weight:bold;">Raison du refus :</label>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="maladie" checked>
-                            <span>🦠 Maladie / Pas disponible</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="vehicule">
-                            <span>🔧 Problème véhicule</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="horaire">
-                            <span>⏰ Horaire incompatible</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="charge">
-                            <span>⚖️ Charge trop lourde</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="autre">
-                            <span>📝 Autre raison</span>
-                        </label>
-                    </div>
-                </div>
-                
-                <div id="autreRaisonDiv" style="display:none; margin-bottom:15px;">
-                    <label style="display:block; margin-bottom:5px;">Précisez :</label>
-                    <input type="text" id="autreRaison" placeholder="Votre raison..." style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:4px;">
-                </div>
-                
-                <div class="modal-actions" style="display:flex; gap:10px;">
-                    <button class="btn btn-secondary" onclick="annulerRefus()" style="flex:1;">Annuler</button>
-                    <button class="btn btn-primary" onclick="confirmerRefus()" style="flex:1; background:#ef4444;">Confirmer refus</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Ajouter le modal à la page
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    // Gestion de l'affichage du champ "Autre"
-    document.querySelectorAll('input[name="refusReason"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            document.getElementById('autreRaisonDiv').style.display = 
-                this.value === 'autre' ? 'block' : 'none';
-        });
-    });
-};
-
-// ===== ANNULER REFUS =====
-window.annulerRefus = function() {
-    document.getElementById('refusModal').remove();
-    // Remontrer la notification
-    document.getElementById('notifBar').style.display = 'flex';
-};
-
-// ===== CONFIRMER REFUS =====
-window.confirmerRefus = async function() {
-    const raison = document.querySelector('input[name="refusReason"]:checked')?.value;
-    let raisonTexte = '';
-    
-    switch(raison) {
-        case 'maladie': raisonTexte = 'Maladie / Pas disponible'; break;
-        case 'vehicule': raisonTexte = 'Problème véhicule'; break;
-        case 'horaire': raisonTexte = 'Horaire incompatible'; break;
-        case 'charge': raisonTexte = 'Charge trop lourde'; break;
-        case 'autre': raisonTexte = document.getElementById('autreRaison')?.value || 'Autre raison'; break;
-        default: raisonTexte = 'Raison non spécifiée';
-    }
-    
-    try {
-        // Envoyer le refus à Supabase
-        const { error } = await supabase
-            .from('refus_tournees')
-            .insert([{
-                chauffeur_id: chauffeurData.id,
-                tournee_id: tourneeActive?.id || null,
-                raison: raisonTexte,
-                date: new Date()
-            }]);
-        
-        if (error) throw error;
-        
-        showMessage('✅ Refus enregistré', '#ef4444');
-        document.getElementById('refusModal')?.remove();
-        
-        // La tournée est retirée
-        tourneeActive = null;
-        afficherPage();
-        
-    } catch(e) {
-        console.error("Erreur refus:", e);
-        showMessage('❌ Erreur: ' + e.message, '#ef4444');
-    }
-};
-                
-           // ===== INIT CARTE =====
-function initMap() {
-    if (typeof L === 'undefined') {
-        console.error("❌ Leaflet non chargé !");
-        return;
-    }
-    
-    const map = L.map('driver-map').setView([46.8, 8.2], 8);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    
-    // Position du chauffeur
-    L.marker([46.52, 6.63]).addTo(map).bindPopup('Ma position');
-    
-    // Points de livraison
-    if (tourneeActive) {
-        tourneeActive.stops.forEach((stop, i) => {
-            let lat = 46.52, lng = 6.63;
-            if (stop.adresse.includes('Genève')) { lat = 46.20; lng = 6.14; }
-            if (stop.adresse.includes('Berne')) { lat = 46.95; lng = 7.45; }
-            
-            const color = stop.status === 'completed' ? '#10b981' : '#3b82f6';
-            L.circleMarker([lat, lng], {
-                radius: 8,
-                fillColor: color,
-                color: '#fff',
-                weight: 2,
-                fillOpacity: 0.8
-            }).addTo(map).bindPopup(stop.nom);
-        });
-    }
-}
-                
-                // ===== NOTIFICATIONS =====
-                window.accepterTournee = function() {
-                    document.getElementById('notifBar').style.display = 'none';
-                    showMessage('✅ Tournée acceptée');
-                    demarrerGPS();
-                };
-                
-              // ===== MODAL DE REFUS =====
-window.refuserTournee = function() {
-    document.getElementById('notifBar').style.display = 'none';
-    
-    // Créer le modal de refus
-    const modalHtml = `
-        <div id="refusModal" class="modal" style="display:flex;">
-            <div class="modal-box" style="max-width:400px;">
-                <h3 style="margin-bottom:15px; color:#0f172a;">❌ Refuser la tournée</h3>
-                
-                <div style="margin-bottom:15px;">
-                    <label style="display:block; margin-bottom:8px; font-weight:bold;">Raison du refus :</label>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="maladie" checked>
-                            <span>🦠 Maladie / Pas disponible</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="vehicule">
-                            <span>🔧 Problème véhicule</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="horaire">
-                            <span>⏰ Horaire incompatible</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="charge">
-                            <span>⚖️ Charge trop lourde</span>
-                        </label>
-                    </div>
-                    
-                    <div style="margin-bottom:10px;">
-                        <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
-                            <input type="radio" name="refusReason" value="autre">
-                            <span>📝 Autre raison</span>
-                        </label>
-                    </div>
-                </div>
-                
-                <div id="autreRaisonDiv" style="display:none; margin-bottom:15px;">
-                    <label style="display:block; margin-bottom:5px;">Précisez :</label>
-                    <input type="text" id="autreRaison" placeholder="Votre raison..." style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:4px;">
-                </div>
-                
-                <div style="display:flex; gap:10px; margin-top:20px;">
-                    <button class="btn" onclick="annulerRefus()" style="flex:1; background:#e2e8f0; color:#475569; border:none; padding:10px; border-radius:4px;">Annuler</button>
-                    <button class="btn" onclick="confirmerRefus()" style="flex:1; background:#ef4444; color:white; border:none; padding:10px; border-radius:4px;">Confirmer refus</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Ajouter le modal à la page
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    // Gestion de l'affichage du champ "Autre"
-    document.querySelectorAll('input[name="refusReason"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            const div = document.getElementById('autreRaisonDiv');
-            if (div) {
-                div.style.display = this.value === 'autre' ? 'block' : 'none';
+                initMap();
             }
-        });
+            
+            // ===== INIT CARTE =====
+            function initMap() {
+                if (typeof L === 'undefined') {
+                    console.error("❌ Leaflet non chargé !");
+                    return;
+                }
+                
+                const map = L.map('driver-map').setView([46.8, 8.2], 8);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                
+                L.marker([46.52, 6.63]).addTo(map).bindPopup('Ma position');
+                
+                if (tourneeActive) {
+                    tourneeActive.stops.forEach((stop) => {
+                        let lat = 46.52, lng = 6.63;
+                        if (stop.adresse.includes('Genève')) { lat = 46.20; lng = 6.14; }
+                        if (stop.adresse.includes('Berne')) { lat = 46.95; lng = 7.45; }
+                        
+                        const color = stop.status === 'completed' ? '#10b981' : '#3b82f6';
+                        L.circleMarker([lat, lng], {
+                            radius: 8,
+                            fillColor: color,
+                            color: '#fff',
+                            weight: 2,
+                            fillOpacity: 0.8
+                        }).addTo(map).bindPopup(stop.nom);
+                    });
+                }
+            }
+            
+            // ===== NOTIFICATIONS =====
+            window.accepterTournee = function() {
+                document.getElementById('notifBar').style.display = 'none';
+                showMessage('✅ Tournée acceptée');
+                demarrerGPS();
+            };
+            
+            // ===== MODAL DE REFUS =====
+            window.refuserTournee = function() {
+                document.getElementById('notifBar').style.display = 'none';
+                
+                const modalHtml = `
+                    <div id="refusModal" class="modal" style="display:flex;">
+                        <div class="modal-box" style="max-width:400px;">
+                            <h3 style="margin-bottom:15px; color:#0f172a;">❌ Refuser la tournée</h3>
+                            
+                            <div style="margin-bottom:15px;">
+                                <label style="display:block; margin-bottom:8px; font-weight:bold;">Raison du refus :</label>
+                                
+                                <div style="margin-bottom:10px;">
+                                    <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                                        <input type="radio" name="refusReason" value="maladie" checked>
+                                        <span>🦠 Maladie / Pas disponible</span>
+                                    </label>
+                                </div>
+                                
+                                <div style="margin-bottom:10px;">
+                                    <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                                        <input type="radio" name="refusReason" value="vehicule">
+                                        <span>🔧 Problème véhicule</span>
+                                    </label>
+                                </div>
+                                
+                                <div style="margin-bottom:10px;">
+                                    <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                                        <input type="radio" name="refusReason" value="horaire">
+                                        <span>⏰ Horaire incompatible</span>
+                                    </label>
+                                </div>
+                                
+                                <div style="margin-bottom:10px;">
+                                    <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                                        <input type="radio" name="refusReason" value="charge">
+                                        <span>⚖️ Charge trop lourde</span>
+                                    </label>
+                                </div>
+                                
+                                <div style="margin-bottom:10px;">
+                                    <label style="display:flex; align-items:center; gap:8px; padding:8px; background:#f8fafc; border-radius:4px;">
+                                        <input type="radio" name="refusReason" value="autre">
+                                        <span>📝 Autre raison</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div id="autreRaisonDiv" style="display:none; margin-bottom:15px;">
+                                <label style="display:block; margin-bottom:5px;">Précisez :</label>
+                                <input type="text" id="autreRaison" placeholder="Votre raison..." style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:4px;">
+                            </div>
+                            
+                            <div style="display:flex; gap:10px; margin-top:20px;">
+                                <button class="btn" onclick="annulerRefus()" style="flex:1; background:#e2e8f0; color:#475569; border:none; padding:10px; border-radius:4px;">Annuler</button>
+                                <button class="btn" onclick="confirmerRefus()" style="flex:1; background:#ef4444; color:white; border:none; padding:10px; border-radius:4px;">Confirmer refus</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                
+                document.querySelectorAll('input[name="refusReason"]').forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        const div = document.getElementById('autreRaisonDiv');
+                        if (div) {
+                            div.style.display = this.value === 'autre' ? 'block' : 'none';
+                        }
+                    });
+                });
+            };
+            
+            window.annulerRefus = function() {
+                const modal = document.getElementById('refusModal');
+                if (modal) modal.remove();
+                document.getElementById('notifBar').style.display = 'flex';
+            };
+            
+            window.confirmerRefus = async function() {
+                const raison = document.querySelector('input[name="refusReason"]:checked')?.value;
+                let raisonTexte = '';
+                
+                switch(raison) {
+                    case 'maladie': raisonTexte = 'Maladie / Pas disponible'; break;
+                    case 'vehicule': raisonTexte = 'Problème véhicule'; break;
+                    case 'horaire': raisonTexte = 'Horaire incompatible'; break;
+                    case 'charge': raisonTexte = 'Charge trop lourde'; break;
+                    case 'autre': raisonTexte = document.getElementById('autreRaison')?.value || 'Autre raison'; break;
+                    default: raisonTexte = 'Raison non spécifiée';
+                }
+                
+                try {
+                    const { error } = await supabase
+                        .from('refus_tournees')
+                        .insert([{
+                            chauffeur_id: chauffeurData.id,
+                            tournee_id: tourneeActive?.id || null,
+                            raison: raisonTexte,
+                            date: new Date()
+                        }]);
+                    
+                    if (error) throw error;
+                    
+                    showMessage('✅ Refus enregistré', '#ef4444');
+                    document.getElementById('refusModal')?.remove();
+                    
+                    tourneeActive = null;
+                    afficherPage();
+                    
+                } catch(e) {
+                    console.error("Erreur refus:", e);
+                    showMessage('❌ Erreur: ' + e.message, '#ef4444');
+                }
+            };
+            
+            function showMessage(texte, couleur) {
+                const msg = document.createElement('div');
+                msg.style.position = 'fixed';
+                msg.style.top = '20px';
+                msg.style.right = '20px';
+                msg.style.background = couleur;
+                msg.style.color = 'white';
+                msg.style.padding = '15px 25px';
+                msg.style.borderRadius = '8px';
+                msg.style.zIndex = '3000';
+                msg.innerHTML = texte;
+                document.body.appendChild(msg);
+                setTimeout(() => msg.remove(), 3000);
+            }
+            
+            window.logout = function() {
+                localStorage.removeItem('chauffeur');
+                window.location.href = 'index.html';
+            };
+            
+            // ===== LANCEMENT =====
+            await loadTournee();
+            
+            setTimeout(() => {
+                document.getElementById('notifBar').style.display = 'flex';
+            }, 3000);
+            
+        } catch(e) {
+            console.error("Erreur:", e);
+            document.body.innerHTML = `<div style="color:red; padding:20px;">❌ ${e.message}</div>`;
+        }
     });
-};
-
-window.annulerRefus = function() {
-    const modal = document.getElementById('refusModal');
-    if (modal) modal.remove();
-    // Remontrer la notification
-    document.getElementById('notifBar').style.display = 'flex';
-};
-    </script>
+</script>
     
 </body>
 </html>
