@@ -320,6 +320,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../dispatch/config.js"></script>
 
+<!-- SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../dispatch/config.js"></script>
+
 <script>
     // ===== INITIALISATION SUPABASE =====
     if (!window.SUPABASE_CONFIG) {
@@ -327,15 +331,16 @@
         throw new Error("Configuration manquante");
     }
     
-    const supabase = window.supabase.createClient(
+    // Utiliser un nom différent pour éviter le conflit
+    const supabaseClient = window.supabase.createClient(
         window.SUPABASE_CONFIG.url,
         window.SUPABASE_CONFIG.key
     );
     
-    console.log("✅ Supabase prêt pour inscription");
+    console.log("✅ Supabase client prêt pour inscription");
     
     // ===== FONCTIONS =====
-    function fillDemoData() {
+    window.fillDemoData = function() {
         document.getElementById('company_name').value = 'Dupont SA';
         document.getElementById('contact_name').value = 'Jean Dupont';
         document.getElementById('email').value = 'jean.dupont' + Math.floor(Math.random() * 1000) + '@email.ch';
@@ -347,7 +352,7 @@
         document.getElementById('password').value = 'password123';
         document.getElementById('confirmPassword').value = 'password123';
         document.getElementById('default_pickup_address').value = 'Impasse des Griottes 3, 1462 Yvonand';
-    }
+    };
     
     function showError(message) {
         document.getElementById('errorText').textContent = message;
@@ -361,7 +366,8 @@
         document.getElementById('errorMessage').style.display = 'none';
     }
     
-    async function createAccount() {
+    // Rendre la fonction globale pour l'attribut onsubmit
+    window.createAccount = async function() {
         const submitBtn = document.getElementById('submitBtn');
         const clientNumber = document.getElementById('client_number').value.trim();
         const password = document.getElementById('password').value;
@@ -394,7 +400,7 @@
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création en cours...';
             
             // 1. Vérifier si le numéro client existe déjà
-            const { data: existingClient, error: checkError } = await supabase
+            const { data: existingClient, error: checkError } = await supabaseClient
                 .from('clients')
                 .select('client_number')
                 .eq('client_number', clientNumber);
@@ -408,8 +414,23 @@
                 return;
             }
             
-            // 2. Créer l'utilisateur dans Supabase Auth
-            const { data: authData, error: authError } = await supabase.auth.signUp({
+            // 2. Vérifier si l'email existe déjà dans la table clients
+            const { data: existingEmail, error: emailError } = await supabaseClient
+                .from('clients')
+                .select('email')
+                .eq('email', email);
+            
+            if (emailError) throw emailError;
+            
+            if (existingEmail && existingEmail.length > 0) {
+                showError('Cet email est déjà utilisé');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Créer mon compte';
+                return;
+            }
+            
+            // 3. Créer l'utilisateur dans Supabase Auth
+            const { data: authData, error: authError } = await supabaseClient.auth.signUp({
                 email: email,
                 password: password,
                 options: {
@@ -423,7 +444,7 @@
             
             if (authError) {
                 if (authError.message.includes('already registered')) {
-                    showError('Cet email est déjà utilisé');
+                    showError('Cet email est déjà utilisé dans Auth');
                 } else {
                     throw authError;
                 }
@@ -432,8 +453,8 @@
                 return;
             }
             
-            // 3. Ajouter dans la table clients avec les bons noms de colonnes
-            const { error: clientError } = await supabase
+            // 4. Ajouter dans la table clients avec les bons noms de colonnes
+            const { error: clientError } = await supabaseClient
                 .from('clients')
                 .insert([{
                     id: authData.user.id,
@@ -450,9 +471,12 @@
                 }]);
             
             if (clientError) {
-                // Si erreur dans clients, on nettoie l'utilisateur Auth
-                await supabase.auth.admin.deleteUser(authData.user.id);
-                throw clientError;
+                // Si erreur dans clients, on supprime l'utilisateur Auth (si possible)
+                console.error('Erreur insertion client:', clientError);
+                showError('Erreur lors de la création du profil client');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Créer mon compte';
+                return;
             }
             
             // Succès !
@@ -475,7 +499,7 @@
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Créer mon compte';
         }
-    }
+    };
 </script>
 
 </body>
