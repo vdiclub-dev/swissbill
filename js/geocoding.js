@@ -1,18 +1,11 @@
-
+// /js/geocoding.js - VERSION CORRECTE
 import { supabase } from './supabase.js';
 
-// Cache pour éviter les appels répétés
 const geocodeCache = new Map();
 
-/**
- * Géocode une adresse avec Nominatim
- * @param {string} adresse - Adresse complète
- * @returns {Promise<{lat: number, lng: number}|null>}
- */
 export async function geocoderAdresse(adresse) {
     if (!adresse) return null;
     
-    // Vérifier le cache
     if (geocodeCache.has(adresse)) {
         return geocodeCache.get(adresse);
     }
@@ -38,12 +31,6 @@ export async function geocoderAdresse(adresse) {
     return null;
 }
 
-/**
- * Géocode tous les transports d'une tournée qui n'ont pas de coordonnées
- * @param {Array} transports - Liste des transports
- * @param {Function} showMessage - Fonction d'affichage des messages
- * @returns {Promise<{success: number, failed: number}>}
- */
 export async function geocoderTournee(transports, showMessage) {
     let success = 0;
     let failed = 0;
@@ -73,3 +60,5 @@ export async function geocoderTournee(transports, showMessage) {
     
     return { success, failed };
 }
+
+console.log("✅ Module geocoding.js chargé");
