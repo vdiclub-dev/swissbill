@@ -325,193 +325,200 @@
         </div>
     </div>
     
-    <script>
-        // ===== CONFIGURATION =====
-        const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';  // 🔴 À REMPLACER
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';               // 🔴 À REMPLACER
-        
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
-        // ===== VÉRIFICATION SESSION =====
-        (async function() {
+  <script>
+    // ===== CONFIGURATION - UNE SEULE FOIS =====
+    const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
+    
+    // UNE SEULE création du client Supabase
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    console.log("✅ Supabase initialisé");
+    
+    // ===== VÉRIFICATION SESSION =====
+    (async function() {
+        try {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                // Récupérer le rôle depuis la table employes
+                console.log("Utilisateur déjà connecté:", user.email);
                 const { data: employe } = await supabase
                     .from('employes')
                     .select('role')
                     .eq('email', user.email)
-                    .single();
+                    .maybeSingle();
                 
                 if (employe) {
                     redirectToRole(employe.role);
                 }
             }
-        })();
+        } catch(e) {
+            console.error("Erreur vérification session:", e);
+        }
+    })();
+    
+    // ===== FONCTION DE CONNEXION - ATTACHÉE À WINDOW =====
+    window.login = async function() {
+        console.log("🚀 Fonction login appelée");
         
-        // ===== FONCTION DE CONNEXION =====
-        async function login() {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value.trim();
-            const selectedRole = document.getElementById('role').value;
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value.trim();
+        const selectedRole = document.getElementById('role').value;
+        
+        hideMessages();
+        
+        if (!email || !password) {
+            showError('Veuillez remplir tous les champs');
+            return;
+        }
+        
+        const loginBtn = document.getElementById('loginBtn');
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connexion...';
+        
+        try {
+            console.log("🔐 Tentative de connexion pour:", email);
             
-            hideMessages();
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
             
-            if (!email || !password) {
-                showError('Veuillez remplir tous les champs');
-                return;
-            }
+            if (error) throw error;
             
-            const loginBtn = document.getElementById('loginBtn');
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connexion...';
+            console.log("✅ Auth réussie");
             
+            // Essayer de récupérer le rôle, mais ne pas bloquer si la table n'existe pas
+            let role = selectedRole;
             try {
-                // 1. Authentification avec Supabase Auth
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email: email,
-                    password: password
-                });
-                
-                if (error) throw error;
-                
-                // 2. Récupérer le rôle depuis la table employes
-                const { data: employe, error: roleError } = await supabase
+                const { data: employe } = await supabase
                     .from('employes')
                     .select('role')
                     .eq('email', email)
-                    .single();
+                    .maybeSingle();
                 
-                if (roleError) {
-                    console.warn("Rôle non trouvé, utilisation du rôle par défaut");
+                if (employe) {
+                    role = employe.role;
                 }
-                
-                const role = employe?.role || selectedRole;
-                
-                // 3. Vérifier que le rôle correspond
-                if (employe && employe.role !== selectedRole) {
-                    showError(`Ce compte n'est pas un ${selectedRole}`);
-                    await supabase.auth.signOut();
-                    loginBtn.disabled = false;
-                    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Se connecter';
-                    return;
-                }
-                
-                // 4. Stocker les infos
-                localStorage.setItem('user', JSON.stringify({
-                    id: data.user.id,
-                    email: email,
-                    role: role,
-                    loggedIn: true
-                }));
-                
-                showSuccess('Connexion réussie ! Redirection...');
-                
-                setTimeout(() => {
-                    redirectToRole(role);
-                }, 1000);
-                
-            } catch (error) {
-                console.error('Erreur:', error);
-                
-                if (error.message.includes('Invalid login')) {
-                    showError('Email ou mot de passe incorrect');
-                } else if (error.message.includes('Email not confirmed')) {
-                    showError('Veuillez confirmer votre email avant de vous connecter');
-                } else {
-                    showError('Erreur de connexion: ' + error.message);
-                }
-                
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Se connecter';
+            } catch (e) {
+                console.log("Table employes peut-être inexistante, utilisation du rôle sélectionné");
             }
+            
+            localStorage.setItem('user', JSON.stringify({
+                id: data.user.id,
+                email: email,
+                role: role,
+                loggedIn: true
+            }));
+            
+            showSuccess('Connexion réussie ! Redirection...');
+            
+            setTimeout(() => {
+                redirectToRole(role);
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ Erreur:', error);
+            
+            if (error.message.includes('Invalid login')) {
+                showError('Email ou mot de passe incorrect');
+            } else if (error.message.includes('Email not confirmed')) {
+                showError('Veuillez confirmer votre email');
+            } else {
+                showError('Erreur: ' + error.message);
+            }
+            
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Se connecter';
         }
-        
-        // ===== RÉINITIALISATION MOT DE PASSE =====
-        function showForgotModal() {
-            document.getElementById('forgotModal').style.display = 'flex';
-        }
-        
-        function closeForgotModal() {
-            document.getElementById('forgotModal').style.display = 'none';
-        }
-        
-     async function sendResetEmail() {
-    const email = document.getElementById('resetEmail').value.trim();
+    };
     
-    if (!email) {
-        alert('Veuillez saisir votre email');
-        return;
+    // ===== RÉINITIALISATION MOT DE PASSE =====
+    window.showForgotModal = function() {
+        document.getElementById('forgotModal').style.display = 'flex';
+    };
+    
+    window.closeForgotModal = function() {
+        document.getElementById('forgotModal').style.display = 'none';
+    };
+    
+    window.sendResetEmail = async function() {
+        const email = document.getElementById('resetEmail').value.trim();
+        
+        if (!email) {
+            alert('Veuillez saisir votre email');
+            return;
+        }
+        
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin + '/admin/reset-password.html'
+            });
+            
+            if (error) throw error;
+            
+            alert('✅ Email de réinitialisation envoyé !');
+            closeForgotModal();
+            
+        } catch (error) {
+            alert('Erreur: ' + error.message);
+        }
+    };
+    
+    // ===== REDIRECTION =====
+    function redirectToRole(role) {
+        switch(role) {
+            case 'admin':
+                window.location.href = '../admin/';
+                break;
+            case 'client':
+                window.location.href = '../client/dashboard.html';
+                break;
+            case 'chauffeur':
+                window.location.href = '../chauffeur/';
+                break;
+            case 'magasinier':
+                window.location.href = '../magasinier/';
+                break;
+            default:
+                window.location.href = '../';
+        }
     }
     
-    try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/admin/reset-password.html'  // ← Chemin corrigé
-        });
-        
-        if (error) throw error;
-        
-        alert('✅ Email de réinitialisation envoyé ! Vérifiez votre boîte (pensez aux spams).');
-        closeForgotModal();
-        
-    } catch (error) {
-        alert('Erreur: ' + error.message);
+    // ===== GESTION MESSAGES =====
+    function showError(message) {
+        document.getElementById('errorText').textContent = message;
+        document.getElementById('errorMessage').style.display = 'flex';
+        document.getElementById('successMessage').style.display = 'none';
     }
-}
-        
-        // ===== REDIRECTION =====
-        function redirectToRole(role) {
-            switch(role) {
-                case 'admin':
-                    window.location.href = '../admin/';
-                    break;
-                case 'client':
-                    window.location.href = '../client/dashboard.html';
-                    break;
-                case 'chauffeur':
-                    window.location.href = '../chauffeur/';
-                    break;
-                case 'magasinier':
-                    window.location.href = '../magasinier/';
-                    break;
-                default:
-                    window.location.href = '../';
-            }
+    
+    function showSuccess(message) {
+        document.getElementById('successText').textContent = message;
+        document.getElementById('successMessage').style.display = 'flex';
+        document.getElementById('errorMessage').style.display = 'none';
+    }
+    
+    function hideMessages() {
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'none';
+    }
+    
+    // ===== FERMER MODAL =====
+    window.onclick = function(event) {
+        const modal = document.getElementById('forgotModal');
+        if (event.target === modal) {
+            modal.style.display = 'none';
         }
-        
-        // ===== GESTION MESSAGES =====
-        function showError(message) {
-            document.getElementById('errorText').textContent = message;
-            document.getElementById('errorMessage').style.display = 'flex';
-            document.getElementById('successMessage').style.display = 'none';
+    };
+    
+    // ===== ENTRÉE =====
+    document.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            window.login();
         }
-        
-        function showSuccess(message) {
-            document.getElementById('successText').textContent = message;
-            document.getElementById('successMessage').style.display = 'flex';
-            document.getElementById('errorMessage').style.display = 'none';
-        }
-        
-        function hideMessages() {
-            document.getElementById('errorMessage').style.display = 'none';
-            document.getElementById('successMessage').style.display = 'none';
-        }
-        
-        // ===== FERMER MODAL EN CLIQUANT DEHORS =====
-        window.onclick = function(event) {
-            const modal = document.getElementById('forgotModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        }
-        
-        // ===== ENTRÉE =====
-        document.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                login();
-            }
-        });
-    </script>
+    });
+    
+    console.log("✅ Script chargé, login disponible:", typeof window.login === 'function');
+</script>
     
 </body>
 </html>
