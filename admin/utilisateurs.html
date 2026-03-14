@@ -182,51 +182,55 @@
             modal.style.display = 'none';
         }
         
-        async function enregistrerUtilisateur() {
-            const email = document.getElementById('userEmail').value;
-            const password = document.getElementById('userPassword').value;
-            
-            if (!email || !password) {
-                alert('❌ Email et mot de passe requis');
-                return;
-            }
-            
-            try {
-                btnEnregistrer.disabled = true;
-                btnEnregistrer.textContent = 'Création...';
-                
-                // Créer dans Auth
-                const { data: authData, error: authError } = await lemanClient.auth.signUp({
-                    email: email,
-                    password: password
-                });
-                
-                if (authError) throw authError;
-                
-                // Créer dans employes
-                const { error } = await lemanClient
-                    .from('employes')
-                    .insert([{
-                        id: authData.user.id,
-                        email: email,
-                        nom: document.getElementById('userNom').value,
-                        prenom: document.getElementById('userPrenom').value,
-                        role: document.getElementById('userRole').value
-                    }]);
-                
-                if (error) throw error;
-                
-                alert('✅ Utilisateur créé avec succès !');
-                fermerModal();
-                chargerUtilisateurs();
-                
-            } catch (error) {
-                alert('❌ ' + error.message);
-            } finally {
-                btnEnregistrer.disabled = false;
-                btnEnregistrer.textContent = 'Enregistrer';
-            }
-        }
+     async function enregistrerUtilisateur() {
+    const email = document.getElementById('userEmail').value;
+    const password = document.getElementById('userPassword').value;
+    const nom = document.getElementById('userNom').value || 'À définir';  // ← Valeur par défaut
+    const prenom = document.getElementById('userPrenom').value || '';    // ← Optionnel
+    const role = document.getElementById('userRole').value;
+    
+    if (!email || !password) {
+        alert('❌ Email et mot de passe requis');
+        return;
+    }
+    
+    try {
+        btnEnregistrer.disabled = true;
+        btnEnregistrer.textContent = 'Création...';
+        
+        // 1. Créer dans Auth
+        const { data: authData, error: authError } = await lemanClient.auth.signUp({
+            email: email,
+            password: password
+        });
+        
+        if (authError) throw authError;
+        
+        // 2. Créer dans employes avec TOUS les champs obligatoires
+        const { error: insertError } = await lemanClient
+            .from('employes')
+            .insert([{
+                id: authData.user.id,
+                email: email,
+                nom: nom,                    // ← OBLIGATOIRE
+                prenom: prenom,
+                role: role
+            }]);
+        
+        if (insertError) throw insertError;
+        
+        alert('✅ Utilisateur créé avec succès !');
+        fermerModal();
+        chargerUtilisateurs();
+        
+    } catch (error) {
+        console.error('❌ Erreur:', error);
+        alert('❌ ' + error.message);
+    } finally {
+        btnEnregistrer.disabled = false;
+        btnEnregistrer.textContent = 'Enregistrer';
+    }
+}
         
         async function chargerUtilisateurs() {
             const { data: users, error } = await lemanClient
