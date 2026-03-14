@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des utilisateurs | Léman-Courses</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        /* Vos styles ici (identiques) */
+        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
+        body { background: #f1f5f9; min-height: 100vh; }
+        
+        /* Styles simplifiés pour tester */
+        .container { max-width: 1200px; margin: 50px auto; padding: 20px; }
+        .btn { background: #e53935; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); }
+        .modal-content { background:white; max-width:400px; margin:100px auto; padding:20px; border-radius:10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gestion des utilisateurs</h1>
+        
+        <!-- BOUTONS SANS onclick -->
+        <button class="btn" id="btnNouveau">➕ Nouvel utilisateur</button>
+        <button class="btn" id="btnFiltre">🔍 Filtrer</button>
+        <button class="btn" id="btnReset">🔄 Réinitialiser</button>
+        
+        <!-- Tableau -->
+        <div id="usersList">Chargement...</div>
+    </div>
+    
+    <!-- MODAL -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Nouvel utilisateur</h3>
+            <input type="email" id="userEmail" placeholder="Email" style="width:100%; margin:10px 0; padding:8px;">
+            <input type="password" id="userPassword" placeholder="Mot de passe" style="width:100%; margin:10px 0; padding:8px;">
+            <select id="userRole" style="width:100%; margin:10px 0; padding:8px;">
+                <option value="client">Client</option>
+                <option value="chauffeur">Chauffeur</option>
+                <option value="magasinier">Magasinier</option>
+                <option value="admin">Admin</option>
+            </select>
+            <button class="btn" id="btnEnregistrer">Enregistrer</button>
+            <button class="btn" id="btnAnnuler">Annuler</button>
+        </div>
+    </div>
+
+    <script>
+        // ===== CONFIGURATION UNIQUE =====
+        console.log("🚀 Démarrage...");
+        
+        const PROJET_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
+        const PROJET_CLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
+        
+        // NOM UNIQUE pour éviter les conflits
+        const lemanDB = window.supabase.createClient(PROJET_URL, PROJET_CLE);
+        console.log("✅ Client créé");
+        
+        // ===== ÉLÉMENTS DOM =====
+        const btnNouveau = document.getElementById('btnNouveau');
+        const btnFiltre = document.getElementById('btnFiltre');
+        const btnReset = document.getElementById('btnReset');
+        const btnEnregistrer = document.getElementById('btnEnregistrer');
+        const btnAnnuler = document.getElementById('btnAnnuler');
+        const modal = document.getElementById('userModal');
+        
+        // ===== FONCTIONS =====
+        async function loadUsers() {
+            document.getElementById('usersList').innerHTML = 'Chargement...';
+            
+            const { data, error } = await lemanDB
+                .from('employes')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) {
+                document.getElementById('usersList').innerHTML = 'Erreur: ' + error.message;
+                return;
+            }
+            
+            let html = '<table><tr><th>Email</th><th>Rôle</th></tr>';
+            data.forEach(u => {
+                html += `<tr><td>${u.email}</td><td>${u.role || 'client'}</td></tr>`;
+            });
+            html += '</table>';
+            
+            document.getElementById('usersList').innerHTML = html;
+        }
+        
+        function openModal() {
+            modal.style.display = 'block';
+        }
+        
+        function closeModal() {
+            modal.style.display = 'none';
+        }
+        
+        async function saveUser() {
+            const email = document.getElementById('userEmail').value;
+            const password = document.getElementById('userPassword').value;
+            const role = document.getElementById('userRole').value;
+            
+            if (!email || !password) {
+                alert('Email et mot de passe requis');
+                return;
+            }
+            
+            try {
+                const { data: authData, error: authError } = await lemanDB.auth.signUp({
+                    email: email,
+                    password: password
+                });
+                
+                if (authError) throw authError;
+                
+                const { error } = await lemanDB
+                    .from('employes')
+                    .insert([{
+                        id: authData.user.id,
+                        email: email,
+                        nom: 'À compléter',
+                        role: role
+                    }]);
+                
+                if (error) throw error;
+                
+                alert('✅ Utilisateur créé');
+                closeModal();
+                loadUsers();
+                
+            } catch (error) {
+                alert('❌ ' + error.message);
+            }
+        }
+        
+        // ===== ATTACHEMENT DES ÉVÉNEMENTS =====
+        btnNouveau.addEventListener('click', openModal);
+        btnAnnuler.addEventListener('click', closeModal);
+        btnEnregistrer.addEventListener('click', saveUser);
+        btnFiltre.addEventListener('click', loadUsers);
+        btnReset.addEventListener('click', loadUsers);
+        
+        // Fermer en cliquant dehors
+        window.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+        
+        // Chargement initial
+        loadUsers();
+        console.log("✅ Script prêt");
+    </script>
+</body>
+</html>
