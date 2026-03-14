@@ -325,200 +325,138 @@
         </div>
     </div>
     
-  <script>
-    // ===== CONFIGURATION - UNE SEULE FOIS =====
-    const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
-    
-    // UNE SEULE création du client Supabase
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    
-    console.log("✅ Supabase initialisé");
-    
-    // ===== VÉRIFICATION SESSION =====
-    (async function() {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                console.log("Utilisateur déjà connecté:", user.email);
-                const { data: employe } = await supabase
-                    .from('employes')
-                    .select('role')
-                    .eq('email', user.email)
-                    .maybeSingle();
-                
-                if (employe) {
-                    redirectToRole(employe.role);
-                }
+    <script>
+        // ===== CONFIGURATION - UNE SEULE FOIS =====
+        console.log("🚀 Initialisation...");
+        
+        const SUPABASE_URL = 'https://iubbsnntcreneakbdkmv.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y';
+        
+        // UNE SEULE création du client Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        console.log("✅ Supabase prêt");
+        
+        // ===== FONCTIONS GLOBALES =====
+        window.login = async function() {
+            console.log("🔑 Tentative de connexion");
+            
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
+            
+            hideMessages();
+            
+            if (!email || !password) {
+                showError('Veuillez remplir tous les champs');
+                return;
             }
-        } catch(e) {
-            console.error("Erreur vérification session:", e);
-        }
-    })();
-    
-    // ===== FONCTION DE CONNEXION - ATTACHÉE À WINDOW =====
-    window.login = async function() {
-        console.log("🚀 Fonction login appelée");
-        
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value.trim();
-        const selectedRole = document.getElementById('role').value;
-        
-        hideMessages();
-        
-        if (!email || !password) {
-            showError('Veuillez remplir tous les champs');
-            return;
-        }
-        
-        const loginBtn = document.getElementById('loginBtn');
-        loginBtn.disabled = true;
-        loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connexion...';
-        
-        try {
-            console.log("🔐 Tentative de connexion pour:", email);
             
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email: email,
-                password: password
-            });
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connexion...';
             
-            if (error) throw error;
-            
-            console.log("✅ Auth réussie");
-            
-            // Essayer de récupérer le rôle, mais ne pas bloquer si la table n'existe pas
-            let role = selectedRole;
             try {
-                const { data: employe } = await supabase
-                    .from('employes')
-                    .select('role')
-                    .eq('email', email)
-                    .maybeSingle();
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
                 
-                if (employe) {
-                    role = employe.role;
+                if (error) throw error;
+                
+                console.log("✅ Connecté:", data.user.email);
+                
+                localStorage.setItem('user', JSON.stringify({
+                    id: data.user.id,
+                    email: email,
+                    loggedIn: true
+                }));
+                
+                showSuccess('Connexion réussie !');
+                
+                setTimeout(() => {
+                    window.location.href = '../admin/';
+                }, 1000);
+                
+            } catch (error) {
+                console.error('❌', error);
+                
+                if (error.message.includes('Invalid login')) {
+                    showError('Email ou mot de passe incorrect');
+                } else {
+                    showError('Erreur: ' + error.message);
                 }
-            } catch (e) {
-                console.log("Table employes peut-être inexistante, utilisation du rôle sélectionné");
+                
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Se connecter';
+            }
+        };
+        
+        window.showForgotModal = function() {
+            document.getElementById('forgotModal').style.display = 'flex';
+        };
+        
+        window.closeForgotModal = function() {
+            document.getElementById('forgotModal').style.display = 'none';
+        };
+        
+        window.sendResetEmail = async function() {
+            const email = document.getElementById('resetEmail').value.trim();
+            
+            if (!email) {
+                alert('Veuillez saisir votre email');
+                return;
             }
             
-            localStorage.setItem('user', JSON.stringify({
-                id: data.user.id,
-                email: email,
-                role: role,
-                loggedIn: true
-            }));
-            
-            showSuccess('Connexion réussie ! Redirection...');
-            
-            setTimeout(() => {
-                redirectToRole(role);
-            }, 1000);
-            
-        } catch (error) {
-            console.error('❌ Erreur:', error);
-            
-            if (error.message.includes('Invalid login')) {
-                showError('Email ou mot de passe incorrect');
-            } else if (error.message.includes('Email not confirmed')) {
-                showError('Veuillez confirmer votre email');
-            } else {
-                showError('Erreur: ' + error.message);
+            try {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin + '/admin/reset-password.html'
+                });
+                
+                if (error) throw error;
+                
+                alert('✅ Email envoyé ! Vérifiez votre boîte.');
+                closeForgotModal();
+                
+            } catch (error) {
+                alert('Erreur: ' + error.message);
             }
-            
-            loginBtn.disabled = false;
-            loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Se connecter';
-        }
-    };
-    
-    // ===== RÉINITIALISATION MOT DE PASSE =====
-    window.showForgotModal = function() {
-        document.getElementById('forgotModal').style.display = 'flex';
-    };
-    
-    window.closeForgotModal = function() {
-        document.getElementById('forgotModal').style.display = 'none';
-    };
-    
-    window.sendResetEmail = async function() {
-        const email = document.getElementById('resetEmail').value.trim();
+        };
         
-        if (!email) {
-            alert('Veuillez saisir votre email');
-            return;
+        // ===== GESTION MESSAGES =====
+        function showError(message) {
+            document.getElementById('errorText').textContent = message;
+            document.getElementById('errorMessage').style.display = 'flex';
+            document.getElementById('successMessage').style.display = 'none';
         }
         
-        try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin + '/admin/reset-password.html'
-            });
-            
-            if (error) throw error;
-            
-            alert('✅ Email de réinitialisation envoyé !');
-            closeForgotModal();
-            
-        } catch (error) {
-            alert('Erreur: ' + error.message);
+        function showSuccess(message) {
+            document.getElementById('successText').textContent = message;
+            document.getElementById('successMessage').style.display = 'flex';
+            document.getElementById('errorMessage').style.display = 'none';
         }
-    };
-    
-    // ===== REDIRECTION =====
-    function redirectToRole(role) {
-        switch(role) {
-            case 'admin':
-                window.location.href = '../admin/';
-                break;
-            case 'client':
-                window.location.href = '../client/dashboard.html';
-                break;
-            case 'chauffeur':
-                window.location.href = '../chauffeur/';
-                break;
-            case 'magasinier':
-                window.location.href = '../magasinier/';
-                break;
-            default:
-                window.location.href = '../';
+        
+        function hideMessages() {
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'none';
         }
-    }
-    
-    // ===== GESTION MESSAGES =====
-    function showError(message) {
-        document.getElementById('errorText').textContent = message;
-        document.getElementById('errorMessage').style.display = 'flex';
-        document.getElementById('successMessage').style.display = 'none';
-    }
-    
-    function showSuccess(message) {
-        document.getElementById('successText').textContent = message;
-        document.getElementById('successMessage').style.display = 'flex';
-        document.getElementById('errorMessage').style.display = 'none';
-    }
-    
-    function hideMessages() {
-        document.getElementById('errorMessage').style.display = 'none';
-        document.getElementById('successMessage').style.display = 'none';
-    }
-    
-    // ===== FERMER MODAL =====
-    window.onclick = function(event) {
-        const modal = document.getElementById('forgotModal');
-        if (event.target === modal) {
-            modal.style.display = 'none';
-        }
-    };
-    
-    // ===== ENTRÉE =====
-    document.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            window.login();
-        }
-    });
-    
-    console.log("✅ Script chargé, login disponible:", typeof window.login === 'function');
-</script>
+        
+        // ===== FERMER MODAL =====
+        window.onclick = function(event) {
+            const modal = document.getElementById('forgotModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
+        
+        // ===== ENTRÉE =====
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                window.login();
+            }
+        });
+        
+        console.log("✅ Script prêt, login disponible");
+    </script>
     
 </body>
 </html>
