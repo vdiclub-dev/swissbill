@@ -1,1 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin | Léman-Courses</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Supabase et Config -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
+        
+        body {
+            background: #f1f5f9;
+            min-height: 100vh;
+        }
+        
+        /* Topbar */
+        .topbar {
+            background: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: #e53935;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .btn-logout {
+            background: #fee2e2;
+            color: #e53935;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+        
+        .btn-logout:hover {
+            background: #fecaca;
+        }
+        
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 40px auto;
+            padding: 0 30px;
+        }
+        
+        .welcome {
+            margin-bottom: 40px;
+        }
+        
+        .welcome h1 {
+            font-size: 32px;
+            color: #0f172a;
+            margin-bottom: 10px;
+        }
+        
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .stat-icon {
+            width: 70px;
+            height: 70px;
+            background: #fee2e2;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e53935;
+            font-size: 32px;
+        }
+        
+        .stat-content h3 {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 5px;
+        }
+        
+        .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        
+        /* Menu Cards */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+        
+        .menu-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            text-decoration: none;
+            color: inherit;
+            transition: 0.3s;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .menu-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(229,57,53,0.1);
+            border-color: #e53935;
+        }
+        
+        .menu-icon {
+            width: 70px;
+            height: 70px;
+            background: #e53935;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: white;
+            font-size: 30px;
+        }
+        
+        .menu-card h3 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .menu-card p {
+            color: #64748b;
+            font-size: 14px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+        
+        .loading i {
+            font-size: 40px;
+            color: #e53935;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="logo">
+            <i class="fas fa-truck"></i>
+            Admin Léman-Courses
+        </div>
+        <div class="user-info">
+            <span id="userEmail">Chargement...</span>
+            <button class="btn-logout" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Déconnexion
+            </button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="welcome">
+            <h1>Bonjour, <span id="userName">Admin</span> 👋</h1>
+            <p>Bienvenue dans votre espace d'administration</p>
+        </div>
+        
+        <div class="stats-grid" id="stats">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-content">
+                    <h3>Utilisateurs</h3>
+                    <div class="stat-number" id="totalUsers">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-user-tie"></i></div>
+                <div class="stat-content">
+                    <h3>Administrateurs</h3>
+                    <div class="stat-number" id="totalAdmins">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-truck"></i></div>
+                <div class="stat-content">
+                    <h3>Chauffeurs</h3>
+                    <div class="stat-number" id="totalChauffeurs">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-box"></i></div>
+                <div class="stat-content">
+                    <h3>Magasiniers</h3>
+                    <div class="stat-number" id="totalMagasiniers">0</div>
+                </div>
+            </div>
+        </div>
+        
+        <h2 style="margin:30px 0 20px;">Gestion</h2>
+        
+        <div class="menu-grid">
+            <a href="utilisateurs.html" class="menu-card">
+                <div class="menu-icon"><i class="fas fa-user-cog"></i></div>
+                <h3>Utilisateurs</h3>
+                <p>Gérer les comptes et les rôles</p>
+            </a>
+            
+            <a href="transports.html" class="menu-card">
+                <div class="menu-icon"><i class="fas fa-tasks"></i></div>
+                <h3>Transports</h3>
+                <p>Suivre toutes les livraisons</p>
+            </a>
+            
+            <a href="clients.html" class="menu-card">
+                <div class="menu-icon"><i class="fas fa-building"></i></div>
+                <h3>Clients</h3>
+                <p>Gérer les entreprises clientes</p>
+            </a>
+            
+            <a href="parametres.html" class="menu-card">
+                <div class="menu-icon"><i class="fas fa-cog"></i></div>
+                <h3>Paramètres</h3>
+                <p>Configuration générale</p>
+            </a>
+        </div>
+    </div>
 
+    <script>
+        const supabase = window.supabase.createClient(
+            window.SUPABASE_CONFIG.url,
+            window.SUPABASE_CONFIG.key
+        );
+        
+        async function checkAuth() {
+            const { data: { user } } = await supabase.auth.getUser();
+            
+            if (!user) {
+                window.location.href = '/login/';
+                return;
+            }
+            
+            document.getElementById('userEmail').textContent = user.email;
+            document.getElementById('userName').textContent = user.email.split('@')[0];
+            
+            loadStats();
+        }
+        
+        async function loadStats() {
+            const { count: total } = await supabase
+                .from('utilisateurs')
+                .select('*', { count: 'exact', head: true });
+            document.getElementById('totalUsers').textContent = total || 0;
+            
+            const roles = ['admin', 'chauffeur', 'magasinier'];
+            for (let role of roles) {
+                const { count } = await supabase
+                    .from('utilisateurs')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('role', role);
+                
+                if (role === 'admin') document.getElementById('totalAdmins').textContent = count || 0;
+                if (role === 'chauffeur') document.getElementById('totalChauffeurs').textContent = count || 0;
+                if (role === 'magasinier') document.getElementById('totalMagasiniers').textContent = count || 0;
+            }
+        }
+        
+        window.logout = async function() {
+            await supabase.auth.signOut();
+            window.location.href = '/login/';
+        };
+        
+        checkAuth();
+    </script>
+</body>
+</html>
