@@ -1,1 +1,313 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des transports | Léman-Courses</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Supabase et Config -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
+        
+        body {
+            background: #f1f5f9;
+            min-height: 100vh;
+        }
+        
+        .topbar {
+            background: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: #e53935;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn-back {
+            background: #f1f5f9;
+            color: #475569;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 40px auto;
+            padding: 0 30px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .btn-primary {
+            background: #e53935;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        
+        .filters {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        
+        .table-container {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            text-align: left;
+            padding: 15px;
+            border-bottom: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+        
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-transit { background: #dbeafe; color: #1e40af; }
+        .status-delivered { background: #d1fae5; color: #065f46; }
+        
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: none;
+            margin: 0 5px;
+        }
+        
+        .btn-icon:hover { background: #f1f5f9; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="logo">
+            <i class="fas fa-truck"></i>
+            Gestion des transports
+        </div>
+        <a href="dashboard.html" class="btn-back">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>Liste des transports</h1>
+            <a href="nouveau-transport.html" class="btn-primary">
+                <i class="fas fa-plus"></i> Nouveau transport
+            </a>
+        </div>
+        
+        <div class="filters">
+            <div class="filter-group">
+                <label>Statut :</label>
+                <select id="statusFilter">
+                    <option value="all">Tous</option>
+                    <option value="pending">En attente</option>
+                    <option value="transit">En cours</option>
+                    <option value="delivered">Livrés</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Recherche :</label>
+                <input type="text" id="searchInput" placeholder="N° commande, client...">
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>N° commande</th>
+                        <th>Client</th>
+                        <th>Destinataire</th>
+                        <th>Date</th>
+                        <th>Poids</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="transportsList">
+                    <tr>
+                        <td colspan="7" style="text-align:center; padding:40px;">
+                            <i class="fas fa-spinner fa-spin"></i> Chargement...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
+    <script>
+        const supabase = window.supabase.createClient(
+            window.SUPABASE_CONFIG.url,
+            window.SUPABASE_CONFIG.key
+        );
+        
+        let currentTransports = [];
+        
+        async function loadTransports() {
+            const { data, error } = await supabase
+                .from('transport_orders_simple')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) {
+                console.error(error);
+                return;
+            }
+            
+            currentTransports = data || [];
+            displayTransports();
+        }
+        
+        function displayTransports() {
+            let html = '';
+            
+            currentTransports.forEach(t => {
+                const date = new Date(t.created_at).toLocaleDateString('fr-CH');
+                const statusClass = `status-${t.status || 'pending'}`;
+                const statusText = t.status === 'delivered' ? 'Livré' :
+                                  t.status === 'transit' ? 'En cours' : 'En attente';
+                
+                html += `
+                    <tr>
+                        <td><strong>${t.order_number || 'N/A'}</strong></td>
+                        <td>${t.client_number || '-'}</td>
+                        <td>${t.destinataire_nom || '-'}</td>
+                        <td>${date}</td>
+                        <td>${t.weight || 0} kg</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <button class="btn-icon" onclick="viewTransport('${t.id}')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn-icon" onclick="editTransport('${t.id}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            document.getElementById('transportsList').innerHTML = html;
+        }
+        
+        window.viewTransport = function(id) {
+            alert('Voir le transport ' + id);
+        };
+        
+        window.editTransport = function(id) {
+            alert('Modifier le transport ' + id);
+        };
+        
+        // Filtres
+        document.getElementById('statusFilter').addEventListener('change', filterTransports);
+        document.getElementById('searchInput').addEventListener('input', filterTransports);
+        
+        function filterTransports() {
+            const status = document.getElementById('statusFilter').value;
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            
+            const filtered = currentTransports.filter(t => {
+                const matchStatus = status === 'all' || t.status === status;
+                const matchSearch = t.order_number?.toLowerCase().includes(search) ||
+                                   t.client_number?.toLowerCase().includes(search) ||
+                                   t.destinataire_nom?.toLowerCase().includes(search);
+                return matchStatus && matchSearch;
+            });
+            
+            displayFiltered(filtered);
+        }
+        
+        function displayFiltered(transports) {
+            let html = '';
+            transports.forEach(t => {
+                const date = new Date(t.created_at).toLocaleDateString('fr-CH');
+                const statusClass = `status-${t.status || 'pending'}`;
+                const statusText = t.status === 'delivered' ? 'Livré' :
+                                  t.status === 'transit' ? 'En cours' : 'En attente';
+                
+                html += `<tr>...</tr>`; // Même structure que displayTransports
+            });
+            document.getElementById('transportsList').innerHTML = html;
+        }
+        
+        loadTransports();
+    </script>
+</body>
+</html>
