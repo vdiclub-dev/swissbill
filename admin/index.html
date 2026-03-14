@@ -1,1 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Léman-Courses | Administration</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
+        body {
+            background: #0f172a;
+            min-height: 100vh;
+            display: flex;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: white;
+            padding: 30px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar h2 {
+            color: #0f172a;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .sidebar h2 i {
+            color: #facc15;
+        }
+        
+        .sidebar-menu {
+            list-style: none;
+        }
+        
+        .sidebar-menu li {
+            margin-bottom: 10px;
+        }
+        
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            color: #475569;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: 0.2s;
+        }
+        
+        .sidebar-menu a:hover,
+        .sidebar-menu a.active {
+            background: #fef3c7;
+            color: #facc15;
+        }
+        
+        .sidebar-menu a i {
+            width: 20px;
+        }
+        
+        .logout {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        /* Main content */
+        .main-content {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            background: #fef3c7;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #facc15;
+        }
+        
+        .stat-info h3 {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .stat-info p {
+            color: #0f172a;
+            font-size: 28px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>
+            <i class="fas fa-crown"></i>
+            Admin Panel
+        </h2>
+        
+        <ul class="sidebar-menu">
+            <li><a href="index.html" class="active"><i class="fas fa-dashboard"></i> Dashboard</a></li>
+            <li><a href="entreprises.html"><i class="fas fa-building"></i> Entreprises</a></li>
+            <li><a href="employes.html"><i class="fas fa-users"></i> Employés</a></li>
+            <li><a href="transports.html"><i class="fas fa-truck"></i> Transports</a></li>
+            <li><a href="nouveau-transport.html"><i class="fas fa-plus-circle"></i> Nouveau transport</a></li>
+        </ul>
+        
+        <div class="logout">
+            <a href="#" onclick="logout()" style="color:#ef4444;">
+                <i class="fas fa-sign-out-alt"></i> Déconnexion
+            </a>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <h1>Dashboard</h1>
+            <div id="userInfo">Chargement...</div>
+        </div>
+        
+        <div class="stats-grid" id="stats">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-building"></i></div>
+                <div class="stat-info">
+                    <h3>Entreprises</h3>
+                    <p id="totalEntreprises">0</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-info">
+                    <h3>Employés</h3>
+                    <p id="totalEmployes">0</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-truck"></i></div>
+                <div class="stat-info">
+                    <h3>Transports</h3>
+                    <p id="totalTransports">0</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                <div class="stat-info">
+                    <h3>En attente</h3>
+                    <p id="totalEnAttente">0</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dernières activités -->
+        <div style="background:white; border-radius:12px; padding:25px;">
+            <h3 style="margin-bottom:20px;">Derniers transports</h3>
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="border-bottom:2px solid #e2e8f0;">
+                        <th style="text-align:left; padding:10px;">N° commande</th>
+                        <th style="text-align:left; padding:10px;">Client</th>
+                        <th style="text-align:left; padding:10px;">Date</th>
+                        <th style="text-align:left; padding:10px;">Statut</th>
+                    </tr>
+                </thead>
+                <tbody id="recentTransports"></tbody>
+            </table>
+        </div>
+    </div>
 
+    <script>
+        let supabase;
+        
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                if (!window.SUPABASE_CONFIG) throw new Error("config.js manquant");
+                
+                supabase = window.supabase.createClient(
+                    window.SUPABASE_CONFIG.url,
+                    window.SUPABASE_CONFIG.key
+                );
+                
+                // Vérifier la session
+                const { data: { user }, error } = await supabase.auth.getUser();
+                
+                if (error || !user) {
+                    window.location.href = '../login/';
+                    return;
+                }
+                
+                // Vérifier si c'est un admin
+                const { data: employe } = await supabase
+                    .from('employes')
+                    .select('role, nom, prenom')
+                    .eq('email', user.email)
+                    .single();
+                
+                if (!employe || employe.role !== 'admin') {
+                    alert("Accès non autorisé");
+                    window.location.href = '../';
+                    return;
+                }
+                
+                document.getElementById('userInfo').textContent = 
+                    `${employe.prenom} ${employe.nom} (Admin)`;
+                
+                // Charger les stats
+                await chargerStats();
+                
+            } catch(e) {
+                console.error(e);
+                alert("Erreur: " + e.message);
+            }
+        });
+        
+        async function chargerStats() {
+            // Compter les entreprises
+            const { count: entreprises } = await supabase
+                .from('entreprises')
+                .select('*', { count: 'exact', head: true });
+            document.getElementById('totalEntreprises').textContent = entreprises || 0;
+            
+            // Compter les employés
+            const { count: employes } = await supabase
+                .from('employes')
+                .select('*', { count: 'exact', head: true });
+            document.getElementById('totalEmployes').textContent = employes || 0;
+            
+            // Compter les transports
+            const { count: transports } = await supabase
+                .from('transport_orders_simple')
+                .select('*', { count: 'exact', head: true });
+            document.getElementById('totalTransports').textContent = transports || 0;
+            
+            // Compter les transports en attente
+            const { count: enAttente } = await supabase
+                .from('transport_orders_simple')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'pending');
+            document.getElementById('totalEnAttente').textContent = enAttente || 0;
+            
+            // Derniers transports
+            const { data: recents } = await supabase
+                .from('transport_orders_simple')
+                .select('order_number, client_number, created_at, status')
+                .order('created_at', { ascending: false })
+                .limit(5);
+            
+            let html = '';
+            recents?.forEach(t => {
+                html += `<tr>
+                    <td style="padding:10px;">${t.order_number}</td>
+                    <td style="padding:10px;">${t.client_number}</td>
+                    <td style="padding:10px;">${new Date(t.created_at).toLocaleDateString()}</td>
+                    <td style="padding:10px;">
+                        <span style="background:${t.status === 'pending' ? '#fef3c7' : '#10b981'}; 
+                                     color:${t.status === 'pending' ? '#92400e' : 'white'};
+                                     padding:5px 10px; border-radius:20px; font-size:12px;">
+                            ${t.status}
+                        </span>
+                    </td>
+                </tr>`;
+            });
+            document.getElementById('recentTransports').innerHTML = html;
+        }
+        
+        window.logout = async function() {
+            await supabase.auth.signOut();
+            window.location.href = '../login/';
+        };
+    </script>
+</body>
+</html>
