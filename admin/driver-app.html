@@ -1020,15 +1020,52 @@
         if(!curMission) return;
         showLoad();
         try {
+            const now = new Date().toISOString();
+            const note = document.getElementById('deliveryNote').value.trim();
+
+            // Récupérer signature si présente
+            let signatureData = null;
+            const sigCanvas = document.getElementById('sigCanvas');
+            if(hasSig && sigCanvas) {
+                signatureData = sigCanvas.toDataURL('image/png');
+            }
+
+            // 1. Mettre à jour le statut du transport
             const { error } = await db.from('transport_orders_simple').update({
-                status:'delivered', delivered_at:new Date().toISOString(),
-                instructions:document.getElementById('deliveryNote').value.trim()||curMission.instructions||null
-            }).eq('id',curMission.id);
+                status:        'delivered',
+                delivered_at:   now,
+                instructions:   note || curMission.instructions || null
+            }).eq('id', curMission.id);
             if(error) throw error;
+
+            // 2. Créer un enregistrement de livraison détaillé
+            const deliveryRecord = {
+                order_id:        curMission.id,
+                order_number:    curMission.order_number,
+                driver_id:       driver.id,
+                delivered_at:    now,
+                delivery_address:curMission.delivery_address,
+                destinataire_nom:curMission.destinataire_nom || null,
+                note_livraison:  note || null,
+                has_signature:   hasSig,
+                signature_data:  signatureData,
+                gps_lat:         myLat,
+                gps_lng:         myLng,
+                created_at:      now
+            };
+
+            // Insérer dans deliveries (ignore si table n'existe pas)
+            try {
+                await db.from('deliveries').insert([deliveryRecord]);
+            } catch(e2) {
+                console.warn('Table deliveries non disponible:', e2.message);
+            }
+
             hideLoad();
-            document.getElementById('successMsg').textContent=`Transport ${curMission.order_number||''} livré avec succès !`;
+            document.getElementById('successMsg').textContent = `Transport ${curMission.order_number||''} livré avec succès !`;
             showScreen('success');
             await loadMissions();
+
         } catch(e) { hideLoad(); toast('error',e.message); }
     };
 
