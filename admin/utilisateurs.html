@@ -3,499 +3,748 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestion utilisateurs | Léman-Courses</title>
+    <title>Léman-Courses — Transport express Suisse romande</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../config.js"></script>
+    <script src="config.js"></script>
     <style>
         :root {
-            --red:      #e8311a;
-            --red-dark: #c0280f;
-            --red-glow: rgba(232,49,26,0.2);
-            --night:    #0a0a0f;
-            --night2:   #111118;
-            --night3:   #18181f;
-            --surface:  #1e1e28;
-            --border:   rgba(255,255,255,0.07);
-            --border2:  rgba(255,255,255,0.12);
-            --white:    #ffffff;
-            --muted:    rgba(255,255,255,0.38);
-            --muted2:   rgba(255,255,255,0.6);
-            --green:    #22c55e;
-            --blue:     #3b82f6;
-            --yellow:   #f59e0b;
+            --red:       #e8311a;
+            --red-dark:  #c0280f;
+            --red-glow:  rgba(232,49,26,0.22);
+            --night:     #0a0a0f;
+            --night2:    #111118;
+            --night3:    #18181f;
+            --surface:   #1e1e28;
+            --border:    rgba(255,255,255,0.07);
+            --border2:   rgba(255,255,255,0.12);
+            --white:     #ffffff;
+            --muted:     rgba(255,255,255,0.38);
+            --muted2:    rgba(255,255,255,0.6);
+            --green:     #22c55e;
+            --blue:      #3b82f6;
         }
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html { scroll-behavior:smooth; }
         body {
             font-family: 'Outfit', sans-serif;
             background: var(--night);
             color: var(--white);
-            min-height: 100vh;
+            overflow-x: hidden;
+            cursor: none;
         }
 
-        /* ── TOPBAR ── */
-        .topbar {
-            background: var(--night2);
-            border-bottom: 1px solid var(--border);
-            padding: 0 40px;
-            height: 64px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: sticky; top: 0; z-index: 100;
+        /* ── Custom cursor ── */
+        .cursor {
+            position:fixed; width:10px; height:10px;
+            background:var(--red); border-radius:50%;
+            pointer-events:none; z-index:9999;
+            transform:translate(-50%,-50%);
+            transition:width 0.2s, height 0.2s;
+        }
+        .cursor-ring {
+            position:fixed; width:36px; height:36px;
+            border:1.5px solid rgba(232,49,26,0.5); border-radius:50%;
+            pointer-events:none; z-index:9998;
+            transform:translate(-50%,-50%);
+            transition:width 0.2s, height 0.2s;
+        }
+
+        /* ── Nav ── */
+        nav {
+            position:fixed; top:0; left:0; right:0; z-index:400;
+            padding:22px 60px;
+            display:flex; align-items:center; justify-content:space-between;
+            transition:all 0.4s;
+        }
+        nav.stuck {
+            padding:14px 60px;
+            background:rgba(10,10,15,0.92);
+            backdrop-filter:blur(20px);
+            border-bottom:1px solid var(--border);
         }
         .logo {
-            font-family: 'Bebas Neue', cursive;
-            font-size: 22px; letter-spacing: 1px;
-            color: var(--white); text-decoration: none;
-            display: flex; align-items: center; gap: 10px;
+            display:flex; align-items:center; gap:12px;
+            font-family:'Bebas Neue', cursive;
+            font-size:26px; letter-spacing:1px;
+            color:var(--white); text-decoration:none;
         }
-        .logo em { color: var(--red); font-style: normal; }
         .logo-mark {
-            width: 34px; height: 34px; background: var(--red);
-            border-radius: 8px; display: grid; place-items: center; font-size: 16px;
+            width:38px; height:38px; background:var(--red);
+            border-radius:10px; display:grid; place-items:center;
+            font-size:18px; transition:transform 0.3s;
         }
-        .topbar-right { display: flex; align-items: center; gap: 12px; }
+        .logo:hover .logo-mark { transform:rotate(-10deg) scale(1.1); }
+        .logo em { color:var(--red); font-style:normal; }
+        .nav-right { display:flex; gap:10px; }
+
+        /* ── Buttons ── */
         .btn {
-            font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 13px;
-            padding: 9px 20px; border-radius: 10px; border: none;
-            cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
-            transition: all 0.2s; text-decoration: none; white-space: nowrap;
+            font-family:'Outfit', sans-serif; font-weight:600; font-size:14px;
+            padding:11px 26px; border-radius:100px; border:none;
+            cursor:none; display:inline-flex; align-items:center; gap:8px;
+            transition:all 0.25s; white-space:nowrap; text-decoration:none;
         }
-        .btn-ghost { background: transparent; color: var(--muted2); border: 1px solid var(--border2); }
-        .btn-ghost:hover { color: var(--white); border-color: rgba(255,255,255,0.3); }
-        .btn-red { background: var(--red); color: var(--white); box-shadow: 0 4px 16px var(--red-glow); }
-        .btn-red:hover { background: var(--red-dark); transform: translateY(-1px); }
-        .btn-sm { padding: 7px 14px; font-size: 12px; border-radius: 8px; }
+        .btn-outline {
+            background:transparent; color:var(--muted2);
+            border:1.5px solid var(--border2);
+        }
+        .btn-outline:hover { border-color:rgba(255,255,255,0.35); color:var(--white); }
+        .btn-red {
+            background:var(--red); color:var(--white);
+            box-shadow:0 4px 20px var(--red-glow);
+        }
+        .btn-red:hover { background:var(--red-dark); transform:translateY(-2px); box-shadow:0 8px 32px var(--red-glow); }
+        .btn-white {
+            background:var(--white); color:var(--night);
+        }
+        .btn-white:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(255,255,255,0.15); }
+        .btn-lg { padding:16px 36px; font-size:16px; border-radius:14px; }
 
-        /* ── LAYOUT ── */
-        .page { max-width: 1300px; margin: 0 auto; padding: 40px; }
+        /* ── Hero ── */
+        .hero {
+            min-height:100vh;
+            display:grid; grid-template-columns:1fr 1fr;
+            align-items:center; gap:0;
+            padding:130px 60px 80px;
+            position:relative; overflow:hidden;
+        }
+        .hero-bg {
+            position:absolute; inset:0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size:60px 60px;
+            animation:gridMove 20s linear infinite;
+        }
+        @keyframes gridMove { from{background-position:0 0} to{background-position:60px 60px} }
+        .hero-bg::after {
+            content:''; position:absolute; inset:0;
+            background:radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, var(--night) 100%);
+        }
+        .hero-glow {
+            position:absolute; width:800px; height:800px;
+            background:radial-gradient(circle, rgba(232,49,26,0.1) 0%, transparent 65%);
+            top:-200px; right:-100px; pointer-events:none;
+            animation:breathe 6s ease-in-out infinite;
+        }
+        @keyframes breathe { 0%,100%{transform:scale(1);opacity:0.8} 50%{transform:scale(1.15);opacity:1} }
 
-        /* ── HEADER ── */
-        .page-header {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 32px;
+        .hero-left { position:relative; z-index:2; }
+        .hero-pill {
+            display:inline-flex; align-items:center; gap:10px;
+            background:rgba(255,255,255,0.05); border:1px solid var(--border2);
+            padding:8px 18px; border-radius:100px;
+            font-size:12px; font-weight:500; color:var(--muted2);
+            letter-spacing:0.5px; margin-bottom:32px;
+            animation:fadeUp 0.8s 0.1s both;
         }
-        .page-title {
-            font-family: 'Bebas Neue', cursive;
-            font-size: 40px; letter-spacing: 1px; line-height: 1;
+        .live-dot {
+            width:8px; height:8px; background:var(--green);
+            border-radius:50%; box-shadow:0 0 8px var(--green);
+            animation:livePulse 1.5s infinite;
         }
-        .page-title span { color: var(--muted); font-size: 16px; font-family: 'Outfit', sans-serif; font-weight: 300; display: block; margin-top: 4px; letter-spacing: 0; }
+        @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
 
-        /* ── STATS CARDS ── */
-        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
-        .stat-card {
-            background: var(--night2); border: 1px solid var(--border2);
-            border-radius: 18px; padding: 24px;
-            transition: border-color 0.3s;
+        .hero h1 {
+            font-family:'Bebas Neue', cursive;
+            font-size:clamp(72px, 8vw, 120px);
+            line-height:0.92; letter-spacing:2px;
+            color:var(--white); margin-bottom:28px;
+            animation:fadeUp 0.8s 0.2s both;
         }
-        .stat-card:hover { border-color: rgba(232,49,26,0.3); }
-        .stat-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-        .stat-card-icon {
-            width: 40px; height: 40px; border-radius: 10px;
-            display: grid; place-items: center; font-size: 18px;
+        .hero h1 .accent { color:var(--red); }
+        .hero h1 .stroke { -webkit-text-stroke:1.5px rgba(255,255,255,0.3); color:transparent; }
+        .hero-desc {
+            font-size:17px; font-weight:300; color:var(--muted2);
+            line-height:1.7; max-width:460px; margin-bottom:44px;
+            animation:fadeUp 0.8s 0.3s both;
         }
-        .stat-card-icon.red    { background: rgba(232,49,26,0.12); color: var(--red); }
-        .stat-card-icon.blue   { background: rgba(59,130,246,0.12); color: var(--blue); }
-        .stat-card-icon.green  { background: rgba(34,197,94,0.12);  color: var(--green); }
-        .stat-card-icon.yellow { background: rgba(245,158,11,0.12); color: var(--yellow); }
-        .stat-card-num { font-family: 'Bebas Neue', cursive; font-size: 40px; letter-spacing: 1px; line-height: 1; }
-        .stat-card-lbl { font-size: 13px; color: var(--muted); margin-top: 4px; font-weight: 300; }
+        .hero-actions { display:flex; gap:14px; flex-wrap:wrap; animation:fadeUp 0.8s 0.4s both; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(32px)} to{opacity:1;transform:translateY(0)} }
 
-        /* ── SEARCH & FILTER BAR ── */
-        .toolbar {
-            display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+        /* ── Hero tracker card ── */
+        .hero-right {
+            position:relative; z-index:2;
+            display:flex; justify-content:center;
+            animation:fadeUp 0.8s 0.3s both;
         }
-        .search-wrap {
-            flex: 1; min-width: 200px;
-            position: relative;
+        .tracker {
+            background:var(--night3); border:1px solid var(--border2);
+            border-radius:28px; padding:32px; width:100%; max-width:420px;
+            box-shadow:0 40px 80px rgba(0,0,0,0.5);
+            position:relative;
         }
-        .search-wrap i {
-            position: absolute; left: 14px; top: 50%;
-            transform: translateY(-50%); color: var(--muted); font-size: 14px;
+        .tracker-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+        .tracker-title { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; color:var(--muted2); }
+        .live-badge {
+            display:inline-flex; align-items:center; gap:6px;
+            background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25);
+            color:var(--green); font-size:11px; font-weight:600;
+            padding:5px 12px; border-radius:100px;
         }
-        .search-wrap input {
-            width: 100%; padding: 11px 14px 11px 40px;
-            background: var(--night2); border: 1px solid var(--border2);
-            border-radius: 10px; font-family: 'Outfit', sans-serif;
-            font-size: 14px; color: var(--white);
-            transition: border-color 0.2s;
+        .route-stops { margin-bottom:24px; }
+        .stop { display:flex; align-items:center; gap:16px; padding:14px 0; border-bottom:1px solid var(--border); }
+        .stop:last-child { border:none; }
+        .stop-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+        .stop-dot.a { background:var(--blue); box-shadow:0 0 12px rgba(59,130,246,0.5); }
+        .stop-dot.b { background:var(--red); box-shadow:0 0 12px var(--red-glow); }
+        .stop-info { flex:1; }
+        .stop-city { font-weight:600; font-size:15px; color:var(--white); }
+        .stop-time { font-size:12px; color:var(--muted); margin-top:2px; }
+        .stop-chip { font-size:11px; font-weight:600; padding:4px 11px; border-radius:8px; }
+        .stop-chip.done { background:rgba(59,130,246,0.12); color:var(--blue); }
+        .stop-chip.eta  { background:rgba(232,49,26,0.12); color:var(--red); }
+        .prog-bar { width:100%; height:3px; background:var(--border2); border-radius:100px; overflow:hidden; margin-bottom:8px; }
+        .prog-fill { height:100%; background:linear-gradient(90deg,var(--blue),var(--red)); border-radius:100px; width:67%; animation:progAnim 4s ease-in-out infinite alternate; }
+        @keyframes progAnim { from{width:60%} to{width:74%} }
+        .prog-info { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:24px; }
+        .tracker-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+        .t-stat { background:var(--surface); border-radius:14px; padding:14px 12px; text-align:center; }
+        .t-stat-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; color:var(--white); }
+        .t-stat-val sup { font-family:'Outfit',sans-serif; font-size:11px; color:var(--muted); }
+        .t-stat-lbl { font-size:11px; color:var(--muted); margin-top:3px; }
+        .notif-pop {
+            position:absolute; bottom:-20px; left:-20px;
+            background:var(--night2); border:1px solid var(--border2);
+            border-radius:16px; padding:14px 18px;
+            display:flex; align-items:center; gap:12px;
+            box-shadow:0 20px 50px rgba(0,0,0,0.5);
+            animation:floatNotif 5s ease-in-out infinite; min-width:240px;
         }
-        .search-wrap input::placeholder { color: var(--muted); }
-        .search-wrap input:focus { outline: none; border-color: var(--red); }
-        .filter-select {
-            padding: 11px 16px; background: var(--night2);
-            border: 1px solid var(--border2); border-radius: 10px;
-            font-family: 'Outfit', sans-serif; font-size: 14px;
-            color: var(--white); cursor: pointer;
-        }
-        .filter-select:focus { outline: none; border-color: var(--red); }
-        .filter-select option { background: var(--night2); }
+        @keyframes floatNotif { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+        .notif-ico { width:36px; height:36px; background:rgba(34,197,94,0.15); border-radius:10px; display:grid; place-items:center; font-size:16px; }
+        .notif-body strong { display:block; font-size:13px; color:var(--white); font-weight:600; }
+        .notif-body small  { font-size:11px; color:var(--muted); }
 
-        /* ── TABLE ── */
-        .table-wrap {
-            background: var(--night2); border: 1px solid var(--border2);
-            border-radius: 20px; overflow: hidden;
-        }
-        table { width: 100%; border-collapse: collapse; }
-        thead { background: var(--night3); }
-        th {
-            padding: 14px 20px; text-align: left;
-            font-size: 11px; font-weight: 700;
-            letter-spacing: 1.5px; text-transform: uppercase;
-            color: var(--muted);
-        }
-        td { padding: 16px 20px; border-top: 1px solid var(--border); font-size: 14px; }
-        tr { transition: background 0.15s; }
-        tbody tr:hover { background: rgba(255,255,255,0.02); }
+        /* ── Ticker ── */
+        .ticker { background:var(--red); padding:12px 0; overflow:hidden; white-space:nowrap; }
+        .ticker-inner { display:inline-flex; gap:60px; animation:tickerMove 18s linear infinite; }
+        @keyframes tickerMove { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+        .ticker-item { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:2px; color:rgba(255,255,255,0.85); display:inline-flex; align-items:center; gap:20px; }
+        .ticker-sep { color:rgba(255,255,255,0.4); }
 
-        .user-cell { display: flex; align-items: center; gap: 12px; }
-        .avatar {
-            width: 36px; height: 36px; border-radius: 10px;
-            display: grid; place-items: center;
-            font-family: 'Bebas Neue', cursive; font-size: 15px;
-            flex-shrink: 0; letter-spacing: 0.5px;
-        }
-        .avatar.admin     { background: rgba(232,49,26,0.15); color: var(--red); }
-        .avatar.chauffeur { background: rgba(59,130,246,0.15); color: var(--blue); }
-        .avatar.magasinier{ background: rgba(34,197,94,0.15);  color: var(--green); }
-        .avatar.client    { background: rgba(255,255,255,0.08); color: var(--muted2); }
+        /* ── Stats band ── */
+        .stats-band { background:var(--night2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); display:grid; grid-template-columns:repeat(4,1fr); }
+        .stat-block { padding:48px 40px; border-right:1px solid var(--border); transition:background 0.3s; }
+        .stat-block:last-child { border:none; }
+        .stat-block:hover { background:var(--night3); }
+        .stat-num { font-family:'Bebas Neue',cursive; font-size:56px; letter-spacing:1px; line-height:1; color:var(--white); }
+        .stat-num em { font-style:normal; color:var(--red); }
+        .stat-lbl { font-size:14px; color:var(--muted); margin-top:8px; font-weight:300; }
 
-        .user-name  { font-weight: 600; font-size: 14px; }
-        .user-email { font-size: 12px; color: var(--muted); margin-top: 1px; }
+        /* ── Sections ── */
+        section { padding:120px 60px; }
+        .s-tag { font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--red); margin-bottom:16px; }
+        .s-title { font-family:'Bebas Neue',cursive; font-size:clamp(40px,5vw,64px); line-height:0.95; letter-spacing:1px; color:var(--white); margin-bottom:60px; }
+        .s-title .dim { color:rgba(255,255,255,0.25); }
 
-        .badge {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 4px 12px; border-radius: 100px;
-            font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
-        }
-        .badge.admin     { background: rgba(232,49,26,0.12); color: var(--red);    border: 1px solid rgba(232,49,26,0.2); }
-        .badge.chauffeur { background: rgba(59,130,246,0.12); color: var(--blue);  border: 1px solid rgba(59,130,246,0.2); }
-        .badge.magasinier{ background: rgba(34,197,94,0.12);  color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
-        .badge.client    { background: rgba(255,255,255,0.05); color: var(--muted2); border: 1px solid var(--border2); }
+        /* ── Services ── */
+        .services-bg { background:var(--night); }
+        .services-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:2px; border:2px solid var(--border2); border-radius:24px; overflow:hidden; }
+        .svc { background:var(--night2); padding:40px 36px; transition:background 0.3s; position:relative; overflow:hidden; }
+        .svc::before { content:''; position:absolute; bottom:-60px; right:-60px; width:160px; height:160px; background:var(--red); border-radius:50%; opacity:0; transition:opacity 0.4s, transform 0.4s; transform:scale(0.5); }
+        .svc:hover { background:var(--night3); }
+        .svc:hover::before { opacity:0.06; transform:scale(1); }
+        .svc-num { font-family:'Bebas Neue',cursive; font-size:48px; color:var(--border2); letter-spacing:1px; margin-bottom:20px; line-height:1; transition:color 0.3s; }
+        .svc:hover .svc-num { color:rgba(232,49,26,0.3); }
+        .svc-icon { width:52px; height:52px; background:var(--surface); border-radius:14px; display:grid; place-items:center; font-size:22px; color:var(--red); margin-bottom:24px; }
+        .svc-name { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:0.5px; color:var(--white); margin-bottom:12px; }
+        .svc-desc { font-size:14px; color:var(--muted); line-height:1.7; margin-bottom:20px; font-weight:300; }
+        .svc-price { font-size:12px; font-weight:600; color:var(--red); display:inline-flex; align-items:center; gap:6px; }
+        .svc-price::before { content:'→'; }
 
-        .actions { display: flex; gap: 6px; }
-        .action-btn {
-            width: 32px; height: 32px; border-radius: 8px; border: none;
-            background: transparent; cursor: pointer;
-            display: grid; place-items: center; font-size: 14px;
-            color: var(--muted); transition: all 0.2s;
-            border: 1px solid transparent;
-        }
-        .action-btn:hover.edit   { background: rgba(59,130,246,0.12); color: var(--blue);  border-color: rgba(59,130,246,0.2); }
-        .action-btn:hover.delete { background: rgba(232,49,26,0.12);  color: var(--red);   border-color: rgba(232,49,26,0.2); }
-        .action-btn:hover.pwd    { background: rgba(245,158,11,0.12); color: var(--yellow); border-color: rgba(245,158,11,0.2); }
+        /* ── Why ── */
+        .why-bg { background:var(--night2); }
+        .why-grid { display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center; }
+        .why-list { display:flex; flex-direction:column; gap:4px; }
+        .why-item { display:flex; align-items:flex-start; gap:20px; padding:24px; border-radius:18px; border:1px solid transparent; transition:all 0.3s; }
+        .why-item:hover { background:var(--night3); border-color:var(--border2); }
+        .why-num { font-family:'Bebas Neue',cursive; font-size:36px; letter-spacing:1px; color:var(--red); flex-shrink:0; line-height:1; width:48px; }
+        .why-title { font-size:17px; font-weight:600; color:var(--white); margin-bottom:6px; }
+        .why-desc  { font-size:14px; color:var(--muted); line-height:1.65; font-weight:300; }
+        .why-visual { display:flex; flex-direction:column; gap:20px; }
+        .big-metric { background:var(--night3); border:1px solid var(--border2); border-radius:24px; padding:36px; }
+        .big-metric-num { font-family:'Bebas Neue',cursive; font-size:80px; line-height:0.9; letter-spacing:1px; color:var(--white); }
+        .big-metric-num em { font-style:normal; color:var(--red); }
+        .big-metric-lbl { font-size:14px; color:var(--muted); margin-top:16px; font-weight:300; }
+        .metric-row { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        .small-metric { background:var(--night3); border:1px solid var(--border2); border-radius:20px; padding:28px; }
+        .small-metric-num { font-family:'Bebas Neue',cursive; font-size:48px; letter-spacing:1px; line-height:1; color:var(--white); }
+        .small-metric-num em { font-style:normal; color:var(--red); }
+        .small-metric-lbl { font-size:13px; color:var(--muted); margin-top:8px; font-weight:300; }
 
-        .empty-state {
-            padding: 80px 20px; text-align: center;
-        }
-        .empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.3; }
-        .empty-text { font-size: 15px; color: var(--muted); }
+        /* ── CTA ── */
+        .cta-section { background:var(--night); padding:120px 60px; text-align:center; position:relative; overflow:hidden; }
+        .cta-section::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 60% 60% at 50% 100%, rgba(232,49,26,0.12), transparent); }
+        .cta-inner { position:relative; z-index:1; max-width:700px; margin:0 auto; }
+        .cta-section .s-title { margin-bottom:20px; }
+        .cta-sub { font-size:18px; color:var(--muted); margin-bottom:48px; font-weight:300; line-height:1.6; }
+        .cta-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
 
-        /* ── MODAL ── */
-        .modal {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.75); backdrop-filter: blur(10px);
-            z-index: 500; align-items: center; justify-content: center; padding: 20px;
-        }
-        .modal.open { display: flex; }
-        .modal-box {
-            background: var(--night3); border: 1px solid var(--border2);
-            border-radius: 24px; padding: 40px; width: 100%; max-width: 460px;
-            box-shadow: 0 40px 100px rgba(0,0,0,0.6);
-            animation: boxIn 0.3s cubic-bezier(0.4,0,0.2,1);
-        }
-        @keyframes boxIn { from{opacity:0;transform:scale(0.94) translateY(16px)} to{opacity:1;transform:none} }
-        .modal-head {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 28px;
-        }
-        .modal-title { font-family: 'Bebas Neue', cursive; font-size: 26px; letter-spacing: 1px; }
-        .modal-close {
-            width: 34px; height: 34px; background: var(--surface); border: none;
-            border-radius: 50%; cursor: pointer; display: grid; place-items: center;
-            font-size: 15px; color: var(--muted); transition: all 0.2s;
-        }
-        .modal-close:hover { background: var(--border2); color: var(--white); }
-        .field { margin-bottom: 16px; }
-        .field label {
-            display: block; font-size: 11px; font-weight: 700;
-            letter-spacing: 1px; text-transform: uppercase;
-            color: var(--muted); margin-bottom: 8px;
-        }
-        .field input, .field select {
-            width: 100%; padding: 12px 14px;
-            background: var(--surface); border: 1.5px solid var(--border2);
-            border-radius: 10px; font-family: 'Outfit', sans-serif;
-            font-size: 14px; color: var(--white); transition: border-color 0.2s;
-        }
-        .field input::placeholder { color: rgba(255,255,255,0.2); }
-        .field input:focus, .field select:focus { outline: none; border-color: var(--red); }
-        .field select option { background: var(--night3); }
-        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .field-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
-        .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
-        .modal-actions .btn { flex: 1; justify-content: center; padding: 13px; }
+        /* ── Footer ── */
+        footer { background:var(--night2); border-top:1px solid var(--border); padding:36px 60px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
+        .foot-logo { font-family:'Bebas Neue',cursive; font-size:20px; color:var(--white); letter-spacing:1px; }
+        .foot-logo em { font-style:normal; color:var(--red); }
+        .foot-copy { font-size:13px; color:var(--muted); }
+        .foot-links { display:flex; gap:24px; }
+        .foot-links a { font-size:13px; color:var(--muted); text-decoration:none; transition:color 0.2s; }
+        .foot-links a:hover { color:var(--white); }
 
-        /* ── CONFIRM MODAL ── */
-        .confirm-box {
-            background: var(--night3); border: 1px solid rgba(232,49,26,0.25);
-            border-radius: 24px; padding: 40px; width: 100%; max-width: 380px;
-            box-shadow: 0 40px 100px rgba(0,0,0,0.6);
-            animation: boxIn 0.3s cubic-bezier(0.4,0,0.2,1);
-            text-align: center;
-        }
-        .confirm-icon { font-size: 40px; margin-bottom: 16px; }
-        .confirm-title { font-family: 'Bebas Neue', cursive; font-size: 24px; margin-bottom: 10px; }
-        .confirm-text  { font-size: 14px; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
-        .confirm-actions { display: flex; gap: 10px; }
+        /* ── Modals ── */
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(12px); z-index:600; align-items:center; justify-content:center; padding:20px; }
+        .modal.open { display:flex; }
+        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:28px; padding:44px; width:100%; max-width:420px; box-shadow:0 40px 100px rgba(0,0,0,0.6); animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes boxIn { from{opacity:0;transform:scale(0.93) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:32px; }
+        .modal-title { font-family:'Bebas Neue',cursive; font-size:28px; letter-spacing:1px; color:var(--white); }
+        .modal-close { width:36px; height:36px; background:var(--surface); border:none; border-radius:50%; cursor:none; display:grid; place-items:center; font-size:16px; color:var(--muted); transition:background 0.2s, color 0.2s; }
+        .modal-close:hover { background:var(--border2); color:var(--white); }
+        .field { margin-bottom:14px; }
+        .field label { display:block; font-size:12px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+        .field input { width:100%; padding:13px 16px; background:var(--surface); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:15px; color:var(--white); transition:border-color 0.2s; }
+        .field input::placeholder { color:rgba(255,255,255,0.2); }
+        .field input:focus { outline:none; border-color:var(--red); }
+        .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+        .field-row .field { margin:0; }
+        .modal-submit { width:100%; margin-top:8px; }
+        .modal-foot { text-align:center; margin-top:16px; font-size:14px; color:var(--muted); }
+        .modal-foot a { color:var(--red); font-weight:600; text-decoration:none; }
+        .modal-foot a:hover { text-decoration:underline; }
 
-        /* ── TOAST ── */
-        .toast {
-            position: fixed; top: 20px; right: 20px;
-            padding: 14px 20px; border-radius: 12px;
-            display: flex; align-items: center; gap: 10px;
-            font-size: 14px; font-weight: 500;
-            background: var(--night3); border: 1px solid var(--border2);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-            z-index: 9999; transform: translateX(calc(100% + 40px));
-            transition: transform 0.4s cubic-bezier(0.4,0,0.2,1);
-        }
-        .toast.show { transform: translateX(0); }
-        .toast.success .t-ico { color: var(--green); }
-        .toast.error   .t-ico { color: var(--red); }
-        .t-ico { font-size: 16px; }
+        /* ── Toast ── */
+        .toast { position:fixed; top:24px; right:24px; padding:16px 22px; border-radius:14px; display:flex; align-items:center; gap:12px; font-size:14px; font-weight:500; box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; border:1px solid var(--border2); transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); background:var(--night3); }
+        .toast.show { transform:translateX(0); }
+        .toast.success .t-ico { color:var(--green); }
+        .toast.error   .t-ico { color:var(--red); }
+        .t-ico { font-size:18px; }
 
-        /* ── LOADER ── */
-        .loader { display: none; position: fixed; inset: 0; background: rgba(10,10,15,0.8); backdrop-filter: blur(4px); place-items: center; z-index: 2000; }
-        .loader.on { display: grid; }
-        .spin { width: 40px; height: 40px; border: 2.5px solid var(--border2); border-top-color: var(--red); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        /* ── Loader ── */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; }
+        .loader.on { display:grid; }
+        .spin { width:44px; height:44px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
         @keyframes spin { to{transform:rotate(360deg)} }
 
-        /* ── RESPONSIVE ── */
-        @media(max-width:900px) {
-            .page { padding: 20px; }
-            .stats-row { grid-template-columns: 1fr 1fr; }
-            .topbar { padding: 0 20px; }
+        /* ── Reveal ── */
+        [data-r] { opacity:0; transform:translateY(28px); transition:opacity 0.7s ease, transform 0.7s ease; }
+        [data-r].vis { opacity:1; transform:none; }
+
+        /* ── Responsive ── */
+        @media(max-width:1100px) {
+            .hero { grid-template-columns:1fr; }
+            .hero-right { display:none; }
+            .why-grid { grid-template-columns:1fr; }
+            .why-visual { display:none; }
+            .stats-band { grid-template-columns:1fr 1fr; }
         }
-        @media(max-width:600px) {
-            .stats-row { grid-template-columns: 1fr 1fr; }
-            .page-header { flex-direction: column; align-items: flex-start; gap: 16px; }
-            th:nth-child(3), td:nth-child(3) { display: none; }
+        @media(max-width:768px) {
+            nav { padding:16px 20px; }
+            nav.stuck { padding:12px 20px; }
+            .hero { padding:100px 20px 60px; }
+            section { padding:80px 20px; }
+            .services-grid { grid-template-columns:1fr; }
+            .stats-band { grid-template-columns:1fr 1fr; }
+            footer { padding:28px 20px; flex-direction:column; }
+            .modal-box { padding:28px; }
+            .cta-section { padding:80px 20px; }
         }
     </style>
 </head>
 <body>
 
+<!-- Curseur personnalisé -->
+<div class="cursor"     id="cur"></div>
+<div class="cursor-ring" id="curRing"></div>
+
 <!-- Toast -->
-<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<div class="toast" id="toast">
+    <span class="t-ico" id="toastIco"></span>
+    <span id="toastTxt"></span>
+</div>
 
 <!-- Loader -->
 <div class="loader" id="loader"><div class="spin"></div></div>
 
-<!-- ═══ TOPBAR ═══ -->
-<header class="topbar">
-    <a href="dashboard.html" class="logo">
+<!-- ═══ NAV ═══ -->
+<nav id="nav">
+    <a href="#" class="logo">
         <div class="logo-mark">🚚</div>
         Léman<em>-Courses</em>
     </a>
-    <div class="topbar-right">
-        <a href="dashboard.html" class="btn btn-ghost btn-sm">
-            <i class="fas fa-arrow-left"></i> Dashboard
-        </a>
-    </div>
-</header>
-
-<!-- ═══ PAGE ═══ -->
-<main class="page">
-
-    <!-- Header -->
-    <div class="page-header">
-        <div class="page-title">
-            UTILISATEURS
-            <span>Gestion de tous les comptes</span>
-        </div>
-        <button class="btn btn-red" id="btnNouveau">
-            <i class="fas fa-plus"></i> Nouvel utilisateur
+    <div class="nav-right">
+        <button class="btn btn-outline" id="btnLogin">
+            <i class="fas fa-user"></i> Connexion
+        </button>
+        <button class="btn btn-red" id="btnSignup">
+            <i class="fas fa-user-plus"></i> S'inscrire
         </button>
     </div>
+</nav>
 
-    <!-- Stats -->
-    <div class="stats-row" id="statsRow">
-        <div class="stat-card">
-            <div class="stat-card-top">
-                <div class="stat-card-icon red"><i class="fas fa-users"></i></div>
-            </div>
-            <div class="stat-card-num" id="statTotal">—</div>
-            <div class="stat-card-lbl">Total utilisateurs</div>
+<!-- ═══ HERO ═══ -->
+<section class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-glow"></div>
+
+    <div class="hero-left">
+        <div class="hero-pill">
+            <div class="live-dot"></div>
+            247 livraisons actives en ce moment
         </div>
-        <div class="stat-card">
-            <div class="stat-card-top">
-                <div class="stat-card-icon blue"><i class="fas fa-truck"></i></div>
-            </div>
-            <div class="stat-card-num" id="statChauffeurs">—</div>
-            <div class="stat-card-lbl">Chauffeurs</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-top">
-                <div class="stat-card-icon green"><i class="fas fa-box"></i></div>
-            </div>
-            <div class="stat-card-num" id="statMagasiniers">—</div>
-            <div class="stat-card-lbl">Magasiniers</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-top">
-                <div class="stat-card-icon yellow"><i class="fas fa-user"></i></div>
-            </div>
-            <div class="stat-card-num" id="statClients">—</div>
-            <div class="stat-card-lbl">Clients</div>
+        <h1>
+            TRANS<br>
+            <span class="accent">PORT</span><br>
+            <span class="stroke">EXPRESS</span>
+        </h1>
+        <p class="hero-desc">
+            Plateforme de dispatch professionnelle pour vos livraisons urgentes en Suisse romande. Suivi GPS temps réel, interface intuitive, fiabilité garantie.
+        </p>
+        <div class="hero-actions">
+            <button class="btn btn-red btn-lg" id="heroSignup">
+                <i class="fas fa-rocket"></i> Commencer gratuitement
+            </button>
+            <button class="btn btn-outline btn-lg" id="heroLogin">
+                <i class="fas fa-sign-in-alt"></i> Se connecter
+            </button>
         </div>
     </div>
 
-    <!-- Toolbar -->
-    <div class="toolbar">
-        <div class="search-wrap">
-            <i class="fas fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Rechercher par nom, email…">
+    <div class="hero-right">
+        <div class="tracker">
+            <div class="tracker-top">
+                <div class="tracker-title">SUIVI EN DIRECT</div>
+                <div class="live-badge"><div class="live-dot"></div> Live</div>
+            </div>
+            <div class="route-stops">
+                <div class="stop">
+                    <div class="stop-dot a"></div>
+                    <div class="stop-info">
+                        <div class="stop-city">Genève, GE</div>
+                        <div class="stop-time">Départ · 08h30</div>
+                    </div>
+                    <div class="stop-chip done">✓ Parti</div>
+                </div>
+                <div class="stop">
+                    <div class="stop-dot b"></div>
+                    <div class="stop-info">
+                        <div class="stop-city">Lausanne, VD</div>
+                        <div class="stop-time">Arrivée prévue · 10h15</div>
+                    </div>
+                    <div class="stop-chip eta">~43 min</div>
+                </div>
+            </div>
+            <div class="prog-bar"><div class="prog-fill"></div></div>
+            <div class="prog-info">
+                <span>Genève</span>
+                <span>67% du trajet</span>
+                <span>Lausanne</span>
+            </div>
+            <div class="tracker-stats">
+                <div class="t-stat">
+                    <div class="t-stat-val">42<sup>km</sup></div>
+                    <div class="t-stat-lbl">Distance</div>
+                </div>
+                <div class="t-stat">
+                    <div class="t-stat-val">98<sup>%</sup></div>
+                    <div class="t-stat-lbl">Ponctualité</div>
+                </div>
+                <div class="t-stat">
+                    <div class="t-stat-val">3<sup>h</sup></div>
+                    <div class="t-stat-lbl">Express max</div>
+                </div>
+            </div>
+            <div class="notif-pop">
+                <div class="notif-ico">✅</div>
+                <div class="notif-body">
+                    <strong>Livraison confirmée</strong>
+                    <small>Colis #LC-2851 · Sion → Martigny</small>
+                </div>
+            </div>
         </div>
-        <select class="filter-select" id="filterRole">
-            <option value="">Tous les rôles</option>
-            <option value="admin">Administrateur</option>
-            <option value="chauffeur">Chauffeur</option>
-            <option value="magasinier">Magasinier</option>
-            <option value="client">Client</option>
-        </select>
     </div>
+</section>
 
-    <!-- Table -->
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>Utilisateur</th>
-                    <th>Téléphone</th>
-                    <th>Rôle</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="usersList">
-                <tr>
-                    <td colspan="4">
-                        <div class="empty-state">
-                            <div class="empty-icon"><i class="fas fa-spinner fa-spin"></i></div>
-                            <div class="empty-text">Chargement…</div>
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+<!-- ═══ TICKER ═══ -->
+<div class="ticker">
+    <div class="ticker-inner">
+        <span class="ticker-item">TRANSPORT EXPRESS <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">SUIVI GPS TEMPS RÉEL <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">SUISSE ROMANDE <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">LIVRAISON EN 3H <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">98% PONCTUALITÉ <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">DISPATCH PROFESSIONNEL <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">TRANSPORT EXPRESS <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">SUIVI GPS TEMPS RÉEL <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">SUISSE ROMANDE <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">LIVRAISON EN 3H <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">98% PONCTUALITÉ <span class="ticker-sep">✦</span></span>
+        <span class="ticker-item">DISPATCH PROFESSIONNEL <span class="ticker-sep">✦</span></span>
     </div>
-</main>
+</div>
 
-<!-- ═══ MODAL UTILISATEUR ═══ -->
-<div id="userModal" class="modal" role="dialog" aria-modal="true">
+<!-- ═══ STATS ═══ -->
+<div class="stats-band">
+    <div class="stat-block" data-r>
+        <div class="stat-num">12<em>k+</em></div>
+        <div class="stat-lbl">Livraisons réalisées</div>
+    </div>
+    <div class="stat-block" data-r>
+        <div class="stat-num">98<em>%</em></div>
+        <div class="stat-lbl">Taux de ponctualité</div>
+    </div>
+    <div class="stat-block" data-r>
+        <div class="stat-num">3<em>h</em></div>
+        <div class="stat-lbl">Délai express maximum</div>
+    </div>
+    <div class="stat-block" data-r>
+        <div class="stat-num">7<em>/7</em></div>
+        <div class="stat-lbl">Disponibilité service</div>
+    </div>
+</div>
+
+<!-- ═══ SERVICES ═══ -->
+<section class="services-bg">
+    <div class="s-tag" data-r>Services</div>
+    <div class="s-title" data-r>CE QUE NOUS<br><span class="dim">FAISONS</span></div>
+    <div class="services-grid">
+        <div class="svc" data-r>
+            <div class="svc-num">01</div>
+            <div class="svc-icon"><i class="fas fa-bolt"></i></div>
+            <div class="svc-name">EXPRESS MÊME JOUR</div>
+            <div class="svc-desc">Livraison urgente dans les 3 heures sur toute la Suisse romande. Idéal pour les documents et colis prioritaires.</div>
+            <div class="svc-price">Dès CHF 35.–</div>
+        </div>
+        <div class="svc" data-r>
+            <div class="svc-num">02</div>
+            <div class="svc-icon"><i class="fas fa-map-marked-alt"></i></div>
+            <div class="svc-name">SUIVI GPS LIVE</div>
+            <div class="svc-desc">Interface de suivi en temps réel pour vous et votre destinataire. Notifications automatiques à chaque étape.</div>
+            <div class="svc-price">Inclus dans tous les envois</div>
+        </div>
+        <div class="svc" data-r>
+            <div class="svc-num">03</div>
+            <div class="svc-icon"><i class="fas fa-building"></i></div>
+            <div class="svc-name">COMPTES ENTREPRISES</div>
+            <div class="svc-desc">Dashboard dédié, facturation mensuelle, API d'intégration et tarifs négociés pour les volumes importants.</div>
+            <div class="svc-price">Sur devis</div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ POURQUOI NOUS ═══ -->
+<section class="why-bg">
+    <div class="s-tag" data-r>Pourquoi nous</div>
+    <div class="why-grid">
+        <div>
+            <div class="s-title" data-r>QUATRE<br><span class="dim">ENGAGEMENTS</span></div>
+            <div class="why-list">
+                <div class="why-item" data-r>
+                    <div class="why-num">01</div>
+                    <div>
+                        <div class="why-title">Ponctualité garantie</div>
+                        <div class="why-desc">98% de nos livraisons arrivent dans la fenêtre horaire promise. Remboursement si dépassement de 30 min.</div>
+                    </div>
+                </div>
+                <div class="why-item" data-r>
+                    <div class="why-num">02</div>
+                    <div>
+                        <div class="why-title">Colis assurés jusqu'à CHF 2'000</div>
+                        <div class="why-desc">Chaque envoi est automatiquement couvert. Extension disponible pour les colis de haute valeur.</div>
+                    </div>
+                </div>
+                <div class="why-item" data-r>
+                    <div class="why-num">03</div>
+                    <div>
+                        <div class="why-title">Interface professionnelle</div>
+                        <div class="why-desc">Dashboard pour gérer vos envois, consulter l'historique complet et exporter vos factures en PDF.</div>
+                    </div>
+                </div>
+                <div class="why-item" data-r>
+                    <div class="why-num">04</div>
+                    <div>
+                        <div class="why-title">Support 7j/7</div>
+                        <div class="why-desc">Une équipe réactive par téléphone, chat et email pour répondre à toutes vos questions urgentes.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="why-visual">
+            <div class="big-metric" data-r>
+                <div class="big-metric-num">98<em>%</em></div>
+                <div class="big-metric-lbl">Taux de ponctualité sur les 12 derniers mois</div>
+            </div>
+            <div class="metric-row">
+                <div class="small-metric" data-r>
+                    <div class="small-metric-num">12<em>k</em></div>
+                    <div class="small-metric-lbl">Livraisons réalisées</div>
+                </div>
+                <div class="small-metric" data-r>
+                    <div class="small-metric-num">3<em>h</em></div>
+                    <div class="small-metric-lbl">Délai express garanti</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section class="cta-section">
+    <div class="cta-inner">
+        <div class="s-tag">Commencer</div>
+        <div class="s-title" data-r>PRÊT À<br>EXPÉDIER ?</div>
+        <p class="cta-sub" data-r>Créez votre compte en 2 minutes. Aucune carte bancaire requise pour commencer.</p>
+        <div class="cta-btns" data-r>
+            <button class="btn btn-red btn-lg" id="ctaSignup">
+                <i class="fas fa-user-plus"></i> Créer un compte gratuit
+            </button>
+            <button class="btn btn-outline btn-lg" id="ctaLogin">
+                <i class="fas fa-sign-in-alt"></i> Se connecter
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer>
+    <div class="foot-logo">LÉMAN<em>-COURSES</em></div>
+    <div class="foot-copy">© 2025 Léman-Courses — Suisse romande</div>
+    <div class="foot-links">
+        <a href="#">CGU</a>
+        <a href="#">Confidentialité</a>
+        <a href="#">Contact</a>
+    </div>
+</footer>
+
+<!-- ═══ MODAL CONNEXION ═══ -->
+<div id="modalLogin" class="modal" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="modal-head">
-            <div class="modal-title" id="modalTitle">NOUVEL UTILISATEUR</div>
-            <button class="modal-close" data-close="userModal">✕</button>
+            <div class="modal-title">CONNEXION</div>
+            <button class="modal-close" data-close="modalLogin">✕</button>
         </div>
-        <form id="userForm">
-            <input type="hidden" id="userId">
+        <form id="formLogin">
+            <div class="field">
+                <label>Email</label>
+                <input type="email" id="loginEmail" placeholder="vous@exemple.ch" required autocomplete="email">
+            </div>
+            <div class="field">
+                <label>Mot de passe</label>
+                <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-red modal-submit">
+                <i class="fas fa-sign-in-alt"></i> Se connecter
+            </button>
+        </form>
+        <div class="modal-foot"><a href="#" id="linkForgot">Mot de passe oublié ?</a></div>
+        <div class="modal-foot">Pas de compte ? <a href="#" id="linkToSignup">S'inscrire</a></div>
+    </div>
+</div>
+
+<!-- ═══ MODAL INSCRIPTION ═══ -->
+<div id="modalSignup" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">INSCRIPTION</div>
+            <button class="modal-close" data-close="modalSignup">✕</button>
+        </div>
+        <form id="formSignup">
             <div class="field">
                 <label>Email *</label>
-                <input type="email" id="userEmail" placeholder="prenom@exemple.ch" required autocomplete="off">
+                <input type="email" id="signupEmail" placeholder="vous@exemple.ch" required autocomplete="email">
             </div>
-            <div class="field" id="passwordField">
+            <div class="field">
                 <label>Mot de passe *</label>
-                <input type="password" id="userPassword" placeholder="6 caractères min." minlength="6" autocomplete="new-password">
-                <div class="field-hint" id="passwordHint">Requis pour un nouvel utilisateur</div>
+                <input type="password" id="signupPassword" placeholder="6 caractères min." minlength="6" required autocomplete="new-password">
             </div>
             <div class="field-row">
                 <div class="field">
                     <label>Nom</label>
-                    <input type="text" id="userNom" placeholder="Dupont">
+                    <input type="text" id="signupNom" placeholder="Dupont" autocomplete="family-name">
                 </div>
                 <div class="field">
                     <label>Prénom</label>
-                    <input type="text" id="userPrenom" placeholder="Jean">
+                    <input type="text" id="signupPrenom" placeholder="Jean" autocomplete="given-name">
                 </div>
             </div>
             <div class="field">
                 <label>Téléphone</label>
-                <input type="tel" id="userTel" placeholder="+41 79 000 00 00">
+                <input type="tel" id="signupTel" placeholder="+41 79 000 00 00" autocomplete="tel">
             </div>
-            <div class="field">
-                <label>Rôle</label>
-                <select id="userRole">
-                    <option value="client">Client</option>
-                    <option value="chauffeur">Chauffeur</option>
-                    <option value="magasinier">Magasinier</option>
-                    <option value="admin">Administrateur</option>
-                </select>
-            </div>
-            <div class="modal-actions">
-                <button type="submit" class="btn btn-red">
-                    <i class="fas fa-save"></i> Enregistrer
-                </button>
-                <button type="button" class="btn btn-ghost" data-close="userModal">Annuler</button>
-            </div>
+            <button type="submit" class="btn btn-red modal-submit">
+                <i class="fas fa-user-plus"></i> Créer mon compte
+            </button>
         </form>
+        <div class="modal-foot">Déjà un compte ? <a href="#" id="linkToLogin">Se connecter</a></div>
     </div>
 </div>
 
-<!-- ═══ MODAL MOT DE PASSE ═══ -->
-<div id="pwdModal" class="modal" role="dialog" aria-modal="true">
+<!-- ═══ MODAL MOT DE PASSE OUBLIÉ ═══ -->
+<div id="modalForgot" class="modal" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="modal-head">
-            <div class="modal-title">NOUVEAU MOT DE PASSE</div>
-            <button class="modal-close" data-close="pwdModal">✕</button>
+            <div class="modal-title">RÉINITIALISATION</div>
+            <button class="modal-close" data-close="modalForgot">✕</button>
         </div>
-        <form id="pwdForm">
-            <input type="hidden" id="pwdUserId">
+        <p style="font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.6;font-weight:300;">
+            Entrez votre email et nous vous enverrons un lien pour réinitialiser votre mot de passe.
+        </p>
+        <form id="formForgot">
             <div class="field">
-                <label>Nouveau mot de passe</label>
-                <input type="password" id="newPassword" placeholder="6 caractères min." minlength="6" required>
+                <label>Votre email</label>
+                <input type="email" id="forgotEmail" placeholder="vous@exemple.ch" required autocomplete="email">
             </div>
-            <div class="modal-actions">
-                <button type="submit" class="btn btn-red">
-                    <i class="fas fa-key"></i> Changer
-                </button>
-                <button type="button" class="btn btn-ghost" data-close="pwdModal">Annuler</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ═══ MODAL CONFIRMATION SUPPRESSION ═══ -->
-<div id="confirmModal" class="modal" role="dialog" aria-modal="true">
-    <div class="confirm-box">
-        <div class="confirm-icon">🗑️</div>
-        <div class="confirm-title">SUPPRIMER ?</div>
-        <div class="confirm-text" id="confirmText">Cette action est irréversible.</div>
-        <div class="confirm-actions">
-            <button class="btn btn-red" id="confirmYes" style="flex:1;justify-content:center;">
-                <i class="fas fa-trash"></i> Supprimer
+            <button type="submit" class="btn btn-red modal-submit">
+                <i class="fas fa-paper-plane"></i> Envoyer le lien
             </button>
-            <button class="btn btn-ghost" data-close="confirmModal" style="flex:1;justify-content:center;">Annuler</button>
-        </div>
+        </form>
+        <div class="modal-foot"><a href="#" id="linkBackLogin">← Retour à la connexion</a></div>
     </div>
 </div>
 
+<!-- ═══ SCRIPT ═══ -->
 <script>
 (function () {
     'use strict';
 
     /* ── Supabase ── */
     if (!window.SUPABASE_CONFIG) {
-        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
+        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;font-size:18px;">❌ config.js manquant ou introuvable</div>';
         return;
     }
-    const db = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.key);
+    const db = window.SUPABASE_CLIENT;
 
-    /* ── State ── */
-    let allUsers = [];
+    /* ── Curseur personnalisé ── */
+    const cur     = document.getElementById('cur');
+    const curRing = document.getElementById('curRing');
+    let mx = 0, my = 0, rx = 0, ry = 0;
+    document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+    (function loop() {
+        rx += (mx - rx) * 0.13;
+        ry += (my - ry) * 0.13;
+        cur.style.left     = mx + 'px';
+        cur.style.top      = my + 'px';
+        curRing.style.left = rx + 'px';
+        curRing.style.top  = ry + 'px';
+        requestAnimationFrame(loop);
+    })();
+
+    /* ── Nav sticky ── */
+    window.addEventListener('scroll', () => {
+        document.getElementById('nav').classList.toggle('stuck', window.scrollY > 50);
+    }, { passive: true });
+
+    /* ── Scroll reveal ── */
+    const revObs = new IntersectionObserver(entries => {
+        entries.forEach((en, i) => {
+            if (en.isIntersecting) {
+                setTimeout(() => en.target.classList.add('vis'), i * 70);
+                revObs.unobserve(en.target);
+            }
+        });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('[data-r]').forEach(el => revObs.observe(el));
 
     /* ── Toast ── */
     const toastEl  = document.getElementById('toast');
@@ -507,7 +756,7 @@
         toastEl.className = 'toast ' + type + ' show';
         toastIco.textContent = type === 'success' ? '✓' : '✕';
         toastTxt.textContent = msg;
-        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 4000);
+        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 5000);
     }
 
     /* ── Loader ── */
@@ -515,160 +764,94 @@
     const showLoad = () => loaderEl.classList.add('on');
     const hideLoad = () => loaderEl.classList.remove('on');
 
-    /* ── Modal helpers ── */
-    function openModal(id) {
+    /* ── Modals ── */
+    function open(id) {
         const m = document.getElementById(id);
-        if (m) { m.style.display = 'flex'; m.classList.add('open'); }
+        if (!m) return;
+        m.style.display = 'flex';
+        m.classList.add('open');
     }
-    function closeModal(id) {
+    function close(id) {
         const m = document.getElementById(id);
-        if (m) { m.style.display = 'none'; m.classList.remove('open'); }
+        if (!m) return;
+        m.style.display = 'none';
+        m.classList.remove('open');
+    }
+    function swap(from, to) {
+        close(from);
+        open(to);
     }
 
+    /* Ouvrir depuis boutons */
+    ['btnLogin','heroLogin','ctaLogin'].forEach(id => {
+        document.getElementById(id)?.addEventListener('click', () => open('modalLogin'));
+    });
+    ['btnSignup','heroSignup','ctaSignup'].forEach(id => {
+        document.getElementById(id)?.addEventListener('click', () => open('modalSignup'));
+    });
+
+    /* Fermer via data-close */
     document.querySelectorAll('[data-close]').forEach(btn => {
-        btn.addEventListener('click', () => closeModal(btn.dataset.close));
+        btn.addEventListener('click', () => close(btn.dataset.close));
     });
+
+    /* Liens de switch */
+    document.getElementById('linkToSignup')?.addEventListener('click',  e => { e.preventDefault(); swap('modalLogin','modalSignup'); });
+    document.getElementById('linkToLogin')?.addEventListener('click',   e => { e.preventDefault(); swap('modalSignup','modalLogin'); });
+    document.getElementById('linkForgot')?.addEventListener('click',    e => { e.preventDefault(); swap('modalLogin','modalForgot'); });
+    document.getElementById('linkBackLogin')?.addEventListener('click', e => { e.preventDefault(); swap('modalForgot','modalLogin'); });
+
+    /* Fermer en cliquant le fond */
     document.querySelectorAll('.modal').forEach(m => {
-        m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+        m.addEventListener('click', e => { if (e.target === m) close(m.id); });
     });
+
+    /* Fermer avec Échap */
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') document.querySelectorAll('.modal.open').forEach(m => closeModal(m.id));
-    });
-
-    /* ── Load users ── */
-    async function loadUsers() {
-        const { data, error } = await db
-            .from('utilisateurs')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error) { toast('error', error.message); return; }
-        allUsers = data || [];
-        updateStats();
-        renderUsers(allUsers);
-    }
-
-    /* ── Stats ── */
-    function updateStats() {
-        document.getElementById('statTotal').textContent       = allUsers.length;
-        document.getElementById('statChauffeurs').textContent  = allUsers.filter(u => u.role === 'chauffeur').length;
-        document.getElementById('statMagasiniers').textContent = allUsers.filter(u => u.role === 'magasinier').length;
-        document.getElementById('statClients').textContent     = allUsers.filter(u => u.role === 'client').length;
-    }
-
-    /* ── Render table ── */
-    function renderUsers(users) {
-        const tbody = document.getElementById('usersList');
-        if (!users.length) {
-            tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-icon"><i class="fas fa-users-slash"></i></div><div class="empty-text">Aucun utilisateur trouvé</div></div></td></tr>`;
-            return;
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal').forEach(m => {
+                if (m.style.display === 'flex') close(m.id);
+            });
         }
-        tbody.innerHTML = users.map(u => {
-            const initials = ((u.prenom?.[0] || '') + (u.nom?.[0] || '') || u.email[0]).toUpperCase();
-            const fullName = [u.prenom, u.nom].filter(Boolean).join(' ') || '—';
-            const roleLabel = { admin: 'Admin', chauffeur: 'Chauffeur', magasinier: 'Magasinier', client: 'Client' }[u.role] || u.role;
-            return `
-                <tr>
-                    <td>
-                        <div class="user-cell">
-                            <div class="avatar ${u.role}">${initials}</div>
-                            <div>
-                                <div class="user-name">${fullName}</div>
-                                <div class="user-email">${u.email}</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td style="color:var(--muted2)">${u.telephone || '—'}</td>
-                    <td><span class="badge ${u.role}">${roleLabel}</span></td>
-                    <td>
-                        <div class="actions">
-                            <button class="action-btn edit"   title="Modifier"           onclick="editUser('${u.id}')"><i class="fas fa-pen"></i></button>
-                            <button class="action-btn pwd"    title="Changer mot de passe" onclick="changePwd('${u.id}')"><i class="fas fa-key"></i></button>
-                            <button class="action-btn delete" title="Supprimer"           onclick="askDelete('${u.id}', '${u.email}')"><i class="fas fa-trash"></i></button>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    /* ── Search & filter ── */
-    function applyFilters() {
-        const q    = document.getElementById('searchInput').value.toLowerCase();
-        const role = document.getElementById('filterRole').value;
-        const filtered = allUsers.filter(u => {
-            const matchQ = !q || u.email.toLowerCase().includes(q) ||
-                (u.nom  || '').toLowerCase().includes(q) ||
-                (u.prenom || '').toLowerCase().includes(q);
-            const matchR = !role || u.role === role;
-            return matchQ && matchR;
-        });
-        renderUsers(filtered);
-    }
-    document.getElementById('searchInput').addEventListener('input', applyFilters);
-    document.getElementById('filterRole').addEventListener('change', applyFilters);
-
-    /* ── New user ── */
-    document.getElementById('btnNouveau').addEventListener('click', () => {
-        document.getElementById('modalTitle').textContent = 'NOUVEL UTILISATEUR';
-        document.getElementById('userForm').reset();
-        document.getElementById('userId').value = '';
-        document.getElementById('userPassword').required = true;
-        document.getElementById('passwordHint').textContent = 'Requis pour un nouvel utilisateur';
-        openModal('userModal');
     });
 
-    /* ── Edit user ── */
-    window.editUser = function (id) {
-        const u = allUsers.find(x => x.id === id);
-        if (!u) return;
-        document.getElementById('modalTitle').textContent    = 'MODIFIER UTILISATEUR';
-        document.getElementById('userId').value              = u.id;
-        document.getElementById('userEmail').value           = u.email;
-        document.getElementById('userPassword').value        = '';
-        document.getElementById('userPassword').required     = false;
-        document.getElementById('passwordHint').textContent  = 'Laisser vide pour ne pas changer';
-        document.getElementById('userNom').value             = u.nom    || '';
-        document.getElementById('userPrenom').value          = u.prenom || '';
-        document.getElementById('userTel').value             = u.telephone || '';
-        document.getElementById('userRole').value            = u.role;
-        openModal('userModal');
-    };
-
-    /* ── Save user form ── */
-    document.getElementById('userForm').addEventListener('submit', async e => {
+    /* ── Connexion ── */
+    document.getElementById('formLogin').addEventListener('submit', async e => {
         e.preventDefault();
-        const id      = document.getElementById('userId').value;
-        const email   = document.getElementById('userEmail').value.trim();
-        const password= document.getElementById('userPassword').value;
-        const nom     = document.getElementById('userNom').value.trim();
-        const prenom  = document.getElementById('userPrenom').value.trim();
-        const tel     = document.getElementById('userTel').value.trim();
-        const role    = document.getElementById('userRole').value;
-
+        const email    = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
         showLoad();
         try {
-            if (id) {
-                // Modification
-                const { error } = await db.from('utilisateurs')
-                    .update({ email, nom: nom||null, prenom: prenom||null, telephone: tel||null, role })
-                    .eq('id', id);
-                if (error) throw error;
-                toast('success', 'Utilisateur mis à jour');
-            } else {
-                // Création
-                const { data: authData, error: authErr } = await db.auth.signUp({ email, password });
-                if (authErr) throw authErr;
-                const { error: dbErr } = await db.from('utilisateurs').insert([{
-                    id: authData.user.id, email,
-                    nom: nom||null, prenom: prenom||null,
-                    telephone: tel||null, role
-                }]);
-                if (dbErr) throw dbErr;
-                toast('success', 'Utilisateur créé');
-            }
-            closeModal('userModal');
-            await loadUsers();
+            const { error } = await db.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            toast('success', 'Connexion réussie — redirection…');
+            setTimeout(() => window.location.href = '/admin/dashboard.html', 1200);
+        } catch (err) {
+            hideLoad();
+            toast('error', err.message);
+        }
+    });
+
+    /* ── Inscription ── */
+    document.getElementById('formSignup').addEventListener('submit', async e => {
+        e.preventDefault();
+        const email    = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value;
+        const nom      = document.getElementById('signupNom').value.trim();
+        const prenom   = document.getElementById('signupPrenom').value.trim();
+        const tel      = document.getElementById('signupTel').value.trim();
+        showLoad();
+        try {
+            const { data, error: authErr } = await db.auth.signUp({ email, password });
+            if (authErr) throw authErr;
+            const { error: dbErr } = await db.from('utilisateurs').insert([{
+                id: data.user.id, email,
+                nom: nom || null, prenom: prenom || null,
+                telephone: tel || null, role: 'client'
+            }]);
+            if (dbErr) throw dbErr;
+            toast('success', 'Compte créé ! Vérifiez vos emails.');
+            close('modalSignup');
         } catch (err) {
             toast('error', err.message);
         } finally {
@@ -676,57 +859,24 @@
         }
     });
 
-    /* ── Change password ── */
-    window.changePwd = function (id) {
-        document.getElementById('pwdUserId').value = id;
-        document.getElementById('newPassword').value = '';
-        openModal('pwdModal');
-    };
-
-    document.getElementById('pwdForm').addEventListener('submit', async e => {
+    /* ── Mot de passe oublié ── */
+    document.getElementById('formForgot').addEventListener('submit', async e => {
         e.preventDefault();
-        const id  = document.getElementById('pwdUserId').value;
-        const pwd = document.getElementById('newPassword').value;
+        const email = document.getElementById('forgotEmail').value.trim();
         showLoad();
         try {
-            // Note: admin.updateUserById nécessite la service_role key
-            // Ici on utilise une fonction RPC ou on informe l'admin
-            const { error } = await db.rpc('admin_update_password', { user_id: id, new_password: pwd });
+            const { error } = await db.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin + '/admin/reset-password.html'
+            });
             if (error) throw error;
-            toast('success', 'Mot de passe mis à jour');
-            closeModal('pwdModal');
-        } catch (err) {
-            // Fallback : afficher un message explicatif
-            toast('error', 'Nécessite la clé service_role — utilisez le dashboard Supabase');
-        } finally {
-            hideLoad();
-        }
-    });
-
-    /* ── Delete ── */
-    window.askDelete = function (id, email) {
-        document.getElementById('confirmText').textContent = `Supprimer "${email}" ? Cette action est irréversible.`;
-        document.getElementById('confirmYes').onclick = () => doDelete(id);
-        openModal('confirmModal');
-    };
-
-    async function doDelete(id) {
-        showLoad();
-        try {
-            const { error } = await db.from('utilisateurs').delete().eq('id', id);
-            if (error) throw error;
-            toast('success', 'Utilisateur supprimé');
-            closeModal('confirmModal');
-            await loadUsers();
+            toast('success', 'Email envoyé — vérifiez votre boîte.');
+            close('modalForgot');
         } catch (err) {
             toast('error', err.message);
         } finally {
             hideLoad();
         }
-    }
-
-    /* ── Init ── */
-    loadUsers();
+    });
 
 })();
 </script>
