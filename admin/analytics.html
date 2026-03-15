@@ -1,1 +1,786 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics | Léman Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <style>
+        :root {
+            --red:     #e8311a;
+            --red-dark:#c0280f;
+            --red-glow:rgba(232,49,26,0.2);
+            --night:   #0a0a0f;
+            --night2:  #111118;
+            --night3:  #18181f;
+            --surface: #1e1e28;
+            --border:  rgba(255,255,255,0.07);
+            --border2: rgba(255,255,255,0.13);
+            --white:   #ffffff;
+            --muted:   rgba(255,255,255,0.38);
+            --muted2:  rgba(255,255,255,0.6);
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --yellow:  #f59e0b;
+            --orange:  #f97316;
+            --purple:  #a855f7;
+            --sidebar: 220px;
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; }
+        body {
+            font-family:'Outfit',sans-serif;
+            background:var(--night);
+            color:var(--white);
+            display:flex;
+        }
 
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width:var(--sidebar); flex-shrink:0;
+            background:var(--night2);
+            border-right:1px solid var(--border);
+            display:flex; flex-direction:column;
+            position:fixed; top:0; left:0; bottom:0;
+            z-index:100;
+        }
+        .sidebar-logo {
+            padding:22px 18px;
+            border-bottom:1px solid var(--border);
+            display:flex; align-items:center; gap:10px;
+            text-decoration:none;
+        }
+        .logo-mark { width:34px; height:34px; background:var(--red); border-radius:9px; display:grid; place-items:center; font-size:15px; flex-shrink:0; }
+        .logo-text { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; color:var(--white); }
+        .logo-text em { color:var(--red); font-style:normal; }
+        .nav-section { padding:16px 12px 6px; font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--muted); }
+        .nav-item {
+            display:flex; align-items:center; gap:10px;
+            padding:10px 14px; border-radius:10px; margin:2px 8px;
+            font-size:13px; font-weight:500; color:var(--muted2);
+            cursor:pointer; transition:all 0.2s; text-decoration:none;
+            border:1px solid transparent;
+        }
+        .nav-item i { width:16px; text-align:center; font-size:14px; }
+        .nav-item:hover { background:var(--night3); color:var(--white); }
+        .nav-item.active { background:rgba(232,49,26,0.1); color:var(--white); border-color:rgba(232,49,26,0.2); }
+        .nav-item.active i { color:var(--red); }
+        .sidebar-footer { margin-top:auto; padding:14px 8px; border-top:1px solid var(--border); }
+        .user-chip { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:var(--night3); }
+        .user-avatar { width:30px; height:30px; background:var(--red); border-radius:8px; display:grid; place-items:center; font-family:'Bebas Neue',cursive; font-size:13px; flex-shrink:0; }
+        .user-name { font-size:12px; font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .btn-logout { background:none; border:none; cursor:pointer; color:var(--muted); font-size:13px; transition:color 0.2s; padding:4px; }
+        .btn-logout:hover { color:var(--red); }
+
+        /* ── MAIN ── */
+        .main { margin-left:var(--sidebar); flex:1; display:flex; flex-direction:column; min-height:100vh; }
+
+        /* ── TOPBAR ── */
+        .topbar { background:var(--night2); border-bottom:1px solid var(--border); padding:0 32px; height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; }
+        .page-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
+        .topbar-right { display:flex; gap:10px; align-items:center; }
+        .btn { font-family:'Outfit',sans-serif; font-weight:600; font-size:13px; padding:8px 18px; border-radius:9px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s; text-decoration:none; white-space:nowrap; }
+        .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .btn-red { background:var(--red); color:var(--white); }
+        .btn-red:hover { background:var(--red-dark); }
+
+        /* Period selector */
+        .period-selector { display:flex; gap:0; background:var(--night3); border:1px solid var(--border2); border-radius:9px; overflow:hidden; }
+        .period-btn { padding:7px 14px; font-family:'Outfit',sans-serif; font-size:12px; font-weight:600; background:transparent; border:none; color:var(--muted); cursor:pointer; transition:all 0.2s; }
+        .period-btn.active { background:var(--red); color:var(--white); }
+
+        /* ── CONTENT ── */
+        .content { padding:28px 32px; flex:1; }
+
+        /* ── KPI CARDS ── */
+        .kpi-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
+        .kpi-card {
+            background:var(--night2); border:1px solid var(--border2);
+            border-radius:16px; padding:20px;
+            transition:all 0.3s; cursor:default;
+            position:relative; overflow:hidden;
+        }
+        .kpi-card::after {
+            content:''; position:absolute;
+            bottom:0; left:0; right:0; height:2px;
+            opacity:0; transition:opacity 0.3s;
+        }
+        .kpi-card:hover { transform:translateY(-3px); box-shadow:0 12px 32px rgba(0,0,0,0.3); }
+        .kpi-card:hover::after { opacity:1; }
+        .kpi-card.red::after   { background:var(--red); }
+        .kpi-card.green::after { background:var(--green); }
+        .kpi-card.blue::after  { background:var(--blue); }
+        .kpi-card.yellow::after{ background:var(--yellow); }
+        .kpi-card.purple::after{ background:var(--purple); }
+        .kpi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .kpi-icon { width:36px; height:36px; border-radius:9px; display:grid; place-items:center; font-size:16px; }
+        .kpi-icon.red    { background:rgba(232,49,26,0.12); color:var(--red); }
+        .kpi-icon.green  { background:rgba(34,197,94,0.12);  color:var(--green); }
+        .kpi-icon.blue   { background:rgba(59,130,246,0.12); color:var(--blue); }
+        .kpi-icon.yellow { background:rgba(245,158,11,0.12); color:var(--yellow); }
+        .kpi-icon.purple { background:rgba(168,85,247,0.12); color:var(--purple); }
+        .kpi-trend { font-size:11px; font-weight:600; padding:3px 8px; border-radius:100px; }
+        .kpi-trend.up   { background:rgba(34,197,94,0.12);  color:var(--green); }
+        .kpi-trend.down { background:rgba(232,49,26,0.12);  color:var(--red); }
+        .kpi-trend.flat { background:rgba(255,255,255,0.06); color:var(--muted); }
+        .kpi-val { font-family:'Bebas Neue',cursive; font-size:36px; letter-spacing:1px; line-height:1; margin-bottom:4px; }
+        .kpi-lbl { font-size:12px; color:var(--muted); font-weight:300; }
+
+        /* ── CHARTS GRID ── */
+        .charts-row { display:grid; grid-template-columns:2fr 1fr; gap:18px; margin-bottom:18px; }
+        .charts-row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; margin-bottom:18px; }
+        .chart-card {
+            background:var(--night2); border:1px solid var(--border2);
+            border-radius:18px; padding:24px; overflow:hidden;
+        }
+        .chart-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+        .chart-title { font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:1px; }
+        .chart-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+        .chart-wrap { position:relative; }
+
+        /* ── TOP TABLE ── */
+        .top-table { width:100%; border-collapse:collapse; }
+        .top-table td { padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
+        .top-table tr:last-child td { border:none; }
+        .top-table .rank { font-family:'Bebas Neue',cursive; font-size:18px; color:var(--muted); width:28px; }
+        .top-table .name { color:var(--muted2); flex:1; }
+        .top-table .val  { font-weight:600; color:var(--white); text-align:right; }
+        .bar-mini { height:3px; background:var(--border2); border-radius:100px; margin-top:4px; overflow:hidden; }
+        .bar-mini-fill { height:100%; border-radius:100px; background:var(--red); }
+
+        /* ── STATUS BREAKDOWN ── */
+        .status-list { display:flex; flex-direction:column; gap:10px; }
+        .status-row { display:flex; align-items:center; gap:10px; }
+        .status-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .status-name { font-size:13px; color:var(--muted2); flex:1; }
+        .status-count { font-family:'Bebas Neue',cursive; font-size:16px; color:var(--white); }
+        .status-pct { font-size:11px; color:var(--muted); width:36px; text-align:right; }
+
+        /* ── HEATMAP ── */
+        .heatmap-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+        .heatmap-day { aspect-ratio:1; border-radius:4px; background:var(--surface); transition:transform 0.2s; cursor:default; }
+        .heatmap-day:hover { transform:scale(1.2); }
+        .heatmap-labels { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px; }
+        .heatmap-label { font-size:9px; color:var(--muted); text-align:center; letter-spacing:0.5px; }
+
+        /* ── RECENT TABLE ── */
+        .recent-table { width:100%; border-collapse:collapse; }
+        .recent-table th { padding:10px 16px; text-align:left; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); background:var(--night3); }
+        .recent-table td { padding:12px 16px; border-top:1px solid var(--border); font-size:13px; }
+        .recent-table tr:hover td { background:rgba(255,255,255,0.02); }
+        .status-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:100px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+        .status-chip.pending   { background:rgba(245,158,11,0.15); color:var(--yellow); border:1px solid rgba(245,158,11,0.3); }
+        .status-chip.delivered { background:rgba(34,197,94,0.15);  color:var(--green);  border:1px solid rgba(34,197,94,0.3); }
+        .status-chip.planned   { background:rgba(59,130,246,0.15); color:var(--blue);   border:1px solid rgba(59,130,246,0.3); }
+        .status-chip.urgent    { background:rgba(249,115,22,0.15); color:var(--orange); border:1px solid rgba(249,115,22,0.3); }
+
+        /* ── LOADER ── */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; }
+        .loader.on { display:grid; }
+        .spin { width:40px; height:40px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+
+        /* ── REVEAL ── */
+        [data-r] { opacity:0; transform:translateY(20px); transition:opacity 0.6s ease, transform 0.6s ease; }
+        [data-r].vis { opacity:1; transform:none; }
+
+        /* ── RESPONSIVE ── */
+        @media(max-width:1200px) { .kpi-grid { grid-template-columns:repeat(3,1fr); } .charts-row { grid-template-columns:1fr; } .charts-row3 { grid-template-columns:1fr 1fr; } }
+        @media(max-width:900px)  { .sidebar { width:60px; } .logo-text,.nav-item span,.nav-section,.user-name { display:none; } .main { margin-left:60px; } .content { padding:16px; } .kpi-grid { grid-template-columns:1fr 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="loader" id="loader"><div class="spin"></div></div>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+    <a href="dashboard.html" class="sidebar-logo">
+        <div class="logo-mark">🚚</div>
+        <div class="logo-text">Léman<em>-Dispatch</em></div>
+    </a>
+    <div class="nav-section">Navigation</div>
+    <a href="dashboard.html" class="nav-item"><i class="fas fa-th-large"></i> <span>Dashboard</span></a>
+    <a href="dispatch.html"  class="nav-item"><i class="fas fa-map"></i> <span>Carte Dispatch</span></a>
+    <a href="new-transport.html" class="nav-item"><i class="fas fa-plus-circle"></i> <span>Nouveau transport</span></a>
+    <a href="analytics.html" class="nav-item active"><i class="fas fa-chart-bar"></i> <span>Analytics</span></a>
+    <a href="users.html"     class="nav-item"><i class="fas fa-users"></i> <span>Utilisateurs</span></a>
+    <div class="sidebar-footer">
+        <div class="user-chip">
+            <div class="user-avatar" id="sideAvatar">SA</div>
+            <div class="user-name"   id="sideName">Admin</div>
+            <button class="btn-logout" id="btnLogout"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+    </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+    <header class="topbar">
+        <div class="page-title">ANALYTICS</div>
+        <div class="topbar-right">
+            <div class="period-selector">
+                <button class="period-btn" data-days="7">7j</button>
+                <button class="period-btn active" data-days="30">30j</button>
+                <button class="period-btn" data-days="90">90j</button>
+                <button class="period-btn" data-days="365">1an</button>
+            </div>
+            <button class="btn btn-ghost" onclick="exportCSV()">
+                <i class="fas fa-download"></i> Export CSV
+            </button>
+        </div>
+    </header>
+
+    <div class="content">
+
+        <!-- KPI CARDS -->
+        <div class="kpi-grid" id="kpiGrid">
+            <div class="kpi-card red" data-r>
+                <div class="kpi-top"><div class="kpi-icon red"><i class="fas fa-truck"></i></div><div class="kpi-trend up" id="trendTotal">+0%</div></div>
+                <div class="kpi-val" id="kpiTotal">—</div>
+                <div class="kpi-lbl">Transports totaux</div>
+            </div>
+            <div class="kpi-card green" data-r>
+                <div class="kpi-top"><div class="kpi-icon green"><i class="fas fa-check-circle"></i></div><div class="kpi-trend up" id="trendDelivered">—</div></div>
+                <div class="kpi-val" id="kpiDelivered">—</div>
+                <div class="kpi-lbl">Livrés</div>
+            </div>
+            <div class="kpi-card blue" data-r>
+                <div class="kpi-top"><div class="kpi-icon blue"><i class="fas fa-franc-sign"></i></div><div class="kpi-trend flat" id="trendRevenue">CHF</div></div>
+                <div class="kpi-val" id="kpiRevenue">—</div>
+                <div class="kpi-lbl">Chiffre d'affaires</div>
+            </div>
+            <div class="kpi-card yellow" data-r>
+                <div class="kpi-top"><div class="kpi-icon yellow"><i class="fas fa-route"></i></div><div class="kpi-trend flat">km</div></div>
+                <div class="kpi-val" id="kpiKm">—</div>
+                <div class="kpi-lbl">Kilomètres totaux</div>
+            </div>
+            <div class="kpi-card purple" data-r>
+                <div class="kpi-top"><div class="kpi-icon purple"><i class="fas fa-percentage"></i></div><div class="kpi-trend up" id="trendRate">—</div></div>
+                <div class="kpi-val" id="kpiRate">—</div>
+                <div class="kpi-lbl">Taux de livraison</div>
+            </div>
+        </div>
+
+        <!-- ROW 1 : volume + statuts -->
+        <div class="charts-row" data-r>
+            <!-- Ligne volume -->
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">VOLUME DE TRANSPORTS</div>
+                        <div class="chart-sub">Nombre de transports par jour</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="height:220px;">
+                    <canvas id="chartVolume"></canvas>
+                </div>
+            </div>
+            <!-- Statuts donut -->
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">STATUTS</div>
+                        <div class="chart-sub">Répartition actuelle</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="height:140px;margin-bottom:16px;">
+                    <canvas id="chartStatus"></canvas>
+                </div>
+                <div class="status-list" id="statusList"></div>
+            </div>
+        </div>
+
+        <!-- ROW 2 : revenus + types + priorités -->
+        <div class="charts-row3" data-r>
+            <!-- Revenus bar -->
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">REVENUS CHF</div>
+                        <div class="chart-sub">Par semaine</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="height:180px;">
+                    <canvas id="chartRevenue"></canvas>
+                </div>
+            </div>
+            <!-- Types colis -->
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">TYPES DE COLIS</div>
+                        <div class="chart-sub">Répartition</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="height:180px;">
+                    <canvas id="chartTypes"></canvas>
+                </div>
+            </div>
+            <!-- Services -->
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">SERVICES</div>
+                        <div class="chart-sub">Standard / Express / Same Day</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="height:180px;">
+                    <canvas id="chartServices"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ROW 3 : heatmap + top clients -->
+        <div class="charts-row" data-r>
+            <!-- Heatmap activité -->
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">ACTIVITÉ 12 SEMAINES</div>
+                        <div class="chart-sub">Volume de transports par jour</div>
+                    </div>
+                </div>
+                <div class="heatmap-labels">
+                    <div class="heatmap-label">LUN</div>
+                    <div class="heatmap-label">MAR</div>
+                    <div class="heatmap-label">MER</div>
+                    <div class="heatmap-label">JEU</div>
+                    <div class="heatmap-label">VEN</div>
+                    <div class="heatmap-label">SAM</div>
+                    <div class="heatmap-label">DIM</div>
+                </div>
+                <div class="heatmap-grid" id="heatmapGrid"></div>
+            </div>
+            <!-- Top clients -->
+            <div class="chart-card">
+                <div class="chart-head">
+                    <div>
+                        <div class="chart-title">TOP CLIENTS</div>
+                        <div class="chart-sub">Par volume de transports</div>
+                    </div>
+                </div>
+                <table class="top-table" id="topClientsTable">
+                    <tbody id="topClientsList"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ROW 4 : derniers transports -->
+        <div class="chart-card" data-r style="margin-bottom:28px;">
+            <div class="chart-head">
+                <div class="chart-title">DERNIERS TRANSPORTS</div>
+                <a href="dispatch.html" class="btn btn-ghost" style="font-size:11px;padding:6px 12px;">Voir tout</a>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="recent-table">
+                    <thead>
+                        <tr>
+                            <th>N° Ordre</th>
+                            <th>Enlèvement</th>
+                            <th>Livraison</th>
+                            <th>Service</th>
+                            <th>Distance</th>
+                            <th>Prix</th>
+                            <th>Statut</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+(function () {
+    'use strict';
+
+    if (!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
+        return;
+    }
+    const db = window.SUPABASE_CLIENT;
+
+    /* ── State ── */
+    let allOrders = [];
+    let currentDays = 30;
+    let charts = {};
+
+    /* ── Loader ── */
+    const loaderEl = document.getElementById('loader');
+    const showLoad = () => loaderEl.classList.add('on');
+    const hideLoad = () => loaderEl.classList.remove('on');
+
+    /* ── Chart.js defaults ── */
+    Chart.defaults.color = 'rgba(255,255,255,0.38)';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+    Chart.defaults.font.family = "'Outfit', sans-serif";
+    Chart.defaults.font.size = 11;
+
+    /* ── Period selector ── */
+    document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentDays = parseInt(btn.dataset.days);
+            renderAll();
+        });
+    });
+
+    /* ── Auth ── */
+    async function init() {
+        const { data: { session } } = await db.auth.getSession();
+        if (!session) { window.location.href = '../index.html'; return; }
+        const { data: user } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
+        if (user) {
+            const init = ((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
+            document.getElementById('sideAvatar').textContent = init;
+            document.getElementById('sideName').textContent   = [user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
+        }
+        document.getElementById('btnLogout').addEventListener('click', async () => {
+            await db.auth.signOut();
+            window.location.href = '../index.html';
+        });
+        await loadData();
+    }
+
+    /* ── Load data ── */
+    async function loadData() {
+        showLoad();
+        const { data } = await db
+            .from('transport_orders_simple')
+            .select('*')
+            .order('created_at', { ascending: false });
+        allOrders = data || [];
+        hideLoad();
+        renderAll();
+        setupRevealObserver();
+    }
+
+    /* ── Filter by period ── */
+    function filterByPeriod(orders) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - currentDays);
+        return orders.filter(o => new Date(o.created_at) >= cutoff);
+    }
+
+    /* ── Render all ── */
+    function renderAll() {
+        const filtered = filterByPeriod(allOrders);
+        renderKPIs(filtered);
+        renderVolumeChart(filtered);
+        renderStatusChart(filtered);
+        renderRevenueChart(filtered);
+        renderTypesChart(filtered);
+        renderServicesChart(filtered);
+        renderHeatmap(filtered);
+        renderTopClients(filtered);
+        renderRecentTable(filtered.slice(0, 10));
+    }
+
+    /* ── KPIs ── */
+    function renderKPIs(orders) {
+        const total     = orders.length;
+        const delivered = orders.filter(o => o.status === 'delivered').length;
+        const revenue   = orders.reduce((s,o) => s + (parseFloat(o.price_chf)||0), 0);
+        const km        = orders.reduce((s,o) => s + (parseFloat(o.distance_km)||0), 0);
+        const rate      = total > 0 ? Math.round(delivered/total*100) : 0;
+
+        document.getElementById('kpiTotal').textContent     = total;
+        document.getElementById('kpiDelivered').textContent = delivered;
+        document.getElementById('kpiRevenue').textContent   = revenue > 1000 ? `${(revenue/1000).toFixed(1)}k` : revenue.toFixed(0);
+        document.getElementById('kpiKm').textContent        = km > 1000 ? `${(km/1000).toFixed(1)}k` : km.toFixed(0);
+        document.getElementById('kpiRate').textContent      = `${rate}%`;
+
+        document.getElementById('trendDelivered').textContent = `${rate}%`;
+        document.getElementById('trendRate').textContent      = rate >= 90 ? '✓ Excellent' : rate >= 70 ? '~ Correct' : '↓ À améliorer';
+        document.getElementById('trendRate').className = `kpi-trend ${rate>=90?'up':rate>=70?'flat':'down'}`;
+    }
+
+    /* ── Volume chart (line) ── */
+    function renderVolumeChart(orders) {
+        const days = Math.min(currentDays, 30);
+        const labels = [], data = [];
+        for (let i = days-1; i >= 0; i--) {
+            const d = new Date(); d.setDate(d.getDate()-i);
+            const key = d.toISOString().slice(0,10);
+            labels.push(d.toLocaleDateString('fr-CH', { day:'2-digit', month:'2-digit' }));
+            data.push(orders.filter(o => o.created_at?.slice(0,10) === key).length);
+        }
+        if (charts.volume) charts.volume.destroy();
+        charts.volume = new Chart(document.getElementById('chartVolume'), {
+            type:'line',
+            data:{
+                labels,
+                datasets:[{
+                    label:'Transports',
+                    data,
+                    borderColor:'#e8311a',
+                    backgroundColor:'rgba(232,49,26,0.08)',
+                    borderWidth:2,
+                    pointBackgroundColor:'#e8311a',
+                    pointRadius:3,
+                    pointHoverRadius:5,
+                    fill:true,
+                    tension:0.4,
+                }]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{display:false} },
+                scales:{
+                    x:{ grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ maxTicksLimit:8 } },
+                    y:{ grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ stepSize:1 }, min:0 }
+                }
+            }
+        });
+    }
+
+    /* ── Status donut ── */
+    function renderStatusChart(orders) {
+        const statuses = {
+            'pending':    { label:'En attente', color:'#f59e0b' },
+            'planned':    { label:'Planifié',   color:'#3b82f6' },
+            'urgent':     { label:'Urgent',     color:'#f97316' },
+            'in_transit': { label:'En route',   color:'#a855f7' },
+            'delivered':  { label:'Livré',      color:'#22c55e' },
+        };
+        const counts = {};
+        orders.forEach(o => {
+            const k = o.priority==='urgent' ? 'urgent' : (o.status||'pending');
+            counts[k] = (counts[k]||0)+1;
+        });
+        const keys    = Object.keys(statuses).filter(k => counts[k]>0);
+        const labels  = keys.map(k => statuses[k].label);
+        const data    = keys.map(k => counts[k]||0);
+        const colors  = keys.map(k => statuses[k].color);
+        const total   = data.reduce((s,v)=>s+v,0);
+
+        if (charts.status) charts.status.destroy();
+        charts.status = new Chart(document.getElementById('chartStatus'), {
+            type:'doughnut',
+            data:{ labels, datasets:[{ data, backgroundColor:colors, borderWidth:0, hoverOffset:4 }] },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                cutout:'72%',
+                plugins:{ legend:{display:false}, tooltip:{
+                    callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.raw} (${Math.round(ctx.raw/total*100)}%)` }
+                }}
+            }
+        });
+
+        document.getElementById('statusList').innerHTML = keys.map(k => `
+            <div class="status-row">
+                <div class="status-dot" style="background:${statuses[k].color}"></div>
+                <div class="status-name">${statuses[k].label}</div>
+                <div class="status-count">${counts[k]||0}</div>
+                <div class="status-pct">${total?Math.round((counts[k]||0)/total*100):0}%</div>
+            </div>`).join('');
+    }
+
+    /* ── Revenue bar chart ── */
+    function renderRevenueChart(orders) {
+        const weeks = 8;
+        const labels = [], data = [];
+        for (let i = weeks-1; i >= 0; i--) {
+            const start = new Date(); start.setDate(start.getDate() - i*7 - 6);
+            const end   = new Date(); end.setDate(end.getDate() - i*7);
+            const rev   = orders
+                .filter(o => { const d=new Date(o.created_at); return d>=start&&d<=end; })
+                .reduce((s,o)=>s+(parseFloat(o.price_chf)||0),0);
+            labels.push(`S-${i}`);
+            data.push(parseFloat(rev.toFixed(2)));
+        }
+        if (charts.revenue) charts.revenue.destroy();
+        charts.revenue = new Chart(document.getElementById('chartRevenue'), {
+            type:'bar',
+            data:{
+                labels,
+                datasets:[{
+                    label:'CHF',
+                    data,
+                    backgroundColor: data.map((_,i) => i===data.length-1 ? '#e8311a' : 'rgba(232,49,26,0.3)'),
+                    borderRadius:6,
+                    borderSkipped:false,
+                }]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{display:false} },
+                scales:{
+                    x:{ grid:{display:false} },
+                    y:{ grid:{ color:'rgba(255,255,255,0.05)' }, min:0 }
+                }
+            }
+        });
+    }
+
+    /* ── Package types polar ── */
+    function renderTypesChart(orders) {
+        const types = {};
+        orders.forEach(o => { if(o.package_type) types[o.package_type]=(types[o.package_type]||0)+1; });
+        const labels = Object.keys(types);
+        const data   = Object.values(types);
+        if (!labels.length) { labels.push('Aucune donnée'); data.push(1); }
+        if (charts.types) charts.types.destroy();
+        charts.types = new Chart(document.getElementById('chartTypes'), {
+            type:'polarArea',
+            data:{
+                labels,
+                datasets:[{
+                    data,
+                    backgroundColor:['rgba(232,49,26,0.6)','rgba(59,130,246,0.6)','rgba(245,158,11,0.6)','rgba(168,85,247,0.6)'],
+                    borderWidth:0
+                }]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, padding:8 } } },
+                scales:{ r:{ grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{display:false} } }
+            }
+        });
+    }
+
+    /* ── Services horizontal bar ── */
+    function renderServicesChart(orders) {
+        const svc = { standard:0, express:0, same_day:0 };
+        orders.forEach(o => { if(svc[o.service_type]!==undefined) svc[o.service_type]++; });
+        if (charts.services) charts.services.destroy();
+        charts.services = new Chart(document.getElementById('chartServices'), {
+            type:'bar',
+            data:{
+                labels:['Standard','Express','Same Day'],
+                datasets:[{
+                    data:[svc.standard, svc.express, svc.same_day],
+                    backgroundColor:['rgba(59,130,246,0.7)','rgba(232,49,26,0.7)','rgba(245,158,11,0.7)'],
+                    borderRadius:8, borderSkipped:false,
+                }]
+            },
+            options:{
+                indexAxis:'y',
+                responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{display:false} },
+                scales:{
+                    x:{ grid:{ color:'rgba(255,255,255,0.05)' }, min:0 },
+                    y:{ grid:{display:false} }
+                }
+            }
+        });
+    }
+
+    /* ── Heatmap 12 semaines ── */
+    function renderHeatmap(orders) {
+        const grid = document.getElementById('heatmapGrid');
+        const counts = {};
+        orders.forEach(o => {
+            const key = o.created_at?.slice(0,10);
+            if(key) counts[key]=(counts[key]||0)+1;
+        });
+        const max = Math.max(...Object.values(counts), 1);
+        const cells = [];
+        for (let i = 83; i >= 0; i--) {
+            const d = new Date(); d.setDate(d.getDate()-i);
+            const key = d.toISOString().slice(0,10);
+            const v = counts[key]||0;
+            const opacity = v > 0 ? 0.15 + (v/max)*0.85 : 0;
+            const title = `${key}: ${v} transport${v>1?'s':''}`;
+            cells.push(`<div class="heatmap-day" style="background:${v>0?`rgba(232,49,26,${opacity.toFixed(2)})`:'var(--surface)'}" title="${title}"></div>`);
+        }
+        grid.innerHTML = cells.join('');
+    }
+
+    /* ── Top clients ── */
+    function renderTopClients(orders) {
+        const counts = {};
+        orders.forEach(o => {
+            const k = o.client_number||'Sans client';
+            counts[k]=(counts[k]||0)+1;
+        });
+        const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        const max = sorted[0]?.[1]||1;
+        document.getElementById('topClientsList').innerHTML = sorted.map(([name,count],i) => `
+            <tr>
+                <td class="rank">${i+1}</td>
+                <td>
+                    <div class="name">${name}</div>
+                    <div class="bar-mini"><div class="bar-mini-fill" style="width:${Math.round(count/max*100)}%"></div></div>
+                </td>
+                <td class="val">${count}</td>
+            </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px;">Aucune donnée</td></tr>';
+    }
+
+    /* ── Recent table ── */
+    function renderRecentTable(orders) {
+        document.getElementById('recentTable').innerHTML = orders.map(o => {
+            const status = o.priority==='urgent'?'urgent':(o.status||'pending');
+            const statusLabel = { pending:'En attente', planned:'Planifié', urgent:'URGENT', in_transit:'En route', delivered:'Livré' }[status]||status;
+            const date = new Date(o.created_at).toLocaleDateString('fr-CH');
+            return `<tr>
+                <td style="font-family:'Bebas Neue',cursive;letter-spacing:0.5px;color:var(--muted2);">${o.order_number||o.id.slice(0,8)}</td>
+                <td style="color:var(--muted2);">${shortAddr(o.pickup_address)}</td>
+                <td style="color:var(--muted2);">${shortAddr(o.delivery_address)}</td>
+                <td style="color:var(--muted);">${o.service_type||'—'}</td>
+                <td style="color:var(--muted);">${o.distance_km?o.distance_km+'km':'—'}</td>
+                <td style="font-weight:600;">${o.price_chf?'CHF '+o.price_chf:'—'}</td>
+                <td><span class="status-chip ${status}">${statusLabel}</span></td>
+                <td style="color:var(--muted);">${date}</td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px;">Aucun transport</td></tr>';
+    }
+
+    function shortAddr(addr) {
+        if(!addr) return '—';
+        return addr.split(',').slice(0,2).join(',').trim();
+    }
+
+    /* ── Export CSV ── */
+    window.exportCSV = function() {
+        const filtered = filterByPeriod(allOrders);
+        const headers  = ['N° Ordre','Enlèvement','Livraison','Service','Distance km','Prix CHF','Statut','Date'];
+        const rows     = filtered.map(o => [
+            o.order_number||o.id,
+            (o.pickup_address||'').replace(/,/g,' '),
+            (o.delivery_address||'').replace(/,/g,' '),
+            o.service_type||'',
+            o.distance_km||'',
+            o.price_chf||'',
+            o.status||'',
+            o.created_at?.slice(0,10)||''
+        ]);
+        const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+        const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `leman-dispatch-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    /* ── Reveal observer ── */
+    function setupRevealObserver() {
+        const obs = new IntersectionObserver(entries => {
+            entries.forEach((en,i) => {
+                if(en.isIntersecting) {
+                    setTimeout(()=>en.target.classList.add('vis'), i*80);
+                    obs.unobserve(en.target);
+                }
+            });
+        }, { threshold:0.1 });
+        document.querySelectorAll('[data-r]').forEach(el => obs.observe(el));
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>
