@@ -422,7 +422,7 @@
 
     /* ── State ── */
     let allOrders  = [];
-    let chauffeurs = [];
+    let chauffeurs = []; window._chauffeurs = chauffeurs;
     let tours      = [];
     let mapMarkers = {};
     let mapLines   = [];
@@ -492,8 +492,9 @@
             db.from('utilisateurs').select('id,nom,prenom,email,actif').eq('role','chauffeur')
         ]);
         allOrders  = orders||[];
-        chauffeurs = (chauf||[]).filter(c => c.actif !== false); // inclure null=actif par défaut
-        console.log('[Dispatch] Chauffeurs chargés:', chauffeurs.length, chauffeurs.map(c=>c.prenom+' '+c.nom));
+        chauffeurs = (chauf||[]).filter(c => c.actif !== false);
+        window._chauffeurs = chauffeurs;
+        console.log('[Dispatch] Chauffeurs:', chauffeurs.length, JSON.stringify(chauffeurs));
         updateStats();
         applyFilters();
         renderMap(); // async - géocode les adresses manquantes
@@ -699,9 +700,10 @@
         selectedColor='#22c55e';
         document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('selected'));
         document.querySelector('.color-opt[data-color="#22c55e"]')?.classList.add('selected');
-        // Repeupler les chauffeurs à chaque ouverture
         populateSelects();
         openModal('modalTour');
+        // Double appel après rendu modal
+        requestAnimationFrame(()=>requestAnimationFrame(populateSelects));
     };
 
     window.createTour=function(){
@@ -1300,9 +1302,14 @@
 
     /* ── POPULATE SELECTS ── */
     function populateSelects(){
-        const opts='<option value="">— Assigner plus tard —</option>'+chauffeurs.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
-        document.getElementById('tourDriver').innerHTML=opts;
-        document.getElementById('assignDriver').innerHTML='<option value="">— Choisir —</option>'+chauffeurs.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        const list = window._chauffeurs || chauffeurs || [];
+        const opts1 = '<option value="">— Assigner plus tard —</option>' + list.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        const opts2 = '<option value="">— Choisir —</option>'            + list.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        const s1 = document.getElementById('tourDriver');
+        const s2 = document.getElementById('assignDriver');
+        if(s1) s1.innerHTML = opts1;
+        if(s2) s2.innerHTML = opts2;
+        console.log('[Dispatch] populateSelects — chauffeurs:', list.length, list.map(c=>c.prenom));
     }
 
     /* ── DUAL SCREEN ── */
