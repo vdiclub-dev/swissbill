@@ -680,7 +680,13 @@
                         ${orders.length===0
                             ? `<div class="drop-hint"><i class="fas fa-hand-point-up"></i> Glissez ici</div>`
                             : orders.map((o,i)=>`
-                                <div class="toi">
+                                <div class="toi" draggable="true"
+                                    data-tour="${tour.id}" data-order="${o.id}" data-idx="${i}"
+                                    ondragstart="reorderDragStart(event,'${tour.id}',${i})"
+                                    ondragover="reorderDragOver(event)"
+                                    ondrop="reorderDrop(event,'${tour.id}',${i})"
+                                    style="cursor:grab;">
+                                    <i class="fas fa-grip-vertical" style="color:var(--muted);font-size:10px;flex-shrink:0;"></i>
                                     <span class="toi-idx" style="color:${tour.color}">${i+1}</span>
                                     <div class="toi-info">
                                         <div class="toi-num">${o.order_number||o.id.slice(0,8)}</div>
@@ -758,10 +764,13 @@
         const tour=tours.find(t=>t.id===tourId); if(!tour) return;
         const orders=tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
 
-        // Build waypoints: pickup premier ordre + delivery de chaque ordre dans l'ordre
+        // Build waypoints: utiliser pickup si dispo, sinon delivery
         const wpts=[];
-        if(orders[0]?.pickup_lat) wpts.push([orders[0].pickup_lat,orders[0].pickup_lng]);
-        orders.forEach(o=>{ if(o.delivery_lat) wpts.push([o.delivery_lat,o.delivery_lng]); });
+        orders.forEach((o,i)=>{
+            if(i===0 && o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
+            if(o.delivery_lat) wpts.push([o.delivery_lat,o.delivery_lng]);
+            else if(o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
+        });
 
         if(wpts.length<2){toast('info','Transports sans coordonnées GPS');return;}
 
@@ -846,10 +855,11 @@
 
     /* ── AUTO OPTIMIZE (Nearest Neighbor) ── */
     window.autoOptimize=function(){
+        const inTourIds=new Set(tours.flatMap(t=>t.orderIds));
         const pending=allOrders.filter(o=>
-            (o.status==='pending'||o.priority==='urgent')&&
-            o.pickup_lat&&o.delivery_lat&&
-            !tours.flatMap(t=>t.orderIds).includes(o.id)
+            o.status!=='delivered'&&
+            !inTourIds.has(o.id)&&
+            (o.delivery_lat||o.pickup_lat) // Au moins une coordonnée
         );
         if(!pending.length){toast('info','Aucun transport avec GPS à optimiser');return;}
 
@@ -875,13 +885,20 @@
         while(remaining.length){
             let best=0,bestD=Infinity;
             remaining.forEach((o,i)=>{
-                let d=haversine(current,{lat:o.pickup_lat,lng:o.pickup_lng});
-                if(o.priority==='urgent') d*=0.3; // Priorité urgents
+                // Utiliser pickup ou delivery selon ce qui est disponible
+                const lat=o.pickup_lat||o.delivery_lat;
+                const lng=o.pickup_lng||o.delivery_lng;
+                if(!lat) return;
+                let d=haversine(current,{lat,lng});
+                if(o.priority==='urgent') d*=0.3;
                 if(d<bestD){bestD=d;best=i;}
             });
             route.push(remaining.splice(best,1)[0]);
             const last=route[route.length-1];
-            current={lat:last.delivery_lat||last.pickup_lat,lng:last.delivery_lng||last.pickup_lng};
+            current={
+                lat:last.delivery_lat||last.pickup_lat||depot.lat,
+                lng:last.delivery_lng||last.pickup_lng||depot.lng
+            };
         }
 
         // Créer une seule tournée optimisée
@@ -900,6 +917,44 @@
         toast('success',`✓ Tournée optimisée créée — ${route.length} stops dans le meilleur ordre`);
         // Calculer la route automatiquement
         setTimeout(()=>calcTourRoute(newTour.id),500);
+    };
+
+    /* ── REORDER STOPS IN TOUR ── */
+    let reorderDragIdx = null;
+    let reorderTourId  = null;
+
+    window.reorderDragStart = function(e, tourId, idx) {
+        reorderTourId  = tourId;
+        reorderDragIdx = idx;
+        e.dataTransfer.effectAllowed = 'move';
+        e.stopPropagation(); // Empêcher le drag global
+    };
+
+    window.reorderDragOver = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    window.reorderDrop = function(e, tourId, targetIdx) {
+        e.preventDefault();
+        e.stopPropagation();
+        if(reorderTourId !== tourId || reorderDragIdx === null || reorderDragIdx === targetIdx) return;
+
+        const tour = tours.find(t=>t.id===tourId);
+        if(!tour) return;
+
+        // Réorganiser le tableau
+        const newOrder = [...tour.orderIds];
+        const [moved]  = newOrder.splice(reorderDragIdx, 1);
+        newOrder.splice(targetIdx, 0, moved);
+        tour.orderIds  = newOrder;
+        tour.routeData = null; // Reset cache route
+
+        reorderDragIdx = null;
+        reorderTourId  = null;
+        renderTours();
+        toast('info', 'Ordre mis à jour — recalculez la route');
     };
 
     /* ── SAVE TOUR ── */
