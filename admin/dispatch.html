@@ -11,6 +11,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../config.js"></script>
+    <script src="../push-manager.js"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -738,6 +739,16 @@
             if(error) throw error;
             toast('success','Chauffeur assigné ✓');
             window.closeModal('modalAssign');
+
+            // Notifier le chauffeur
+            const o = allOrders.find(x=>x.id===orderId);
+            await window.LémanPush?.notifyDriver(
+                driverId,
+                '📦 Nouveau transport assigné !',
+                `Transport ${o?.order_number||''} — ${shortAddr(o?.pickup_address)} → ${shortAddr(o?.delivery_address)}`,
+                { type: 'order_assigned', orderId }
+            );
+
             await loadAll();
         } catch(e) { toast('error',e.message); }
         finally { hideLoad(); }
@@ -939,6 +950,14 @@
             const driverName = driver ? `${driver.prenom||''} ${driver.nom||''}`.trim() : 'Chauffeur';
 
             toast('success', `✓ Tournée "${tour.name}" assignée à ${driverName} — ${ok} transport${ok>1?'s':''} visibles sur l'app chauffeur`);
+
+            // Envoyer notification push au chauffeur
+            await window.LémanPush?.notifyDriver(
+                tour.driverId,
+                '🚚 Nouvelle tournée assignée !',
+                `Tournée "${tour.name}" — ${ok} transport${ok>1?'s':''} à effectuer`,
+                { type: 'tour_assigned', tourName: tour.name }
+            );
 
             await loadAll();
             renderTours();
