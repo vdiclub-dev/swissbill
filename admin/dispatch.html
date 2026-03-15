@@ -248,7 +248,10 @@
         <button class="btn btn-yellow" onclick="openNewTour()"><i class="fas fa-plus"></i> Tournée</button>
         <button class="btn btn-ghost"  onclick="autoOptimize()"><i class="fas fa-magic"></i> Optimiser</button>
         <a href="new-transport.html" class="btn btn-red"><i class="fas fa-plus"></i> Transport</a>
-        <a href="dashboard.html" class="btn btn-ghost"><i class="fas fa-th-large"></i></a>
+        <button class="btn btn-ghost" id="btnDualScreen" onclick="openDualScreen()" title="Ouvrir la carte sur 2ème écran">
+        <i class="fas fa-desktop"></i> Double écran
+    </button>
+    <a href="dashboard.html" class="btn btn-ghost"><i class="fas fa-th-large"></i></a>
     </div>
 </header>
 
@@ -1166,6 +1169,7 @@
             );
 
             toast('success',`✓ Tournée assignée à ${dName} — visible sur l'app chauffeur`);
+            syncMapWindow();
             await loadAll();
             renderTours();
         } catch(e){toast('error',e.message);}
@@ -1200,6 +1204,88 @@
         const opts='<option value="">— Assigner plus tard —</option>'+chauffeurs.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
         document.getElementById('tourDriver').innerHTML=opts;
         document.getElementById('assignDriver').innerHTML='<option value="">— Choisir —</option>'+chauffeurs.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+    }
+
+    /* ── DUAL SCREEN ── */
+    let mapWindow = null;
+
+    window.openDualScreen = async function() {
+        // Vérifier si l'API Multi-Screen est disponible
+        if ('getScreenDetails' in window) {
+            try {
+                const screenDetails = await window.getScreenDetails();
+                const screens = screenDetails.screens;
+
+                if(screens.length >= 2) {
+                    // Trouver le 2ème écran
+                    const screen2 = screens.find(s => !s.isPrimary) || screens[1];
+                    const opts = `left=${screen2.left},top=${screen2.top},width=${screen2.width},height=${screen2.height},fullscreen=1`;
+
+                    // Ouvrir la carte sur le 2ème écran
+                    mapWindow = window.open('dispatch-map.html', 'LemanDispatchMap', opts);
+                    if(mapWindow) {
+                        toast('success', '🖥️ Carte ouverte sur le 2ème écran !');
+                        document.getElementById('btnDualScreen').style.background = 'rgba(34,197,94,0.2)';
+                        document.getElementById('btnDualScreen').style.borderColor = 'var(--green)';
+                        document.getElementById('btnDualScreen').style.color = 'var(--green)';
+
+                        // Masquer la carte dans la fenêtre principale
+                        document.querySelector('.col-map').style.display = 'none';
+                        document.querySelector('.layout').style.gridTemplateColumns = 'var(--col1) 1fr';
+
+                        // Envoyer les données à la carte externe via BroadcastChannel
+                        const channel = new BroadcastChannel('leman_dispatch');
+                        channel.postMessage({ type: 'INIT', orders: allOrders, tours, chauffeurs });
+
+                        // Écouter les mises à jour de la carte
+                        mapWindow.addEventListener('beforeunload', () => {
+                            document.querySelector('.col-map').style.display = '';
+                            document.querySelector('.layout').style.gridTemplateColumns = '';
+                            document.getElementById('btnDualScreen').style = '';
+                            toast('info', 'Carte fermée — retour vue unique');
+                        });
+                        return;
+                    }
+                }
+            } catch(e) {
+                console.warn('Multi-screen API:', e.message);
+            }
+        }
+
+        // Fallback : ouvrir dans une nouvelle fenêtre standard
+        const w = window.screen.width;
+        const h = window.screen.height;
+
+        // Essayer d'ouvrir sur écran secondaire (heuristique)
+        const opts = `left=${w},top=0,width=${w},height=${h}`;
+        mapWindow = window.open('dispatch-map.html', 'LemanDispatchMap', opts);
+
+        if(mapWindow) {
+            toast('success', '🖥️ Carte ouverte — déplacez-la sur votre 2ème écran');
+            // Mettre à jour couleur bouton
+            document.getElementById('btnDualScreen').style.cssText = 'background:rgba(34,197,94,0.15);border-color:var(--green);color:var(--green);';
+
+            // Écouter fermeture
+            const checkClosed = setInterval(() => {
+                if(mapWindow.closed) {
+                    clearInterval(checkClosed);
+                    mapWindow = null;
+                    document.getElementById('btnDualScreen').style.cssText = '';
+                    toast('info', 'Carte externe fermée');
+                }
+            }, 1000);
+        } else {
+            toast('error', 'Popup bloqué — autorisez les popups pour ce site');
+        }
+    };
+
+    // Sync carte externe quand les données changent
+    function syncMapWindow() {
+        if(!mapWindow || mapWindow.closed) return;
+        try {
+            const channel = new BroadcastChannel('leman_dispatch');
+            channel.postMessage({ type: 'UPDATE', orders: allOrders, tours, chauffeurs });
+        } catch(e) {}
     }
 
     /* ── REALTIME ── */
