@@ -494,14 +494,13 @@
         allOrders  = orders||[];
         chauffeurs = (chauf||[]).filter(c => c.actif !== false);
         window._chauffeurs = chauffeurs;
-        console.log('[Dispatch] Chauffeurs:', chauffeurs.length, JSON.stringify(chauffeurs));
+        console.log('[Dispatch] Chauffeurs chargés:', chauffeurs.length);
         updateStats();
         applyFilters();
-        renderMap(); // async - géocode les adresses manquantes
-        populateSelects();
+        renderMap();
+        window.populateSelects();
         renderTours();
-        // Re-appel différé pour s'assurer que le DOM modal est prêt
-        setTimeout(populateSelects, 200);
+        setTimeout(window.populateSelects, 300);
     }
 
     /* ── Stats ── */
@@ -1301,7 +1300,7 @@
     };
 
     /* ── POPULATE SELECTS ── */
-    function populateSelects(){
+    window.populateSelects = function populateSelects(){
         const list = window._chauffeurs || chauffeurs || [];
         const opts1 = '<option value="">— Assigner plus tard —</option>' + list.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
         const opts2 = '<option value="">— Choisir —</option>'            + list.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
@@ -1310,7 +1309,7 @@
         if(s1) s1.innerHTML = opts1;
         if(s2) s2.innerHTML = opts2;
         console.log('[Dispatch] populateSelects — chauffeurs:', list.length, list.map(c=>c.prenom));
-    }
+    };
 
     /* ── DUAL SCREEN ── */
     let mapWindow = null;
@@ -1395,9 +1394,10 @@
     }
 
     /* ── FLOATING PANEL DRAG ── */
-    (function() {
+    document.addEventListener('DOMContentLoaded', function() {
         const panel  = document.getElementById('toursFloat');
         const header = document.getElementById('toursFloatHeader');
+        if(!panel||!header) return;
         let dragging=false, startX, startY, startLeft, startTop;
 
         header.addEventListener('mousedown', e => {
@@ -1433,7 +1433,7 @@
             document.body.style.userSelect = '';
             document.body.style.cursor     = '';
         });
-    })();
+    });
 
     window.toggleMinimize = function() {
         const panel = document.getElementById('toursFloat');
@@ -1441,13 +1441,6 @@
         const minimized = panel.classList.toggle('minimized');
         btn.innerHTML = minimized ? '<i class="fas fa-chevron-down"></i>' : '─';
     };
-
-    /* ── FORCE POPULATE après DOM ready ── */
-    document.addEventListener('DOMContentLoaded', ()=>{
-        setTimeout(populateSelects, 500);
-    });
-    // Aussi forcer après loadAll
-    const _origLoadAll = loadAll;
 
     /* ── REALTIME ── */
     db.channel('dispatch_rt')
