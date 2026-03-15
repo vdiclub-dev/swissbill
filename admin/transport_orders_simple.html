@@ -1,1 +1,1049 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nouveau Transport | Léman Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <style>
+        :root {
+            --red:      #e8311a;
+            --red-dark: #c0280f;
+            --red-glow: rgba(232,49,26,0.2);
+            --night:    #0a0a0f;
+            --night2:   #111118;
+            --night3:   #18181f;
+            --surface:  #1e1e28;
+            --border:   rgba(255,255,255,0.07);
+            --border2:  rgba(255,255,255,0.13);
+            --white:    #ffffff;
+            --muted:    rgba(255,255,255,0.38);
+            --muted2:   rgba(255,255,255,0.6);
+            --green:    #22c55e;
+            --blue:     #3b82f6;
+            --yellow:   #f59e0b;
+            --orange:   #f97316;
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; }
+        body {
+            font-family:'Outfit', sans-serif;
+            background:var(--night);
+            color:var(--white);
+            display:flex;
+            flex-direction:column;
+            min-height:100vh;
+        }
 
+        /* ── TOPBAR ── */
+        .topbar {
+            background:var(--night2);
+            border-bottom:1px solid var(--border);
+            padding:0 32px; height:60px;
+            display:flex; align-items:center; justify-content:space-between;
+            position:sticky; top:0; z-index:200;
+            flex-shrink:0;
+        }
+        .logo {
+            display:flex; align-items:center; gap:10px;
+            font-family:'Bebas Neue',cursive;
+            font-size:20px; letter-spacing:1px;
+            color:var(--white); text-decoration:none;
+        }
+        .logo-mark { width:32px; height:32px; background:var(--red); border-radius:8px; display:grid; place-items:center; font-size:15px; }
+        .logo em { color:var(--red); font-style:normal; }
+        .topbar-center {
+            font-family:'Bebas Neue',cursive;
+            font-size:18px; letter-spacing:2px; color:var(--muted2);
+        }
+        .topbar-right { display:flex; gap:10px; align-items:center; }
+        .btn {
+            font-family:'Outfit',sans-serif; font-weight:600; font-size:13px;
+            padding:9px 20px; border-radius:10px; border:none;
+            cursor:pointer; display:inline-flex; align-items:center; gap:7px;
+            transition:all 0.2s; text-decoration:none; white-space:nowrap;
+        }
+        .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .btn-red { background:var(--red); color:var(--white); box-shadow:0 4px 16px var(--red-glow); }
+        .btn-red:hover { background:var(--red-dark); transform:translateY(-1px); box-shadow:0 6px 24px var(--red-glow); }
+        .btn-green { background:var(--green); color:var(--night); box-shadow:0 4px 16px rgba(34,197,94,0.25); }
+        .btn-green:hover { filter:brightness(1.1); transform:translateY(-1px); }
+        .btn-lg { padding:14px 32px; font-size:15px; border-radius:12px; }
+
+        /* ── LAYOUT ── */
+        .layout {
+            flex:1;
+            display:grid;
+            grid-template-columns: 520px 1fr;
+            overflow:hidden;
+            height:calc(100vh - 60px);
+        }
+
+        /* ── FORM PANEL ── */
+        .form-panel {
+            background:var(--night2);
+            border-right:1px solid var(--border);
+            overflow-y:auto;
+            padding:28px;
+            display:flex; flex-direction:column; gap:20px;
+        }
+        .form-panel::-webkit-scrollbar { width:4px; }
+        .form-panel::-webkit-scrollbar-track { background:transparent; }
+        .form-panel::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+
+        /* ── STEP HEADER ── */
+        .step-header {
+            display:flex; align-items:center; gap:12px;
+            padding-bottom:16px;
+            border-bottom:1px solid var(--border);
+        }
+        .step-num {
+            width:32px; height:32px;
+            background:var(--red); border-radius:8px;
+            display:grid; place-items:center;
+            font-family:'Bebas Neue',cursive; font-size:16px;
+            flex-shrink:0;
+        }
+        .step-title {
+            font-family:'Bebas Neue',cursive;
+            font-size:18px; letter-spacing:1px; color:var(--white);
+        }
+        .step-sub { font-size:12px; color:var(--muted); margin-top:1px; }
+
+        /* ── FORM BLOCK ── */
+        .form-block {
+            background:var(--night3);
+            border:1px solid var(--border2);
+            border-radius:18px; padding:20px;
+        }
+
+        /* ── FIELDS ── */
+        .field { margin-bottom:14px; }
+        .field:last-child { margin-bottom:0; }
+        .field label {
+            display:flex; align-items:center; gap:6px;
+            font-size:11px; font-weight:700;
+            letter-spacing:1px; text-transform:uppercase;
+            color:var(--muted); margin-bottom:7px;
+        }
+        .field label i { font-size:10px; }
+        .field input, .field select, .field textarea {
+            width:100%; padding:11px 14px;
+            background:var(--surface);
+            border:1.5px solid var(--border2);
+            border-radius:10px;
+            font-family:'Outfit',sans-serif; font-size:14px;
+            color:var(--white); transition:border-color 0.2s, background 0.2s;
+        }
+        .field input::placeholder, .field textarea::placeholder { color:rgba(255,255,255,0.2); }
+        .field input:focus, .field select:focus, .field textarea:focus {
+            outline:none; border-color:var(--red); background:rgba(255,255,255,0.03);
+        }
+        .field input.valid   { border-color:var(--green); }
+        .field input.loading { border-color:var(--yellow); }
+        .field select option { background:var(--night3); }
+        .field textarea { resize:vertical; min-height:70px; }
+        .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .field-row3 { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+        .field-hint { font-size:11px; color:var(--muted); margin-top:5px; display:flex; align-items:center; gap:5px; }
+        .field-hint.success { color:var(--green); }
+        .field-hint.error   { color:var(--red); }
+
+        /* ── AUTOCOMPLETE ── */
+        .autocomplete-wrap { position:relative; }
+        .autocomplete-list {
+            position:absolute; top:calc(100% + 4px); left:0; right:0;
+            background:var(--night3); border:1px solid var(--border2);
+            border-radius:10px; z-index:300; overflow:hidden;
+            box-shadow:0 16px 40px rgba(0,0,0,0.5);
+            max-height:200px; overflow-y:auto;
+        }
+        .autocomplete-item {
+            padding:11px 14px; font-size:13px; cursor:pointer;
+            border-bottom:1px solid var(--border);
+            transition:background 0.15s;
+            display:flex; align-items:flex-start; gap:10px;
+        }
+        .autocomplete-item:last-child { border:none; }
+        .autocomplete-item:hover { background:rgba(232,49,26,0.1); }
+        .autocomplete-item i { color:var(--red); flex-shrink:0; margin-top:2px; font-size:12px; }
+        .autocomplete-item .addr-main { font-weight:500; color:var(--white); }
+        .autocomplete-item .addr-sub  { font-size:11px; color:var(--muted); margin-top:1px; }
+
+        /* ── ADDRESS CARD ── */
+        .addr-card {
+            background:var(--surface);
+            border:1px solid var(--border2);
+            border-radius:10px; padding:12px 14px;
+            display:flex; align-items:center; gap:12px;
+            margin-top:8px;
+        }
+        .addr-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .addr-dot.pickup   { background:var(--blue);  box-shadow:0 0 8px rgba(59,130,246,0.5); }
+        .addr-dot.delivery { background:var(--red);   box-shadow:0 0 8px var(--red-glow); }
+        .addr-text { flex:1; font-size:13px; color:var(--muted2); }
+        .addr-clear { background:none; border:none; cursor:pointer; color:var(--muted); font-size:12px; padding:4px; transition:color 0.2s; }
+        .addr-clear:hover { color:var(--red); }
+
+        /* ── ROUTE SUMMARY ── */
+        .route-summary {
+            background:var(--surface);
+            border:1px solid var(--border2);
+            border-radius:14px; padding:16px 20px;
+            display:grid; grid-template-columns:repeat(3,1fr);
+            gap:0; text-align:center;
+            opacity:0; transform:translateY(8px);
+            transition:opacity 0.4s, transform 0.4s;
+        }
+        .route-summary.show { opacity:1; transform:translateY(0); }
+        .route-summary-item { padding:0 12px; }
+        .route-summary-item:not(:last-child) { border-right:1px solid var(--border); }
+        .rs-val { font-family:'Bebas Neue',cursive; font-size:28px; letter-spacing:1px; color:var(--white); }
+        .rs-val em { font-style:normal; color:var(--red); }
+        .rs-lbl { font-size:11px; color:var(--muted); margin-top:2px; }
+
+        /* ── TOGGLE GROUP ── */
+        .toggle-group { display:flex; gap:6px; flex-wrap:wrap; }
+        .toggle-btn {
+            padding:8px 16px; border-radius:8px;
+            border:1.5px solid var(--border2);
+            background:transparent; color:var(--muted2);
+            font-family:'Outfit',sans-serif; font-size:13px; font-weight:500;
+            cursor:pointer; transition:all 0.2s;
+            display:inline-flex; align-items:center; gap:6px;
+        }
+        .toggle-btn:hover { border-color:rgba(255,255,255,0.3); color:var(--white); }
+        .toggle-btn.active { border-color:var(--red); background:rgba(232,49,26,0.12); color:var(--white); }
+        .toggle-btn.active.urgent { border-color:var(--orange); background:rgba(249,115,22,0.12); color:var(--orange); }
+        .toggle-btn.active.night  { border-color:var(--blue);   background:rgba(59,130,246,0.12); color:var(--blue); }
+
+        /* ── PRICE CARD ── */
+        .price-card {
+            background:var(--night3);
+            border:1px solid var(--border2);
+            border-radius:18px; padding:20px;
+            opacity:0; transform:translateY(8px);
+            transition:opacity 0.4s, transform 0.4s;
+        }
+        .price-card.show { opacity:1; transform:translateY(0); }
+        .price-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+        .price-title { font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; }
+        .price-breakdown { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+        .price-line { display:flex; justify-content:space-between; font-size:13px; }
+        .price-line .pl-lbl { color:var(--muted); }
+        .price-line .pl-val { color:var(--muted2); font-weight:500; }
+        .price-total {
+            display:flex; justify-content:space-between; align-items:center;
+            padding-top:14px; border-top:1px solid var(--border2);
+        }
+        .price-total .pt-lbl { font-size:14px; font-weight:600; }
+        .price-total .pt-val {
+            font-family:'Bebas Neue',cursive;
+            font-size:36px; letter-spacing:1px; color:var(--green);
+        }
+        .price-total .pt-val sup { font-family:'Outfit',sans-serif; font-size:14px; }
+
+        /* ── MAP PANEL ── */
+        .map-panel { position:relative; }
+        #map { width:100%; height:100%; }
+
+        /* Map overlay */
+        .map-overlay {
+            position:absolute; top:16px; left:16px; z-index:100;
+            display:flex; flex-direction:column; gap:8px;
+            pointer-events:none;
+        }
+        .map-badge {
+            background:rgba(10,10,15,0.85);
+            backdrop-filter:blur(10px);
+            border:1px solid var(--border2);
+            border-radius:10px; padding:8px 14px;
+            font-size:12px; font-weight:500; color:var(--muted2);
+            display:flex; align-items:center; gap:8px;
+            pointer-events:auto;
+        }
+        .map-badge .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .map-badge .dot.blue { background:var(--blue); box-shadow:0 0 6px rgba(59,130,246,0.7); }
+        .map-badge .dot.red  { background:var(--red);  box-shadow:0 0 6px var(--red-glow); }
+        .map-badge .dot.route { background:var(--green); box-shadow:0 0 6px rgba(34,197,94,0.7); }
+
+        .map-status {
+            position:absolute; top:16px; right:16px; z-index:100;
+            background:rgba(10,10,15,0.85); backdrop-filter:blur(10px);
+            border:1px solid var(--border2); border-radius:10px;
+            padding:10px 14px; font-size:12px; color:var(--muted2);
+            display:flex; align-items:center; gap:8px;
+        }
+        .map-status .s-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+        .map-status.ready .s-dot { background:var(--green); box-shadow:0 0 8px rgba(34,197,94,0.7); animation:blink 2s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        /* ── ORDER NUMBER BADGE ── */
+        .order-num-badge {
+            display:inline-flex; align-items:center; gap:8px;
+            background:rgba(232,49,26,0.1); border:1px solid rgba(232,49,26,0.25);
+            border-radius:100px; padding:6px 14px;
+            font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:1px;
+            color:var(--red);
+        }
+
+        /* ── CHAUFFEUR SELECT ── */
+        .chauffeur-grid {
+            display:grid; grid-template-columns:1fr 1fr;
+            gap:8px; margin-top:8px;
+        }
+        .chauffeur-card {
+            background:var(--surface);
+            border:1.5px solid var(--border2);
+            border-radius:10px; padding:12px;
+            cursor:pointer; transition:all 0.2s;
+            display:flex; align-items:center; gap:10px;
+        }
+        .chauffeur-card:hover { border-color:rgba(255,255,255,0.3); }
+        .chauffeur-card.selected { border-color:var(--green); background:rgba(34,197,94,0.08); }
+        .chauffeur-avatar {
+            width:34px; height:34px; border-radius:9px;
+            background:rgba(34,197,94,0.15); color:var(--green);
+            display:grid; place-items:center;
+            font-family:'Bebas Neue',cursive; font-size:14px; flex-shrink:0;
+        }
+        .chauffeur-name { font-size:13px; font-weight:600; color:var(--white); }
+        .chauffeur-status { font-size:11px; color:var(--muted); margin-top:1px; }
+
+        /* ── TOAST ── */
+        .toast { position:fixed; top:20px; right:20px; padding:14px 20px; border-radius:12px; display:flex; align-items:center; gap:10px; font-size:14px; font-weight:500; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.5); z-index:9999; transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .toast.show { transform:translateX(0); }
+        .toast.success .t-ico { color:var(--green); }
+        .toast.error   .t-ico { color:var(--red); }
+        .toast.info    .t-ico { color:var(--blue); }
+        .t-ico { font-size:16px; }
+
+        /* ── LOADER ── */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; flex-direction:column; gap:16px; }
+        .loader.on { display:grid; }
+        .spin { width:44px; height:44px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
+        .loader-text { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:2px; color:var(--muted2); animation:pulse 1.5s ease-in-out infinite; }
+        @keyframes spin    { to{transform:rotate(360deg)} }
+        @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        /* Leaflet dark override */
+        .leaflet-tile { filter:brightness(0.85) saturate(0.7) invert(1) hue-rotate(180deg); }
+        .leaflet-container { background:#0a0a0f; }
+        .leaflet-control-zoom a { background:var(--night3) !important; color:var(--white) !important; border-color:var(--border2) !important; }
+
+        /* ── RESPONSIVE ── */
+        @media(max-width:900px) {
+            .layout { grid-template-columns:1fr; grid-template-rows:auto 400px; height:auto; }
+            .map-panel { height:400px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<!-- Loader -->
+<div class="loader" id="loader"><div class="spin"></div><div class="loader-text" id="loaderText">Création en cours…</div></div>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+    <a href="dashboard.html" class="logo">
+        <div class="logo-mark">🚚</div>
+        Léman<em>-Courses</em>
+    </a>
+    <div class="topbar-center">NOUVEAU TRANSPORT</div>
+    <div class="topbar-right">
+        <a href="dashboard.html" class="btn btn-ghost">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+        <button class="btn btn-red" id="btnSave">
+            <i class="fas fa-save"></i> Créer le transport
+        </button>
+    </div>
+</header>
+
+<!-- ═══ LAYOUT ═══ -->
+<div class="layout">
+
+    <!-- ── FORM PANEL ── -->
+    <div class="form-panel" id="formPanel">
+
+        <!-- N° de commande -->
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span class="order-num-badge" id="orderNumBadge">
+                <i class="fas fa-hashtag"></i> <span id="orderNum">LC-0001</span>
+            </span>
+            <span style="font-size:12px;color:var(--muted);" id="orderDate"></span>
+        </div>
+
+        <!-- ── ÉTAPE 1 : ENLÈVEMENT ── -->
+        <div>
+            <div class="step-header">
+                <div class="step-num" style="background:var(--blue);">1</div>
+                <div>
+                    <div class="step-title">ENLÈVEMENT</div>
+                    <div class="step-sub">Adresse de prise en charge du colis</div>
+                </div>
+            </div>
+            <div style="margin-top:16px;">
+                <div class="form-block">
+                    <div class="field">
+                        <label><i class="fas fa-map-marker-alt" style="color:var(--blue)"></i> Adresse d'enlèvement *</label>
+                        <div class="autocomplete-wrap">
+                            <input type="text" id="pickupInput" placeholder="Rue, ville, NPA…" autocomplete="off">
+                            <div class="autocomplete-list" id="pickupList" style="display:none;"></div>
+                        </div>
+                        <div class="addr-card" id="pickupCard" style="display:none;">
+                            <div class="addr-dot pickup"></div>
+                            <div class="addr-text" id="pickupCardText"></div>
+                            <button class="addr-clear" id="pickupClear" title="Effacer"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-user"></i> Nom expéditeur</label>
+                        <input type="text" id="senderName" placeholder="Entreprise ou nom">
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-phone"></i> Téléphone expéditeur</label>
+                        <input type="tel" id="senderPhone" placeholder="+41 79 000 00 00">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ÉTAPE 2 : LIVRAISON ── -->
+        <div>
+            <div class="step-header">
+                <div class="step-num" style="background:var(--red);">2</div>
+                <div>
+                    <div class="step-title">LIVRAISON</div>
+                    <div class="step-sub">Adresse de destination du colis</div>
+                </div>
+            </div>
+            <div style="margin-top:16px;">
+                <div class="form-block">
+                    <div class="field">
+                        <label><i class="fas fa-map-marker-alt" style="color:var(--red)"></i> Adresse de livraison *</label>
+                        <div class="autocomplete-wrap">
+                            <input type="text" id="deliveryInput" placeholder="Rue, ville, NPA…" autocomplete="off">
+                            <div class="autocomplete-list" id="deliveryList" style="display:none;"></div>
+                        </div>
+                        <div class="addr-card" id="deliveryCard" style="display:none;">
+                            <div class="addr-dot delivery"></div>
+                            <div class="addr-text" id="deliveryCardText"></div>
+                            <button class="addr-clear" id="deliveryClear" title="Effacer"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-user"></i> Nom destinataire</label>
+                        <input type="text" id="destName" placeholder="Entreprise ou nom">
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-phone"></i> Téléphone destinataire</label>
+                        <input type="tel" id="destPhone" placeholder="+41 79 000 00 00">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ROUTE SUMMARY ── -->
+        <div class="route-summary" id="routeSummary">
+            <div class="route-summary-item">
+                <div class="rs-val" id="rsKm">—</div>
+                <div class="rs-lbl">Distance</div>
+            </div>
+            <div class="route-summary-item">
+                <div class="rs-val" id="rsDur">—</div>
+                <div class="rs-lbl">Durée estimée</div>
+            </div>
+            <div class="route-summary-item">
+                <div class="rs-val" id="rsArrive">—</div>
+                <div class="rs-lbl">Arrivée estimée</div>
+            </div>
+        </div>
+
+        <!-- ── ÉTAPE 3 : COLIS ── -->
+        <div>
+            <div class="step-header">
+                <div class="step-num">3</div>
+                <div>
+                    <div class="step-title">COLIS & SERVICE</div>
+                    <div class="step-sub">Caractéristiques et type de service</div>
+                </div>
+            </div>
+            <div style="margin-top:16px;">
+                <div class="form-block">
+                    <div class="field-row">
+                        <div class="field">
+                            <label><i class="fas fa-weight-hanging"></i> Poids (kg)</label>
+                            <input type="number" id="weight" placeholder="0.5" min="0" step="0.1">
+                        </div>
+                        <div class="field">
+                            <label><i class="fas fa-boxes"></i> Quantité</label>
+                            <input type="number" id="quantity" placeholder="1" min="1" value="1">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-box"></i> Type de colis</label>
+                        <div class="toggle-group" id="packageTypeGroup">
+                            <button class="toggle-btn active" data-val="document"><i class="fas fa-file"></i> Document</button>
+                            <button class="toggle-btn" data-val="colis"><i class="fas fa-box"></i> Colis</button>
+                            <button class="toggle-btn" data-val="palette"><i class="fas fa-pallet"></i> Palette</button>
+                            <button class="toggle-btn" data-val="fragile"><i class="fas fa-wine-glass-alt"></i> Fragile</button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-shipping-fast"></i> Type de service</label>
+                        <div class="toggle-group" id="serviceTypeGroup">
+                            <button class="toggle-btn active" data-val="standard"><i class="fas fa-clock"></i> Standard</button>
+                            <button class="toggle-btn" data-val="express"><i class="fas fa-bolt"></i> Express</button>
+                            <button class="toggle-btn" data-val="same_day"><i class="fas fa-calendar-day"></i> Same Day</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ÉTAPE 4 : PRIORITÉ ── -->
+        <div>
+            <div class="step-header">
+                <div class="step-num" style="background:var(--orange);">4</div>
+                <div>
+                    <div class="step-title">PRIORITÉ & OPTIONS</div>
+                    <div class="step-sub">Urgence et options spéciales</div>
+                </div>
+            </div>
+            <div style="margin-top:16px;">
+                <div class="form-block">
+                    <div class="field">
+                        <label><i class="fas fa-exclamation-triangle"></i> Priorité</label>
+                        <div class="toggle-group" id="priorityGroup">
+                            <button class="toggle-btn active" data-val="normal"><i class="fas fa-minus-circle"></i> Normal</button>
+                            <button class="toggle-btn urgent" data-val="urgent"><i class="fas fa-fire"></i> Urgent</button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-moon"></i> Options</label>
+                        <div class="toggle-group">
+                            <button class="toggle-btn night" id="nightToggle" data-active="false"><i class="fas fa-moon"></i> Livraison de nuit</button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-sticky-note"></i> Instructions spéciales</label>
+                        <textarea id="instructions" placeholder="Code d'accès, étage, remarques…"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ÉTAPE 5 : CHAUFFEUR ── -->
+        <div>
+            <div class="step-header">
+                <div class="step-num" style="background:var(--green);">5</div>
+                <div>
+                    <div class="step-title">ATTRIBUTION</div>
+                    <div class="step-sub">Assigner un chauffeur (optionnel)</div>
+                </div>
+            </div>
+            <div style="margin-top:16px;">
+                <div class="form-block">
+                    <div class="field">
+                        <label><i class="fas fa-user-tie"></i> Client (entreprise)</label>
+                        <select id="clientSelect">
+                            <option value="">— Sélectionner un client —</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label><i class="fas fa-id-card"></i> Chauffeur disponible</label>
+                        <div class="chauffeur-grid" id="chauffeurGrid">
+                            <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:13px;">
+                                <i class="fas fa-spinner fa-spin"></i> Chargement…
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PRIX ── -->
+        <div class="price-card" id="priceCard">
+            <div class="price-header">
+                <div class="price-title">ESTIMATION DU PRIX</div>
+                <span style="font-size:11px;color:var(--muted);">CHF · TTC</span>
+            </div>
+            <div class="price-breakdown" id="priceBreakdown"></div>
+            <div class="price-total">
+                <div class="pt-lbl">Total estimé</div>
+                <div class="pt-val"><sup>CHF </sup><span id="priceTotal">—</span></div>
+            </div>
+        </div>
+
+        <!-- ── SUBMIT ── -->
+        <button class="btn btn-green btn-lg" id="btnSubmit" style="width:100%;justify-content:center;">
+            <i class="fas fa-check-circle"></i> Créer le transport
+        </button>
+
+        <div style="height:20px;"></div>
+
+    </div><!-- /form-panel -->
+
+    <!-- ── MAP PANEL ── -->
+    <div class="map-panel">
+        <div id="map"></div>
+
+        <div class="map-overlay">
+            <div class="map-badge"><div class="dot blue"></div> Enlèvement</div>
+            <div class="map-badge"><div class="dot red"></div> Livraison</div>
+            <div class="map-badge" id="routeBadge" style="display:none;"><div class="dot route"></div> Route calculée</div>
+        </div>
+
+        <div class="map-status" id="mapStatus">
+            <div class="s-dot"></div>
+            <span id="mapStatusText">En attente des adresses</span>
+        </div>
+    </div>
+
+</div><!-- /layout -->
+
+<script>
+(function () {
+    'use strict';
+
+    if (!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
+        return;
+    }
+    const db = window.SUPABASE_CLIENT;
+
+    /* ── State ── */
+    let pickupCoords   = null; // { lat, lng, label }
+    let deliveryCoords = null;
+    let routeData      = null; // { distance_km, duration_min }
+    let selectedDriverId = null;
+    let chauffeurs     = [];
+    let entreprises    = [];
+    let packageType    = 'document';
+    let serviceType    = 'standard';
+    let priority       = 'normal';
+    let nightDelivery  = false;
+
+    /* ── Toast ── */
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function toast(type, msg) {
+        clearTimeout(toastTimer);
+        toastEl.className = 'toast ' + type + ' show';
+        document.getElementById('toastIco').textContent = type === 'success' ? '✓' : type === 'info' ? 'ℹ' : '✕';
+        document.getElementById('toastTxt').textContent = msg;
+        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 5000);
+    }
+
+    /* ── Loader ── */
+    const loaderEl = document.getElementById('loader');
+    function showLoader(text='Création en cours…') {
+        document.getElementById('loaderText').textContent = text;
+        loaderEl.classList.add('on');
+    }
+    function hideLoader() { loaderEl.classList.remove('on'); }
+
+    /* ── Date ── */
+    const now = new Date();
+    document.getElementById('orderDate').textContent = now.toLocaleDateString('fr-CH', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+
+    /* ── Generate order number ── */
+    async function generateOrderNumber() {
+        const { count } = await db.from('transport_orders_simple').select('*', { count:'exact', head:true });
+        const num = String((count || 0) + 1).padStart(4, '0');
+        const date = now.toISOString().slice(0,10).replace(/-/g,'');
+        document.getElementById('orderNum').textContent = `LC-${date}-${num}`;
+    }
+    generateOrderNumber();
+
+    /* ── MAP INIT ── */
+    const map = L.map('map', { zoomControl:true, attributionControl:false }).setView([46.5197, 6.6323], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Custom markers
+    function makeIcon(color, pulse=false) {
+        return L.divIcon({
+            html: `<div style="
+                width:18px;height:18px;
+                background:${color};
+                border:3px solid white;
+                border-radius:50%;
+                box-shadow:0 2px 8px rgba(0,0,0,0.4);
+                ${pulse ? 'animation:mapPulse 1.5s ease-in-out infinite' : ''}
+            "></div>
+            <style>@keyframes mapPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.4)}}</style>`,
+            className:'', iconSize:[18,18], iconAnchor:[9,9]
+        });
+    }
+
+    let pickupMarker   = null;
+    let deliveryMarker = null;
+    let routeLine      = null;
+
+    function updateMap() {
+        // Pickup marker
+        if (pickupCoords) {
+            if (pickupMarker) map.removeLayer(pickupMarker);
+            pickupMarker = L.marker([pickupCoords.lat, pickupCoords.lng], { icon:makeIcon('#3b82f6') })
+                .addTo(map)
+                .bindPopup(`<b>Enlèvement</b><br>${pickupCoords.label}`);
+        }
+        // Delivery marker
+        if (deliveryCoords) {
+            if (deliveryMarker) map.removeLayer(deliveryMarker);
+            deliveryMarker = L.marker([deliveryCoords.lat, deliveryCoords.lng], { icon:makeIcon('#e8311a', priority==='urgent') })
+                .addTo(map)
+                .bindPopup(`<b>Livraison</b><br>${deliveryCoords.label}`);
+        }
+        // Fit bounds
+        if (pickupCoords && deliveryCoords) {
+            map.fitBounds([[pickupCoords.lat, pickupCoords.lng],[deliveryCoords.lat, deliveryCoords.lng]], { padding:[60,60] });
+            calculateRoute();
+        } else if (pickupCoords) {
+            map.setView([pickupCoords.lat, pickupCoords.lng], 14);
+        } else if (deliveryCoords) {
+            map.setView([deliveryCoords.lat, deliveryCoords.lng], 14);
+        }
+    }
+
+    /* ── OSRM Route calculation ── */
+    async function calculateRoute() {
+        if (!pickupCoords || !deliveryCoords) return;
+        setMapStatus('Calcul de la route…', false);
+        try {
+            const url = `https://router.project-osrm.org/route/v1/driving/${pickupCoords.lng},${pickupCoords.lat};${deliveryCoords.lng},${deliveryCoords.lat}?overview=full&geometries=geojson`;
+            const res  = await fetch(url);
+            const data = await res.json();
+            if (data.code !== 'Ok') throw new Error('Route introuvable');
+
+            const route = data.routes[0];
+            const km    = (route.distance / 1000).toFixed(1);
+            const min   = Math.round(route.duration / 60);
+
+            routeData = { distance_km: parseFloat(km), duration_min: min };
+
+            // Draw route
+            if (routeLine) map.removeLayer(routeLine);
+            routeLine = L.geoJSON(route.geometry, {
+                style: { color:'#22c55e', weight:4, opacity:0.8, dashArray:'8 4' }
+            }).addTo(map);
+
+            // Update summary
+            document.getElementById('rsKm').innerHTML  = `${km}<em>km</em>`;
+            document.getElementById('rsDur').innerHTML = `${min}<em>min</em>`;
+            const arrive = new Date(Date.now() + min * 60000);
+            document.getElementById('rsArrive').innerHTML = arrive.toLocaleTimeString('fr-CH', { hour:'2-digit', minute:'2-digit' });
+            document.getElementById('routeSummary').classList.add('show');
+            document.getElementById('routeBadge').style.display = 'flex';
+
+            setMapStatus('Route calculée', true);
+            calculatePrice();
+
+        } catch(err) {
+            toast('error', 'Impossible de calculer la route');
+            setMapStatus('Erreur de calcul', false);
+        }
+    }
+
+    function setMapStatus(text, ready) {
+        const el = document.getElementById('mapStatus');
+        el.className = 'map-status' + (ready ? ' ready' : '');
+        document.getElementById('mapStatusText').textContent = text;
+    }
+
+    /* ── NOMINATIM Geocoding ── */
+    let geocodeTimer = null;
+    function setupAutocomplete(inputId, listId, type) {
+        const input = document.getElementById(inputId);
+        const list  = document.getElementById(listId);
+
+        input.addEventListener('input', () => {
+            clearTimeout(geocodeTimer);
+            const q = input.value.trim();
+            if (q.length < 3) { list.style.display = 'none'; return; }
+            geocodeTimer = setTimeout(() => geocode(q, list, type), 400);
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(() => list.style.display = 'none', 200);
+        });
+    }
+
+    async function geocode(query, listEl, type) {
+        try {
+            const q   = encodeURIComponent(query + ', Suisse');
+            const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&addressdetails=1&countrycodes=ch`;
+            const res  = await fetch(url, { headers:{ 'Accept-Language':'fr' } });
+            const data = await res.json();
+
+            if (!data.length) { listEl.style.display = 'none'; return; }
+
+            listEl.innerHTML = data.map((r,i) => {
+                const main = r.display_name.split(',')[0];
+                const sub  = r.display_name.split(',').slice(1,3).join(',').trim();
+                return `<div class="autocomplete-item" data-idx="${i}" data-lat="${r.lat}" data-lng="${r.lon}" data-label="${r.display_name}">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <div><div class="addr-main">${main}</div><div class="addr-sub">${sub}</div></div>
+                </div>`;
+            }).join('');
+
+            listEl.querySelectorAll('.autocomplete-item').forEach(item => {
+                item.addEventListener('mousedown', () => {
+                    const lat   = parseFloat(item.dataset.lat);
+                    const lng   = parseFloat(item.dataset.lng);
+                    const label = item.dataset.label;
+                    selectAddress(type, lat, lng, label);
+                    listEl.style.display = 'none';
+                });
+            });
+            listEl.style.display = 'block';
+        } catch(e) { listEl.style.display = 'none'; }
+    }
+
+    function selectAddress(type, lat, lng, label) {
+        const shortLabel = label.split(',').slice(0,3).join(',').trim();
+        if (type === 'pickup') {
+            pickupCoords = { lat, lng, label };
+            document.getElementById('pickupInput').value     = shortLabel;
+            document.getElementById('pickupCardText').textContent = shortLabel;
+            document.getElementById('pickupCard').style.display = 'flex';
+            document.getElementById('pickupInput').classList.add('valid');
+        } else {
+            deliveryCoords = { lat, lng, label };
+            document.getElementById('deliveryInput').value      = shortLabel;
+            document.getElementById('deliveryCardText').textContent = shortLabel;
+            document.getElementById('deliveryCard').style.display  = 'flex';
+            document.getElementById('deliveryInput').classList.add('valid');
+        }
+        updateMap();
+    }
+
+    // Clear buttons
+    document.getElementById('pickupClear').addEventListener('click', () => {
+        pickupCoords = null;
+        document.getElementById('pickupInput').value = '';
+        document.getElementById('pickupCard').style.display = 'none';
+        document.getElementById('pickupInput').classList.remove('valid');
+        if (pickupMarker) { map.removeLayer(pickupMarker); pickupMarker = null; }
+        if (routeLine)    { map.removeLayer(routeLine); routeLine = null; }
+        routeData = null;
+        document.getElementById('routeSummary').classList.remove('show');
+        document.getElementById('routeBadge').style.display = 'none';
+        document.getElementById('priceCard').classList.remove('show');
+        setMapStatus('En attente des adresses', false);
+    });
+
+    document.getElementById('deliveryClear').addEventListener('click', () => {
+        deliveryCoords = null;
+        document.getElementById('deliveryInput').value = '';
+        document.getElementById('deliveryCard').style.display = 'none';
+        document.getElementById('deliveryInput').classList.remove('valid');
+        if (deliveryMarker) { map.removeLayer(deliveryMarker); deliveryMarker = null; }
+        if (routeLine)      { map.removeLayer(routeLine); routeLine = null; }
+        routeData = null;
+        document.getElementById('routeSummary').classList.remove('show');
+        document.getElementById('routeBadge').style.display = 'none';
+        document.getElementById('priceCard').classList.remove('show');
+        setMapStatus('En attente des adresses', false);
+    });
+
+    setupAutocomplete('pickupInput', 'pickupList', 'pickup');
+    setupAutocomplete('deliveryInput', 'deliveryList', 'delivery');
+
+    /* ── TOGGLE GROUPS ── */
+    function setupToggleGroup(groupId, callback) {
+        document.getElementById(groupId).querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById(groupId).querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                callback(btn.dataset.val);
+            });
+        });
+    }
+
+    setupToggleGroup('packageTypeGroup', val => { packageType = val; calculatePrice(); });
+    setupToggleGroup('serviceTypeGroup', val => { serviceType = val; calculatePrice(); });
+    setupToggleGroup('priorityGroup',    val => {
+        priority = val;
+        calculatePrice();
+        if (deliveryMarker) {
+            map.removeLayer(deliveryMarker);
+            deliveryMarker = L.marker([deliveryCoords.lat, deliveryCoords.lng], { icon:makeIcon('#e8311a', val==='urgent') }).addTo(map);
+        }
+    });
+
+    document.getElementById('nightToggle').addEventListener('click', function() {
+        nightDelivery = !nightDelivery;
+        this.classList.toggle('active', nightDelivery);
+        calculatePrice();
+    });
+
+    /* ── PRICING ENGINE ── */
+    function calculatePrice() {
+        if (!routeData) return;
+        const BASE    = 18;
+        const PER_KM  = 1.80;
+        const PER_KG  = 0.50;
+        const w       = parseFloat(document.getElementById('weight').value) || 0;
+
+        let price = BASE;
+        const kmCost  = routeData.distance_km * PER_KM;
+        const kgCost  = w * PER_KG;
+        price += kmCost + kgCost;
+
+        // Multiplicateurs
+        let urgentSurcharge  = 0;
+        let nightSurcharge   = 0;
+        let serviceSurcharge = 0;
+
+        if (priority === 'urgent')        { urgentSurcharge  = price * 0.8; price += urgentSurcharge; }
+        if (nightDelivery)                { nightSurcharge   = price * 0.3; price += nightSurcharge; }
+        if (serviceType === 'express')    { serviceSurcharge = 15; price += serviceSurcharge; }
+        if (serviceType === 'same_day')   { serviceSurcharge = 25; price += serviceSurcharge; }
+
+        price = Math.max(price, 25);
+        price = Math.ceil(price * 20) / 20; // Arrondi 0.05 CHF
+
+        // Breakdown
+        const lines = [
+            { lbl:`Base forfaitaire`, val:`CHF ${BASE.toFixed(2)}` },
+            { lbl:`Distance (${routeData.distance_km} km × 1.80)`, val:`CHF ${kmCost.toFixed(2)}` },
+        ];
+        if (kgCost > 0) lines.push({ lbl:`Poids (${w}kg × 0.50)`, val:`CHF ${kgCost.toFixed(2)}` });
+        if (urgentSurcharge > 0)  lines.push({ lbl:`Supplément urgent (+80%)`, val:`CHF ${urgentSurcharge.toFixed(2)}` });
+        if (nightSurcharge > 0)   lines.push({ lbl:`Supplément nuit (+30%)`,   val:`CHF ${nightSurcharge.toFixed(2)}` });
+        if (serviceSurcharge > 0) lines.push({ lbl:`Supplément ${serviceType}`, val:`CHF ${serviceSurcharge.toFixed(2)}` });
+
+        document.getElementById('priceBreakdown').innerHTML = lines.map(l =>
+            `<div class="price-line"><span class="pl-lbl">${l.lbl}</span><span class="pl-val">${l.val}</span></div>`
+        ).join('');
+        document.getElementById('priceTotal').textContent = price.toFixed(2);
+        document.getElementById('priceCard').classList.add('show');
+
+        return price;
+    }
+
+    // Recalculate price when weight changes
+    document.getElementById('weight').addEventListener('input', () => calculatePrice());
+
+    /* ── LOAD CHAUFFEURS & ENTREPRISES ── */
+    async function loadData() {
+        const [{ data: chauf }, { data: entr }] = await Promise.all([
+            db.from('chauffeurs').select('*').eq('actif', true).order('nom'),
+            db.from('entreprises').select('*').order('nom')
+        ]);
+
+        chauffeurs  = chauf  || [];
+        entreprises = entr   || [];
+
+        // Populate client select
+        const sel = document.getElementById('clientSelect');
+        sel.innerHTML = '<option value="">— Sélectionner un client —</option>' +
+            entreprises.map(e => `<option value="${e.id}">${e.nom} (${e.numero_client})</option>`).join('');
+
+        // Render chauffeur grid
+        const grid = document.getElementById('chauffeurGrid');
+        if (!chauffeurs.length) {
+            grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:13px;">Aucun chauffeur disponible</div>`;
+            return;
+        }
+        grid.innerHTML = chauffeurs.map(c => `
+            <div class="chauffeur-card" data-id="${c.id}" onclick="selectDriver('${c.id}')">
+                <div class="chauffeur-avatar">${(c.prenom?.[0]||'C').toUpperCase()}</div>
+                <div>
+                    <div class="chauffeur-name">${c.prenom||''} ${c.nom||''}</div>
+                    <div class="chauffeur-status"><i class="fas fa-circle" style="color:var(--green);font-size:8px;"></i> Disponible</div>
+                </div>
+            </div>
+        `).join('');
+    }
+    loadData();
+
+    window.selectDriver = function(id) {
+        selectedDriverId = selectedDriverId === id ? null : id;
+        document.querySelectorAll('.chauffeur-card').forEach(c => {
+            c.classList.toggle('selected', c.dataset.id === selectedDriverId);
+        });
+    };
+
+    /* ── SAVE TRANSPORT ── */
+    async function saveTransport() {
+        if (!pickupCoords) {
+            toast('error', 'Adresse d\'enlèvement requise');
+            document.getElementById('pickupInput').focus();
+            return;
+        }
+        if (!deliveryCoords) {
+            toast('error', 'Adresse de livraison requise');
+            document.getElementById('deliveryInput').focus();
+            return;
+        }
+
+        const orderNum = document.getElementById('orderNum').textContent;
+        const price    = calculatePrice() || 0;
+
+        const payload = {
+            order_number:     orderNum,
+            client_number:    document.getElementById('clientSelect').value || null,
+            pickup_address:   pickupCoords.label,
+            delivery_address: deliveryCoords.label,
+            pickup_lat:       pickupCoords.lat,
+            pickup_lng:       pickupCoords.lng,
+            delivery_lat:     deliveryCoords.lat,
+            delivery_lng:     deliveryCoords.lng,
+            weight:           parseFloat(document.getElementById('weight').value) || null,
+            quantity:         parseInt(document.getElementById('quantity').value) || 1,
+            package_type:     packageType,
+            service_type:     serviceType,
+            speed:            serviceType,
+            priority:         priority,
+            night_delivery:   nightDelivery,
+            instructions:     document.getElementById('instructions').value.trim() || null,
+            distance_km:      routeData?.distance_km || null,
+            duration_min:     routeData?.duration_min || null,
+            price_chf:        price,
+            driver_id:        selectedDriverId || null,
+            entreprise_id:    document.getElementById('clientSelect').value || null,
+            status:           'pending',
+        };
+
+        // Ajouter destinataire si champs présents
+        if (document.getElementById('destName').value)  payload.destinataire_nom = document.getElementById('destName').value.trim();
+        if (document.getElementById('destPhone').value) payload.destinataire_tel  = document.getElementById('destPhone').value.trim();
+
+        showLoader('Création du transport…');
+        try {
+            const { data, error } = await db.from('transport_orders_simple').insert([payload]).select().single();
+            if (error) throw error;
+
+            hideLoader();
+            toast('success', `Transport ${orderNum} créé avec succès !`);
+            setTimeout(() => window.location.href = 'dashboard.html', 1500);
+
+        } catch(err) {
+            hideLoader();
+            toast('error', err.message);
+            console.error(err);
+        }
+    }
+
+    document.getElementById('btnSave').addEventListener('click', saveTransport);
+    document.getElementById('btnSubmit').addEventListener('click', saveTransport);
+
+    /* ── Init map status ── */
+    setMapStatus('En attente des adresses', false);
+
+})();
+</script>
+</body>
+</html>
