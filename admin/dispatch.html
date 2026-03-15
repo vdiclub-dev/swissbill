@@ -230,9 +230,10 @@
         /* ── FLOATING TOURS PANEL ── */
         .tours-float {
             position:fixed;
-            top:80px; right:16px;
-            width:360px; min-width:260px; max-width:600px;
-            min-height:200px; max-height:calc(100vh - 120px);
+            top:68px;
+            left:316px;
+            width:380px; min-width:280px; max-width:650px;
+            min-height:220px; max-height:calc(100vh - 100px);
             background:rgba(17,17,24,0.97);
             backdrop-filter:blur(20px);
             border:1px solid var(--border2);
@@ -488,10 +489,10 @@
     async function loadAll() {
         const [{data:orders},{data:chauf}] = await Promise.all([
             db.from('transport_orders_simple').select('*').order('created_at',{ascending:false}),
-            db.from('utilisateurs').select('id,nom,prenom,email').eq('role','chauffeur')
+            db.from('utilisateurs').select('id,nom,prenom,email,actif').eq('role','chauffeur')
         ]);
         allOrders  = orders||[];
-        chauffeurs = chauf ||[];
+        chauffeurs = (chauf||[]).filter(c => c.actif !== false); // inclure null=actif par défaut
         updateStats();
         applyFilters();
         renderMap(); // async - géocode les adresses manquantes
@@ -1388,34 +1389,36 @@
 
         header.addEventListener('mousedown', e => {
             if(e.target.closest('.tf-btn')) return;
-            dragging=true;
+            e.preventDefault();
+            const rect  = panel.getBoundingClientRect();
+            panel.style.left  = rect.left + 'px';
+            panel.style.top   = rect.top  + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom= 'auto';
+            dragging  = true;
             startX    = e.clientX;
             startY    = e.clientY;
-            const rect = panel.getBoundingClientRect();
-            startLeft  = rect.left;
-            startTop   = rect.top;
-            panel.style.transition='none';
-            document.body.style.cursor='move';
+            startLeft = rect.left;
+            startTop  = rect.top;
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor     = 'grabbing';
         });
 
         document.addEventListener('mousemove', e => {
             if(!dragging) return;
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            let newLeft = startLeft + dx;
-            let newTop  = startTop  + dy;
-            // Boundaries
-            newLeft = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth,  newLeft));
-            newTop  = Math.max(52, Math.min(window.innerHeight - 60, newTop));
-            panel.style.left   = newLeft + 'px';
-            panel.style.top    = newTop  + 'px';
-            panel.style.right  = 'auto';
+            let newLeft = startLeft + (e.clientX - startX);
+            let newTop  = startTop  + (e.clientY - startY);
+            newLeft = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  newLeft));
+            newTop  = Math.max(54, Math.min(window.innerHeight - 100, newTop));
+            panel.style.left = newLeft + 'px';
+            panel.style.top  = newTop  + 'px';
         });
 
         document.addEventListener('mouseup', () => {
-            dragging=false;
-            panel.style.transition='';
-            document.body.style.cursor='';
+            if(!dragging) return;
+            dragging = false;
+            document.body.style.userSelect = '';
+            document.body.style.cursor     = '';
         });
     })();
 
@@ -1427,7 +1430,13 @@
     };
 
     /* ── REALTIME ── */
-    db.channel('dispatch').on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},()=>loadAll()).subscribe();
+    db.channel('dispatch_rt')
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'transport_orders_simple'},payload=>{
+            loadAll();
+            toast('info',`📦 Nouveau transport : ${payload.new.order_number||'—'}`);
+        })
+        .on('postgres_changes',{event:'UPDATE',schema:'public',table:'transport_orders_simple'},()=>loadAll())
+        .subscribe();
 
     /* ── INIT ── */
     loadAll();
