@@ -731,11 +731,20 @@
 
     /* ── Auth check ── */
     async function init() {
+        await new Promise(r => setTimeout(r, 500));
         const { data: { session } } = await db.auth.getSession();
         if (!session) { window.location.href = '../index.html'; return; }
+        console.log('Session OK:', session.user.email);
 
-        const { data: user } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
-        if (!user || !['super_admin','admin'].includes(user.role)) {
+        const { data: user, error } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
+        console.log('User:', user, 'Error:', error);
+
+        if (!user) {
+            document.getElementById('sideName').textContent = session.user.email;
+            await loadAll();
+            return;
+        }
+        if (!['super_admin','admin'].includes(user.role)) {
             await db.auth.signOut();
             window.location.href = '../index.html';
             return;
