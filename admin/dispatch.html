@@ -918,42 +918,27 @@
         const tour = tours.find(t=>t.id===tourId);
         if(!tour) return;
         if(!tour.orderIds.length) { toast('error','Ajoutez des transports à la tournée'); return; }
+        if(!tour.driverId)        { toast('error','Assignez un chauffeur à la tournée'); return; }
 
         showLoad();
         try {
-            // 1. Créer la tournée dans tours table
-            const tourPayload = {
-                name: tour.name,
-                status: 'active',
-                total_distance_km: null,
-                total_duration_min: null,
-                optimized: false
-            };
-            // Ajouter driver_id seulement si la colonne existe
-            if(tour.driverId) tourPayload.driver_id = tour.driverId;
-
-            const { data: tourRec, error: tourErr } = await db.from('tours').insert([tourPayload]).select().single();
-
-            if(tourErr) {
-                // Si erreur colonne driver_id, réessayer sans
-                delete tourPayload.driver_id;
-                const { data: tourRec2, error: tourErr2 } = await db.from('tours').insert([tourPayload]).select().single();
-                if(tourErr2) throw tourErr2;
-            }
-
-            // 2. Mettre à jour tous les transports — driver_id + status + tour_id
+            // Mettre à jour directement les transports avec driver_id + status
+            // C'est ce qui compte pour l'app chauffeur
+            let ok = 0;
             for(const orderId of tour.orderIds) {
-                await db.from('transport_orders_simple').update({
-                    status: 'planned',
-                    driver_id: tour.driverId||null,
-                    assigned_at: new Date().toISOString()
+                const { error } = await db.from('transport_orders_simple').update({
+                    status:      'planned',
+                    driver_id:    tour.driverId,
+                    assigned_at:  new Date().toISOString()
                 }).eq('id', orderId);
+                if(!error) ok++;
             }
 
-            toast('success', `Tournée "${tour.name}" sauvegardée — ${tour.orderIds.length} transports assignés ✓`);
+            // Vérifier chauffeur
+            const driver = chauffeurs.find(c=>c.id===tour.driverId);
+            const driverName = driver ? `${driver.prenom||''} ${driver.nom||''}`.trim() : 'Chauffeur';
 
-            // Update tour id to real DB id
-            tour.dbId = tourRec.id;
+            toast('success', `✓ Tournée "${tour.name}" assignée à ${driverName} — ${ok} transport${ok>1?'s':''} visibles sur l'app chauffeur`);
 
             await loadAll();
             renderTours();
