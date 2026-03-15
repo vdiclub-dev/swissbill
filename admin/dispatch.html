@@ -488,6 +488,7 @@
     const showLoad = () => loaderEl.classList.add('on');
     const hideLoad = () => loaderEl.classList.remove('on');
 
+    const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
     const STATUS_COLORS = { pending:'#f59e0b', planned:'#3b82f6', urgent:'#f97316', in_transit:'#a855f7', delivered:'#22c55e' };
     const TOUR_COLORS   = ['#22c55e','#3b82f6','#f59e0b','#f97316','#a855f7','#ec4899','#14b8a6','#e8311a'];
 
@@ -683,11 +684,30 @@
         showDetail(o);
     };
 
-    window.focusOrder = function(id) {
+    window.focusOrder = async function(id) {
         const o = allOrders.find(x=>x.id===id);
         if(!o||!o.pickup_lat) { toast('info','Pas de coordonnées GPS pour ce transport'); return; }
         map.flyTo([o.pickup_lat,o.pickup_lng],14,{duration:1});
         selectOrder(id);
+        // Tracer la route ORS pour ce transport
+        if(o.pickup_lat && o.delivery_lat) {
+            const routeData = await getORSRoute([
+                [o.pickup_lat, o.pickup_lng],
+                [o.delivery_lat, o.delivery_lng]
+            ]);
+            if(routeData?.features?.[0]) {
+                const feature = routeData.features[0];
+                const km  = (feature.properties.summary.distance/1000).toFixed(1);
+                const min = Math.round(feature.properties.summary.duration/60);
+                // Supprimer ancienne route single
+                if(window._singleRoute) map.removeLayer(window._singleRoute);
+                window._singleRoute = L.geoJSON(feature.geometry, {
+                    style:{color:'#22c55e', weight:3, opacity:0.8, dashArray:'6 3'}
+                }).addTo(map);
+                map.fitBounds(window._singleRoute.getBounds(),{padding:[60,80]});
+                toast('success', `${o.order_number} — ${km}km · ${min}min`);
+            }
+        }
     };
 
     /* ── DETAIL PANEL ── */
@@ -1004,28 +1024,177 @@
     /* ── MAP TOUR LINES ── */
     const tourLines = {};
     function clearTourLines(tourId) {
-        if(tourLines[tourId]) { tourLines[tourId].forEach(l=>map.removeLayer(l)); tourLines[tourId]=[]; }
+        if(tourLines[tourId]) { tourLines[tourId].forEach(l=>{ if(l&&l.remove) l.remove(); else if(l) map.removeLayer(l); }); tourLines[tourId]=[]; }
     }
     window.clearAllTourLines = function() {
         Object.keys(tourLines).forEach(clearTourLines);
+        // Clear all route popups
+        document.querySelectorAll('.route-popup').forEach(p=>p.remove());
         toast('info','Routes effacées');
     };
-    function drawTourOnMap(tour) {
+
+    // ── Calcul route ORS ──
+    async function getORSRoute(waypoints) {
+        if(waypoints.length < 2) return null;
+        try {
+            const coordinates = waypoints.map(p => [p[1], p[0]]); // ORS = [lng, lat]
+            const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+                method: 'POST',
+                headers: {
+                    'Authorization': ORS_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ coordinates })
+            });
+            if(!res.ok) throw new Error(`ORS Error: ${res.status}`);
+            return await res.json();
+        } catch(e) {
+            console.error('[ORS]', e.message);
+            return null;
+        }
+    }
+
+    // ── Dessiner tournée avec vraie route ──
+    async function drawTourOnMap(tour) {
         if(!tour) return;
         clearTourLines(tour.id);
         const lines = [];
-        const pts   = [];
+
         const orders = tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
+        const pts = [];
         orders.forEach(o => {
             if(o.pickup_lat)   pts.push([o.pickup_lat,   o.pickup_lng]);
             if(o.delivery_lat) pts.push([o.delivery_lat, o.delivery_lng]);
         });
-        if(pts.length > 1) {
-            const line = L.polyline(pts, {color:tour.color, weight:3, opacity:0.85, dashArray:'8 4'}).addTo(map);
+
+        if(pts.length < 2) { toast('info','Pas assez de coordonnées GPS'); return; }
+
+        toast('info', 'Calcul de la route en cours…');
+
+        // Appel ORS
+        const routeData = await getORSRoute(pts);
+
+        if(routeData && routeData.features?.[0]) {
+            const feature  = routeData.features[0];
+            const geom     = feature.geometry;
+            const props    = feature.properties;
+            const segments = props.segments || [];
+
+            // Dessiner la vraie route
+            const routeLayer = L.geoJSON(geom, {
+                style: { color:tour.color, weight:4, opacity:0.85 }
+            }).addTo(map);
+            lines.push(routeLayer);
+
+            // Distance et durée totales
+            const totalKm  = (props.summary.distance / 1000).toFixed(1);
+            const totalMin = Math.round(props.summary.duration / 60);
+            const totalH   = Math.floor(totalMin/60);
+            const totalM   = totalMin % 60;
+            const dureeStr = totalH > 0 ? `${totalH}h${totalM.toString().padStart(2,'0')}` : `${totalMin} min`;
+
+            // Marqueurs avec infos entre chaque stop
+            let stopIndex = 0;
+            for(let i=0; i<pts.length-1; i++) {
+                const seg = segments[i] || {};
+                const km  = seg.distance ? (seg.distance/1000).toFixed(1) : '?';
+                const min = seg.duration ? Math.round(seg.duration/60) : '?';
+
+                // Marqueur milieu du segment
+                const midLat = (pts[i][0] + pts[i+1][0]) / 2;
+                const midLng = (pts[i][1] + pts[i+1][1]) / 2;
+
+                const labelHtml = `<div style="
+                    background:rgba(17,17,24,0.92);
+                    border:1px solid ${tour.color};
+                    border-radius:8px;
+                    padding:4px 8px;
+                    font-family:'Outfit',sans-serif;
+                    font-size:11px;
+                    font-weight:600;
+                    color:white;
+                    white-space:nowrap;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.4);
+                ">
+                    <span style="color:${tour.color}">▶</span> ${km}km · ${min}min
+                </div>`;
+
+                const label = L.marker([midLat, midLng], {
+                    icon: L.divIcon({ html:labelHtml, className:'', iconAnchor:[40,12] }),
+                    interactive: false
+                }).addTo(map);
+                lines.push(label);
+            }
+
+            // Numéroter les stops
+            orders.forEach((o, idx) => {
+                if(o.delivery_lat) {
+                    const numHtml = `<div style="
+                        width:22px;height:22px;
+                        background:${tour.color};
+                        border:2px solid white;
+                        border-radius:50%;
+                        display:flex;align-items:center;justify-content:center;
+                        font-family:'Bebas Neue',cursive;
+                        font-size:12px;color:white;
+                        box-shadow:0 2px 8px rgba(0,0,0,0.4);
+                    ">${idx+1}</div>`;
+                    const stopMarker = L.marker([o.delivery_lat, o.delivery_lng], {
+                        icon: L.divIcon({ html:numHtml, className:'', iconSize:[22,22], iconAnchor:[11,11] })
+                    }).addTo(map)
+                    .bindTooltip(`<b>Stop ${idx+1}</b><br>${shortAddr(o.delivery_address)}<br><span style="color:${tour.color}">▶ ${((segments[idx]||{}).distance/1000||0).toFixed(1)}km — ${Math.round(((segments[idx]||{}).duration||0)/60)}min</span>`, {direction:'top'});
+                    lines.push(stopMarker);
+                }
+            });
+
+            // Panel récap tournée
+            showTourSummary(tour, totalKm, dureeStr, orders.length);
+
+            map.fitBounds(routeLayer.getBounds(), {padding:[60,80]});
+            toast('success', `Route calculée — ${totalKm}km · ${dureeStr}`);
+
+        } else {
+            // Fallback ligne droite si ORS échoue
+            const line = L.polyline(pts, {color:tour.color, weight:3, opacity:0.6, dashArray:'8 4'}).addTo(map);
             lines.push(line);
             map.fitBounds(pts, {padding:[60,60]});
+            toast('error', 'Route ORS indisponible — affichage simplifié');
         }
+
         tourLines[tour.id] = lines;
+    }
+
+    // ── Panel récap tournée ──
+    function showTourSummary(tour, km, duree, nbStops) {
+        let panel = document.getElementById('tourSummaryPanel');
+        if(!panel) {
+            panel = document.createElement('div');
+            panel.id = 'tourSummaryPanel';
+            panel.style.cssText = 'position:absolute;top:12px;left:12px;z-index:100;background:rgba(17,17,24,0.95);backdrop-filter:blur(16px);border:1px solid var(--border2);border-radius:14px;padding:14px 16px;min-width:200px;animation:slideDown 0.3s cubic-bezier(0.4,0,0.2,1);';
+            document.querySelector('.map-wrap').appendChild(panel);
+        }
+        panel.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <div style="font-family:'Bebas Neue',cursive;font-size:14px;letter-spacing:1px;display:flex;align-items:center;gap:8px;">
+                    <div style="width:10px;height:10px;border-radius:50%;background:${tour.color};"></div>
+                    ${tour.name}
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;">✕</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+                <div style="background:var(--surface);border-radius:8px;padding:8px;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:20px;color:${tour.color}">${km}</div>
+                    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">km</div>
+                </div>
+                <div style="background:var(--surface);border-radius:8px;padding:8px;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:20px;color:${tour.color}">${duree}</div>
+                    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">durée</div>
+                </div>
+                <div style="background:var(--surface);border-radius:8px;padding:8px;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:20px;color:${tour.color}">${nbStops}</div>
+                    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">stops</div>
+                </div>
+            </div>`;
     }
 
     /* ── DRIVERS TAB ── */
