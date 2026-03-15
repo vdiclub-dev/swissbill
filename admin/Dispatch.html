@@ -1,1 +1,1088 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dispatch Map | Léman Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <style>
+        :root {
+            --red:     #e8311a;
+            --red-dark:#c0280f;
+            --red-glow:rgba(232,49,26,0.2);
+            --night:   #0a0a0f;
+            --night2:  #111118;
+            --night3:  #18181f;
+            --surface: #1e1e28;
+            --border:  rgba(255,255,255,0.07);
+            --border2: rgba(255,255,255,0.13);
+            --white:   #ffffff;
+            --muted:   rgba(255,255,255,0.38);
+            --muted2:  rgba(255,255,255,0.6);
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --yellow:  #f59e0b;
+            --orange:  #f97316;
+            --purple:  #a855f7;
+            --sidebar: 340px;
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; overflow:hidden; }
+        body { font-family:'Outfit',sans-serif; background:var(--night); color:var(--white); display:flex; flex-direction:column; }
+
+        /* ── TOPBAR ── */
+        .topbar {
+            background:var(--night2); border-bottom:1px solid var(--border);
+            padding:0 20px; height:56px;
+            display:flex; align-items:center; gap:12px;
+            flex-shrink:0; z-index:200; position:relative;
+        }
+        .logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; color:var(--white); text-decoration:none; }
+        .logo-mark { width:30px; height:30px; background:var(--red); border-radius:7px; display:grid; place-items:center; font-size:14px; }
+        .logo em { color:var(--red); font-style:normal; }
+        .topbar-sep { width:1px; height:24px; background:var(--border2); }
+        .topbar-title { font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:2px; color:var(--muted2); }
+
+        .btn { font-family:'Outfit',sans-serif; font-weight:600; font-size:12px; padding:7px 16px; border-radius:8px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s; text-decoration:none; white-space:nowrap; }
+        .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .btn-red { background:var(--red); color:var(--white); }
+        .btn-red:hover { background:var(--red-dark); }
+        .btn-green { background:var(--green); color:var(--night); font-weight:700; }
+        .btn-green:hover { filter:brightness(1.1); }
+        .btn-blue { background:var(--blue); color:var(--white); }
+        .btn-blue:hover { filter:brightness(1.1); }
+        .btn-yellow { background:var(--yellow); color:var(--night); font-weight:700; }
+        .btn-yellow:hover { filter:brightness(1.1); }
+
+        .topbar-actions { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+        /* Live indicator */
+        .live-badge {
+            display:inline-flex; align-items:center; gap:6px;
+            background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25);
+            color:var(--green); font-size:11px; font-weight:600;
+            padding:4px 10px; border-radius:100px;
+        }
+        .live-dot { width:6px; height:6px; background:var(--green); border-radius:50%; animation:livePulse 1.5s infinite; }
+        @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+
+        /* ── MAIN LAYOUT ── */
+        .main { flex:1; display:flex; overflow:hidden; }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width:var(--sidebar); flex-shrink:0;
+            background:var(--night2); border-right:1px solid var(--border);
+            display:flex; flex-direction:column;
+            overflow:hidden;
+        }
+
+        /* Tabs */
+        .tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .tab {
+            flex:1; padding:12px 8px;
+            font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+            color:var(--muted); cursor:pointer; text-align:center;
+            border-bottom:2px solid transparent; transition:all 0.2s;
+        }
+        .tab.active { color:var(--white); border-bottom-color:var(--red); }
+        .tab-content { display:none; flex:1; overflow-y:auto; flex-direction:column; }
+        .tab-content.active { display:flex; }
+        .tab-content::-webkit-scrollbar { width:3px; }
+        .tab-content::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+
+        /* Filter bar */
+        .filter-bar {
+            padding:12px; display:flex; gap:8px; flex-shrink:0;
+            border-bottom:1px solid var(--border);
+        }
+        .filter-bar input {
+            flex:1; padding:8px 12px;
+            background:var(--night3); border:1px solid var(--border2);
+            border-radius:8px; font-family:'Outfit',sans-serif;
+            font-size:12px; color:var(--white);
+        }
+        .filter-bar input::placeholder { color:var(--muted); }
+        .filter-bar input:focus { outline:none; border-color:var(--red); }
+        .filter-select {
+            padding:8px 10px; background:var(--night3);
+            border:1px solid var(--border2); border-radius:8px;
+            font-family:'Outfit',sans-serif; font-size:12px; color:var(--white);
+        }
+        .filter-select option { background:var(--night3); }
+
+        /* Stats mini */
+        .stats-mini {
+            display:grid; grid-template-columns:repeat(4,1fr);
+            gap:1px; background:var(--border); flex-shrink:0;
+        }
+        .stat-mini {
+            background:var(--night2); padding:10px 8px; text-align:center;
+            cursor:pointer; transition:background 0.2s;
+        }
+        .stat-mini:hover { background:var(--night3); }
+        .stat-mini.active { background:rgba(232,49,26,0.08); }
+        .sm-num { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
+        .sm-lbl { font-size:10px; color:var(--muted); margin-top:1px; }
+
+        /* Order cards */
+        .order-list { padding:8px; display:flex; flex-direction:column; gap:6px; }
+        .order-card {
+            background:var(--night3); border:1px solid var(--border2);
+            border-radius:12px; padding:12px;
+            cursor:pointer; transition:all 0.2s;
+            position:relative; overflow:hidden;
+        }
+        .order-card::before {
+            content:''; position:absolute; left:0; top:0; bottom:0;
+            width:3px; border-radius:3px 0 0 3px;
+        }
+        .order-card.pending  ::before { background:var(--yellow); }
+        .order-card.planned  ::before { background:var(--blue); }
+        .order-card.urgent   ::before { background:var(--orange); }
+        .order-card.delivered::before { background:var(--green); }
+        .order-card:hover { border-color:rgba(255,255,255,0.25); transform:translateX(2px); }
+        .order-card.selected { border-color:var(--red); background:rgba(232,49,26,0.06); }
+
+        .oc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+        .oc-num { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; color:var(--muted2); }
+        .oc-badge {
+            font-size:9px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
+            padding:2px 8px; border-radius:100px;
+        }
+        .oc-badge.pending   { background:rgba(245,158,11,0.15); color:var(--yellow); border:1px solid rgba(245,158,11,0.3); }
+        .oc-badge.planned   { background:rgba(59,130,246,0.15);  color:var(--blue);   border:1px solid rgba(59,130,246,0.3); }
+        .oc-badge.urgent    { background:rgba(249,115,22,0.15);  color:var(--orange); border:1px solid rgba(249,115,22,0.3); }
+        .oc-badge.delivered { background:rgba(34,197,94,0.15);   color:var(--green);  border:1px solid rgba(34,197,94,0.3); }
+        .oc-badge.in_transit{ background:rgba(168,85,247,0.15);  color:var(--purple); border:1px solid rgba(168,85,247,0.3); }
+
+        .oc-route { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+        .oc-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+        .oc-dot.p { background:var(--blue); }
+        .oc-dot.d { background:var(--red); }
+        .oc-addr { font-size:12px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .oc-arrow { color:var(--muted); font-size:10px; flex-shrink:0; }
+        .oc-meta { display:flex; gap:8px; align-items:center; }
+        .oc-meta-item { font-size:11px; color:var(--muted); display:flex; align-items:center; gap:4px; }
+        .oc-actions { display:flex; gap:4px; margin-top:8px; }
+        .oc-btn { flex:1; padding:5px; border-radius:6px; border:none; font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; cursor:pointer; transition:all 0.2s; }
+        .oc-btn.assign { background:rgba(59,130,246,0.15); color:var(--blue); }
+        .oc-btn.assign:hover { background:rgba(59,130,246,0.3); }
+        .oc-btn.view   { background:rgba(255,255,255,0.06); color:var(--muted2); }
+        .oc-btn.view:hover { background:rgba(255,255,255,0.12); color:var(--white); }
+        .oc-btn.done   { background:rgba(34,197,94,0.15); color:var(--green); }
+        .oc-btn.done:hover { background:rgba(34,197,94,0.3); }
+
+        /* Empty state */
+        .empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; text-align:center; }
+        .empty-ico { font-size:40px; opacity:0.15; margin-bottom:12px; }
+        .empty-txt { font-size:13px; color:var(--muted); }
+
+        /* Tours tab */
+        .tour-header { padding:12px; display:flex; gap:8px; flex-shrink:0; border-bottom:1px solid var(--border); }
+        .tour-card { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:14px; margin:0 8px 6px; cursor:pointer; transition:all 0.2s; }
+        .tour-card:hover { border-color:rgba(255,255,255,0.25); }
+        .tour-card.active-tour { border-color:var(--green); background:rgba(34,197,94,0.06); }
+        .tc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+        .tc-name { font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:1px; }
+        .tc-meta { display:flex; gap:10px; }
+        .tc-meta-item { font-size:11px; color:var(--muted); }
+        .tc-orders { display:flex; flex-direction:column; gap:4px; margin-top:8px; }
+        .tc-order { font-size:11px; color:var(--muted2); padding:4px 8px; background:var(--surface); border-radius:6px; display:flex; gap:6px; align-items:center; }
+
+        /* ── MAP ── */
+        .map-wrap { flex:1; position:relative; }
+        #map { width:100%; height:100%; }
+
+        /* Map controls */
+        .map-controls {
+            position:absolute; top:12px; right:12px; z-index:100;
+            display:flex; flex-direction:column; gap:6px;
+        }
+        .map-ctrl-btn {
+            width:36px; height:36px;
+            background:rgba(17,17,24,0.92); backdrop-filter:blur(10px);
+            border:1px solid var(--border2); border-radius:9px;
+            display:grid; place-items:center;
+            color:var(--muted2); font-size:14px;
+            cursor:pointer; transition:all 0.2s;
+        }
+        .map-ctrl-btn:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .map-ctrl-btn.active { background:rgba(232,49,26,0.2); border-color:var(--red); color:var(--red); }
+
+        /* Map legend */
+        .map-legend {
+            position:absolute; bottom:16px; left:12px; z-index:100;
+            background:rgba(17,17,24,0.92); backdrop-filter:blur(10px);
+            border:1px solid var(--border2); border-radius:12px;
+            padding:10px 14px;
+        }
+        .legend-title { font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+        .legend-item { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted2); margin-bottom:4px; }
+        .legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+        /* Order detail panel */
+        .detail-panel {
+            position:absolute; bottom:16px; right:12px; z-index:100;
+            width:280px;
+            background:rgba(17,17,24,0.95); backdrop-filter:blur(16px);
+            border:1px solid var(--border2); border-radius:16px;
+            padding:16px; display:none;
+            animation:slideUp 0.3s cubic-bezier(0.4,0,0.2,1);
+        }
+        @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+        .detail-panel.show { display:block; }
+        .dp-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .dp-num { font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:1px; color:var(--red); }
+        .dp-close { background:none; border:none; cursor:pointer; color:var(--muted); font-size:14px; transition:color 0.2s; }
+        .dp-close:hover { color:var(--white); }
+        .dp-route { margin-bottom:12px; }
+        .dp-stop { display:flex; align-items:flex-start; gap:10px; padding:6px 0; }
+        .dp-stop:not(:last-child) { border-bottom:1px dashed var(--border2); }
+        .dp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:4px; }
+        .dp-dot.p { background:var(--blue); }
+        .dp-dot.d { background:var(--red); }
+        .dp-addr { font-size:12px; color:var(--muted2); line-height:1.4; }
+        .dp-stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+        .dp-stat { background:var(--surface); border-radius:8px; padding:8px; text-align:center; }
+        .dp-stat-val { font-family:'Bebas Neue',cursive; font-size:16px; color:var(--white); }
+        .dp-stat-lbl { font-size:10px; color:var(--muted); margin-top:1px; }
+        .dp-actions { display:flex; gap:6px; }
+        .dp-actions .btn { flex:1; justify-content:center; font-size:11px; padding:7px; }
+
+        /* Optimize panel */
+        .optimize-panel {
+            position:absolute; top:12px; left:12px; z-index:100;
+            background:rgba(17,17,24,0.95); backdrop-filter:blur(16px);
+            border:1px solid var(--border2); border-radius:14px;
+            padding:14px 16px; min-width:220px; display:none;
+        }
+        .optimize-panel.show { display:block; animation:slideDown 0.3s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes slideDown { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:none} }
+        .op-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+        .op-item { display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--border); }
+        .op-item:last-of-type { border:none; }
+        .op-lbl { color:var(--muted); }
+        .op-val { color:var(--white); font-weight:600; }
+
+        /* Toast */
+        .toast { position:fixed; top:16px; right:16px; padding:12px 18px; border-radius:10px; display:flex; align-items:center; gap:10px; font-size:13px; font-weight:500; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.5); z-index:9999; transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .toast.show { transform:translateX(0); }
+        .toast.success .t-ico { color:var(--green); }
+        .toast.error   .t-ico { color:var(--red); }
+        .toast.info    .t-ico { color:var(--blue); }
+        .t-ico { font-size:14px; }
+
+        /* Loader */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; }
+        .loader.on { display:grid; }
+        .spin { width:40px; height:40px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+
+        /* Leaflet dark override */
+        .leaflet-tile { filter:brightness(0.85) saturate(0.6) invert(1) hue-rotate(180deg); }
+        .leaflet-container { background:#0a0a0f; }
+        .leaflet-control-zoom { display:none; }
+    </style>
+</head>
+<body>
+
+<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<div class="loader" id="loader"><div class="spin"></div></div>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+    <a href="dashboard.html" class="logo">
+        <div class="logo-mark">🚚</div>
+        Léman<em>-Dispatch</em>
+    </a>
+    <div class="topbar-sep"></div>
+    <div class="topbar-title">CARTE DISPATCH</div>
+    <div class="live-badge"><div class="live-dot"></div> Live</div>
+
+    <div class="topbar-actions">
+        <button class="btn btn-yellow" id="btnOptimize">
+            <i class="fas fa-magic"></i> Optimiser tournées
+        </button>
+        <a href="new-transport.html" class="btn btn-red">
+            <i class="fas fa-plus"></i> Nouveau transport
+        </a>
+        <a href="dashboard.html" class="btn btn-ghost">
+            <i class="fas fa-th-large"></i> Dashboard
+        </a>
+    </div>
+</header>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+
+        <!-- Stats mini -->
+        <div class="stats-mini">
+            <div class="stat-mini" data-filter="" id="smAll">
+                <div class="sm-num" id="smNumAll">0</div>
+                <div class="sm-lbl">Tous</div>
+            </div>
+            <div class="stat-mini" data-filter="pending" id="smPending">
+                <div class="sm-num" id="smNumPending" style="color:var(--yellow)">0</div>
+                <div class="sm-lbl">En attente</div>
+            </div>
+            <div class="stat-mini" data-filter="urgent" id="smUrgent">
+                <div class="sm-num" id="smNumUrgent" style="color:var(--orange)">0</div>
+                <div class="sm-lbl">Urgents</div>
+            </div>
+            <div class="stat-mini" data-filter="delivered" id="smDone">
+                <div class="sm-num" id="smNumDone" style="color:var(--green)">0</div>
+                <div class="sm-lbl">Livrés</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <div class="tab active" data-tab="orders">Transports</div>
+            <div class="tab" data-tab="tours">Tournées</div>
+            <div class="tab" data-tab="drivers">Chauffeurs</div>
+        </div>
+
+        <!-- ── TAB: ORDERS ── -->
+        <div class="tab-content active" id="tab-orders">
+            <div class="filter-bar">
+                <input type="text" id="searchOrders" placeholder="🔍 Rechercher…">
+                <select class="filter-select" id="filterStatus">
+                    <option value="">Tous</option>
+                    <option value="pending">En attente</option>
+                    <option value="planned">Planifié</option>
+                    <option value="in_transit">En route</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="delivered">Livré</option>
+                </select>
+            </div>
+            <div class="order-list" id="orderList">
+                <div class="empty-state">
+                    <div class="empty-ico"><i class="fas fa-spinner fa-spin"></i></div>
+                    <div class="empty-txt">Chargement…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── TAB: TOURS ── -->
+        <div class="tab-content" id="tab-tours">
+            <div class="tour-header">
+                <button class="btn btn-yellow" style="flex:1;justify-content:center;" id="btnAutoTours">
+                    <i class="fas fa-magic"></i> Générer auto
+                </button>
+                <button class="btn btn-ghost" id="btnClearTours">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div id="tourList" style="padding:8px;">
+                <div class="empty-state">
+                    <div class="empty-ico">🗺️</div>
+                    <div class="empty-txt">Aucune tournée.<br>Cliquez "Générer auto"</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── TAB: DRIVERS ── -->
+        <div class="tab-content" id="tab-drivers">
+            <div id="driverList" style="padding:8px;">
+                <div class="empty-state">
+                    <div class="empty-ico"><i class="fas fa-spinner fa-spin"></i></div>
+                    <div class="empty-txt">Chargement…</div>
+                </div>
+            </div>
+        </div>
+
+    </aside>
+
+    <!-- ── MAP ── -->
+    <div class="map-wrap">
+        <div id="map"></div>
+
+        <!-- Map controls -->
+        <div class="map-controls">
+            <div class="map-ctrl-btn" id="btnZoomIn"  title="Zoom +"><i class="fas fa-plus"></i></div>
+            <div class="map-ctrl-btn" id="btnZoomOut" title="Zoom -"><i class="fas fa-minus"></i></div>
+            <div class="map-ctrl-btn" id="btnFitAll"  title="Voir tout"><i class="fas fa-expand"></i></div>
+            <div class="map-ctrl-btn" id="btnToggleRoutes" title="Routes" style="margin-top:6px;"><i class="fas fa-route"></i></div>
+            <div class="map-ctrl-btn" id="btnToggleClusters" title="Clusters"><i class="fas fa-layer-group"></i></div>
+        </div>
+
+        <!-- Legend -->
+        <div class="map-legend">
+            <div class="legend-title">Légende</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div> En attente</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> Planifié</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Urgent</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> En route</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Livré</div>
+        </div>
+
+        <!-- Optimize result panel -->
+        <div class="optimize-panel" id="optimizePanel">
+            <div class="op-title"><i class="fas fa-magic" style="color:var(--yellow)"></i> OPTIMISATION</div>
+            <div class="op-item"><span class="op-lbl">Tournées générées</span><span class="op-val" id="opTours">—</span></div>
+            <div class="op-item"><span class="op-lbl">Transports groupés</span><span class="op-val" id="opOrders">—</span></div>
+            <div class="op-item"><span class="op-lbl">Distance totale</span><span class="op-val" id="opDist">—</span></div>
+            <div class="op-item"><span class="op-lbl">Durée estimée</span><span class="op-val" id="opDur">—</span></div>
+        </div>
+
+        <!-- Order detail panel -->
+        <div class="detail-panel" id="detailPanel">
+            <div class="dp-head">
+                <div class="dp-num" id="dpNum">LC-0001</div>
+                <button class="dp-close" id="dpClose"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="dp-route" id="dpRoute"></div>
+            <div class="dp-stats" id="dpStats"></div>
+            <div class="dp-actions" id="dpActions"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    if (!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
+        return;
+    }
+    const db = window.SUPABASE_CLIENT;
+
+    /* ── State ── */
+    let allOrders   = [];
+    let allDrivers  = [];
+    let filteredOrders = [];
+    let selectedOrder  = null;
+    let markers     = {};
+    let routeLines  = [];
+    let tourColors  = ['#22c55e','#3b82f6','#f59e0b','#a855f7','#f97316','#ec4899','#14b8a6'];
+    let showRoutes  = true;
+    let filterStatus = '';
+    let filterSearch = '';
+    let generatedTours = [];
+
+    /* ── Toast ── */
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function toast(type, msg) {
+        clearTimeout(toastTimer);
+        toastEl.className = 'toast ' + type + ' show';
+        document.getElementById('toastIco').textContent = type==='success'?'✓':type==='info'?'ℹ':'✕';
+        document.getElementById('toastTxt').textContent = msg;
+        toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 4000);
+    }
+    const loaderEl = document.getElementById('loader');
+    const showLoad = () => loaderEl.classList.add('on');
+    const hideLoad = () => loaderEl.classList.remove('on');
+
+    /* ── MAP INIT ── */
+    const map = L.map('map', { zoomControl:false, attributionControl:false }).setView([46.5197, 6.6323], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Map controls
+    document.getElementById('btnZoomIn').addEventListener('click',  () => map.zoomIn());
+    document.getElementById('btnZoomOut').addEventListener('click', () => map.zoomOut());
+    document.getElementById('btnFitAll').addEventListener('click',  () => fitAllMarkers());
+    document.getElementById('btnToggleRoutes').addEventListener('click', function() {
+        showRoutes = !showRoutes;
+        this.classList.toggle('active', showRoutes);
+        routeLines.forEach(l => showRoutes ? map.addLayer(l) : map.removeLayer(l));
+    });
+
+    /* ── MARKERS ── */
+    const STATUS_COLORS = {
+        pending:    '#f59e0b',
+        planned:    '#3b82f6',
+        urgent:     '#f97316',
+        in_transit: '#a855f7',
+        delivered:  '#22c55e',
+    };
+
+    function makeMarker(lat, lng, color, label, pulse=false) {
+        const size = pulse ? 14 : 12;
+        const html = `
+            <div style="position:relative;width:${size}px;height:${size}px;">
+                <div style="
+                    width:${size}px;height:${size}px;
+                    background:${color}; border:2px solid rgba(255,255,255,0.8);
+                    border-radius:50%; box-shadow:0 2px 8px rgba(0,0,0,0.5);
+                    ${pulse?'animation:mPulse 1.2s ease-in-out infinite':''}
+                "></div>
+                ${pulse?`<div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid ${color};opacity:0.4;animation:mRipple 1.2s ease-in-out infinite"></div>`:''}
+            </div>
+            <style>
+                @keyframes mPulse  {0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
+                @keyframes mRipple {0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(2);opacity:0}}
+            </style>`;
+        return L.marker([lat, lng], {
+            icon: L.divIcon({ html, className:'', iconSize:[size,size], iconAnchor:[size/2,size/2] })
+        });
+    }
+
+    function makeDeliveryMarker(lat, lng, color) {
+        const html = `<div style="
+            width:10px;height:10px;
+            background:${color}; border:2px solid rgba(255,255,255,0.6);
+            border-radius:2px; transform:rotate(45deg);
+            box-shadow:0 2px 6px rgba(0,0,0,0.4);
+        "></div>`;
+        return L.marker([lat, lng], {
+            icon: L.divIcon({ html, className:'', iconSize:[10,10], iconAnchor:[5,5] })
+        });
+    }
+
+    /* ── LOAD DATA ── */
+    async function loadOrders() {
+        const { data, error } = await db
+            .from('transport_orders_simple')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) { toast('error', error.message); return; }
+        allOrders = data || [];
+        updateStats();
+        applyFilters();
+        renderMap();
+    }
+
+    async function loadDrivers() {
+        const { data } = await db.from('chauffeurs').select('*').eq('actif', true);
+        allDrivers = data || [];
+        renderDrivers();
+    }
+
+    /* ── STATS ── */
+    function updateStats() {
+        document.getElementById('smNumAll').textContent     = allOrders.length;
+        document.getElementById('smNumPending').textContent = allOrders.filter(o=>o.status==='pending').length;
+        document.getElementById('smNumUrgent').textContent  = allOrders.filter(o=>o.priority==='urgent').length;
+        document.getElementById('smNumDone').textContent    = allOrders.filter(o=>o.status==='delivered').length;
+    }
+
+    /* ── FILTERS ── */
+    function applyFilters() {
+        let list = [...allOrders];
+        if (filterStatus) {
+            if (filterStatus === 'urgent') list = list.filter(o => o.priority === 'urgent');
+            else list = list.filter(o => o.status === filterStatus);
+        }
+        if (filterSearch) {
+            const q = filterSearch.toLowerCase();
+            list = list.filter(o =>
+                (o.order_number||'').toLowerCase().includes(q) ||
+                (o.pickup_address||'').toLowerCase().includes(q) ||
+                (o.delivery_address||'').toLowerCase().includes(q)
+            );
+        }
+        filteredOrders = list;
+        renderOrderList();
+    }
+
+    document.getElementById('searchOrders').addEventListener('input', e => { filterSearch = e.target.value; applyFilters(); });
+    document.getElementById('filterStatus').addEventListener('change', e => { filterStatus = e.target.value; applyFilters(); });
+
+    // Stats mini filter
+    document.querySelectorAll('.stat-mini').forEach(el => {
+        el.addEventListener('click', () => {
+            document.querySelectorAll('.stat-mini').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+            filterStatus = el.dataset.filter;
+            document.getElementById('filterStatus').value = filterStatus;
+            applyFilters();
+        });
+    });
+
+    /* ── RENDER ORDER LIST ── */
+    function renderOrderList() {
+        const el = document.getElementById('orderList');
+        if (!filteredOrders.length) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-ico">📦</div><div class="empty-txt">Aucun transport trouvé</div></div>`;
+            return;
+        }
+        el.innerHTML = filteredOrders.map(o => {
+            const status   = o.priority === 'urgent' ? 'urgent' : (o.status || 'pending');
+            const statusLabel = { pending:'En attente', planned:'Planifié', urgent:'URGENT', in_transit:'En route', delivered:'Livré' }[status] || status;
+            const pickup   = shortAddr(o.pickup_address);
+            const delivery = shortAddr(o.delivery_address);
+            const km       = o.distance_km ? `${o.distance_km}km` : '—';
+            const price    = o.price_chf   ? `CHF ${o.price_chf}` : '—';
+
+            return `<div class="order-card ${status}" data-id="${o.id}" onclick="selectOrder('${o.id}')">
+                <div class="oc-top">
+                    <span class="oc-num">${o.order_number || o.id.slice(0,8)}</span>
+                    <span class="oc-badge ${status}">${statusLabel}</span>
+                </div>
+                <div class="oc-route">
+                    <div class="oc-dot p"></div>
+                    <div class="oc-addr" style="flex:1">${pickup}</div>
+                </div>
+                <div class="oc-route">
+                    <div class="oc-dot d"></div>
+                    <div class="oc-addr" style="flex:1">${delivery}</div>
+                </div>
+                <div class="oc-meta">
+                    <span class="oc-meta-item"><i class="fas fa-route"></i> ${km}</span>
+                    <span class="oc-meta-item"><i class="fas fa-franc-sign"></i> ${price}</span>
+                    ${o.package_type ? `<span class="oc-meta-item"><i class="fas fa-box"></i> ${o.package_type}</span>` : ''}
+                </div>
+                <div class="oc-actions">
+                    <button class="oc-btn view"   onclick="event.stopPropagation();focusOrder('${o.id}')"><i class="fas fa-map-marker-alt"></i> Carte</button>
+                    <button class="oc-btn assign" onclick="event.stopPropagation();openAssign('${o.id}')"><i class="fas fa-user-plus"></i> Assigner</button>
+                    ${status !== 'delivered' ? `<button class="oc-btn done" onclick="event.stopPropagation();markDelivered('${o.id}')"><i class="fas fa-check"></i></button>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function shortAddr(addr) {
+        if (!addr) return '—';
+        return addr.split(',').slice(0,2).join(',').trim();
+    }
+
+    /* ── RENDER MAP ── */
+    function renderMap() {
+        // Clear existing markers
+        Object.values(markers).forEach(m => {
+            if (m.pickup)   map.removeLayer(m.pickup);
+            if (m.delivery) map.removeLayer(m.delivery);
+        });
+        markers = {};
+        routeLines.forEach(l => map.removeLayer(l));
+        routeLines = [];
+
+        const bounds = [];
+
+        allOrders.forEach(o => {
+            const color = STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')] || STATUS_COLORS.pending;
+            const isUrgent = o.priority === 'urgent';
+            const mGroup = {};
+
+            if (o.pickup_lat && o.pickup_lng) {
+                const m = makeMarker(o.pickup_lat, o.pickup_lng, color, o.order_number, isUrgent);
+                m.addTo(map);
+                m.on('click', () => selectOrder(o.id));
+                m.bindTooltip(`<b>${o.order_number}</b><br>📍 ${shortAddr(o.pickup_address)}`, { className:'', direction:'top' });
+                mGroup.pickup = m;
+                bounds.push([o.pickup_lat, o.pickup_lng]);
+            }
+            if (o.delivery_lat && o.delivery_lng) {
+                const m = makeDeliveryMarker(o.delivery_lat, o.delivery_lng, color);
+                m.addTo(map);
+                m.on('click', () => selectOrder(o.id));
+                m.bindTooltip(`<b>${o.order_number}</b><br>🏁 ${shortAddr(o.delivery_address)}`, { className:'', direction:'top' });
+                mGroup.delivery = m;
+                bounds.push([o.delivery_lat, o.delivery_lng]);
+            }
+            // Draw straight line between pickup and delivery
+            if (o.pickup_lat && o.delivery_lat) {
+                const line = L.polyline([
+                    [o.pickup_lat, o.pickup_lng],
+                    [o.delivery_lat, o.delivery_lng]
+                ], { color, weight:1.5, opacity:0.35, dashArray:'4 6' });
+                line.addTo(map);
+                routeLines.push(line);
+                mGroup.line = line;
+            }
+            markers[o.id] = mGroup;
+        });
+
+        if (bounds.length > 0) {
+            try { map.fitBounds(bounds, { padding:[40,40] }); } catch(e){}
+        }
+    }
+
+    function fitAllMarkers() {
+        const bounds = [];
+        allOrders.forEach(o => {
+            if (o.pickup_lat)   bounds.push([o.pickup_lat, o.pickup_lng]);
+            if (o.delivery_lat) bounds.push([o.delivery_lat, o.delivery_lng]);
+        });
+        if (bounds.length) map.fitBounds(bounds, { padding:[40,40] });
+    }
+
+    /* ── SELECT ORDER ── */
+    window.selectOrder = function(id) {
+        // Deselect previous
+        document.querySelectorAll('.order-card').forEach(c => c.classList.remove('selected'));
+        const card = document.querySelector(`.order-card[data-id="${id}"]`);
+        if (card) { card.classList.add('selected'); card.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+
+        const o = allOrders.find(x => x.id === id);
+        if (!o) return;
+        selectedOrder = o;
+        showDetail(o);
+    };
+
+    window.focusOrder = function(id) {
+        const o = allOrders.find(x => x.id === id);
+        if (!o || !o.pickup_lat) return;
+        map.flyTo([o.pickup_lat, o.pickup_lng], 14, { duration:1 });
+        selectOrder(id);
+    };
+
+    /* ── DETAIL PANEL ── */
+    function showDetail(o) {
+        const panel = document.getElementById('detailPanel');
+        document.getElementById('dpNum').textContent = o.order_number || o.id.slice(0,8);
+
+        const pickup   = shortAddr(o.pickup_address)   || '—';
+        const delivery = shortAddr(o.delivery_address) || '—';
+
+        document.getElementById('dpRoute').innerHTML = `
+            <div class="dp-stop">
+                <div class="dp-dot p"></div>
+                <div class="dp-addr">${pickup}</div>
+            </div>
+            <div class="dp-stop">
+                <div class="dp-dot d"></div>
+                <div class="dp-addr">${delivery}</div>
+            </div>`;
+
+        const status = o.priority==='urgent'?'urgent':(o.status||'pending');
+        const statusLabel = { pending:'En attente', planned:'Planifié', urgent:'URGENT', in_transit:'En route', delivered:'Livré' }[status] || status;
+
+        document.getElementById('dpStats').innerHTML = `
+            <div class="dp-stat"><div class="dp-stat-val">${o.distance_km||'—'}</div><div class="dp-stat-lbl">km</div></div>
+            <div class="dp-stat"><div class="dp-stat-val">${o.price_chf?`${o.price_chf}`:'—'}</div><div class="dp-stat-lbl">CHF</div></div>
+            <div class="dp-stat"><div class="dp-stat-val" style="font-size:11px;font-family:'Outfit',sans-serif;">${statusLabel}</div><div class="dp-stat-lbl">Statut</div></div>`;
+
+        document.getElementById('dpActions').innerHTML = `
+            <button class="btn btn-blue" onclick="focusOrder('${o.id}');"><i class="fas fa-map-marker-alt"></i> Centrer</button>
+            ${status!=='delivered'?`<button class="btn btn-green" onclick="markDelivered('${o.id}')"><i class="fas fa-check"></i> Livré</button>`:''}
+            <button class="btn btn-ghost" onclick="editOrder('${o.id}')"><i class="fas fa-pen"></i></button>`;
+
+        panel.classList.add('show');
+    }
+
+    document.getElementById('dpClose').addEventListener('click', () => {
+        document.getElementById('detailPanel').classList.remove('show');
+        selectedOrder = null;
+        document.querySelectorAll('.order-card').forEach(c => c.classList.remove('selected'));
+    });
+
+    /* ── MARK DELIVERED ── */
+    window.markDelivered = async function(id) {
+        showLoad();
+        try {
+            const { error } = await db.from('transport_orders_simple')
+                .update({ status:'delivered', delivered_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) throw error;
+            toast('success', 'Transport marqué comme livré ✓');
+            await loadOrders();
+            document.getElementById('detailPanel').classList.remove('show');
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.editOrder = function(id) {
+        window.location.href = `new-transport.html?edit=${id}`;
+    };
+
+    /* ── ASSIGN DRIVER ── */
+    window.openAssign = function(id) {
+        const o = allOrders.find(x => x.id === id);
+        if (!o) return;
+        if (!allDrivers.length) { toast('info', 'Aucun chauffeur disponible'); return; }
+
+        const driverOptions = allDrivers.map(d =>
+            `<option value="${d.id}">${d.prenom||''} ${d.nom||''}</option>`
+        ).join('');
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:500;';
+        modal.innerHTML = `
+            <div style="background:var(--night3);border:1px solid var(--border2);border-radius:20px;padding:32px;width:320px;box-shadow:0 40px 100px rgba(0,0,0,0.6);">
+                <div style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;margin-bottom:20px;">ASSIGNER CHAUFFEUR</div>
+                <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${o.order_number} · ${shortAddr(o.pickup_address)} → ${shortAddr(o.delivery_address)}</div>
+                <select id="assignSelect" style="width:100%;padding:11px 14px;background:var(--surface);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);margin-bottom:16px;">
+                    <option value="">— Choisir un chauffeur —</option>
+                    ${driverOptions}
+                </select>
+                <div style="display:flex;gap:10px;">
+                    <button onclick="doAssign('${id}', document.getElementById('assignSelect').value); this.closest('[style]').remove();" style="flex:2;padding:12px;background:var(--green);color:var(--night);border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;cursor:pointer;">Assigner</button>
+                    <button onclick="this.closest('[style]').remove();" style="flex:1;padding:12px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;cursor:pointer;">Annuler</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+    };
+
+    window.doAssign = async function(orderId, driverId) {
+        if (!driverId) { toast('error', 'Choisissez un chauffeur'); return; }
+        showLoad();
+        try {
+            const { error } = await db.from('transport_orders_simple')
+                .update({ driver_id: driverId, status:'planned', assigned_at: new Date().toISOString() })
+                .eq('id', orderId);
+            if (error) throw error;
+            toast('success', 'Chauffeur assigné ✓');
+            await loadOrders();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    /* ── RENDER DRIVERS ── */
+    function renderDrivers() {
+        const el = document.getElementById('driverList');
+        if (!allDrivers.length) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-ico">🚗</div><div class="empty-txt">Aucun chauffeur actif</div></div>`;
+            return;
+        }
+        el.innerHTML = allDrivers.map(d => {
+            const assigned = allOrders.filter(o => o.driver_id === d.id && o.status !== 'delivered').length;
+            return `<div style="background:var(--night3);border:1px solid var(--border2);border-radius:12px;padding:12px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
+                <div style="width:36px;height:36px;border-radius:10px;background:rgba(34,197,94,0.15);color:var(--green);display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:15px;flex-shrink:0;">${(d.prenom?.[0]||'C').toUpperCase()}</div>
+                <div style="flex:1;">
+                    <div style="font-weight:600;font-size:13px;">${d.prenom||''} ${d.nom||''}</div>
+                    <div style="font-size:11px;color:var(--muted);">${assigned} transport${assigned>1?'s':''} en cours</div>
+                </div>
+                <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:100px;${assigned>0?'background:rgba(59,130,246,0.15);color:var(--blue);border:1px solid rgba(59,130,246,0.3)':'background:rgba(34,197,94,0.1);color:var(--green);border:1px solid rgba(34,197,94,0.2)'}">
+                    ${assigned>0?'En mission':'Disponible'}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    /* ── TOUR OPTIMIZER ── */
+    class TourOptimizer {
+        haversine(a, b) {
+            const R=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+            const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+            return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+        }
+        cluster(orders, radius=8) {
+            const clusters=[], assigned=new Set();
+            orders.forEach(o => {
+                if(assigned.has(o.id)||!o.pickup_lat) return;
+                const cluster=[o]; assigned.add(o.id);
+                orders.forEach(other => {
+                    if(assigned.has(other.id)||!other.pickup_lat) return;
+                    const d=this.haversine({lat:o.pickup_lat,lng:o.pickup_lng},{lat:other.pickup_lat,lng:other.pickup_lng});
+                    if(d<=radius){cluster.push(other);assigned.add(other.id);}
+                });
+                clusters.push(cluster);
+            });
+            return clusters;
+        }
+        nearestNeighbor(orders) {
+            if(!orders.length) return [];
+            const route=[], remaining=[...orders];
+            let current={lat:46.5197,lng:6.6323};
+            while(remaining.length) {
+                let best=0, bestD=Infinity;
+                remaining.forEach((o,i)=>{
+                    if(!o.pickup_lat) return;
+                    const d=this.haversine(current,{lat:o.pickup_lat,lng:o.pickup_lng});
+                    const bonus=o.priority==='urgent'?0.3:1;
+                    if(d*bonus<bestD){bestD=d*bonus;best=i;}
+                });
+                route.push(remaining.splice(best,1)[0]);
+                const last=route[route.length-1];
+                current={lat:last.delivery_lat||last.pickup_lat,lng:last.delivery_lng||last.pickup_lng};
+            }
+            return route;
+        }
+        totalDist(orders) {
+            if(orders.length<2) return 0;
+            let d=0;
+            for(let i=0;i<orders.length-1;i++) {
+                if(orders[i].delivery_lat&&orders[i+1].pickup_lat)
+                    d+=this.haversine({lat:orders[i].delivery_lat,lng:orders[i].delivery_lng},{lat:orders[i+1].pickup_lat,lng:orders[i+1].pickup_lng});
+            }
+            return d;
+        }
+        optimize(orders) {
+            const pending=orders.filter(o=>o.status!=='delivered'&&o.pickup_lat);
+            if(!pending.length) return [];
+            const clusters=this.cluster(pending,10);
+            return clusters.map((cluster,i)=>{
+                const sorted=this.nearestNeighbor(cluster);
+                const dist=this.totalDist(sorted);
+                const urgents=sorted.filter(o=>o.priority==='urgent').length;
+                return {
+                    id:i+1, name:`Tournée ${i+1}`,
+                    orders:sorted, color:tourColors[i%tourColors.length],
+                    dist:dist.toFixed(1),
+                    dur:Math.round(dist*3+sorted.length*5),
+                    urgents
+                };
+            }).sort((a,b)=>b.urgents-a.urgents);
+        }
+    }
+
+    /* ── GENERATE TOURS ── */
+    document.getElementById('btnAutoTours').addEventListener('click', generateTours);
+    document.getElementById('btnOptimize').addEventListener('click', generateTours);
+
+    function generateTours() {
+        const opt = new TourOptimizer();
+        generatedTours = opt.optimize(allOrders);
+
+        if (!generatedTours.length) {
+            toast('info', 'Aucun transport à optimiser');
+            return;
+        }
+
+        // Draw tour routes on map
+        routeLines.forEach(l => map.removeLayer(l));
+        routeLines = [];
+
+        generatedTours.forEach(tour => {
+            const pts = [];
+            tour.orders.forEach(o => {
+                if(o.pickup_lat)   pts.push([o.pickup_lat,   o.pickup_lng]);
+                if(o.delivery_lat) pts.push([o.delivery_lat, o.delivery_lng]);
+            });
+            if(pts.length > 1) {
+                const line = L.polyline(pts, { color:tour.color, weight:3, opacity:0.8, dashArray:'6 4' }).addTo(map);
+                routeLines.push(line);
+            }
+        });
+
+        renderTours();
+
+        // Optimization panel
+        const totalOrders = generatedTours.reduce((s,t)=>s+t.orders.length, 0);
+        const totalDist   = generatedTours.reduce((s,t)=>s+parseFloat(t.dist), 0);
+        const totalDur    = generatedTours.reduce((s,t)=>s+t.dur, 0);
+        document.getElementById('opTours').textContent  = generatedTours.length;
+        document.getElementById('opOrders').textContent = totalOrders;
+        document.getElementById('opDist').textContent   = `${totalDist.toFixed(1)} km`;
+        document.getElementById('opDur').textContent    = `${Math.round(totalDur/60)}h ${totalDur%60}min`;
+        document.getElementById('optimizePanel').classList.add('show');
+
+        // Switch to tours tab
+        switchTab('tours');
+        toast('success', `${generatedTours.length} tournée${generatedTours.length>1?'s':''} générée${generatedTours.length>1?'s':''} ✓`);
+    }
+
+    function renderTours() {
+        const el = document.getElementById('tourList');
+        if (!generatedTours.length) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-ico">🗺️</div><div class="empty-txt">Aucune tournée.<br>Cliquez "Générer auto"</div></div>`;
+            return;
+        }
+        el.innerHTML = generatedTours.map(tour => `
+            <div class="tour-card" onclick="focusTour(${tour.id})">
+                <div class="tc-top">
+                    <div class="tc-name" style="color:${tour.color}">${tour.name}</div>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        ${tour.urgents>0?`<span style="font-size:10px;font-weight:700;color:var(--orange);background:rgba(249,115,22,0.15);padding:2px 8px;border-radius:100px;">🔥 ${tour.urgents} urgent${tour.urgents>1?'s':''}</span>`:''}
+                        <span style="font-size:10px;color:var(--muted);background:var(--surface);padding:2px 8px;border-radius:100px;">${tour.orders.length} stops</span>
+                    </div>
+                </div>
+                <div class="tc-meta">
+                    <span class="tc-meta-item"><i class="fas fa-route"></i> ${tour.dist} km</span>
+                    <span class="tc-meta-item" style="margin-left:12px;"><i class="fas fa-clock"></i> ~${tour.dur} min</span>
+                </div>
+                <div class="tc-orders">
+                    ${tour.orders.slice(0,3).map(o=>`
+                        <div class="tc-order">
+                            <div style="width:6px;height:6px;border-radius:50%;background:${tour.color};flex-shrink:0;"></div>
+                            ${o.order_number||o.id.slice(0,8)} · ${shortAddr(o.pickup_address)}
+                        </div>`).join('')}
+                    ${tour.orders.length>3?`<div class="tc-order" style="color:var(--muted)">+${tour.orders.length-3} autres…</div>`:''}
+                </div>
+                <div style="display:flex;gap:6px;margin-top:8px;">
+                    <button class="btn btn-green" style="flex:1;justify-content:center;font-size:11px;padding:7px;" onclick="event.stopPropagation();saveTour(${tour.id})">
+                        <i class="fas fa-save"></i> Sauvegarder
+                    </button>
+                </div>
+            </div>`).join('');
+    }
+
+    window.focusTour = function(id) {
+        const tour = generatedTours.find(t => t.id === id);
+        if (!tour) return;
+        const bounds = [];
+        tour.orders.forEach(o => {
+            if(o.pickup_lat)   bounds.push([o.pickup_lat, o.pickup_lng]);
+            if(o.delivery_lat) bounds.push([o.delivery_lat, o.delivery_lng]);
+        });
+        if(bounds.length) map.fitBounds(bounds, { padding:[40,40] });
+    };
+
+    window.saveTour = async function(id) {
+        const tour = generatedTours.find(t => t.id === id);
+        if (!tour) return;
+        showLoad();
+        try {
+            // Create tour record
+            const { data: tourRec, error: tourErr } = await db.from('tours').insert([{
+                name: tour.name,
+                status: 'draft',
+                total_distance_km: parseFloat(tour.dist),
+                total_duration_min: tour.dur,
+                optimized: true
+            }]).select().single();
+            if (tourErr) throw tourErr;
+
+            // Update orders with tour_id
+            for (const o of tour.orders) {
+                await db.from('transport_orders_simple')
+                    .update({ status:'planned' })
+                    .eq('id', o.id);
+            }
+
+            toast('success', `${tour.name} sauvegardée ✓`);
+            await loadOrders();
+        } catch(e) {
+            toast('error', e.message);
+        } finally { hideLoad(); }
+    };
+
+    document.getElementById('btnClearTours').addEventListener('click', () => {
+        generatedTours = [];
+        routeLines.forEach(l => map.removeLayer(l));
+        routeLines = [];
+        renderTours();
+        document.getElementById('optimizePanel').classList.remove('show');
+        renderMap();
+        toast('info', 'Tournées effacées');
+    });
+
+    /* ── TABS ── */
+    function switchTab(name) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.tab[data-tab="${name}"]`)?.classList.add('active');
+        document.getElementById(`tab-${name}`)?.classList.add('active');
+    }
+    document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => switchTab(t.dataset.tab));
+    });
+
+    /* ── REALTIME ── */
+    function setupRealtime() {
+        db.channel('transport_orders_simple')
+            .on('postgres_changes', { event:'*', schema:'public', table:'transport_orders_simple' }, () => {
+                loadOrders();
+            })
+            .subscribe();
+    }
+
+    /* ── INIT ── */
+    async function init() {
+        await Promise.all([loadOrders(), loadDrivers()]);
+        setupRealtime();
+    }
+    init();
+
+})();
+</script>
+</body>
+</html>
 
