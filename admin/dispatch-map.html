@@ -1,388 +1,1365 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Carte Dispatch | Léman</title>
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Dispatch | Léman Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../config.js"></script>
+    <script src="../push-manager.js"></script>
     <style>
         :root {
-            --red:    #e8311a;
-            --night:  #0a0a0f;
-            --night2: #111118;
-            --night3: #18181f;
-            --border: rgba(255,255,255,0.07);
-            --border2:rgba(255,255,255,0.13);
-            --white:  #ffffff;
-            --muted:  rgba(255,255,255,0.38);
-            --muted2: rgba(255,255,255,0.6);
-            --green:  #22c55e;
-            --blue:   #3b82f6;
-            --yellow: #f59e0b;
-            --orange: #f97316;
-            --purple: #a855f7;
+            --red:     #e8311a;
+            --red-dark:#c0280f;
+            --night:   #0a0a0f;
+            --night2:  #111118;
+            --night3:  #18181f;
+            --surface: #1e1e28;
+            --border:  rgba(255,255,255,0.07);
+            --border2: rgba(255,255,255,0.13);
+            --white:   #ffffff;
+            --muted:   rgba(255,255,255,0.38);
+            --muted2:  rgba(255,255,255,0.6);
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --yellow:  #f59e0b;
+            --orange:  #f97316;
+            --purple:  #a855f7;
+            --col1:    300px;
+            --col2:    360px;
         }
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
         html, body { height:100%; overflow:hidden; }
-        body { font-family:'Outfit',sans-serif; background:var(--night); color:var(--white); }
+        body { font-family:'Outfit',sans-serif; background:var(--night); color:var(--white); display:flex; flex-direction:column; }
 
-        /* ── MAP ── */
-        #map { width:100vw; height:100vh; }
+        /* ── TOPBAR ── */
+        .topbar { background:var(--night2); border-bottom:1px solid var(--border); padding:0 16px; height:52px; display:flex; align-items:center; gap:10px; flex-shrink:0; z-index:200; }
+        .logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; color:var(--white); text-decoration:none; }
+        .logo-mark { width:28px; height:28px; background:var(--red); border-radius:7px; display:grid; place-items:center; font-size:13px; }
+        .logo em { color:var(--red); font-style:normal; }
+        .sep { width:1px; height:20px; background:var(--border2); }
+        .tb-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:2px; color:var(--muted2); }
+        .tb-right { margin-left:auto; display:flex; gap:8px; align-items:center; }
+        .btn { font-family:'Outfit',sans-serif; font-weight:600; font-size:12px; padding:6px 12px; border-radius:7px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all 0.2s; text-decoration:none; white-space:nowrap; }
+        .btn-ghost  { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .btn-red    { background:var(--red); color:var(--white); }
+        .btn-red:hover { background:var(--red-dark); }
+        .btn-green  { background:var(--green); color:var(--night); font-weight:700; }
+        .btn-green:hover { filter:brightness(1.1); }
+        .btn-yellow { background:var(--yellow); color:var(--night); font-weight:700; }
+        .btn-blue   { background:var(--blue); color:var(--white); }
+        .btn-sm     { padding:5px 10px; font-size:11px; }
+
+        /* ── 3 COLUMN LAYOUT ── */
+        .layout { flex:1; display:grid; grid-template-columns:var(--col1) var(--col2) 1fr; overflow:hidden; }
+
+        /* ── COL 1 : TRANSPORTS ── */
+        .col-transports { background:var(--night2); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+        .col-header { padding:10px 12px 8px; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .col-title { font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; color:var(--muted2); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+        .col-title span { font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; background:rgba(232,49,26,0.12); color:var(--red); padding:2px 8px; border-radius:100px; }
+
+        /* Stats mini */
+        .stats-mini { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); flex-shrink:0; }
+        .sm { background:var(--night2); padding:8px 4px; text-align:center; cursor:pointer; transition:background 0.2s; }
+        .sm:hover,.sm.active { background:var(--night3); }
+        .sm-num { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; }
+        .sm-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+
+        /* Filter */
+        .filter-bar { padding:8px; flex-shrink:0; border-bottom:1px solid var(--border); }
+        .filter-bar input { width:100%; padding:7px 10px; background:var(--night3); border:1px solid var(--border2); border-radius:7px; font-family:'Outfit',sans-serif; font-size:12px; color:var(--white); }
+        .filter-bar input::placeholder { color:var(--muted); }
+        .filter-bar input:focus { outline:none; border-color:var(--red); }
+
+        /* Order list */
+        .order-list { flex:1; overflow-y:auto; padding:6px; }
+        .order-list::-webkit-scrollbar { width:2px; }
+        .order-list::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+
+        /* Order card */
+        .order-card {
+            background:var(--night3); border:1.5px solid var(--border2);
+            border-radius:12px; padding:13px 14px; margin-bottom:7px;
+            cursor:grab; position:relative; overflow:hidden;
+            transition:all 0.2s; user-select:none;
+        }
+        .order-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; }
+        .order-card.pending::before   { background:var(--yellow); }
+        .order-card.urgent::before    { background:var(--orange); animation:pulseBar 1.2s ease-in-out infinite; }
+        .order-card.in_transit::before{ background:var(--purple); }
+        @keyframes pulseBar { 0%,100%{opacity:1}50%{opacity:0.3} }
+        .order-card:hover { border-color:rgba(255,255,255,0.25); transform:translateX(2px); box-shadow:0 4px 12px rgba(0,0,0,0.3); }
+        .order-card.dragging { opacity:0.3; transform:scale(0.97); }
+        .oc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+        .oc-num { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; color:var(--muted2); }
+        .oc-badge { font-size:11px; font-weight:700; text-transform:uppercase; padding:2px 6px; border-radius:100px; }
+        .oc-badge.pending   { background:rgba(245,158,11,0.15); color:var(--yellow); }
+        .oc-badge.urgent    { background:rgba(249,115,22,0.15); color:var(--orange); }
+        .oc-badge.in_transit{ background:rgba(168,85,247,0.15); color:var(--purple); }
+        .oc-stop { display:flex; align-items:center; gap:6px; padding:1px 0; }
+        .oc-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+        .oc-dot.p { background:var(--blue); }
+        .oc-dot.d { background:var(--red); }
+        .oc-addr { font-size:13px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .oc-meta { display:flex; gap:6px; margin-top:6px; }
+        .oc-tag { font-size:12px; color:var(--muted); background:var(--surface); padding:2px 6px; border-radius:5px; }
+        .drag-hint { font-size:10px; color:var(--muted); text-align:center; padding:4px; opacity:0.6; }
+
+        /* ── COL 2 : TOURNÉES ── */
+        .col-tours { background:var(--night2); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+        .tours-list { flex:1; overflow-y:auto; padding:8px; }
+        .tours-list::-webkit-scrollbar { width:2px; }
+        .tours-list::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+
+        /* Tour card */
+        .tour-card { background:var(--night3); border:1.5px solid var(--border2); border-radius:14px; margin-bottom:10px; overflow:hidden; transition:border-color 0.2s; }
+        .tour-card.drag-over { border-color:var(--green); background:rgba(34,197,94,0.06); transform:scale(1.005); }
+        .tour-head { padding:11px 13px; display:flex; align-items:center; gap:8px; cursor:pointer; border-bottom:1px solid var(--border); }
+        .tour-color { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .tour-name { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .tour-count { font-size:12px; font-weight:700; padding:2px 7px; border-radius:100px; background:var(--surface); color:var(--muted2); flex-shrink:0; }
+        .tour-chevron { color:var(--muted); font-size:11px; transition:transform 0.2s; flex-shrink:0; }
+        .tour-card.expanded .tour-chevron { transform:rotate(180deg); }
+        .tour-body { display:none; padding:10px; }
+        .tour-card.expanded .tour-body { display:block; }
+
+        /* Drop zone */
+        .drop-zone { min-height:80px; border:2px dashed var(--border2); border-radius:12px; padding:8px; margin-bottom:8px; transition:all 0.15s; }
+        .drop-zone.drag-over { border-color:var(--green); background:rgba(34,197,94,0.08); border-width:2px; transform:scale(1.01); }
+        .drop-zone.drag-near { border-color:rgba(34,197,94,0.5); background:rgba(34,197,94,0.04); }
+        .drop-hint { text-align:center; padding:18px 14px; font-size:14px; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:8px; flex-direction:column; }
+        .drop-hint i { font-size:22px; opacity:0.4; }
+
+        /* Tour order item */
+        .toi { background:var(--surface); border-radius:7px; padding:7px 9px; margin-bottom:3px; display:flex; align-items:center; gap:7px; }
+        .toi-idx { font-family:'Bebas Neue',cursive; font-size:13px; width:16px; text-align:center; flex-shrink:0; }
+        .toi-info { flex:1; overflow:hidden; }
+        .toi-num  { font-size:13px; font-weight:600; color:var(--muted2); }
+        .toi-addr { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .toi-remove { background:none; border:none; cursor:pointer; color:var(--muted); font-size:11px; padding:2px; transition:color 0.2s; flex-shrink:0; }
+        .toi-remove:hover { color:var(--red); }
+
+        /* Tour driver */
+        .tour-driver-sel { width:100%; padding:9px 11px; background:var(--surface); border:1px solid var(--border2); border-radius:8px; font-family:'Outfit',sans-serif; font-size:12px; color:var(--white); margin-bottom:8px; }
+        .tour-driver-sel option { background:var(--night3); font-size:13px; }
+        .tour-driver-sel:focus { outline:none; border-color:var(--green); }
+
+        /* Tour summary (fixe) */
+        .tour-summary { background:var(--night); border:1px solid var(--border2); border-radius:10px; padding:10px; margin-bottom:8px; }
+        .ts-title { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+        .ts-driver { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted2); margin-bottom:6px; padding:6px 8px; background:var(--surface); border-radius:7px; }
+        .ts-total { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px; }
+        .ts-stat { background:var(--surface); border-radius:7px; padding:8px; text-align:center; }
+        .ts-val { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; }
+        .ts-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+        .ts-stops { display:flex; flex-direction:column; gap:3px; }
+        .ts-stop { display:flex; align-items:center; gap:6px; font-size:11px; padding:4px 6px; background:var(--surface); border-radius:6px; }
+        .ts-stop-num { font-family:'Bebas Neue',cursive; font-size:13px; width:14px; text-align:center; flex-shrink:0; }
+        .ts-stop-addr { flex:1; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ts-stop-info { font-size:10px; font-weight:600; flex-shrink:0; white-space:nowrap; }
+        .ts-stop-arrow { font-size:9px; color:var(--muted); flex-shrink:0; }
+
+        /* Tour actions */
+        .tour-actions { display:flex; gap:5px; }
+        .tour-actions .btn { flex:1; justify-content:center; }
+
+        /* ── MAP COL ── */
+        .col-map { position:relative; }
+        #map { width:100%; height:100%; }
+
+        /* Map controls */
+        .map-ctrl { position:absolute; top:10px; right:10px; z-index:100; display:flex; flex-direction:column; gap:4px; }
+        .mc { width:32px; height:32px; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:7px; display:grid; place-items:center; color:var(--muted2); font-size:12px; cursor:pointer; transition:all 0.2s; }
+        .mc:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .mc.active { background:rgba(232,49,26,0.2); border-color:var(--red); color:var(--red); }
+
+        /* Legend */
+        .map-legend { position:absolute; bottom:12px; right:10px; z-index:100; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:10px; padding:8px 12px; }
+        .leg-row { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--muted2); margin-bottom:3px; }
+        .leg-row:last-child { margin:0; }
+        .leg-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+        .leg-sq  { width:7px; height:7px; border-radius:1px; flex-shrink:0; transform:rotate(45deg); }
+
+        /* ── MODAL ── */
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:500; align-items:center; justify-content:center; padding:20px; }
+        .modal.open { display:flex; }
+        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:22px; padding:32px; width:100%; max-width:420px; box-shadow:0 40px 100px rgba(0,0,0,0.6); animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes boxIn { from{opacity:0;transform:scale(0.94) translateY(14px)} to{opacity:1;transform:none} }
+        .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+        .modal-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
+        .modal-close { width:28px; height:28px; background:var(--surface); border:none; border-radius:50%; cursor:pointer; display:grid; place-items:center; font-size:12px; color:var(--muted); }
+        .modal-close:hover { color:var(--white); background:var(--border2); }
+        .field { margin-bottom:12px; }
+        .field label { display:block; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+        .field input, .field select { width:100%; padding:10px 12px; background:var(--surface); border:1.5px solid var(--border2); border-radius:9px; font-family:'Outfit',sans-serif; font-size:13px; color:var(--white); }
+        .field input:focus, .field select:focus { outline:none; border-color:var(--red); }
+        .field select option { background:var(--night3); }
+        .color-picker { display:flex; gap:7px; flex-wrap:wrap; margin-top:6px; }
+        .color-opt { width:26px; height:26px; border-radius:50%; cursor:pointer; border:2.5px solid transparent; transition:all 0.2s; }
+        .color-opt.selected { border-color:var(--white); transform:scale(1.15); }
+        .modal-actions { display:flex; gap:8px; margin-top:18px; }
+        .modal-actions .btn { flex:1; justify-content:center; padding:11px; }
+
+        /* Toast */
+        .toast { position:fixed; top:14px; right:14px; padding:11px 16px; border-radius:10px; display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .toast.show { transform:translateX(0); }
+        .toast.success .t-ico { color:var(--green); }
+        .toast.error   .t-ico { color:var(--red); }
+        .toast.info    .t-ico { color:var(--blue); }
+        .t-ico { font-size:14px; }
+
+        /* Loader */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; flex-direction:column; gap:12px; }
+        .loader.on { display:grid; }
+        .spin { width:36px; height:36px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
+        .loader-txt { font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:2px; color:var(--muted2); animation:pulse 1.5s ease-in-out infinite; }
+        @keyframes spin    { to{transform:rotate(360deg)} }
+        @keyframes pulse   { 0%,100%{opacity:1}50%{opacity:0.4} }
+
+        .empty-state { padding:30px 12px; text-align:center; }
+        .empty-ico { font-size:28px; opacity:0.12; margin-bottom:8px; }
+        .empty-txt { font-size:11px; color:var(--muted); line-height:1.6; }
 
         /* Leaflet dark */
         .leaflet-tile { filter:brightness(0.85) saturate(0.6) invert(1) hue-rotate(180deg); }
         .leaflet-container { background:#0a0a0f; }
         .leaflet-control-zoom { display:none; }
 
-        /* ── TOPBAR overlay ── */
-        .topbar {
-            position:fixed; top:0; left:0; right:0; z-index:200;
-            background:rgba(10,10,15,0.88); backdrop-filter:blur(16px);
-            border-bottom:1px solid var(--border2);
-            padding:0 20px; height:52px;
-            display:flex; align-items:center; gap:12px;
-        }
-        .logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; }
-        .logo-mark { width:26px; height:26px; background:var(--red); border-radius:6px; display:grid; place-items:center; font-size:12px; }
-        .logo em { color:var(--red); font-style:normal; }
-        .tb-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:2px; color:var(--muted2); }
-        .live-badge { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--green); background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25); padding:3px 10px; border-radius:100px; }
-        .live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:lp 1.5s infinite; }
-        @keyframes lp { 0%,100%{opacity:1}50%{opacity:0.3} }
-        .tb-right { margin-left:auto; display:flex; gap:8px; align-items:center; }
-        .tb-time { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:2px; color:var(--white); }
-        .tb-date { font-size:11px; color:var(--muted); }
-
-        /* ── STATS BAR ── */
-        .stats-bar {
-            position:fixed; bottom:0; left:0; right:0; z-index:200;
-            background:rgba(10,10,15,0.88); backdrop-filter:blur(16px);
-            border-top:1px solid var(--border2);
-            display:flex; align-items:center; height:56px;
-        }
-        .stat-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-right:1px solid var(--border); padding:0 12px; }
-        .stat-item:last-child { border:none; }
-        .stat-val { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:1px; line-height:1; }
-        .stat-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:2px; }
-
-        /* ── CONTROLS ── */
-        .map-ctrl { position:fixed; top:64px; right:12px; z-index:100; display:flex; flex-direction:column; gap:5px; }
-        .mc { width:34px; height:34px; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:8px; display:grid; place-items:center; color:var(--muted2); font-size:13px; cursor:pointer; transition:all 0.2s; }
-        .mc:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
-        .mc.active { background:rgba(232,49,26,0.2); border-color:var(--red); color:var(--red); }
-
-        /* ── LEGEND ── */
-        .legend { position:fixed; bottom:68px; right:12px; z-index:100; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:10px; padding:10px 14px; }
-        .leg-row { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--muted2); margin-bottom:4px; }
-        .leg-row:last-child { margin:0; }
-        .leg-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-
-        /* ── TOUR PANELS ── */
-        .tours-panel {
-            position:fixed; top:64px; left:12px; z-index:100;
-            display:flex; flex-direction:column; gap:6px;
-            max-height:calc(100vh - 130px);
-            overflow-y:auto; pointer-events:none;
-        }
-        .tours-panel::-webkit-scrollbar { display:none; }
-        .tour-badge {
-            background:rgba(17,17,24,0.9); backdrop-filter:blur(10px);
-            border:1px solid var(--border2); border-radius:10px;
-            padding:8px 12px; min-width:180px; pointer-events:auto;
-            cursor:pointer; transition:all 0.2s;
-        }
-        .tour-badge:hover { border-color:rgba(255,255,255,0.3); }
-        .tb-name { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; display:flex; align-items:center; gap:7px; margin-bottom:4px; }
-        .tb-color { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-        .tb-stats { display:flex; gap:8px; font-size:10px; color:var(--muted); }
-        .tb-driver { font-size:11px; color:var(--muted2); }
-
-        /* ── TOAST ── */
-        .toast { position:fixed; top:64px; left:50%; transform:translateX(-50%) translateY(-60px); padding:10px 18px; border-radius:100px; font-size:13px; font-weight:600; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; transition:transform 0.35s cubic-bezier(0.4,0,0.2,1); white-space:nowrap; }
-        .toast.show { transform:translateX(-50%) translateY(0); }
-        .toast.success { background:rgba(34,197,94,0.15); border-color:rgba(34,197,94,0.3); color:var(--green); }
-        .toast.info    { background:rgba(59,130,246,0.15); border-color:rgba(59,130,246,0.3); color:var(--blue); }
+        /* Route label */
+        .route-label { background:rgba(17,17,24,0.92); border-radius:7px; padding:3px 7px; font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; color:white; white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
     </style>
 </head>
 <body>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<div class="loader" id="loader"><div class="spin"></div><div class="loader-txt" id="loaderTxt">Calcul route…</div></div>
 
-<!-- Topbar -->
+<!-- ═══ TOPBAR ═══ -->
 <header class="topbar">
-    <div class="logo"><div class="logo-mark">🚚</div>Léman<em>-Dispatch</em></div>
-    <div class="tb-title">CARTE LIVE</div>
-    <div class="live-badge"><div class="live-dot"></div> Temps réel</div>
+    <a href="dashboard.html" class="logo"><div class="logo-mark">🚚</div>Léman<em>-Dispatch</em></a>
+    <div class="sep"></div>
+    <div class="tb-title">DISPATCH</div>
     <div class="tb-right">
-        <div>
-            <div class="tb-time" id="clock">--:--</div>
-            <div class="tb-date" id="dateStr"></div>
-        </div>
+        <button class="btn btn-yellow" onclick="openNewTour()"><i class="fas fa-plus"></i> Tournée</button>
+        <button class="btn btn-ghost"  onclick="autoOptimize()"><i class="fas fa-magic"></i> Optimiser</button>
+        <a href="new-transport.html" class="btn btn-red"><i class="fas fa-plus"></i> Transport</a>
+        <button class="btn btn-ghost" id="btnDualScreen" onclick="openDualScreen()" title="Ouvrir la carte sur 2ème écran">
+        <i class="fas fa-desktop"></i> Double écran
+    </button>
+    <a href="dashboard.html" class="btn btn-ghost"><i class="fas fa-th-large"></i></a>
     </div>
 </header>
 
-<!-- Map -->
-<div id="map"></div>
+<!-- ═══ 3 COLONNES ═══ -->
+<div class="layout">
 
-<!-- Controls -->
-<div class="map-ctrl">
-    <div class="mc" onclick="map.zoomIn()"><i class="fas fa-plus"></i></div>
-    <div class="mc" onclick="map.zoomOut()"><i class="fas fa-minus"></i></div>
-    <div class="mc" onclick="fitAll()"><i class="fas fa-expand"></i></div>
-    <div class="mc" id="mcAuto" onclick="toggleAutoFit()" title="Auto-centrage" style="margin-top:6px;"><i class="fas fa-crosshairs"></i></div>
+    <!-- ── COL 1 : TRANSPORTS ── -->
+    <div class="col-transports">
+        <div class="col-header">
+            <div class="col-title">
+                TRANSPORTS EN ATTENTE
+                <span id="pendingCount">0</span>
+            </div>
+            <div class="filter-bar" style="padding:0;">
+                <input type="text" id="searchOrders" placeholder="🔍 Rechercher…" oninput="applyFilters()">
+            </div>
+        </div>
+        <div class="stats-mini">
+            <div class="sm active" id="smAll" onclick="setFilter('')">
+                <div class="sm-num" id="smNumAll">0</div>
+                <div class="sm-lbl">Tous</div>
+            </div>
+            <div class="sm" id="smPending" onclick="setFilter('pending')">
+                <div class="sm-num" id="smNumPending" style="color:var(--yellow)">0</div>
+                <div class="sm-lbl">Attente</div>
+            </div>
+            <div class="sm" id="smUrgent" onclick="setFilter('urgent')">
+                <div class="sm-num" id="smNumUrgent" style="color:var(--orange)">0</div>
+                <div class="sm-lbl">Urgents</div>
+            </div>
+            <div class="sm" id="smAll2" onclick="setFilter('all')">
+                <div class="sm-num" id="smNumAll2" style="color:var(--muted)">0</div>
+                <div class="sm-lbl">Planifiés</div>
+            </div>
+        </div>
+        <div class="drag-hint"><i class="fas fa-hand-point-right"></i> Glissez vers une tournée →</div>
+        <div class="order-list" id="orderList"></div>
+    </div>
+
+    <!-- ── COL 2 : TOURNÉES ── -->
+    <div class="col-tours">
+        <div class="col-header">
+            <div class="col-title">
+                TOURNÉES
+                <span id="tourCount" style="background:rgba(34,197,94,0.12);color:var(--green);">0</span>
+            </div>
+        </div>
+        <div class="tours-list" id="toursList">
+            <div class="empty-state">
+                <div class="empty-ico">🗺️</div>
+                <div class="empty-txt">Aucune tournée.<br>Cliquez "+ Tournée"<br>ou "Optimiser"</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── COL 3 : CARTE ── -->
+    <div class="col-map">
+        <div id="map"></div>
+        <div class="map-ctrl">
+            <div class="mc" onclick="map.zoomIn()"  title="Zoom +"><i class="fas fa-plus"></i></div>
+            <div class="mc" onclick="map.zoomOut()" title="Zoom -"><i class="fas fa-minus"></i></div>
+            <div class="mc" onclick="fitAll()"       title="Voir tout"><i class="fas fa-expand"></i></div>
+            <div class="mc" id="mcRoutes" onclick="toggleRoutes()" title="Routes" style="margin-top:6px;"><i class="fas fa-route"></i></div>
+        </div>
+        <div class="map-legend">
+            <div class="leg-row"><div class="leg-dot" style="background:var(--blue)"></div> Enlèvement</div>
+            <div class="leg-row"><div class="leg-sq"  style="background:var(--red)"></div> Livraison</div>
+            <div class="leg-row"><div class="leg-dot" style="background:var(--yellow)"></div> En attente</div>
+            <div class="leg-row"><div class="leg-dot" style="background:var(--orange)"></div> Urgent</div>
+            <div class="leg-row"><div class="leg-dot" style="background:var(--green)"></div> Planifié</div>
+        </div>
+    </div>
+
 </div>
 
-<!-- Legend -->
-<div class="legend">
-    <div class="leg-row"><div class="leg-dot" style="background:var(--yellow)"></div> En attente</div>
-    <div class="leg-row"><div class="leg-dot" style="background:var(--orange)"></div> Urgent</div>
-    <div class="leg-row"><div class="leg-dot" style="background:var(--green)"></div> Planifié</div>
-    <div class="leg-row"><div class="leg-dot" style="background:var(--purple)"></div> En route</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#888)"></div> Livré</div>
+<!-- ═══ MODAL NOUVELLE TOURNÉE ═══ -->
+<div id="modalTour" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">NOUVELLE TOURNÉE</div>
+            <button class="modal-close" onclick="closeModal('modalTour')">✕</button>
+        </div>
+        <div class="field">
+            <label>Nom *</label>
+            <input type="text" id="tourName" placeholder="Ex: Tournée Lausanne matin" required>
+        </div>
+        <div class="field">
+            <label>Couleur</label>
+            <div class="color-picker" id="colorPicker">
+                <div class="color-opt selected" data-color="#22c55e" style="background:#22c55e"></div>
+                <div class="color-opt" data-color="#3b82f6" style="background:#3b82f6"></div>
+                <div class="color-opt" data-color="#f59e0b" style="background:#f59e0b"></div>
+                <div class="color-opt" data-color="#f97316" style="background:#f97316"></div>
+                <div class="color-opt" data-color="#a855f7" style="background:#a855f7"></div>
+                <div class="color-opt" data-color="#ec4899" style="background:#ec4899"></div>
+                <div class="color-opt" data-color="#14b8a6" style="background:#14b8a6"></div>
+                <div class="color-opt" data-color="#e8311a" style="background:#e8311a"></div>
+            </div>
+        </div>
+        <div class="field">
+            <label>Chauffeur</label>
+            <select id="tourDriver">
+                <option value="">— Assigner plus tard —</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="createTour()"><i class="fas fa-check"></i> Créer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalTour')">Annuler</button>
+        </div>
+    </div>
 </div>
 
-<!-- Tour badges -->
-<div class="tours-panel" id="toursPanel"></div>
-
-<!-- Stats bar -->
-<div class="stats-bar">
-    <div class="stat-item"><div class="stat-val" id="sTotal" style="color:var(--white)">0</div><div class="stat-lbl">Total</div></div>
-    <div class="stat-item"><div class="stat-val" id="sPending" style="color:var(--yellow)">0</div><div class="stat-lbl">En attente</div></div>
-    <div class="stat-item"><div class="stat-val" id="sUrgent" style="color:var(--orange)">0</div><div class="stat-lbl">Urgents</div></div>
-    <div class="stat-item"><div class="stat-val" id="sPlanned" style="color:var(--blue)">0</div><div class="stat-lbl">Planifiés</div></div>
-    <div class="stat-item"><div class="stat-val" id="sTransit" style="color:var(--purple)">0</div><div class="stat-lbl">En route</div></div>
-    <div class="stat-item"><div class="stat-val" id="sDelivered" style="color:var(--green)">0</div><div class="stat-lbl">Livrés</div></div>
+<!-- ═══ MODAL ASSIGNER ═══ -->
+<div id="modalAssign" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">ASSIGNER CHAUFFEUR</div>
+            <button class="modal-close" onclick="closeModal('modalAssign')">✕</button>
+        </div>
+        <div id="assignInfo" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
+        <div class="field">
+            <label>Chauffeur</label>
+            <select id="assignDriver"><option value="">— Choisir —</option></select>
+        </div>
+        <input type="hidden" id="assignOrderId">
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="doAssign()"><i class="fas fa-user-check"></i> Assigner</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalAssign')">Annuler</button>
+        </div>
+    </div>
 </div>
 
 <script>
 (function () {
     'use strict';
 
-    if (!window.SUPABASE_CONFIG) return;
+    if (!window.SUPABASE_CONFIG) { document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>'; return; }
     const db = window.SUPABASE_CLIENT;
     const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
 
-    let allOrders = [], allTours = [], markers = {}, tourLayers = {}, autoFit = true;
+    /* ── State ── */
+    let allOrders  = [];
+    let chauffeurs = [];
+    let tours      = [];
+    let mapMarkers = {};
+    let mapLines   = [];
+    let tourMapLayers = {};
+    let showRoutes = true;
+    let filterSt   = '';
+    let filterQ    = '';
+    let selectedColor = '#22c55e';
+    let dragOrderId   = null;
 
-    /* ── Clock ── */
-    function updateClock() {
-        const now  = new Date();
-        document.getElementById('clock').textContent   = now.toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        document.getElementById('dateStr').textContent = now.toLocaleDateString('fr-CH',{weekday:'long',day:'2-digit',month:'long'});
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    /* ── Toast ── */
+    /* ── Helpers ── */
     const toastEl = document.getElementById('toast');
     let toastTimer;
     function toast(type, msg) {
         clearTimeout(toastTimer);
         toastEl.className = 'toast ' + type + ' show';
-        toastEl.textContent = msg;
-        toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 3500);
+        document.getElementById('toastIco').textContent = type==='success'?'✓':type==='error'?'✕':'ℹ';
+        document.getElementById('toastTxt').textContent = msg;
+        toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 4000);
     }
+    const loaderEl = document.getElementById('loader');
+    function showLoad(txt='Calcul route…') { document.getElementById('loaderTxt').textContent=txt; loaderEl.classList.add('on'); }
+    function hideLoad() { loaderEl.classList.remove('on'); }
+    const shortAddr = a => a ? a.split(',').slice(0,2).join(',').trim() : '—';
+    const STATUS_COLORS = { pending:'#f59e0b', planned:'#3b82f6', urgent:'#f97316', in_transit:'#a855f7', delivered:'#22c55e' };
+    const TOUR_COLORS   = ['#22c55e','#3b82f6','#f59e0b','#f97316','#a855f7','#ec4899','#14b8a6','#e8311a'];
 
-    /* ── Map ── */
-    const map = L.map('map',{zoomControl:false,attributionControl:false}).setView([46.7785,6.6409],9);
+    /* ── Modals ── */
+    function openModal(id)  { const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
+    window.closeModal = id  => { const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} };
+    document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) window.closeModal(m.id); }));
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal.open').forEach(m=>window.closeModal(m.id)); });
+
+    /* ── Color picker ── */
+    document.querySelectorAll('.color-opt').forEach(opt=>{
+        opt.addEventListener('click',()=>{
+            document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('selected'));
+            opt.classList.add('selected'); selectedColor=opt.dataset.color;
+        });
+    });
+
+    /* ── MAP ── */
+    const map = L.map('map',{zoomControl:false,attributionControl:false}).setView([46.5197,6.6323],9);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    // Dépôt marker
-    L.marker([46.7785,6.6409],{icon:L.divIcon({
-        html:`<div style="width:16px;height:16px;background:#e8311a;border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,
-        className:'',iconSize:[16,16],iconAnchor:[8,8]
-    })}).addTo(map).bindTooltip('🏭 Dépôt Yverdon-les-Bains',{permanent:false,direction:'right'});
+    function makeIcon(color, pulse=false, shape='circle') {
+        const s=12;
+        const html = shape==='square'
+            ? `<div style="width:10px;height:10px;background:${color};border:2px solid white;border-radius:2px;transform:rotate(45deg);box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>`
+            : `<div style="width:${s}px;height:${s}px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5);${pulse?'animation:mp 1.2s ease-in-out infinite':''}"></div>
+               ${pulse?`<div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid ${color};opacity:0.4;animation:mr 1.2s ease-in-out infinite"></div>`:''}
+               <style>@keyframes mp{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}@keyframes mr{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(2);opacity:0}}</style>`;
+        return L.divIcon({html:`<div style="position:relative;">${html}</div>`,className:'',iconSize:[s,s],iconAnchor:[s/2,s/2]});
+    }
 
-    const STATUS_COLORS = {pending:'#f59e0b',planned:'#3b82f6',urgent:'#f97316',in_transit:'#a855f7',delivered:'#22c55e'};
-    const shortAddr = a => a ? a.split(',').slice(0,2).join(',').trim() : '—';
-
-    function makeIcon(color, pulse=false) {
-        const s=14;
+    function makeStopIcon(num, color) {
         return L.divIcon({
-            html:`<div style="position:relative;">
-                <div style="width:${s}px;height:${s}px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.5);${pulse?'animation:mp 1.2s ease-in-out infinite':''}"></div>
-                ${pulse?`<div style="position:absolute;inset:-5px;border-radius:50%;border:2px solid ${color};opacity:0.4;animation:mr 1.2s ease-in-out infinite"></div>`:''}
-                <style>@keyframes mp{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}@keyframes mr{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(2.2);opacity:0}}</style>
-            </div>`,
-            className:'',iconSize:[s,s],iconAnchor:[s/2,s/2]
+            html:`<div style="width:22px;height:22px;background:${color};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:12px;color:white;box-shadow:0 2px 8px rgba(0,0,0,0.5);">${num}</div>`,
+            className:'', iconSize:[22,22], iconAnchor:[11,11]
         });
     }
 
-    /* ── Render map ── */
-    function renderMap() {
-        // Clear markers
-        Object.values(markers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);});
-        markers={};
-
-        const bounds=[[46.7785,6.6409]]; // Dépôt toujours visible
-
-        allOrders.forEach(o=>{
-            if(o.status==='delivered') return;
-            const color=STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')];
-            const pulse=o.status==='pending'||o.priority==='urgent';
-            const mg={};
-
-            if(o.pickup_lat){
-                mg.p=L.marker([o.pickup_lat,o.pickup_lng],{icon:makeIcon(color,pulse)}).addTo(map)
-                    .bindTooltip(`<b>${o.order_number}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
-                bounds.push([o.pickup_lat,o.pickup_lng]);
-            }
-            if(o.delivery_lat){
-                mg.d=L.marker([o.delivery_lat,o.delivery_lng],{
-                    icon:L.divIcon({html:`<div style="width:10px;height:10px;background:${color};border:2px solid white;border-radius:2px;transform:rotate(45deg);box-shadow:0 2px 6px rgba(0,0,0,0.4)"></div>`,className:'',iconSize:[10,10],iconAnchor:[5,5]})
-                }).addTo(map).bindTooltip(`<b>${o.order_number}</b><br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
-                bounds.push([o.delivery_lat,o.delivery_lng]);
-            }
-            if(o.pickup_lat&&o.delivery_lat){
-                mg.l=L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]],{color,weight:1.5,opacity:0.25,dashArray:'4 6'}).addTo(map);
-            }
-            markers[o.id]=mg;
-        });
-
-        if(autoFit && bounds.length>1) { try{map.fitBounds(bounds,{padding:[60,60]});}catch(e){} }
-        renderStats();
-    }
-
-    /* ── Render tour routes ── */
-    async function renderTourRoutes(tours) {
-        // Clear old routes
-        Object.values(tourLayers).forEach(layers=>layers.forEach(l=>{try{map.removeLayer(l);}catch(e){}}));
-        tourLayers={};
-
-        const panel = document.getElementById('toursPanel');
-        panel.innerHTML = '';
-
-        for(const tour of tours) {
-            if(!tour.orderIds?.length) continue;
-            const orders = tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
-            const wpts   = [];
-            orders.forEach((o,i)=>{
-                if(i===0&&o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
-                if(o.delivery_lat)      wpts.push([o.delivery_lat,o.delivery_lng]);
-                else if(o.pickup_lat)   wpts.push([o.pickup_lat,o.pickup_lng]);
-            });
-
-            const layers = [];
-
-            if(wpts.length>=2) {
-                try {
-                    const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{
-                        method:'POST',
-                        headers:{'Authorization':ORS_KEY,'Content-Type':'application/json'},
-                        body:JSON.stringify({coordinates:wpts.map(p=>[p[1],p[0]])})
-                    });
-                    if(res.ok) {
-                        const data = await res.json();
-                        if(data.features?.[0]) {
-                            const line = L.geoJSON(data.features[0].geometry,{style:{color:tour.color,weight:4,opacity:0.8}}).addTo(map);
-                            layers.push(line);
-                        }
-                    }
-                } catch(e) {
-                    // Fallback ligne droite
-                    const line = L.polyline(wpts,{color:tour.color,weight:3,opacity:0.6,dashArray:'8 4'}).addTo(map);
-                    layers.push(line);
-                }
-            }
-
-            // Stop markers
-            orders.forEach((o,i)=>{
-                if(!o.delivery_lat) return;
-                const m = L.marker([o.delivery_lat,o.delivery_lng],{
-                    icon:L.divIcon({
-                        html:`<div style="width:20px;height:20px;background:${tour.color};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:11px;color:white;box-shadow:0 2px 8px rgba(0,0,0,0.5);">${i+1}</div>`,
-                        className:'',iconSize:[20,20],iconAnchor:[10,10]
-                    })
-                }).addTo(map).bindTooltip(`<b>Stop ${i+1}</b> — ${tour.name}<br>${shortAddr(o.delivery_address)}`,{direction:'top'});
-                layers.push(m);
-            });
-
-            tourLayers[tour.id] = layers;
-
-            // Badge tournée
-            const badge = document.createElement('div');
-            badge.className = 'tour-badge';
-            badge.style.borderColor = tour.color+'44';
-            badge.innerHTML = `
-                <div class="tb-name">
-                    <div class="tb-color" style="background:${tour.color}"></div>
-                    ${tour.name}
-                </div>
-                <div class="tb-driver"><i class="fas fa-user" style="color:${tour.color}"></i> ${getDriverName(tour.driverId)}</div>
-                <div class="tb-stats">
-                    <span><i class="fas fa-box"></i> ${orders.length} stops</span>
-                    ${tour.planning ? `<span><i class="fas fa-clock"></i> ${tour.planning.depart}→${tour.planning.fin}</span>` : ''}
-                </div>`;
-            badge.onclick = () => {
-                const b = [];
-                orders.forEach(o=>{if(o.delivery_lat)b.push([o.delivery_lat,o.delivery_lng]);});
-                if(b.length) map.fitBounds(b,{padding:[80,80]});
-            };
-            panel.appendChild(badge);
-        }
-    }
-
-    function getDriverName(driverId) {
-        if(!driverId) return 'Non assigné';
-        // On stocke les chauffeurs si passés via broadcast
-        const c = (window._chauffeurs||[]).find(x=>x.id===driverId);
-        return c ? `${c.prenom||''} ${c.nom||''}`.trim() : '—';
+    /* ── LOAD DATA ── */
+    async function loadAll() {
+        const [{data:orders},{data:chauf}] = await Promise.all([
+            db.from('transport_orders_simple').select('*').order('created_at',{ascending:false}),
+            db.from('utilisateurs').select('id,nom,prenom,email').eq('role','chauffeur')
+        ]);
+        allOrders  = orders||[];
+        chauffeurs = chauf ||[];
+        updateStats();
+        applyFilters();
+        renderMap(); // async - géocode les adresses manquantes
+        populateSelects();
     }
 
     /* ── Stats ── */
-    function renderStats() {
-        document.getElementById('sTotal').textContent    = allOrders.filter(o=>o.status!=='delivered').length;
-        document.getElementById('sPending').textContent  = allOrders.filter(o=>o.status==='pending'&&o.priority!=='urgent').length;
-        document.getElementById('sUrgent').textContent   = allOrders.filter(o=>o.priority==='urgent').length;
-        document.getElementById('sPlanned').textContent  = allOrders.filter(o=>o.status==='planned').length;
-        document.getElementById('sTransit').textContent  = allOrders.filter(o=>o.status==='in_transit').length;
-        document.getElementById('sDelivered').textContent= allOrders.filter(o=>o.status==='delivered').length;
+    function updateStats() {
+        const pending = allOrders.filter(o=>o.status==='pending'&&o.priority!=='urgent');
+        const urgent  = allOrders.filter(o=>o.priority==='urgent');
+        const planned = allOrders.filter(o=>o.status==='planned');
+        const all     = allOrders.filter(o=>o.status!=='delivered');
+        document.getElementById('smNumAll').textContent    = all.length;
+        document.getElementById('smNumPending').textContent= pending.length;
+        document.getElementById('smNumUrgent').textContent = urgent.length;
+        document.getElementById('smNumAll2').textContent   = planned.length;
+        document.getElementById('pendingCount').textContent= pending.length + urgent.length;
     }
 
-    /* ── Controls ── */
-    window.fitAll = function() {
-        const b=[[46.7785,6.6409]];
-        allOrders.forEach(o=>{if(o.pickup_lat)b.push([o.pickup_lat,o.pickup_lng]);if(o.delivery_lat)b.push([o.delivery_lat,o.delivery_lng]);});
-        map.fitBounds(b,{padding:[60,60]});
+    /* ── Filters ── */
+    window.setFilter = function(st) {
+        filterSt=st;
+        document.querySelectorAll('.sm').forEach(s=>s.classList.remove('active'));
+        const map2 = {'':{id:'smAll'},'pending':{id:'smPending'},'urgent':{id:'smUrgent'},'all':{id:'smAll2'}};
+        document.getElementById(map2[st]?.id||'smAll')?.classList.add('active');
+        applyFilters();
     };
-    window.toggleAutoFit = function() {
-        autoFit=!autoFit;
-        document.getElementById('mcAuto').classList.toggle('active',autoFit);
-        toast('info', autoFit ? 'Auto-centrage activé' : 'Auto-centrage désactivé');
-    };
-
-    /* ── BroadcastChannel — recevoir données du dispatch ── */
-    const channel = new BroadcastChannel('leman_dispatch');
-    channel.onmessage = async (e) => {
-        const { type, orders, tours, chauffeurs } = e.data;
-        if(chauffeurs) window._chauffeurs = chauffeurs;
-        if(orders) { allOrders = orders; renderMap(); }
-        if(tours)  { allTours  = tours;  await renderTourRoutes(tours); }
-        if(type==='UPDATE') toast('info', '🔄 Mise à jour reçue');
+    window.applyFilters = function() {
+        filterQ  = document.getElementById('searchOrders').value.toLowerCase();
+        renderOrderList();
     };
 
-    /* ── Supabase Realtime (autonome) ── */
-    async function loadFromDB() {
-        const { data:orders } = await db.from('transport_orders_simple').select('*').order('created_at',{ascending:false});
-        const { data:chauf  } = await db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur');
-        allOrders = orders||[];
-        window._chauffeurs = chauf||[];
-        renderMap();
-        renderStats();
+    /* ── Order list ── */
+    function renderOrderList() {
+        const inTourIds = new Set(tours.flatMap(t=>t.orderIds));
+        let list = [...allOrders].filter(o=>!inTourIds.has(o.id));
+
+        if(filterSt==='all')    list = list.filter(o=>o.status!=='delivered');
+        else if(filterSt==='urgent')  list = list.filter(o=>o.priority==='urgent');
+        else if(filterSt==='pending') list = list.filter(o=>o.status==='pending'&&o.priority!=='urgent');
+        else list = list.filter(o=>o.status!=='delivered'&&o.status!=='planned');
+
+        if(filterQ) list=list.filter(o=>(o.order_number||'').toLowerCase().includes(filterQ)||(o.pickup_address||'').toLowerCase().includes(filterQ)||(o.delivery_address||'').toLowerCase().includes(filterQ));
+
+        // Sort: urgent first
+        list.sort((a,b)=>{
+            if(a.priority==='urgent'&&b.priority!=='urgent') return -1;
+            if(b.priority==='urgent'&&a.priority!=='urgent') return 1;
+            return new Date(b.created_at)-new Date(a.created_at);
+        });
+
+        const el=document.getElementById('orderList');
+        if(!list.length) { el.innerHTML=`<div class="empty-state"><div class="empty-ico">📦</div><div class="empty-txt">Aucun transport en attente</div></div>`; return; }
+
+        el.innerHTML=list.map(o=>{
+            const st=o.priority==='urgent'?'urgent':(o.status||'pending');
+            const stl={pending:'Attente',urgent:'🔥 URGENT',in_transit:'En route',planned:'Planifié'}[st]||st;
+            return `<div class="order-card ${st}" data-id="${o.id}" draggable="true"
+                ondragstart="dragStart(event,'${o.id}')" ondragend="dragEnd(event)"
+                onclick="focusOrderMap('${o.id}')">
+                <div class="oc-top">
+                    <span class="oc-num">${o.order_number||o.id.slice(0,8)}</span>
+                    <span class="oc-badge ${st}">${stl}</span>
+                </div>
+                <div class="oc-stop"><div class="oc-dot p"></div><div class="oc-addr">${shortAddr(o.pickup_address)}</div></div>
+                <div class="oc-stop"><div class="oc-dot d"></div><div class="oc-addr">${shortAddr(o.delivery_address)}</div></div>
+                <div class="oc-meta">
+                    ${o.distance_km?`<span class="oc-tag"><i class="fas fa-route"></i> ${o.distance_km}km</span>`:''}
+                    ${o.weight?`<span class="oc-tag"><i class="fas fa-weight-hanging"></i> ${o.weight}kg</span>`:''}
+                    ${o.priority==='urgent'?`<span class="oc-tag" style="color:var(--orange)">⚡ Urgent</span>`:''}
+                </div>
+            </div>`;
+        }).join('');
     }
 
-    db.channel('map_live')
-        .on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},()=>{ loadFromDB(); toast('info','🔄 Nouveau transport'); })
-        .subscribe();
+    /* ── GEOCODE cache ── */
+    const geoCache = {};
+    async function geocodeAddr(addr) {
+        if(!addr) return null;
+        const key = addr.slice(0,60);
+        if(geoCache[key]) return geoCache[key];
+        try {
+            await new Promise(r=>setTimeout(r,300)); // Respecter Nominatim 1/sec
+            const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr+', Suisse')}&format=json&limit=1`,{headers:{'Accept-Language':'fr'}});
+            const d = await r.json();
+            if(d[0]) { const c={lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}; geoCache[key]=c; return c; }
+        } catch(e) {}
+        return null;
+    }
 
-    /* ── Init ── */
-    loadFromDB();
-    toast('info', '🖥️ Carte dispatch — 2ème écran actif');
+    /* ── MAP render ── */
+    async function renderMap() {
+        Object.values(mapMarkers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);});
+        mapMarkers={};
+        mapLines.forEach(l=>map.removeLayer(l)); mapLines=[];
+
+        // Marker dépôt Yverdon
+        if(!window._depotMarker) {
+            window._depotMarker = L.marker([46.7785,6.6409],{
+                icon:L.divIcon({
+                    html:`<div style="width:18px;height:18px;background:#e8311a;border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 3px 10px rgba(0,0,0,0.5)"></div>`,
+                    className:'',iconSize:[18,18],iconAnchor:[9,9]
+                })
+            }).addTo(map).bindTooltip('🏭 Dépôt — Yverdon-les-Bains',{permanent:true,direction:'right',className:'',offset:[12,0]});
+        }
+
+        const bounds=[[46.7785,6.6409]];
+        const ordersToRender = allOrders.filter(o=>o.status!=='delivered');
+
+        for(const o of ordersToRender) {
+            const color=STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')]||STATUS_COLORS.pending;
+            const pulse=o.status==='pending'||o.priority==='urgent';
+            const mg={};
+
+            // Utiliser coords existantes ou géocoder
+            let pLat=o.pickup_lat,   pLng=o.pickup_lng;
+            let dLat=o.delivery_lat, dLng=o.delivery_lng;
+
+            if(!pLat && o.pickup_address && !geoCache['trying_'+o.id+'_p']) {
+                geoCache['trying_'+o.id+'_p']=true;
+                const c=await geocodeAddr(o.pickup_address);
+                if(c){pLat=c.lat;pLng=c.lng;}
+            }
+            if(!dLat && o.delivery_address && !geoCache['trying_'+o.id+'_d']) {
+                geoCache['trying_'+o.id+'_d']=true;
+                const c=await geocodeAddr(o.delivery_address);
+                if(c){dLat=c.lat;dLng=c.lng;}
+            }
+
+            if(pLat) {
+                mg.p=L.marker([pLat,pLng],{icon:makeIcon(color,pulse,'circle')}).addTo(map)
+                    .on('click',()=>focusOrderMap(o.id))
+                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
+                bounds.push([pLat,pLng]);
+            }
+            if(dLat) {
+                mg.d=L.marker([dLat,dLng],{icon:makeIcon(color,false,'square')}).addTo(map)
+                    .on('click',()=>focusOrderMap(o.id))
+                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
+                bounds.push([dLat,dLng]);
+            }
+            if(pLat&&dLat) {
+                mg.l=L.polyline([[pLat,pLng],[dLat,dLng]],{color,weight:1.5,opacity:0.25,dashArray:'4 6'}).addTo(map);
+                mapLines.push(mg.l);
+            }
+            mapMarkers[o.id]=mg;
+        }
+        if(bounds.length>1) { try{map.fitBounds(bounds,{padding:[40,40]});}catch(e){} }
+    }
+
+    window.fitAll=function(){
+        const b=allOrders.reduce((a,o)=>{if(o.pickup_lat)a.push([o.pickup_lat,o.pickup_lng]);if(o.delivery_lat)a.push([o.delivery_lat,o.delivery_lng]);return a;},[]);
+        if(b.length) map.fitBounds(b,{padding:[40,40]});
+    };
+    window.toggleRoutes=function(){
+        showRoutes=!showRoutes;
+        document.getElementById('mcRoutes').classList.toggle('active',showRoutes);
+        mapLines.forEach(l=>showRoutes?map.addLayer(l):map.removeLayer(l));
+    };
+    window.focusOrderMap=function(id){
+        const o=allOrders.find(x=>x.id===id); if(!o||!o.pickup_lat) return;
+        map.flyTo([o.pickup_lat,o.pickup_lng],14,{duration:0.8});
+    };
+
+    /* ── DRAG & DROP ── */
+    window.dragStart=function(e,id){ dragOrderId=id; e.dataTransfer.effectAllowed='copy'; setTimeout(()=>document.querySelector(`.order-card[data-id="${id}"]`)?.classList.add('dragging'),0); };
+    window.dragEnd=function(){ document.querySelectorAll('.order-card.dragging').forEach(el=>el.classList.remove('dragging')); document.querySelectorAll('.drop-zone.drag-over,.tour-card.drag-over').forEach(el=>el.classList.remove('drag-over')); dragOrderId=null; };
+
+    function setupDropZone(dz, tourId) {
+        // Dragover sur la zone
+        dz.addEventListener('dragover', e=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add('drag-over'); });
+        dz.addEventListener('dragenter', e=>{ e.preventDefault(); dz.classList.add('drag-over'); });
+        dz.addEventListener('dragleave', e=>{ if(!dz.contains(e.relatedTarget)) dz.classList.remove('drag-over'); });
+        dz.addEventListener('drop', e=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag-over'); if(dragOrderId) addToTour(tourId,dragOrderId); });
+
+        // Aussi accepter le drop sur la tour-card entière (pas seulement la drop zone)
+        const tourCard = document.getElementById('tc-'+tourId);
+        if(tourCard) {
+            tourCard.addEventListener('dragover', e=>{ e.preventDefault(); tourCard.classList.add('drag-over'); dz.classList.add('drag-near'); });
+            tourCard.addEventListener('dragenter', e=>{ e.preventDefault(); tourCard.classList.add('drag-over'); });
+            tourCard.addEventListener('dragleave', e=>{ if(!tourCard.contains(e.relatedTarget)){tourCard.classList.remove('drag-over');dz.classList.remove('drag-near');} });
+            tourCard.addEventListener('drop', e=>{ 
+                e.preventDefault(); 
+                tourCard.classList.remove('drag-over'); 
+                dz.classList.remove('drag-near');
+                dz.classList.remove('drag-over');
+                if(dragOrderId) {
+                    // Expand tour if collapsed
+                    const tour = tours.find(t=>t.id===tourId);
+                    if(tour && !tour.expanded) { tour.expanded=true; }
+                    addToTour(tourId, dragOrderId);
+                }
+            });
+        }
+    }
+
+    /* ── TOURS ── */
+    window.openNewTour=function(){
+        document.getElementById('tourName').value='';
+        selectedColor='#22c55e';
+        document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('selected'));
+        document.querySelector('.color-opt[data-color="#22c55e"]')?.classList.add('selected');
+        openModal('modalTour');
+    };
+
+    window.createTour=function(){
+        const name=document.getElementById('tourName').value.trim();
+        if(!name){toast('error','Donnez un nom'); return;}
+        const driverId=document.getElementById('tourDriver').value||null;
+        tours.push({id:'t'+Date.now(),name,color:selectedColor,driverId,orderIds:[],expanded:true,routeData:null});
+        window.closeModal('modalTour');
+        renderTours();
+        document.getElementById('tourCount').textContent=tours.length;
+        toast('success',`Tournée "${name}" créée — glissez des transports !`);
+    };
+
+    function addToTour(tourId, orderId) {
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        if(tour.orderIds.includes(orderId)){toast('info','Déjà dans cette tournée');return;}
+        tour.orderIds.push(orderId);
+        tour.routeData=null; // Reset route cache
+        renderTours();
+        renderOrderList();
+        toast('success','✓ Transport ajouté');
+    }
+    window.addToTour=addToTour;
+
+    window.removeFromTour=function(tourId,orderId){
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        tour.orderIds=tour.orderIds.filter(id=>id!==orderId);
+        tour.routeData=null;
+        clearTourMap(tourId);
+        renderTours(); renderOrderList();
+    };
+
+    window.toggleTour=function(id){
+        const t=tours.find(x=>x.id===id); if(t){t.expanded=!t.expanded;renderTours();}
+    };
+
+    window.setTourDriver=function(tourId,driverId){
+        const t=tours.find(x=>x.id===tourId); if(t) t.driverId=driverId||null;
+    };
+
+    window.deleteTour=function(id){
+        tours=tours.filter(t=>t.id!==id);
+        clearTourMap(id);
+        renderTours(); renderOrderList();
+        document.getElementById('tourCount').textContent=tours.length;
+    };
+
+    /* ── RENDER TOURS ── */
+    function renderTours(){
+        document.getElementById('tourCount').textContent=tours.length;
+        const el=document.getElementById('toursList');
+        if(!tours.length){
+            el.innerHTML=`<div class="empty-state"><div class="empty-ico">🗺️</div><div class="empty-txt">Aucune tournée.<br>Cliquez "+ Tournée"<br>ou "Optimiser"</div></div>`;
+            return;
+        }
+        el.innerHTML=tours.map(tour=>{
+            const orders=tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
+            const driver=chauffeurs.find(c=>c.id===tour.driverId);
+            const driverName=driver?`${driver.prenom||''} ${driver.nom||''}`.trim():'Non assigné';
+            const rd=tour.routeData;
+
+            return `<div class="tour-card ${tour.expanded?'expanded':''}" id="tc-${tour.id}">
+                <div class="tour-head" onclick="toggleTour('${tour.id}')">
+                    <div class="tour-color" style="background:${tour.color}"></div>
+                    <div class="tour-name" style="color:${tour.color}">${tour.name}</div>
+                    <div class="tour-count">${orders.length}</div>
+                    <i class="fas fa-chevron-down tour-chevron"></i>
+                </div>
+                <div class="tour-body">
+                    <!-- Chauffeur -->
+                    <select class="tour-driver-sel" onchange="setTourDriver('${tour.id}',this.value)">
+                        <option value="">🚗 Chauffeur…</option>
+                        ${chauffeurs.map(c=>`<option value="${c.id}" ${c.id===tour.driverId?'selected':''}>${c.prenom||''} ${c.nom||''}</option>`).join('')}
+                    </select>
+
+                    <!-- Planning summary (si optimisation auto) -->
+                    ${tour.planning ? `<div style="background:var(--night);border:1px solid var(--border2);border-radius:9px;padding:9px 10px;margin-bottom:8px;font-size:11px;">
+                        <div style="font-family:'Bebas Neue',cursive;font-size:12px;letter-spacing:1px;color:var(--muted2);margin-bottom:7px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-calendar-alt" style="color:${tour.color}"></i> PLANNING JOURNÉE
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px;">
+                            <div style="background:var(--surface);border-radius:6px;padding:6px 8px;">
+                                <div style="font-family:'Bebas Neue',cursive;font-size:16px;color:${tour.color}">${tour.planning.depart}</div>
+                                <div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Départ Yverdon</div>
+                            </div>
+                            <div style="background:var(--surface);border-radius:6px;padding:6px 8px;">
+                                <div style="font-family:'Bebas Neue',cursify;font-size:16px;color:${tour.color}">${tour.planning.fin}</div>
+                                <div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Fin prévue</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;">
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-steering-wheel" style="color:${tour.color}"></i> ${tour.planning.conduite} conduite
+                            </span>
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-weight-hanging" style="color:${tour.color}"></i> ${tour.planning.poids}kg
+                            </span>
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-clock" style="color:${tour.color}"></i> ${tour.planning.journee}h journée
+                            </span>
+                        </div>
+                        ${tour.planning.stops.map((s,i)=>`
+                            <div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid var(--border);font-size:10px;">
+                                <span style="font-family:'Bebas Neue',cursify;font-size:13px;color:${tour.color};width:14px;text-align:center;">${i+1}</span>
+                                <span style="flex:1;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortAddr(s.order.delivery_address)}</span>
+                                ${s.pauseAjoutee?`<span style="color:var(--yellow);font-weight:700;">☕${s.pauseAjoutee}min</span>`:''}
+                                <span style="color:${tour.color};font-weight:600;white-space:nowrap;">${s.heureArrStr}</span>
+                            </div>`).join('')}
+                    </div>` : ''}
+
+                    <!-- Drop zone -->
+                    <div class="drop-zone" id="dz-${tour.id}">
+                        ${orders.length===0
+                            ? `<div class="drop-hint"><i class="fas fa-inbox"></i><span>Glissez des transports ici</span></div>`
+                            : orders.map((o,i)=>`
+                                <div class="toi" draggable="true"
+                                    data-tour="${tour.id}" data-order="${o.id}" data-idx="${i}"
+                                    ondragstart="reorderDragStart(event,'${tour.id}',${i})"
+                                    ondragover="reorderDragOver(event)"
+                                    ondrop="reorderDrop(event,'${tour.id}',${i})"
+                                    style="cursor:grab;">
+                                    <i class="fas fa-grip-vertical" style="color:var(--muted);font-size:10px;flex-shrink:0;"></i>
+                                    <span class="toi-idx" style="color:${tour.color}">${i+1}</span>
+                                    <div class="toi-info">
+                                        <div class="toi-num">${o.order_number||o.id.slice(0,8)}</div>
+                                        <div class="toi-addr">${shortAddr(o.delivery_address)}</div>
+                                    </div>
+                                    <button class="toi-remove" onclick="removeFromTour('${tour.id}','${o.id}')"><i class="fas fa-times"></i></button>
+                                </div>`).join('')
+                        }
+                    </div>
+
+                    <!-- Récap route (fixe, ne disparait pas) -->
+                    ${rd ? `<div class="tour-summary">
+                        <div class="ts-title"><i class="fas fa-route" style="color:${tour.color}"></i> Récapitulatif route</div>
+                        <div class="ts-driver"><i class="fas fa-user" style="color:${tour.color}"></i> ${driverName}</div>
+                        <div class="ts-total">
+                            <div class="ts-stat">
+                                <div class="ts-val" style="color:${tour.color}">${rd.totalKm}</div>
+                                <div class="ts-lbl">km total</div>
+                            </div>
+                            <div class="ts-stat">
+                                <div class="ts-val" style="color:${tour.color}">${rd.totalDuree}</div>
+                                <div class="ts-lbl">durée</div>
+                            </div>
+                        </div>
+                        <div class="ts-stops">
+                            ${rd.segments.map((seg,i)=>`
+                                <div class="ts-stop">
+                                    <span class="ts-stop-num" style="color:${tour.color}">${i+1}</span>
+                                    <span class="ts-stop-addr">${seg.addr}</span>
+                                    <span class="ts-stop-arrow">→</span>
+                                    <span class="ts-stop-info" style="color:${tour.color}">${seg.km}km · ${seg.min}min</span>
+                                </div>`).join('')}
+                        </div>
+                    </div>` : ''}
+
+                    <!-- Actions -->
+                    <div class="tour-actions">
+                        <button class="btn btn-blue btn-sm" onclick="calcTourRoute('${tour.id}')">
+                            <i class="fas fa-route"></i> Route
+                        </button>
+                        <button class="btn btn-green btn-sm" onclick="saveTour('${tour.id}')">
+                            <i class="fas fa-save"></i> Sauver
+                        </button>
+                        <button class="btn btn-ghost btn-sm" onclick="deleteTour('${tour.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        // Setup drop zones
+        tours.forEach(t=>{
+            const dz=document.getElementById('dz-'+t.id);
+            if(dz) setupDropZone(dz,t.id);
+        });
+    }
+
+    /* ── ORS ROUTING ── */
+    async function getORSRoute(waypoints) {
+        if(waypoints.length<2) return null;
+        try {
+            const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{
+                method:'POST',
+                headers:{'Authorization':ORS_KEY,'Content-Type':'application/json'},
+                body:JSON.stringify({coordinates:waypoints.map(p=>[p[1],p[0]])})
+            });
+            if(!res.ok) throw new Error(`ORS ${res.status}`);
+            return await res.json();
+        } catch(e) { console.error('[ORS]',e.message); return null; }
+    }
+
+    /* ── CALC + DRAW TOUR ROUTE ── */
+    window.calcTourRoute=async function(tourId){
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        const orders=tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
+
+        // Build waypoints: utiliser pickup si dispo, sinon delivery
+        const wpts=[];
+        orders.forEach((o,i)=>{
+            if(i===0 && o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
+            if(o.delivery_lat) wpts.push([o.delivery_lat,o.delivery_lng]);
+            else if(o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
+        });
+
+        if(wpts.length<2){toast('info','Transports sans coordonnées GPS');return;}
+
+        showLoad('Calcul route ORS…');
+        const data=await getORSRoute(wpts);
+        hideLoad();
+
+        if(!data?.features?.[0]){toast('error','Route ORS indisponible'); clearTourMap(tourId); drawFallbackRoute(tour,wpts); return;}
+
+        const feature=data.features[0];
+        const props=feature.properties;
+        const segments=props.segments||[];
+        const totalKm=(props.summary.distance/1000).toFixed(1);
+        const totalMin=Math.round(props.summary.duration/60);
+        const totalH=Math.floor(totalMin/60);
+        const totalM=totalMin%60;
+        const totalDuree=totalH>0?`${totalH}h${totalM.toString().padStart(2,'0')}`:`${totalMin}min`;
+
+        // Segments info
+        const segsInfo=segments.map((seg,i)=>({
+            addr:shortAddr(orders[i]?.delivery_address||''),
+            km:(seg.distance/1000).toFixed(1),
+            min:Math.round(seg.duration/60)
+        }));
+
+        // Save route data to tour (persiste dans la colonne)
+        tour.routeData={ totalKm, totalDuree, segments:segsInfo };
+
+        // Draw on map
+        clearTourMap(tourId);
+        const layers=[];
+
+        // Route line
+        const routeLayer=L.geoJSON(feature.geometry,{style:{color:tour.color,weight:4,opacity:0.85}}).addTo(map);
+        layers.push(routeLayer);
+
+        // Labels entre stops
+        segments.forEach((seg,i)=>{
+            if(i>=wpts.length-1) return;
+            const midLat=(wpts[i][0]+wpts[i+1][0])/2;
+            const midLng=(wpts[i][1]+wpts[i+1][1])/2;
+            const km=(seg.distance/1000).toFixed(1);
+            const min=Math.round(seg.duration/60);
+            const lbl=L.marker([midLat,midLng],{
+                icon:L.divIcon({
+                    html:`<div class="route-label" style="border:1px solid ${tour.color};"><span style="color:${tour.color}">▶</span> ${km}km · ${min}min</div>`,
+                    className:'', iconAnchor:[40,10]
+                }),
+                interactive:false
+            }).addTo(map);
+            layers.push(lbl);
+        });
+
+        // Stop markers numérotés
+        orders.forEach((o,i)=>{
+            if(!o.delivery_lat) return;
+            const m=L.marker([o.delivery_lat,o.delivery_lng],{icon:makeStopIcon(i+1,tour.color)})
+                .addTo(map)
+                .bindTooltip(`<b>Stop ${i+1}</b><br>${shortAddr(o.delivery_address)}<br><span style="color:${tour.color}">${segsInfo[i]?.km||'?'}km — ${segsInfo[i]?.min||'?'}min</span>`,{direction:'top'});
+            layers.push(m);
+        });
+
+        tourMapLayers[tourId]=layers;
+        map.fitBounds(routeLayer.getBounds(),{padding:[60,60]});
+
+        renderTours(); // Mise à jour récap fixe
+        toast('success',`Route calculée — ${totalKm}km · ${totalDuree}`);
+    };
+
+    function clearTourMap(tourId){
+        if(tourMapLayers[tourId]){
+            tourMapLayers[tourId].forEach(l=>{ try{map.removeLayer(l);}catch(e){} });
+            tourMapLayers[tourId]=[];
+        }
+    }
+
+    function drawFallbackRoute(tour, wpts){
+        const line=L.polyline(wpts,{color:tour.color,weight:3,opacity:0.6,dashArray:'8 4'}).addTo(map);
+        tourMapLayers[tour.id]=[line];
+        map.fitBounds(wpts,{padding:[60,60]});
+    }
+
+    /* ════════════════════════════════════════════════════
+       MOTEUR D'OPTIMISATION LEMAN DISPATCH
+       Réglementation suisse conducteurs + contraintes véhicule
+       ════════════════════════════════════════════════════ */
+
+    const DEPOT = { lat: 46.7785, lng: 6.6409, name: 'Yverdon-les-Bains' };
+
+    // ── Paramètres réglementation ──
+    const RULES = {
+        depart:          5 * 60,       // 05h00 en minutes depuis minuit
+        minParStop:      5,            // 5 min/livraison
+        maxPoidsKg:      1000,         // 1000 kg max/véhicule
+        maxConduiteMin:  4.5 * 60,     // 4h30 max avant pause
+        pauseObligMin:   45,           // 45 min de pause
+        maxConducteTotal:9 * 60,       // 9h conduite totale
+        maxJourneeMin:   12 * 60,      // 12h journée totale
+        vitesseMoyKmH:   60,           // 60 km/h moyenne Suisse romande
+    };
+
+    // ── Haversine ──
+    const haversine = (a, b) => {
+        const R=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+        const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+        return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+    };
+
+    // ── Temps de trajet estimé (minutes) ──
+    const trajetMin = (a, b) => Math.round(haversine(a,b) / RULES.vitesseMoyKmH * 60);
+
+    // ── Nearest Neighbor depuis un point ──
+    function nearestNeighbor(orders, start) {
+        const route=[], remaining=[...orders];
+        let cur=start;
+        while(remaining.length) {
+            let best=0, bestD=Infinity;
+            remaining.forEach((o,i)=>{
+                const lat=o.pickup_lat||o.delivery_lat, lng=o.pickup_lng||o.delivery_lng;
+                if(!lat) return;
+                let d=haversine(cur,{lat,lng});
+                if(o.priority==='urgent') d*=0.1; // Urgents très prioritaires
+                if(d<bestD){bestD=d;best=i;}
+            });
+            route.push(remaining.splice(best,1)[0]);
+            const last=route[route.length-1];
+            cur={lat:last.delivery_lat||last.pickup_lat||cur.lat, lng:last.delivery_lng||last.pickup_lng||cur.lng};
+        }
+        return route;
+    }
+
+    // ── Simuler une tournée avec les contraintes légales ──
+    // Retourne { valide, stops, poidsTotal, tempsTotal, finHeure, raison }
+    function simulerTournee(orders) {
+        let tempsConduite = 0;   // minutes de conduite accumulées depuis dernière pause
+        let conduiteTotal = 0;   // total conduite journée
+        let tempsJournee  = 0;   // total journée (conduite + livraisons + pauses)
+        let poidsTotal    = 0;
+        let cur           = DEPOT;
+        const stops       = [];
+
+        for(const o of orders) {
+            const lat = o.delivery_lat||o.pickup_lat;
+            const lng = o.delivery_lng||o.pickup_lng;
+            if(!lat) continue;
+
+            const tTrajet  = trajetMin(cur, {lat, lng});
+            const poids    = parseFloat(o.weight)||0;
+
+            // Vérifier poids
+            if(poidsTotal + poids > RULES.maxPoidsKg) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Poids max dépassé (${poidsTotal+poids}kg > ${RULES.maxPoidsKg}kg)` };
+            }
+
+            // Pause obligatoire si on dépasse 4h30 de conduite
+            let pauseAjoutee = 0;
+            if(tempsConduite + tTrajet > RULES.maxConduiteMin) {
+                pauseAjoutee   = RULES.pauseObligMin;
+                tempsConduite  = 0; // Reset compteur conduite
+                tempsJournee  += pauseAjoutee;
+            }
+
+            // Vérifier limite conduite totale
+            if(conduiteTotal + tTrajet > RULES.maxConducteTotal) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Limite conduite 9h atteinte` };
+            }
+
+            // Vérifier limite journée
+            if(tempsJournee + tTrajet + RULES.minParStop > RULES.maxJourneeMin) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Limite journée 12h atteinte` };
+            }
+
+            // Ajouter le stop
+            tempsConduite += tTrajet;
+            conduiteTotal += tTrajet;
+            tempsJournee  += tTrajet + RULES.minParStop;
+            poidsTotal    += poids;
+            cur            = {lat, lng};
+
+            const heureArr = RULES.depart + tempsJournee;
+            stops.push({
+                order:     o,
+                tTrajet,
+                pauseAjoutee,
+                heureArr,   // minutes depuis minuit
+                heureArrStr: minutesToHHMM(heureArr)
+            });
+        }
+
+        const finMin = RULES.depart + tempsJournee;
+        return {
+            valide:      true,
+            stops,
+            poidsTotal:  poidsTotal.toFixed(0),
+            tempsJournee,
+            conduiteTotal,
+            finHeure:    minutesToHHMM(finMin),
+            raison:      null
+        };
+    }
+
+    function minutesToHHMM(min) {
+        const h = Math.floor(min/60)%24;
+        const m = min%60;
+        return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+    }
+
+    // ── ALGORITHME PRINCIPAL ──
+    window.autoOptimize = function() {
+        if(!chauffeurs.length) { toast('error','Aucun chauffeur disponible'); return; }
+
+        const inTourIds = new Set(tours.flatMap(t=>t.orderIds));
+        const pending   = allOrders.filter(o=>
+            o.status!=='delivered' && o.status!=='planned' &&
+            !inTourIds.has(o.id)  && (o.delivery_lat||o.pickup_lat)
+        );
+
+        if(!pending.length) { toast('info','Aucun transport avec coordonnées GPS à optimiser'); return; }
+
+        // 1. Trier : urgents d'abord, puis par distance depuis dépôt
+        const sorted = nearestNeighbor(pending, DEPOT);
+
+        // 2. Répartir entre chauffeurs en respectant les contraintes
+        const assignments = chauffeurs.map(c=>({ chauffeur:c, orders:[] }));
+        const nonAssignes = [];
+
+        for(const order of sorted) {
+            let assigned = false;
+
+            // Essayer d'ajouter à chaque chauffeur (round-robin intelligent)
+            for(const asgn of assignments) {
+                const test = simulerTournee([...asgn.orders, order]);
+                if(test.valide) {
+                    asgn.orders.push(order);
+                    assigned = true;
+                    break;
+                }
+            }
+
+            if(!assigned) nonAssignes.push(order);
+        }
+
+        // 3. Créer les tournées
+        const newTours = [];
+        assignments.forEach((asgn, i) => {
+            if(!asgn.orders.length) return;
+
+            // Simuler pour obtenir les infos détaillées
+            const sim   = simulerTournee(asgn.orders);
+            const color = TOUR_COLORS[i % TOUR_COLORS.length];
+            const name  = `${asgn.chauffeur.prenom||''} ${asgn.chauffeur.nom||''}`.trim();
+
+            // Construire le résumé planning
+            const depart  = minutesToHHMM(RULES.depart);
+            const fin     = sim.finHeure;
+            const conHH   = Math.floor(sim.conduiteTotal/60);
+            const conMM   = sim.conduiteTotal%60;
+
+            const tour = {
+                id:        't'+Date.now()+i,
+                name:      `${name} — ${depart}→${fin}`,
+                color,
+                driverId:  asgn.chauffeur.id,
+                orderIds:  asgn.orders.map(o=>o.id),
+                expanded:  true,
+                routeData: null,
+                planning: {
+                    depart, fin,
+                    nbStops:       sim.stops.length,
+                    poids:         sim.poidsTotal,
+                    conduite:      `${conHH}h${conMM.toString().padStart(2,'0')}`,
+                    journee:       Math.round(sim.tempsJournee/60*10)/10,
+                    stops:         sim.stops,
+                }
+            };
+            tours.push(tour);
+            newTours.push(tour);
+        });
+
+        if(!newTours.length) { toast('error','Impossible de créer les tournées'); return; }
+
+        // 4. Avertir si des transports n'ont pas pu être assignés
+        if(nonAssignes.length) {
+            toast('error', `⚠️ ${nonAssignes.length} transport${nonAssignes.length>1?'s':''} non assigné${nonAssignes.length>1?'s':''} — capacité ou temps dépassés`);
+        }
+
+        renderTours();
+        renderOrderList();
+
+        const totalStops = newTours.reduce((s,t)=>s+t.orderIds.length,0);
+        toast('success', `✓ ${newTours.length} tournée${newTours.length>1?'s':''} — ${totalStops} transports — départ ${minutesToHHMM(RULES.depart)}`);
+
+        // Calculer routes ORS (espacées pour éviter rate limit)
+        newTours.forEach((t,i) => setTimeout(()=>calcTourRoute(t.id), i*1800));
+    };
+
+    /* ── REORDER STOPS IN TOUR ── */
+    let reorderDragIdx = null;
+    let reorderTourId  = null;
+
+    window.reorderDragStart = function(e, tourId, idx) {
+        reorderTourId  = tourId;
+        reorderDragIdx = idx;
+        e.dataTransfer.effectAllowed = 'move';
+        e.stopPropagation(); // Empêcher le drag global
+    };
+
+    window.reorderDragOver = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    window.reorderDrop = function(e, tourId, targetIdx) {
+        e.preventDefault();
+        e.stopPropagation();
+        if(reorderTourId !== tourId || reorderDragIdx === null || reorderDragIdx === targetIdx) return;
+
+        const tour = tours.find(t=>t.id===tourId);
+        if(!tour) return;
+
+        // Réorganiser le tableau
+        const newOrder = [...tour.orderIds];
+        const [moved]  = newOrder.splice(reorderDragIdx, 1);
+        newOrder.splice(targetIdx, 0, moved);
+        tour.orderIds  = newOrder;
+        tour.routeData = null; // Reset cache route
+
+        reorderDragIdx = null;
+        reorderTourId  = null;
+        renderTours();
+        toast('info', 'Ordre mis à jour — recalculez la route');
+    };
+
+    /* ── SAVE TOUR ── */
+    window.saveTour=async function(tourId){
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        if(!tour.orderIds.length){toast('error','Ajoutez des transports');return;}
+        if(!tour.driverId){toast('error','Assignez un chauffeur');return;}
+
+        showLoad('Sauvegarde…');
+        try {
+            for(const orderId of tour.orderIds){
+                await db.from('transport_orders_simple').update({
+                    status:'planned', driver_id:tour.driverId,
+                    assigned_at:new Date().toISOString()
+                }).eq('id',orderId);
+            }
+            const driver=chauffeurs.find(c=>c.id===tour.driverId);
+            const dName=driver?`${driver.prenom||''} ${driver.nom||''}`.trim():'Chauffeur';
+
+            // Notification push
+            await window.LémanPush?.notifyDriver(
+                tour.driverId,
+                '🚚 Nouvelle tournée assignée !',
+                `Tournée "${tour.name}" — ${tour.orderIds.length} transport${tour.orderIds.length>1?'s':''} à effectuer`,
+                {type:'tour_assigned'}
+            );
+
+            toast('success',`✓ Tournée assignée à ${dName} — visible sur l'app chauffeur`);
+            syncMapWindow();
+            await loadAll();
+            renderTours();
+        } catch(e){toast('error',e.message);}
+        finally{hideLoad();}
+    };
+
+    /* ── ASSIGN SINGLE ── */
+    window.openAssign=function(id){
+        const o=allOrders.find(x=>x.id===id); if(!o) return;
+        document.getElementById('assignOrderId').value=id;
+        document.getElementById('assignInfo').textContent=`${o.order_number||''} · ${shortAddr(o.pickup_address)} → ${shortAddr(o.delivery_address)}`;
+        openModal('modalAssign');
+    };
+    window.doAssign=async function(){
+        const id=document.getElementById('assignOrderId').value;
+        const dId=document.getElementById('assignDriver').value;
+        if(!dId){toast('error','Choisissez un chauffeur');return;}
+        showLoad('Assignation…');
+        try {
+            await db.from('transport_orders_simple').update({status:'planned',driver_id:dId,assigned_at:new Date().toISOString()}).eq('id',id);
+            const o=allOrders.find(x=>x.id===id);
+            await window.LémanPush?.notifyDriver(dId,'📦 Nouveau transport !',`${o?.order_number||''} — ${shortAddr(o?.pickup_address)} → ${shortAddr(o?.delivery_address)}`,{type:'order_assigned'});
+            toast('success','Chauffeur assigné ✓');
+            window.closeModal('modalAssign');
+            await loadAll();
+        } catch(e){toast('error',e.message);}
+        finally{hideLoad();}
+    };
+
+    /* ── POPULATE SELECTS ── */
+    function populateSelects(){
+        const opts='<option value="">— Assigner plus tard —</option>'+chauffeurs.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        document.getElementById('tourDriver').innerHTML=opts;
+        document.getElementById('assignDriver').innerHTML='<option value="">— Choisir —</option>'+chauffeurs.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+    }
+
+    /* ── DUAL SCREEN ── */
+    let mapWindow = null;
+
+    window.openDualScreen = async function() {
+        // Vérifier si l'API Multi-Screen est disponible
+        if ('getScreenDetails' in window) {
+            try {
+                const screenDetails = await window.getScreenDetails();
+                const screens = screenDetails.screens;
+
+                if(screens.length >= 2) {
+                    // Trouver le 2ème écran
+                    const screen2 = screens.find(s => !s.isPrimary) || screens[1];
+                    const opts = `left=${screen2.left},top=${screen2.top},width=${screen2.width},height=${screen2.height},fullscreen=1`;
+
+                    // Ouvrir la carte sur le 2ème écran
+                    mapWindow = window.open('dispatch-map.html', 'LemanDispatchMap', opts);
+                    if(mapWindow) {
+                        toast('success', '🖥️ Carte ouverte sur le 2ème écran !');
+                        document.getElementById('btnDualScreen').style.background = 'rgba(34,197,94,0.2)';
+                        document.getElementById('btnDualScreen').style.borderColor = 'var(--green)';
+                        document.getElementById('btnDualScreen').style.color = 'var(--green)';
+
+                        // Masquer la carte dans la fenêtre principale
+                        document.querySelector('.col-map').style.display = 'none';
+                        document.querySelector('.layout').style.gridTemplateColumns = 'var(--col1) 1fr';
+
+                        // Envoyer les données à la carte externe via BroadcastChannel
+                        const channel = new BroadcastChannel('leman_dispatch');
+                        channel.postMessage({ type: 'INIT', orders: allOrders, tours, chauffeurs });
+
+                        // Écouter les mises à jour de la carte
+                        mapWindow.addEventListener('beforeunload', () => {
+                            document.querySelector('.col-map').style.display = '';
+                            document.querySelector('.layout').style.gridTemplateColumns = '';
+                            document.getElementById('btnDualScreen').style = '';
+                            toast('info', 'Carte fermée — retour vue unique');
+                        });
+                        return;
+                    }
+                }
+            } catch(e) {
+                console.warn('Multi-screen API:', e.message);
+            }
+        }
+
+        // Fallback : ouvrir dans une nouvelle fenêtre standard
+        const w = window.screen.width;
+        const h = window.screen.height;
+
+        // Essayer d'ouvrir sur écran secondaire (heuristique)
+        const opts = `left=${w},top=0,width=${w},height=${h}`;
+        mapWindow = window.open('dispatch-map.html', 'LemanDispatchMap', opts);
+
+        if(mapWindow) {
+            toast('success', '🖥️ Carte ouverte — déplacez-la sur votre 2ème écran');
+            // Mettre à jour couleur bouton
+            document.getElementById('btnDualScreen').style.cssText = 'background:rgba(34,197,94,0.15);border-color:var(--green);color:var(--green);';
+
+            // Écouter fermeture
+            const checkClosed = setInterval(() => {
+                if(mapWindow.closed) {
+                    clearInterval(checkClosed);
+                    mapWindow = null;
+                    document.getElementById('btnDualScreen').style.cssText = '';
+                    toast('info', 'Carte externe fermée');
+                }
+            }, 1000);
+        } else {
+            toast('error', 'Popup bloqué — autorisez les popups pour ce site');
+        }
+    };
+
+    // Sync carte externe quand les données changent
+    function syncMapWindow() {
+        if(!mapWindow || mapWindow.closed) return;
+        try {
+            const channel = new BroadcastChannel('leman_dispatch');
+            channel.postMessage({ type: 'UPDATE', orders: allOrders, tours, chauffeurs });
+        } catch(e) {}
+    }
+
+    /* ── REALTIME ── */
+    db.channel('dispatch').on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},()=>loadAll()).subscribe();
+
+    /* ── INIT ── */
+    loadAll();
 })();
 </script>
 </body>
