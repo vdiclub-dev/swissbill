@@ -14,6 +14,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../config.js"></script>
+    <script src="../push-manager.js"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -289,8 +290,21 @@
     <div class="sb-logo"><div class="sb-mark">🚚</div> Léman<em>-Driver</em></div>
     <div class="sb-right">
         <div class="gps-dot" id="gpsDot"></div>
+        <button id="btnNotifBell" onclick="toggleNotifs()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:4px;position:relative;">
+            <i class="fas fa-bell"></i>
+            <span id="notifBadge" style="display:none;position:absolute;top:-2px;right:-2px;width:14px;height:14px;background:var(--red);border-radius:50%;font-size:9px;font-weight:700;color:white;place-items:center;">0</span>
+        </button>
         <button onclick="logout()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;"><i class="fas fa-sign-out-alt"></i></button>
     </div>
+</div>
+
+<!-- Notification dropdown -->
+<div id="notifDropdown" style="display:none;position:fixed;top:56px;right:8px;width:300px;background:var(--night3);border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.5);z-index:300;max-height:400px;overflow-y:auto;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-family:'Bebas Neue',cursive;font-size:15px;letter-spacing:1px;">NOTIFICATIONS</div>
+        <button onclick="markAllRead()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--muted);font-family:'Outfit',sans-serif;">Tout lire</button>
+    </div>
+    <div id="notifList" style="padding:8px;"></div>
 </div>
 
 <!-- ═══ LOGIN ═══ -->
@@ -610,6 +624,7 @@
         loadMissions();
         loadTodayPointage();
         startGPS();
+        initNotifications(driver.id);
     }
 
     window.logout = async function() {
@@ -1030,6 +1045,114 @@
         }, ()=>document.getElementById('gpsDot').classList.remove('on'), {enableHighAccuracy:true,timeout:10000,maximumAge:5000});
     }
     function stopGPS() { if(gpsWatch) navigator.geolocation.clearWatch(gpsWatch); }
+
+    /* ── NOTIFICATIONS ── */
+    let notifications = [];
+
+    async function initNotifications(userId) {
+        // Demander permission push
+        if ('Notification' in window && Notification.permission === 'default') {
+            setTimeout(async () => {
+                await window.LémanPush?.subscribePush(userId);
+            }, 3000);
+        } else if (Notification.permission === 'granted') {
+            await window.LémanPush?.subscribePush(userId);
+        }
+
+        // Charger notifications existantes
+        await loadNotifications(userId);
+
+        // Écouter nouvelles notifications en temps réel
+        window.SUPABASE_CLIENT.channel('notif_' + userId)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${userId}`
+            }, async (payload) => {
+                const notif = payload.new;
+                console.log('[Notif] Nouvelle:', notif.title);
+
+                // Afficher notification push locale
+                await window.LémanPush?.showLocalNotification(
+                    notif.title,
+                    notif.body || '',
+                    { tag: notif.id, requireInteraction: true }
+                );
+
+                // Vibrer
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+                // Recharger liste
+                await loadNotifications(userId);
+                await loadMissions();
+
+                // Toast in-app
+                toast('info', `🔔 ${notif.title}`);
+            })
+            .subscribe();
+    }
+
+    async function loadNotifications(userId) {
+        const { data } = await window.SUPABASE_CLIENT
+            .from('notifications')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        notifications = data || [];
+        const unread = notifications.filter(n => !n.read).length;
+
+        // Badge
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            badge.textContent = unread;
+            badge.style.display = unread > 0 ? 'grid' : 'none';
+        }
+
+        renderNotifications();
+    }
+
+    function renderNotifications() {
+        const el = document.getElementById('notifList');
+        if (!el) return;
+        if (!notifications.length) {
+            el.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted);">Aucune notification</div>';
+            return;
+        }
+        el.innerHTML = notifications.map(n => `
+            <div style="padding:10px 12px;border-radius:10px;margin-bottom:4px;background:${n.read?'transparent':'rgba(232,49,26,0.06)'};border:1px solid ${n.read?'transparent':'rgba(232,49,26,0.15)'};" onclick="markRead('${n.id}')">
+                <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px;">${n.title}</div>
+                <div style="font-size:12px;color:var(--muted);">${n.body||''}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:4px;">${new Date(n.created_at).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit'})}</div>
+            </div>`).join('');
+    }
+
+    window.toggleNotifs = function() {
+        const dd = document.getElementById('notifDropdown');
+        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+    };
+
+    window.markRead = async function(id) {
+        await window.SUPABASE_CLIENT.from('notifications').update({ read: true }).eq('id', id);
+        if (driver) await loadNotifications(driver.id);
+    };
+
+    window.markAllRead = async function() {
+        if (!driver) return;
+        await window.SUPABASE_CLIENT.from('notifications').update({ read: true }).eq('user_id', driver.id);
+        await loadNotifications(driver.id);
+    };
+
+    // Fermer dropdown en cliquant ailleurs
+    document.addEventListener('click', e => {
+        const dd = document.getElementById('notifDropdown');
+        const bell = document.getElementById('btnNotifBell');
+        if (dd && bell && !dd.contains(e.target) && !bell.contains(e.target)) {
+            dd.style.display = 'none';
+        }
+    });
 
     /* ── INIT ── */
     checkSession();
