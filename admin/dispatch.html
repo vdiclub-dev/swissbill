@@ -675,6 +675,41 @@
                         ${chauffeurs.map(c=>`<option value="${c.id}" ${c.id===tour.driverId?'selected':''}>${c.prenom||''} ${c.nom||''}</option>`).join('')}
                     </select>
 
+                    <!-- Planning summary (si optimisation auto) -->
+                    ${tour.planning ? `<div style="background:var(--night);border:1px solid var(--border2);border-radius:9px;padding:9px 10px;margin-bottom:8px;font-size:11px;">
+                        <div style="font-family:'Bebas Neue',cursive;font-size:12px;letter-spacing:1px;color:var(--muted2);margin-bottom:7px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-calendar-alt" style="color:${tour.color}"></i> PLANNING JOURNÉE
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px;">
+                            <div style="background:var(--surface);border-radius:6px;padding:6px 8px;">
+                                <div style="font-family:'Bebas Neue',cursive;font-size:16px;color:${tour.color}">${tour.planning.depart}</div>
+                                <div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Départ Yverdon</div>
+                            </div>
+                            <div style="background:var(--surface);border-radius:6px;padding:6px 8px;">
+                                <div style="font-family:'Bebas Neue',cursify;font-size:16px;color:${tour.color}">${tour.planning.fin}</div>
+                                <div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Fin prévue</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;">
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-steering-wheel" style="color:${tour.color}"></i> ${tour.planning.conduite} conduite
+                            </span>
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-weight-hanging" style="color:${tour.color}"></i> ${tour.planning.poids}kg
+                            </span>
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-clock" style="color:${tour.color}"></i> ${tour.planning.journee}h journée
+                            </span>
+                        </div>
+                        ${tour.planning.stops.map((s,i)=>`
+                            <div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid var(--border);font-size:10px;">
+                                <span style="font-family:'Bebas Neue',cursify;font-size:13px;color:${tour.color};width:14px;text-align:center;">${i+1}</span>
+                                <span style="flex:1;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortAddr(s.order.delivery_address)}</span>
+                                ${s.pauseAjoutee?`<span style="color:var(--yellow);font-weight:700;">☕${s.pauseAjoutee}min</span>`:''}
+                                <span style="color:${tour.color};font-weight:600;white-space:nowrap;">${s.heureArrStr}</span>
+                            </div>`).join('')}
+                    </div>` : ''}
+
                     <!-- Drop zone -->
                     <div class="drop-zone" id="dz-${tour.id}">
                         ${orders.length===0
@@ -853,70 +888,218 @@
         map.fitBounds(wpts,{padding:[60,60]});
     }
 
-    /* ── AUTO OPTIMIZE (Nearest Neighbor) ── */
-    window.autoOptimize=function(){
-        const inTourIds=new Set(tours.flatMap(t=>t.orderIds));
-        const pending=allOrders.filter(o=>
-            o.status!=='delivered'&&
-            !inTourIds.has(o.id)&&
-            (o.delivery_lat||o.pickup_lat) // Au moins une coordonnée
-        );
-        if(!pending.length){toast('info','Aucun transport avec GPS à optimiser');return;}
+    /* ════════════════════════════════════════════════════
+       MOTEUR D'OPTIMISATION LEMAN DISPATCH
+       Réglementation suisse conducteurs + contraintes véhicule
+       ════════════════════════════════════════════════════ */
 
-        // Sort urgents first
-        const sorted=[...pending].sort((a,b)=>{
-            if(a.priority==='urgent'&&b.priority!=='urgent') return -1;
-            if(b.priority==='urgent'&&a.priority!=='urgent') return 1;
-            return 0;
-        });
+    const DEPOT = { lat: 46.7785, lng: 6.6409, name: 'Yverdon-les-Bains' };
 
-        // Nearest Neighbor algorithm
-        const depot={lat:46.5197,lng:6.6323};
-        const haversine=(a,b)=>{
-            const R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180;
-            const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
-            return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
-        };
+    // ── Paramètres réglementation ──
+    const RULES = {
+        depart:          5 * 60,       // 05h00 en minutes depuis minuit
+        minParStop:      5,            // 5 min/livraison
+        maxPoidsKg:      1000,         // 1000 kg max/véhicule
+        maxConduiteMin:  4.5 * 60,     // 4h30 max avant pause
+        pauseObligMin:   45,           // 45 min de pause
+        maxConducteTotal:9 * 60,       // 9h conduite totale
+        maxJourneeMin:   12 * 60,      // 12h journée totale
+        vitesseMoyKmH:   60,           // 60 km/h moyenne Suisse romande
+    };
 
-        const route=[];
-        const remaining=[...sorted];
-        let current=depot;
+    // ── Haversine ──
+    const haversine = (a, b) => {
+        const R=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+        const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+        return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+    };
 
-        while(remaining.length){
-            let best=0,bestD=Infinity;
+    // ── Temps de trajet estimé (minutes) ──
+    const trajetMin = (a, b) => Math.round(haversine(a,b) / RULES.vitesseMoyKmH * 60);
+
+    // ── Nearest Neighbor depuis un point ──
+    function nearestNeighbor(orders, start) {
+        const route=[], remaining=[...orders];
+        let cur=start;
+        while(remaining.length) {
+            let best=0, bestD=Infinity;
             remaining.forEach((o,i)=>{
-                // Utiliser pickup ou delivery selon ce qui est disponible
-                const lat=o.pickup_lat||o.delivery_lat;
-                const lng=o.pickup_lng||o.delivery_lng;
+                const lat=o.pickup_lat||o.delivery_lat, lng=o.pickup_lng||o.delivery_lng;
                 if(!lat) return;
-                let d=haversine(current,{lat,lng});
-                if(o.priority==='urgent') d*=0.3;
+                let d=haversine(cur,{lat,lng});
+                if(o.priority==='urgent') d*=0.1; // Urgents très prioritaires
                 if(d<bestD){bestD=d;best=i;}
             });
             route.push(remaining.splice(best,1)[0]);
             const last=route[route.length-1];
-            current={
-                lat:last.delivery_lat||last.pickup_lat||depot.lat,
-                lng:last.delivery_lng||last.pickup_lng||depot.lng
-            };
+            cur={lat:last.delivery_lat||last.pickup_lat||cur.lat, lng:last.delivery_lng||last.pickup_lng||cur.lng};
+        }
+        return route;
+    }
+
+    // ── Simuler une tournée avec les contraintes légales ──
+    // Retourne { valide, stops, poidsTotal, tempsTotal, finHeure, raison }
+    function simulerTournee(orders) {
+        let tempsConduite = 0;   // minutes de conduite accumulées depuis dernière pause
+        let conduiteTotal = 0;   // total conduite journée
+        let tempsJournee  = 0;   // total journée (conduite + livraisons + pauses)
+        let poidsTotal    = 0;
+        let cur           = DEPOT;
+        const stops       = [];
+
+        for(const o of orders) {
+            const lat = o.delivery_lat||o.pickup_lat;
+            const lng = o.delivery_lng||o.pickup_lng;
+            if(!lat) continue;
+
+            const tTrajet  = trajetMin(cur, {lat, lng});
+            const poids    = parseFloat(o.weight)||0;
+
+            // Vérifier poids
+            if(poidsTotal + poids > RULES.maxPoidsKg) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Poids max dépassé (${poidsTotal+poids}kg > ${RULES.maxPoidsKg}kg)` };
+            }
+
+            // Pause obligatoire si on dépasse 4h30 de conduite
+            let pauseAjoutee = 0;
+            if(tempsConduite + tTrajet > RULES.maxConduiteMin) {
+                pauseAjoutee   = RULES.pauseObligMin;
+                tempsConduite  = 0; // Reset compteur conduite
+                tempsJournee  += pauseAjoutee;
+            }
+
+            // Vérifier limite conduite totale
+            if(conduiteTotal + tTrajet > RULES.maxConducteTotal) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Limite conduite 9h atteinte` };
+            }
+
+            // Vérifier limite journée
+            if(tempsJournee + tTrajet + RULES.minParStop > RULES.maxJourneeMin) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Limite journée 12h atteinte` };
+            }
+
+            // Ajouter le stop
+            tempsConduite += tTrajet;
+            conduiteTotal += tTrajet;
+            tempsJournee  += tTrajet + RULES.minParStop;
+            poidsTotal    += poids;
+            cur            = {lat, lng};
+
+            const heureArr = RULES.depart + tempsJournee;
+            stops.push({
+                order:     o,
+                tTrajet,
+                pauseAjoutee,
+                heureArr,   // minutes depuis minuit
+                heureArrStr: minutesToHHMM(heureArr)
+            });
         }
 
-        // Créer une seule tournée optimisée
-        const color=TOUR_COLORS[tours.length%TOUR_COLORS.length];
-        const newTour={
-            id:'t'+Date.now(),
-            name:`Tournée optimisée (${route.length} stops)`,
-            color, driverId:null,
-            orderIds:route.map(o=>o.id),
-            expanded:true, routeData:null
+        const finMin = RULES.depart + tempsJournee;
+        return {
+            valide:      true,
+            stops,
+            poidsTotal:  poidsTotal.toFixed(0),
+            tempsJournee,
+            conduiteTotal,
+            finHeure:    minutesToHHMM(finMin),
+            raison:      null
         };
-        tours.push(newTour);
+    }
+
+    function minutesToHHMM(min) {
+        const h = Math.floor(min/60)%24;
+        const m = min%60;
+        return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+    }
+
+    // ── ALGORITHME PRINCIPAL ──
+    window.autoOptimize = function() {
+        if(!chauffeurs.length) { toast('error','Aucun chauffeur disponible'); return; }
+
+        const inTourIds = new Set(tours.flatMap(t=>t.orderIds));
+        const pending   = allOrders.filter(o=>
+            o.status!=='delivered' && o.status!=='planned' &&
+            !inTourIds.has(o.id)  && (o.delivery_lat||o.pickup_lat)
+        );
+
+        if(!pending.length) { toast('info','Aucun transport avec coordonnées GPS à optimiser'); return; }
+
+        // 1. Trier : urgents d'abord, puis par distance depuis dépôt
+        const sorted = nearestNeighbor(pending, DEPOT);
+
+        // 2. Répartir entre chauffeurs en respectant les contraintes
+        const assignments = chauffeurs.map(c=>({ chauffeur:c, orders:[] }));
+        const nonAssignes = [];
+
+        for(const order of sorted) {
+            let assigned = false;
+
+            // Essayer d'ajouter à chaque chauffeur (round-robin intelligent)
+            for(const asgn of assignments) {
+                const test = simulerTournee([...asgn.orders, order]);
+                if(test.valide) {
+                    asgn.orders.push(order);
+                    assigned = true;
+                    break;
+                }
+            }
+
+            if(!assigned) nonAssignes.push(order);
+        }
+
+        // 3. Créer les tournées
+        const newTours = [];
+        assignments.forEach((asgn, i) => {
+            if(!asgn.orders.length) return;
+
+            // Simuler pour obtenir les infos détaillées
+            const sim   = simulerTournee(asgn.orders);
+            const color = TOUR_COLORS[i % TOUR_COLORS.length];
+            const name  = `${asgn.chauffeur.prenom||''} ${asgn.chauffeur.nom||''}`.trim();
+
+            // Construire le résumé planning
+            const depart  = minutesToHHMM(RULES.depart);
+            const fin     = sim.finHeure;
+            const conHH   = Math.floor(sim.conduiteTotal/60);
+            const conMM   = sim.conduiteTotal%60;
+
+            const tour = {
+                id:        't'+Date.now()+i,
+                name:      `${name} — ${depart}→${fin}`,
+                color,
+                driverId:  asgn.chauffeur.id,
+                orderIds:  asgn.orders.map(o=>o.id),
+                expanded:  true,
+                routeData: null,
+                planning: {
+                    depart, fin,
+                    nbStops:       sim.stops.length,
+                    poids:         sim.poidsTotal,
+                    conduite:      `${conHH}h${conMM.toString().padStart(2,'0')}`,
+                    journee:       Math.round(sim.tempsJournee/60*10)/10,
+                    stops:         sim.stops,
+                }
+            };
+            tours.push(tour);
+            newTours.push(tour);
+        });
+
+        if(!newTours.length) { toast('error','Impossible de créer les tournées'); return; }
+
+        // 4. Avertir si des transports n'ont pas pu être assignés
+        if(nonAssignes.length) {
+            toast('error', `⚠️ ${nonAssignes.length} transport${nonAssignes.length>1?'s':''} non assigné${nonAssignes.length>1?'s':''} — capacité ou temps dépassés`);
+        }
+
         renderTours();
         renderOrderList();
 
-        toast('success',`✓ Tournée optimisée créée — ${route.length} stops dans le meilleur ordre`);
-        // Calculer la route automatiquement
-        setTimeout(()=>calcTourRoute(newTour.id),500);
+        const totalStops = newTours.reduce((s,t)=>s+t.orderIds.length,0);
+        toast('success', `✓ ${newTours.length} tournée${newTours.length>1?'s':''} — ${totalStops} transports — départ ${minutesToHHMM(RULES.depart)}`);
+
+        // Calculer routes ORS (espacées pour éviter rate limit)
+        newTours.forEach((t,i) => setTimeout(()=>calcTourRoute(t.id), i*1800));
     };
 
     /* ── REORDER STOPS IN TOUR ── */
