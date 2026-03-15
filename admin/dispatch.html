@@ -572,6 +572,9 @@
     /* ── Order list ── */
     function renderOrderList() {
         let list = [...allOrders];
+        // Par défaut, masquer les transports déjà dans une tournée et les livrés (sauf si filtre)
+        const inTourIds2 = new Set(tours.flatMap(t=>t.orderIds));
+        if(!filterSt) list = list.filter(o=>o.status!=='delivered');
         if(filterSt==='urgent') list = list.filter(o=>o.priority==='urgent');
         else if(filterSt) list = list.filter(o=>o.status===filterSt);
         if(filterQ) list = list.filter(o=>
@@ -623,10 +626,11 @@
         allOrders.forEach(o => {
             const color = STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')]||STATUS_COLORS.pending;
             const isUrgent = o.priority==='urgent';
+            const isPending = o.status==='pending'||o.priority==='urgent';
             const mg = {};
 
             if(o.pickup_lat && o.pickup_lng) {
-                mg.p = L.marker([o.pickup_lat,o.pickup_lng],{icon:makeIcon(color,'circle',isUrgent)})
+                mg.p = L.marker([o.pickup_lat,o.pickup_lng],{icon:makeIcon(color,'circle',isPending)})
                     .addTo(map).on('click',()=>selectOrder(o.id))
                     .bindTooltip(`<b>${o.order_number||'—'}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
                 bounds.push([o.pickup_lat,o.pickup_lng]);
@@ -786,7 +790,7 @@
         });
     }
 
-    function addOrderToTour(tourId, orderId) {
+    window.addOrderToTour = function addOrderToTour(tourId, orderId) {
         const tour = tours.find(t=>t.id===tourId);
         if(!tour) return;
         if(tour.orderIds.includes(orderId)) { toast('info','Transport déjà dans cette tournée'); return; }
@@ -808,8 +812,8 @@
             <div style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;margin-bottom:16px;">CHOISIR TOURNÉE</div>
             <select id="tourSelectModal" style="width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);margin-bottom:16px;">${sel}</select>
             <div style="display:flex;gap:8px;">
-                <button onclick="addOrderToTour(document.getElementById('tourSelectModal').value,'${orderId}');this.closest('[style]').remove();" style="flex:1;padding:11px;background:var(--green);color:var(--night);border:none;border-radius:9px;font-family:'Outfit',sans-serif;font-weight:700;cursor:pointer;">Ajouter</button>
-                <button onclick="this.closest('[style]').remove();" style="flex:1;padding:11px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;cursor:pointer;">Annuler</button>
+                <button onclick="const tid=document.getElementById('tourSelectModal').value;if(tid){window.addOrderToTour(tid,'${orderId}');this.closest('[style*=fixed]').remove();}else{alert('Choisissez une tournée');}" style="flex:1;padding:11px;background:var(--green);color:var(--night);border:none;border-radius:9px;font-family:'Outfit',sans-serif;font-weight:700;cursor:pointer;"><i class='fas fa-check'></i> Confirmer</button>
+                <button onclick="this.closest('[style*=fixed]').remove();" style="flex:1;padding:11px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;cursor:pointer;">Annuler</button>
             </div></div>`;
         div.addEventListener('click', e=>{ if(e.target===div) div.remove(); });
         document.body.appendChild(div);
@@ -918,16 +922,24 @@
         showLoad();
         try {
             // 1. Créer la tournée dans tours table
-            const { data: tourRec, error: tourErr } = await db.from('tours').insert([{
+            const tourPayload = {
                 name: tour.name,
                 status: 'active',
                 total_distance_km: null,
                 total_duration_min: null,
-                optimized: false,
-                driver_id: tour.driverId||null
-            }]).select().single();
+                optimized: false
+            };
+            // Ajouter driver_id seulement si la colonne existe
+            if(tour.driverId) tourPayload.driver_id = tour.driverId;
 
-            if(tourErr) throw tourErr;
+            const { data: tourRec, error: tourErr } = await db.from('tours').insert([tourPayload]).select().single();
+
+            if(tourErr) {
+                // Si erreur colonne driver_id, réessayer sans
+                delete tourPayload.driver_id;
+                const { data: tourRec2, error: tourErr2 } = await db.from('tours').insert([tourPayload]).select().single();
+                if(tourErr2) throw tourErr2;
+            }
 
             // 2. Mettre à jour tous les transports — driver_id + status + tour_id
             for(const orderId of tour.orderIds) {
