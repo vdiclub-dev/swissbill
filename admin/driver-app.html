@@ -804,36 +804,44 @@
             const now = new Date().toISOString();
             if(action==='start') {
                 if(pointage) { toast('info','Journée déjà démarrée'); hideLoad(); return; }
-                const { data, error } = await db.from('pointages').insert([{
+                // Insert puis recharger depuis DB
+                const { error: insErr } = await db.from('pointages').insert([{
                     driver_id: driver.id,
                     date: today(),
                     debut_travail: now,
                     statut: 'en_cours'
-                }]).select().single();
-                if(error) throw error;
-                pointage = data;
+                }]);
+                if(insErr) throw insErr;
+                // Recharger depuis DB pour avoir l'id correct
+                const { data: fresh } = await db.from('pointages').select('*')
+                    .eq('driver_id', driver.id).eq('date', today()).single();
+                pointage = fresh;
                 toast('success','Bonne journée ! ☀️');
             }
             else if(action==='pause') {
-                if(!pointage?.id) return;
-                const { data, error } = await db.from('pointages')
+                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
+                const { error: upErr } = await db.from('pointages')
                     .update({ debut_pause:now, statut:'pause' })
-                    .eq('id',pointage.id).select().single();
-                if(error) throw error;
-                pointage = data;
+                    .eq('id', pointage.id);
+                if(upErr) throw upErr;
+                // Recharger
+                const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
+                pointage = fresh;
                 toast('info','Bonne pause ! ☕');
             }
             else if(action==='resume') {
-                if(!pointage?.id) return;
-                const { data, error } = await db.from('pointages')
+                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
+                const { error: upErr } = await db.from('pointages')
                     .update({ fin_pause:now, statut:'en_cours' })
-                    .eq('id',pointage.id).select().single();
-                if(error) throw error;
-                pointage = data;
+                    .eq('id', pointage.id);
+                if(upErr) throw upErr;
+                // Recharger
+                const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
+                pointage = fresh;
                 toast('success','Reprise du travail 💪');
             }
             else if(action==='stop') {
-                if(!pointage?.id) return;
+                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
                 // Calculate hours
                 const ms = new Date() - new Date(pointage.debut_travail);
                 let pauseMs = 0;
@@ -841,18 +849,17 @@
                     pauseMs = new Date(pointage.fin_pause) - new Date(pointage.debut_pause);
                 const heures = (ms - pauseMs) / 3600000;
                 const heuresSupp = Math.max(0, heures - 8.5);
-                const { data, error } = await db.from('pointages')
-                    .update({ fin_travail:now, statut:'termine', heures_travaillees:parseFloat(heures.toFixed(2)), heures_supp:parseFloat(heuresSupp.toFixed(2)) })
-                    .eq('id',pointage.id).select().single();
-                if(error) throw error;
-                pointage = data;
+                const { error: upErr } = await db.from('pointages')
+                    .update({ fin_travail:now, statut:'termine',
+                        heures_travaillees: parseFloat(heures.toFixed(2)),
+                        heures_supp: parseFloat(heuresSupp.toFixed(2)) })
+                    .eq('id', pointage.id);
+                if(upErr) throw upErr;
+                // Recharger
+                const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
+                pointage = fresh;
                 clearInterval(workTimer);
-                // Update solde heures supp
-                if(heuresSupp > 0) {
-                    await db.from('soldes_rh').upsert([{ driver_id:driver.id }],{onConflict:'driver_id'});
-                    await db.rpc ? null : null; // silent
-                }
-                toast('success',`Journée terminée — ${heures.toFixed(1)}h travaillées`);
+                toast('success',`Journée terminée — ${heures.toFixed(1)}h travaillées ✓`);
             }
             renderPointage();
         } catch(e) { toast('error',e.message); }
