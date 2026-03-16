@@ -536,7 +536,7 @@
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:20px;gap:16px;overflow-y:auto;">
         <!-- Caméra -->
         <div style="width:100%;max-width:340px;position:relative;">
-            <video id="qrVideo" style="width:100%;border-radius:16px;background:#000;aspect-ratio:1;" autoplay muted playsinline></video>
+            <video id="qrVideo" style="width:100%;border-radius:16px;background:#000;aspect-ratio:1;" autoplay muted playsinline webkit-playsinline></video>
             <canvas id="qrCanvas" style="display:none;"></canvas>
             <!-- Cadre de scan -->
             <div style="position:absolute;inset:0;border-radius:16px;overflow:hidden;pointer-events:none;">
@@ -722,48 +722,90 @@
     window.startScan = async function() {
         document.getElementById('scanResult').style.display = 'none';
         document.getElementById('scanStatus').textContent = 'Démarrage caméra…';
+
+        // Stop any existing stream first
+        if(scanStream) { scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+        if(scanInterval) { clearInterval(scanInterval); scanInterval=null; }
+
         try {
-            scanStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment', width:{ideal:640}, height:{ideal:640} }
-            });
+            // iOS Safari: doit être déclenché par geste utilisateur
+            const constraints = {
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width:  { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+            scanStream = await navigator.mediaDevices.getUserMedia(constraints);
             const video = document.getElementById('qrVideo');
             video.srcObject = scanStream;
+            video.setAttribute('playsinline', true); // iOS requis
+            video.setAttribute('muted', true);
+
+            await new Promise((res, rej) => {
+                video.onloadedmetadata = () => res();
+                video.onerror = rej;
+                setTimeout(rej, 5000); // timeout 5s
+            });
             await video.play();
-            document.getElementById('scanStatus').textContent = 'Pointez vers le QR code';
-            // Scan loop
-            scanInterval = setInterval(() => decodeFrame(), 500);
+
+            document.getElementById('scanStatus').textContent = '📷 Pointez vers le QR code';
+            scanning = false; // flag anti-doublon
+            scanInterval = setInterval(() => decodeFrame(), 400);
         } catch(e) {
-            document.getElementById('scanStatus').textContent = '❌ Caméra non disponible — utilisez la saisie manuelle';
-            console.error('Camera:', e);
+            let msg = '❌ Caméra non disponible';
+            if(e.name === 'NotAllowedError')    msg = '❌ Accès caméra refusé — autorisez dans les réglages';
+            if(e.name === 'NotFoundError')      msg = '❌ Aucune caméra trouvée';
+            if(e.name === 'NotSupportedError')  msg = '❌ HTTPS requis pour la caméra';
+            document.getElementById('scanStatus').textContent = msg + ' — utilisez la saisie manuelle ci-dessous';
+            console.error('Camera error:', e.name, e.message);
         }
     };
 
     window.stopScan = function() {
         if(scanInterval) { clearInterval(scanInterval); scanInterval = null; }
         if(scanStream)   { scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+        scanning = false;
         showScreen('home');
     };
 
+    let scanning = false; // anti-doublon
+
     function decodeFrame() {
+        if(scanning) return; // déjà en traitement
         const video  = document.getElementById('qrVideo');
         const canvas = document.getElementById('qrCanvas');
-        if(!video.videoWidth) return;
+        if(!video || !video.videoWidth || video.paused || video.ended) return;
+
         canvas.width  = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0);
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        // Use BarcodeDetector if available
+
+        // BarcodeDetector (Chrome Android natif — le plus rapide)
         if('BarcodeDetector' in window) {
+            scanning = true;
             const bd = new BarcodeDetector({formats:['qr_code']});
             bd.detect(canvas).then(codes => {
-                if(codes.length > 0) handleQRResult(codes[0].rawValue);
-            }).catch(()=>{});
-        } else {
-            // Fallback: jsQR via script load
-            if(window.jsQR) {
-                const code = jsQR(imgData.data, imgData.width, imgData.height);
-                if(code) handleQRResult(code.data);
+                if(codes.length > 0) {
+                    clearInterval(scanInterval); scanInterval = null;
+                    handleQRResult(codes[0].rawValue);
+                } else {
+                    scanning = false;
+                }
+            }).catch(() => { scanning = false; });
+            return;
+        }
+
+        // jsQR fallback (Safari, Firefox)
+        if(window.jsQR) {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imgData.data, imgData.width, imgData.height, {
+                inversionAttempts: 'dontInvert'
+            });
+            if(code && code.data) {
+                clearInterval(scanInterval); scanInterval = null;
+                handleQRResult(code.data);
             }
         }
     }
