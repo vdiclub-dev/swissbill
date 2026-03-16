@@ -1349,11 +1349,29 @@
             const now = new Date().toISOString();
             const note = document.getElementById('deliveryNote').value.trim();
 
-            // Récupérer signature si présente
+            // Récupérer signature
             let signatureData = null;
             const sigCanvas = document.getElementById('sigCanvas');
             if(hasSig && sigCanvas) {
                 signatureData = sigCanvas.toDataURL('image/png');
+            }
+
+            // Récupérer photo en base64
+            let photoData = null;
+            const photoPreview = document.getElementById('photoPreview');
+            if(photoPreview && photoPreview.style.display !== 'none' && photoPreview.src && !photoPreview.src.startsWith('data:')) {
+                // Convertir l'objectURL en base64
+                try {
+                    const resp = await fetch(photoPreview.src);
+                    const blob = await resp.blob();
+                    photoData = await new Promise(res => {
+                        const r = new FileReader();
+                        r.onload = () => res(r.result);
+                        r.readAsDataURL(blob);
+                    });
+                } catch(e) { console.warn('Photo conversion:', e); }
+            } else if(photoPreview?.src?.startsWith('data:')) {
+                photoData = photoPreview.src;
             }
 
             // 1. Mettre à jour le statut du transport
@@ -1364,7 +1382,7 @@
             }).eq('id', curMission.id);
             if(error) throw error;
 
-            // 2. Créer un enregistrement de livraison détaillé
+            // 2. Enregistrement livraison avec photo + signature
             const deliveryRecord = {
                 order_id:        curMission.id,
                 order_number:    curMission.order_number,
@@ -1375,16 +1393,16 @@
                 note_livraison:  note || null,
                 has_signature:   hasSig,
                 signature_data:  signatureData,
+                photo_data:      photoData,
                 gps_lat:         myLat,
                 gps_lng:         myLng,
                 created_at:      now
             };
 
-            // Insérer dans deliveries (ignore si table n'existe pas)
             try {
                 await db.from('deliveries').insert([deliveryRecord]);
             } catch(e2) {
-                console.warn('Table deliveries non disponible:', e2.message);
+                console.warn('Table deliveries:', e2.message);
             }
 
             hideLoad();
