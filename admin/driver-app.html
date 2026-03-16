@@ -720,6 +720,88 @@
         loadVehicule();
         startGPS();
         initNotifications(driver.id);
+
+        // ── Vérifier si ouvert depuis un scan QR ──
+        const params = new URLSearchParams(window.location.search);
+        const orderId    = params.get('id');
+        const orderNum   = params.get('order');
+        const colisNum   = params.get('colis');
+        const colisTotal = params.get('total');
+
+        if(orderId || orderNum) {
+            // Afficher notification de scan
+            setTimeout(async () => {
+                toast('info', `📦 QR scanné — chargement du transport…`);
+                // Chercher le transport
+                let query = db.from('transport_orders_simple').select('*');
+                if(orderId)   query = query.eq('id', orderId);
+                else          query = query.eq('order_number', orderNum);
+                const { data:order } = await query.maybeSingle();
+                if(order) {
+                    // Afficher un modal de confirmation de prise en charge
+                    showQRPickup(order, colisNum, colisTotal);
+                } else {
+                    toast('error', `Transport introuvable : ${orderNum||orderId}`);
+                }
+                // Nettoyer l'URL sans recharger la page
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }, 800);
+        }
+    }
+
+    function showQRPickup(o, colisNum, colisTotal) {
+        // Créer un modal de prise en charge
+        const existing = document.getElementById('modalQRPickup');
+        if(existing) existing.remove();
+
+        const stColor = o.status==='in_transit'?'var(--purple)':o.status==='delivered'?'var(--green)':'var(--yellow)';
+        const overlay = document.createElement('div');
+        overlay.id = 'modalQRPickup';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--night3);border:1.5px solid var(--border2);border-radius:22px;padding:28px;width:100%;max-width:360px;box-shadow:0 40px 100px rgba(0,0,0,0.6);">
+                <div style="text-align:center;margin-bottom:18px;">
+                    <div style="font-size:36px;margin-bottom:8px;">📦</div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;color:var(--white);">QR CODE SCANNÉ</div>
+                    ${colisNum?`<div style="font-size:12px;color:var(--yellow);margin-top:4px;">Colis ${colisNum}/${colisTotal||'?'}</div>`:''}
+                </div>
+                <div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;display:flex;flex-direction:column;gap:7px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:var(--muted2)">Commande</span>
+                        <strong>${o.order_number||'—'}</strong>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:var(--muted2)">Statut</span>
+                        <span style="color:${stColor};font-weight:600">${o.status}</span>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:4px;">
+                        <div style="width:8px;height:8px;background:var(--blue);border-radius:50%;margin-top:3px;flex-shrink:0;"></div>
+                        <div style="font-size:12px;color:var(--muted2);line-height:1.4;">${(o.pickup_address||'—').split('|')[0].trim()}</div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <div style="width:8px;height:8px;background:var(--red);border-radius:2px;transform:rotate(45deg);margin-top:3px;flex-shrink:0;"></div>
+                        <div style="font-size:12px;color:var(--white);font-weight:600;line-height:1.4;">${o.destinataire_nom||'—'}<br><span style="color:var(--muted2);font-weight:400">${(o.delivery_address||'—').split(',').slice(0,2).join(',')}</span></div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+                        <span style="background:var(--night);padding:3px 8px;border-radius:6px;font-size:11px;">📦 ${o.quantity||1}× ${o.weight||0}kg</span>
+                        <span style="background:var(--night);padding:3px 8px;border-radius:6px;font-size:11px;">⚡ ${o.service_type||'normal'}</span>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${o.status!=='delivered'?`
+                    <button onclick="confirmPickup('${o.id}');document.getElementById('modalQRPickup').remove();"
+                        style="width:100%;padding:14px;background:var(--green);color:var(--night);border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;cursor:pointer;">
+                        <i class="fas fa-box"></i> Confirmer la prise en charge
+                    </button>`:'<div style="text-align:center;color:var(--green);font-weight:600;padding:8px;">✅ Déjà livré</div>'}
+                    <button onclick="document.getElementById('modalQRPickup').remove();"
+                        style="width:100%;padding:12px;background:transparent;color:var(--muted2);border:1px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;cursor:pointer;font-size:14px;">
+                        Fermer
+                    </button>
+                </div>
+            </div>`;
+
+        overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
     }
 
     /* ── QR SCANNER ── */
@@ -1408,10 +1490,34 @@
     };
 
     window.handlePhoto = function(input) {
-        const f=input.files[0]; if(!f) return;
-        const preview=document.getElementById('photoPreview');
-        preview.src=URL.createObjectURL(f); preview.style.display='block';
-        document.getElementById('photoBtn').style.display='none';
+        const f = input.files[0]; if(!f) return;
+        // Redimensionner et convertir en base64 immédiatement
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                // Redimensionner à max 800px pour ne pas surcharger la DB
+                const MAX = 800;
+                let w = img.width, h = img.height;
+                if(w > MAX || h > MAX) {
+                    if(w > h) { h = Math.round(h * MAX/w); w = MAX; }
+                    else      { w = Math.round(w * MAX/h); h = MAX; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                const b64 = canvas.toDataURL('image/jpeg', 0.75);
+
+                // Stocker en base64 directement sur l'élément
+                const preview = document.getElementById('photoPreview');
+                preview.src = b64;
+                preview.style.display = 'block';
+                preview._base64 = b64; // stocker pour confirmDelivery
+                document.getElementById('photoBtn').style.display = 'none';
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(f);
     };
 
     window.confirmDelivery = async function() {
@@ -1428,22 +1534,12 @@
                 signatureData = sigCanvas.toDataURL('image/png');
             }
 
-            // Récupérer photo en base64
+            // Récupérer photo base64 (convertie dans handlePhoto)
             let photoData = null;
             const photoPreview = document.getElementById('photoPreview');
-            if(photoPreview && photoPreview.style.display !== 'none' && photoPreview.src && !photoPreview.src.startsWith('data:')) {
-                // Convertir l'objectURL en base64
-                try {
-                    const resp = await fetch(photoPreview.src);
-                    const blob = await resp.blob();
-                    photoData = await new Promise(res => {
-                        const r = new FileReader();
-                        r.onload = () => res(r.result);
-                        r.readAsDataURL(blob);
-                    });
-                } catch(e) { console.warn('Photo conversion:', e); }
-            } else if(photoPreview?.src?.startsWith('data:')) {
-                photoData = photoPreview.src;
+            if(photoPreview && photoPreview.style.display !== 'none') {
+                photoData = photoPreview._base64 || null;
+                if(!photoData && photoPreview.src?.startsWith('data:')) photoData = photoPreview.src;
             }
 
             // 1. Mettre à jour le statut du transport
