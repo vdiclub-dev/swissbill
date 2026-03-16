@@ -1134,7 +1134,7 @@
             const now = new Date().toISOString();
             if(action==='start') {
                 if(pointage) { toast('info','Journée déjà démarrée'); hideLoad(); return; }
-                // Insert puis recharger depuis DB
+                // Insert pointage
                 const { error: insErr } = await db.from('pointages').insert([{
                     driver_id: driver.id,
                     date: today(),
@@ -1142,11 +1142,27 @@
                     statut: 'en_cours'
                 }]);
                 if(insErr) throw insErr;
-                // Recharger depuis DB pour avoir l'id correct
+                // Recharger depuis DB
                 const { data: fresh } = await db.from('pointages').select('*')
                     .eq('driver_id', driver.id).eq('date', today()).single();
                 pointage = fresh;
-                toast('success','Bonne journée ! ☀️');
+
+                // ── Passer les transports assignés en "in_transit" ──
+                const { data: assigned } = await db.from('transport_orders_simple')
+                    .select('id, order_number')
+                    .eq('driver_id', driver.id)
+                    .in('status', ['pending', 'planned'])
+                    .neq('admin_status', 'refused');
+
+                if(assigned?.length) {
+                    await db.from('transport_orders_simple')
+                        .update({ status: 'in_transit', picked_up_at: now })
+                        .in('id', assigned.map(o=>o.id));
+                    toast('success', `Bonne journée ! ☀️ — ${assigned.length} transport(s) en route`);
+                } else {
+                    toast('success','Bonne journée ! ☀️');
+                }
+                await loadMissions();
             }
             else if(action==='pause') {
                 if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
