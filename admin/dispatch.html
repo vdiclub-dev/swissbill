@@ -600,6 +600,7 @@
                     ${o.distance_km?`<span class="oc-tag"><i class="fas fa-route"></i> ${o.distance_km}km</span>`:''}
                     ${o.weight?`<span class="oc-tag"><i class="fas fa-weight-hanging"></i> ${o.weight}kg</span>`:''}
                     ${o.priority==='urgent'?`<span class="oc-tag" style="color:var(--orange)">⚡ Urgent</span>`:''}
+                    <span class="oc-tag" style="color:var(--red);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();confirmDeleteOrder('${o.id}','${(o.order_number||'').replace(/'/g,'')}')" title="Supprimer"><i class="fas fa-trash"></i></span>
                 </div>
             </div>`;
         }).join('');
@@ -863,9 +864,49 @@
                 ${st!=='delivered'?`<button class="btn btn-yellow" onclick="closeOrderDetail();openAssign('${o.id}')"><i class="fas fa-user-plus"></i> Assigner</button>`:''}
                 ${o.delivery_lat?`<button class="btn btn-blue" onclick="closeOrderDetail();focusOrderMap('${o.id}')"><i class="fas fa-map-marker-alt"></i> Carte</button>`:''}
                 ${st!=='delivered'?`<button class="btn btn-green" onclick="closeOrderDetail();markDelivered('${o.id}')"><i class="fas fa-check"></i> Livré</button>`:''}
+                <button class="btn btn-ghost" onclick="confirmDeleteOrder('${o.id}','${(o.order_number||'').replace(/'/g,'')}')" style="color:var(--red);border-color:rgba(232,49,26,0.3);flex:0;padding:12px 14px;"><i class="fas fa-trash"></i></button>
             </div>`;
 
         document.getElementById('orderDetailModal').classList.add('open');
+    };
+
+    window.confirmDeleteOrder = function(id, num) {
+        // Mini confirm dialog
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--night3);border:1px solid rgba(232,49,26,0.3);border-radius:20px;padding:32px;max-width:340px;width:100%;text-align:center;animation:boxIn 0.25s cubic-bezier(0.4,0,0.2,1);">
+                <div style="font-size:36px;margin-bottom:14px;">🗑️</div>
+                <div style="font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;margin-bottom:8px;">SUPPRIMER</div>
+                <div style="font-size:14px;color:var(--muted);margin-bottom:24px;line-height:1.6;">
+                    Supprimer le transport <strong style="color:var(--white)">${num}</strong> ?<br>
+                    <span style="color:var(--red);font-size:12px;">Cette action est irréversible.</span>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button onclick="deleteOrder('${id}');this.closest('[style*=fixed]').remove();" 
+                        style="flex:1;padding:12px;background:var(--red);color:white;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;cursor:pointer;font-size:14px;">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
+                    <button onclick="this.closest('[style*=fixed]').remove();"
+                        style="flex:1;padding:12px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;cursor:pointer;font-size:14px;">
+                        Annuler
+                    </button>
+                </div>
+            </div>`;
+        overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    };
+
+    window.deleteOrder = async function(id) {
+        showLoad('Suppression…');
+        try {
+            const { error } = await db.from('transport_orders_simple').delete().eq('id', id);
+            if(error) throw error;
+            closeOrderDetail();
+            toast('success', 'Transport supprimé ✓');
+            await loadAll();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
     };
 
     window.closeOrderDetail = function() {
