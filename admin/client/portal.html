@@ -247,16 +247,21 @@
 
                 <!-- Livraison -->
                 <div class="form-section"><i class="fas fa-flag-checkered" style="color:var(--red)"></i> ADRESSE DE LIVRAISON</div>
+                <div class="field-row">
+                    <div class="field"><label>Nom *</label><input type="text" id="livNom" placeholder="Dupont" required></div>
+                    <div class="field"><label>Prénom</label><input type="text" id="livPrenom" placeholder="Jean"></div>
+                </div>
+                <div class="field"><label>Entreprise / Société</label><input type="text" id="livEntreprise" placeholder="Nom de la société (optionnel)"></div>
                 <div class="field adresse-lookup">
-                    <label>Adresse complète *</label>
-                    <input type="text" id="livAdresse" placeholder="Rue, numéro, ville…" autocomplete="off" oninput="searchAdresse(this.value)">
+                    <label>Rue et numéro *</label>
+                    <input type="text" id="livAdresse" placeholder="Ex: Rue de la Paix 12" autocomplete="off" oninput="searchAdresse(this.value)" required>
                     <div class="autocomplete-list" id="adresseList"></div>
                 </div>
                 <div class="field-row">
-                    <div class="field"><label>NPA</label><input type="text" id="livNpa" placeholder="1000"></div>
-                    <div class="field"><label>Ville</label><input type="text" id="livVille" placeholder="Lausanne"></div>
+                    <div class="field"><label>NPA *</label><input type="text" id="livNpa" placeholder="1000" required></div>
+                    <div class="field"><label>Ville *</label><input type="text" id="livVille" placeholder="Lausanne" required></div>
                 </div>
-                <div class="field"><label>Pays</label>
+                <div class="field"><label>Pays *</label>
                     <select id="livPays">
                         <option value="Suisse" selected>🇨🇭 Suisse</option>
                         <option value="France">🇫🇷 France</option>
@@ -277,11 +282,13 @@
                     </select>
                 </div>
 
-                <div class="field-row">
-                    <div class="field"><label>Nom / Société *</label><input type="text" id="destNom" placeholder="Nom du destinataire"></div>
-                    <div class="field"><label>Téléphone</label><input type="text" id="destTel" placeholder="+41 79 000 00 00" inputmode="tel"></div>
+                <div style="font-size:12px;color:var(--muted2);padding:8px 12px;background:var(--night3);border-radius:8px;margin-bottom:10px;">
+                    <i class="fas fa-info-circle" style="color:var(--blue)"></i> Ces infos sont utilisées pour la facturation et l'étiquette de livraison.
                 </div>
-                <div class="field"><label>Email destinataire</label><input type="email" id="destEmail" placeholder="destinataire@email.ch"></div>
+                <div class="field-row">
+                    <div class="field"><label>Téléphone</label><input type="text" id="destTel" placeholder="+41 79 000 00 00" inputmode="tel"></div>
+                    <div class="field"><label>Email</label><input type="email" id="destEmail" placeholder="contact@email.ch"></div>
+                </div>
                 <div class="field"><label>Instructions spéciales</label>
                     <textarea id="destInstructions" rows="2" placeholder="Laisser en réception, code d'accès, …" style="resize:none;"></textarea>
                 </div>
@@ -296,18 +303,15 @@
                 </div>
 
                 <!-- Colis -->
-                <div class="form-section"><i class="fas fa-box" style="color:var(--yellow)"></i> DÉTAILS DU COLIS</div>
-                <div class="field-row3">
-                    <div class="field"><label>Poids (kg) *</label><input type="number" id="cPoids" value="1" min="0.1" step="0.1"></div>
-                    <div class="field"><label>Quantité</label><input type="number" id="cQty" value="1" min="1"></div>
-                    <div class="field"><label>Type</label>
-                        <select id="cType">
-                            <option value="colis">📦 Colis</option>
-                            <option value="palette">🪟 Palette</option>
-                            <option value="enveloppe">📬 Enveloppe</option>
-                            <option value="fragile">⚠️ Fragile</option>
-                        </select>
-                    </div>
+                <div class="form-section" style="justify-content:space-between;">
+                    <span><i class="fas fa-boxes" style="color:var(--yellow)"></i> COLIS DE L'ENVOI</span>
+                    <button type="button" onclick="addColis()" style="background:rgba(245,158,11,0.12);color:var(--yellow);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:'Outfit',sans-serif;font-size:12px;font-weight:600;"><i class="fas fa-plus"></i> Ajouter un colis</button>
+                </div>
+                <div id="colisList">
+                    <!-- Colis ajoutés dynamiquement -->
+                </div>
+                <div style="font-size:12px;color:var(--muted);padding:6px 0;">
+                    <i class="fas fa-info-circle"></i> Chaque colis recevra sa propre étiquette avec QR code
                 </div>
 
                 <!-- Service -->
@@ -394,7 +398,7 @@
     </div>
 </div>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 (function() {
     'use strict';
 
@@ -409,7 +413,63 @@
     /* ── State ── */
     let client=null, clientEntreprise=null, destinataires=[];
     let selectedService='normal', nightDelivery=false, saveDestEnabled=false;
-    let currentOrderId=null, selectedLivCoords=null;
+    let currentOrderId=null, currentOrderNum=null, selectedLivCoords=null;
+    let colisList=[]; // [{poids, qty, type, description}]
+
+    /* ── COLIS MANAGEMENT ── */
+    function initColis() {
+        colisList=[{poids:1, qty:1, type:'colis', description:''}];
+        renderColis();
+    }
+
+    window.addColis = function() {
+        colisList.push({poids:1, qty:1, type:'colis', description:''});
+        renderColis();
+    };
+
+    window.removeColis = function(idx) {
+        if(colisList.length<=1){toast('info','Au moins 1 colis requis');return;}
+        colisList.splice(idx,1);
+        renderColis();
+    };
+
+    function renderColis() {
+        const el=document.getElementById('colisList');
+        el.innerHTML=colisList.map((c,i)=>`
+            <div style="background:var(--night3);border:1.5px solid var(--border2);border-radius:11px;padding:14px;margin-bottom:8px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                    <span style="font-family:'Bebas Neue',cursive;font-size:13px;letter-spacing:1px;color:var(--yellow)">COLIS ${i+1}</span>
+                    ${colisList.length>1?`<button type="button" onclick="removeColis(${i})" style="background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.2);border-radius:7px;padding:3px 9px;cursor:pointer;font-size:11px;font-family:'Outfit',sans-serif;"><i class="fas fa-times"></i> Retirer</button>`:''}
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Poids (kg) *</div>
+                        <input type="number" value="${c.poids}" min="0.1" step="0.1" onchange="colisList[${i}].poids=parseFloat(this.value)||1"
+                            style="width:100%;padding:8px 10px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);">
+                    </div>
+                    <div>
+                        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Quantité</div>
+                        <input type="number" value="${c.qty}" min="1" step="1" onchange="colisList[${i}].qty=parseInt(this.value)||1"
+                            style="width:100%;padding:8px 10px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);">
+                    </div>
+                    <div>
+                        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Type</div>
+                        <select onchange="colisList[${i}].type=this.value"
+                            style="width:100%;padding:8px 10px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
+                            <option value="colis"    ${c.type==='colis'   ?'selected':''}>📦 Colis</option>
+                            <option value="palette"  ${c.type==='palette' ?'selected':''}>🪟 Palette</option>
+                            <option value="enveloppe"${c.type==='enveloppe'?'selected':''}>📬 Enveloppe</option>
+                            <option value="fragile"  ${c.type==='fragile' ?'selected':''}>⚠️ Fragile</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top:8px;">
+                    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Description (optionnel)</div>
+                    <input type="text" value="${c.description}" placeholder="Ex: Pièces mécaniques, documents…" onchange="colisList[${i}].description=this.value"
+                        style="width:100%;padding:8px 10px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
+                </div>
+            </div>`).join('');
+    }
 
     /* ── Helpers ── */
     const toastEl=document.getElementById('toast');
@@ -475,6 +535,7 @@
         document.getElementById('departAddr').textContent=addr||'Adresse non définie';
 
         showScreen('portal');
+        initColis();
         loadOrders();
     }
 
@@ -565,50 +626,63 @@
 
     /* ── SUBMIT ORDER ── */
     window.submitOrder=async function(){
-        const adresse=document.getElementById('livAdresse').value.trim();
-        const npa    =document.getElementById('livNpa').value.trim();
-        const ville  =document.getElementById('livVille').value.trim();
-        const pays   =document.getElementById('livPays').value;
-        const nom    =document.getElementById('destNom').value.trim();
-        const tel    =document.getElementById('destTel').value.trim();
-        const email  =document.getElementById('destEmail').value.trim();
-        const instr  =document.getElementById('destInstructions').value.trim();
-        const poids  =parseFloat(document.getElementById('cPoids').value)||0;
-        const qty    =parseInt(document.getElementById('cQty').value)||1;
-        const type   =document.getElementById('cType').value;
+        // Adresse livraison structurée
+        const livNom      = document.getElementById('livNom').value.trim();
+        const livPrenom   = document.getElementById('livPrenom').value.trim();
+        const livEntreprise= document.getElementById('livEntreprise').value.trim();
+        const adresse     = document.getElementById('livAdresse').value.trim();
+        const npa         = document.getElementById('livNpa').value.trim();
+        const ville       = document.getElementById('livVille').value.trim();
+        const pays        = document.getElementById('livPays').value;
+        const tel         = document.getElementById('destTel').value.trim();
+        const email       = document.getElementById('destEmail').value.trim();
+        const instr       = document.getElementById('destInstructions').value.trim();
 
-        if(!adresse||!ville){ toast('error','Adresse de livraison requise'); return; }
-        if(!nom){ toast('error','Nom du destinataire requis'); return; }
-        if(!poids){ toast('error','Poids requis'); return; }
+        if(!livNom){ toast('error','Nom du destinataire requis'); return; }
+        if(!adresse||!npa||!ville){ toast('error','Adresse complète requise (rue, NPA, ville)'); return; }
+        if(!colisList.length){ toast('error','Ajoutez au moins 1 colis'); return; }
+
+        // Validation colis
+        for(const c of colisList){
+            if(!c.poids||c.poids<=0){ toast('error','Poids requis pour chaque colis'); return; }
+        }
 
         showLoad();
         try {
-            // Générer numéro de commande
-            const orderNum=`LC-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2,'0')}-${Math.floor(Math.random()*90000+10000)}`;
+            const now = new Date();
+            const envNum = `LC-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}-${Math.floor(Math.random()*90000+10000)}`;
 
-            // Adresse complète livraison
-            const fullAddr=`${adresse}, ${npa} ${ville}, ${pays}`;
+            // Adresse structurée complète
+            const destNomComplet = [livEntreprise, livNom+' '+livPrenom].filter(Boolean).join(' · ');
+            const fullAddr = `${adresse}, ${npa} ${ville}, ${pays}`;
+            const pickupAddr = clientEntreprise ? 
+                `${clientEntreprise.nom||''}
+${clientEntreprise.adresse||''}, ${clientEntreprise.npa||''} ${clientEntreprise.ville||''}`.trim() : null;
 
-            // Adresse départ depuis entreprise
-            const pickupAddr=clientEntreprise?.adresse?`${clientEntreprise.adresse}, ${clientEntreprise.npa||''} ${clientEntreprise.ville||''}`:null;
+            // Poids total
+            const poidsTotal = colisList.reduce((s,c)=>s+(parseFloat(c.poids)*parseInt(c.qty||1)),0);
+            const qtyTotal   = colisList.reduce((s,c)=>s+parseInt(c.qty||1),0);
+
+            // Stocker les détails colis dans instructions (JSON)
+            const colisDetails = JSON.stringify(colisList);
 
             const payload={
-                order_number:     orderNum,
+                order_number:     envNum,
                 client_number:    client.entreprise_id||null,
                 entreprise_id:    client.entreprise_id||null,
                 pickup_address:   pickupAddr,
                 delivery_address: fullAddr,
                 delivery_lat:     selectedLivCoords?.lat||null,
                 delivery_lng:     selectedLivCoords?.lng||null,
-                destinataire_nom: nom,
+                destinataire_nom: destNomComplet,
                 destinataire_tel: tel||null,
-                weight:           poids,
-                quantity:         qty,
-                package_type:     type,
+                weight:           parseFloat(poidsTotal.toFixed(2)),
+                quantity:         qtyTotal,
+                package_type:     colisList[0].type,
                 service_type:     selectedService,
                 speed:            selectedService,
                 night_delivery:   nightDelivery,
-                instructions:     instr||null,
+                instructions:     [instr, `COLIS:${colisDetails}`].filter(Boolean).join('|'),
                 status:           'pending',
                 admin_status:     'pending_validation',
                 priority:         selectedService==='urgent'?'urgent':'normal'
@@ -616,89 +690,190 @@
 
             const{data:order,error}=await db.from('transport_orders_simple').insert([payload]).select().single();
             if(error) throw error;
-            currentOrderId=order.id;
+            currentOrderId  = order.id;
+            currentOrderNum = envNum;
 
-            // Sauvegarder destinataire si demandé
+            // Sauvegarder destinataire
             if(saveDestEnabled) {
                 await db.from('client_destinataires').insert([{
-                    client_id: client.id,
-                    nom, adresse, ville, npa, telephone:tel||null, email:email||null
+                    client_id:  client.id,
+                    nom:        livNom,
+                    adresse:    adresse+', '+npa+' '+ville,
+                    ville, npa,
+                    telephone:  tel||null,
+                    email:      email||null
                 }]);
             }
 
             hideLoad();
-            document.getElementById('successNum').textContent=`Numéro de commande : ${orderNum}`;
+            document.getElementById('successNum').textContent=`Envoi ${envNum} — ${qtyTotal} colis · ${poidsTotal.toFixed(1)}kg`;
             showScreen('success');
-
-            // Reset form
             resetForm();
         } catch(e){ hideLoad(); toast('error',e.message); }
     };
 
     function resetForm(){
-        document.getElementById('livAdresse').value='';
-        document.getElementById('livNpa').value='';
-        document.getElementById('livVille').value='';
-        document.getElementById('destNom').value='';
-        document.getElementById('destTel').value='';
-        document.getElementById('destEmail').value='';
-        document.getElementById('destInstructions').value='';
-        document.getElementById('cPoids').value='1';
-        document.getElementById('cQty').value='1';
+        ['livNom','livPrenom','livEntreprise','livAdresse','livNpa','livVille',
+         'destTel','destEmail','destInstructions'].forEach(id=>{
+            const el=document.getElementById(id); if(el) el.value='';
+        });
         selectedLivCoords=null; nightDelivery=false; saveDestEnabled=false;
-        document.getElementById('toggleNuit').classList.remove('on');
-        document.getElementById('toggleSaveDest').classList.remove('on');
+        document.getElementById('toggleNuit')?.classList.remove('on');
+        document.getElementById('toggleSaveDest')?.classList.remove('on');
         selectService('normal');
+        initColis();
     }
 
-    /* ── PDF / QR ── */
-    window.showPDF=async function(orderId){
-        const id=orderId||currentOrderId; if(!id) return;
+    /* ── PDF / ÉTIQUETTES PAR COLIS ── */
+    let currentOrderData = null;
+
+    window.showPDF = async function(orderId) {
+        const id = orderId||currentOrderId; if(!id) return;
         showLoad();
         const{data:o}=await db.from('transport_orders_simple').select('*').eq('id',id).single();
         hideLoad();
         if(!o) return;
+        currentOrderData = o;
 
-        // QR Code
+        // Extraire les colis depuis instructions
+        let colis = [];
+        try {
+            const instr = o.instructions||'';
+            const colisMatch = instr.match(/COLIS:(\[.*\])/);
+            if(colisMatch) colis = JSON.parse(colisMatch[1]);
+        } catch(e) {}
+        if(!colis.length) colis = [{poids:o.weight||0, qty:o.quantity||1, type:o.package_type||'colis', description:''}];
+
+        // Afficher aperçu du premier colis
         document.getElementById('qrCode').innerHTML='';
         new QRCode(document.getElementById('qrCode'),{
-            text: JSON.stringify({id:o.id,num:o.order_number,poids:o.weight,dest:o.destinataire_nom}),
-            width:160, height:160,
+            text: JSON.stringify({id:o.id, num:o.order_number, colis:1, total:colis.length}),
+            width:140, height:140,
             colorDark:'#000000', colorLight:'#ffffff',
             correctLevel:QRCode.CorrectLevel.M
         });
 
-        // Infos
+        const nbLabels = colis.reduce((s,c)=>s+parseInt(c.qty||1),0);
         document.getElementById('pdfInfo').innerHTML=`
-            <div style="font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;margin-bottom:12px;color:var(--white);">${o.order_number}</div>
-            <div style="display:grid;gap:6px;">
-                <div><span style="color:var(--muted)">📍 Départ :</span> ${o.pickup_address||'—'}</div>
-                <div><span style="color:var(--muted)">🏁 Livraison :</span> ${o.delivery_address||'—'}</div>
-                <div><span style="color:var(--muted)">👤 Destinataire :</span> ${o.destinataire_nom||'—'} ${o.destinataire_tel?'· '+o.destinataire_tel:''}</div>
-                <div><span style="color:var(--muted)">📦 Colis :</span> ${o.quantity||1} × ${o.weight||0}kg (${o.package_type||'colis'})</div>
-                <div><span style="color:var(--muted)">⚡ Service :</span> ${o.service_type||'normal'} ${o.night_delivery?'🌙':''}</div>
-                <div><span style="color:var(--muted)">📅 Créé :</span> ${new Date(o.created_at).toLocaleString('fr-CH')}</div>
-                ${o.instructions?`<div><span style="color:var(--muted)">📋 Instructions :</span> ${o.instructions}</div>`:''}
+            <div style="font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;margin-bottom:10px;color:var(--white);">ENVOI ${o.order_number}</div>
+            <div style="display:grid;gap:6px;font-size:13px;">
+                <div><b>📍 Départ :</b> ${(o.pickup_address||'—').replace(/
+/g,' ')}</div>
+                <div><b>🏁 Livraison :</b> ${o.delivery_address||'—'}</div>
+                <div><b>👤 Destinataire :</b> ${o.destinataire_nom||'—'}${o.destinataire_tel?' · '+o.destinataire_tel:''}</div>
+                <div><b>📦 Colis :</b> ${colis.length} type(s) · ${nbLabels} étiquette(s) à imprimer</div>
+                <div><b>⚡ Service :</b> ${o.service_type||'normal'} ${o.night_delivery?'🌙 Nuit':''}</div>
+            </div>
+            <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12px;color:var(--green);">
+                <i class="fas fa-print"></i> ${nbLabels} étiquette(s) seront imprimées — 1 par colis
             </div>`;
 
         openModal('modalPDF');
     };
 
-    window.printPDF=function(){
-        const qr=document.getElementById('qrCode').innerHTML;
-        const info=document.getElementById('pdfInfo').innerHTML;
-        const w=window.open('','_blank','width=600,height=800');
-        w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bon d'expédition</title>
-        <style>body{font-family:Arial,sans-serif;padding:30px;color:#000;}h1{font-size:24px;margin-bottom:20px;}
-        .qr{margin:20px 0;}.info{font-size:14px;line-height:1.8;border-top:2px solid #000;padding-top:16px;}
-        .footer{margin-top:30px;font-size:11px;color:#666;border-top:1px solid #ccc;padding-top:10px;}</style></head>
-        <body><h1>🚚 BON D'EXPÉDITION — LÉMAN COURSES</h1>
-        <div class="qr">${qr}</div>
-        <div class="info">${info.replace(/<[^>]*>/g,' ').replace(/&amp;/g,'&').trim()}</div>
-        <div class="footer">Léman-Courses SA · portal.leman-courses.ch · info@leman-courses.ch</div>
+    window.printPDF = function() {
+        const o = currentOrderData; if(!o) return;
+
+        let colis = [];
+        try {
+            const instr = o.instructions||'';
+            const m = instr.match(/COLIS:(\[.*\])/);
+            if(m) colis = JSON.parse(m[1]);
+        } catch(e){}
+        if(!colis.length) colis = [{poids:o.weight||0, qty:o.quantity||1, type:o.package_type||'colis', description:''}];
+
+        // Adresse départ formatée
+        const pickup = (o.pickup_address||'—').replace(/·/g,'<br>').replace(/\n/g,'<br>');
+        const delivery = o.delivery_address||'—';
+        const dest = o.destinataire_nom||'—';
+        const tel  = o.destinataire_tel||'';
+
+        // Générer 1 étiquette par colis (qty×)
+        let labelIndex = 1;
+        const labels = [];
+        colis.forEach(c => {
+            const q = parseInt(c.qty||1);
+            for(let i=0;i<q;i++) {
+                labels.push({...c, labelNum:labelIndex++, totalLabels:0});
+            }
+        });
+        const totalLabels = labels.length;
+        labels.forEach(l => l.totalLabels = totalLabels);
+
+        const w = window.open('','_blank','width=700,height=900');
+        w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <title>Étiquettes — ${o.order_number}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box;}
+            body{font-family:Arial,sans-serif;background:#fff;}
+            .label{width:100%;max-width:600px;margin:0 auto 30px;border:2px solid #000;page-break-after:always;}
+            .label:last-child{page-break-after:auto;}
+            .label-header{background:#e8311a;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;}
+            .label-logo{font-size:18px;font-weight:bold;letter-spacing:2px;}
+            .label-num{font-size:13px;}
+            .label-body{display:grid;grid-template-columns:1fr auto;gap:0;}
+            .addr-block{padding:14px 16px;border-right:1px solid #ddd;}
+            .addr-section{margin-bottom:12px;}
+            .addr-title{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#e8311a;margin-bottom:4px;border-bottom:1px solid #e8311a;padding-bottom:2px;}
+            .addr-content{font-size:13px;line-height:1.6;}
+            .addr-main{font-weight:bold;font-size:15px;}
+            .qr-block{padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f9f9f9;min-width:160px;}
+            .qr-label{font-size:10px;color:#666;margin-top:6px;text-align:center;}
+            .label-footer{background:#f5f5f5;padding:8px 16px;display:flex;justify-content:space-between;font-size:11px;color:#666;border-top:1px solid #ddd;}
+            .service-badge{background:#e8311a;color:white;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:bold;}
+            @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+        </style></head><body>
+        ${labels.map((l,i)=>`
+        <div class="label">
+            <div class="label-header">
+                <div class="label-logo">🚚 LÉMAN-COURSES</div>
+                <div class="label-num">${o.order_number} · ${l.labelNum}/${l.totalLabels}</div>
+            </div>
+            <div class="label-body">
+                <div class="addr-block">
+                    <div class="addr-section">
+                        <div class="addr-title">📍 Enlèvement</div>
+                        <div class="addr-content">${pickup}</div>
+                    </div>
+                    <div class="addr-section">
+                        <div class="addr-title">🏁 Livraison</div>
+                        <div class="addr-content">
+                            <div class="addr-main">${dest}</div>
+                            ${delivery}<br>
+                            ${tel?`📞 ${tel}`:''}
+                        </div>
+                    </div>
+                    <div class="addr-section">
+                        <div class="addr-title">📦 Colis</div>
+                        <div class="addr-content">
+                            ${l.type||'colis'} · ${l.poids}kg
+                            ${l.description?`<br><em>${l.description}</em>`:''}
+                        </div>
+                    </div>
+                </div>
+                <div class="qr-block">
+                    <div id="qr${i}"></div>
+                    <div class="qr-label">Scanner à la<br>prise en charge</div>
+                </div>
+            </div>
+            <div class="label-footer">
+                <span>${new Date(o.created_at).toLocaleDateString('fr-CH')}</span>
+                <span class="service-badge">${(o.service_type||'normal').toUpperCase()} ${o.night_delivery?'🌙':''}</span>
+                <span>Léman-Courses SA</span>
+            </div>
+        </div>`).join('')}
+        <script>
+            ${labels.map((l,i)=>`
+            new QRCode(document.getElementById('qr${i}'), {
+                text: JSON.stringify({id:'${o.id}',num:'${o.order_number}',colis:${l.labelNum},total:${l.totalLabels},poids:${l.poids},type:'${l.type}'}),
+                width:130, height:130, colorDark:'#000', colorLight:'#fff',
+                correctLevel:QRCode.CorrectLevel.M
+            });`).join('')}
+            setTimeout(()=>window.print(), 800);
+        <\/script>
         </body></html>`);
         w.document.close();
-        w.print();
     };
 
     /* ── ORDERS LIST ── */
