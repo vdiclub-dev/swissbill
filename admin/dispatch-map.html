@@ -134,6 +134,16 @@
     <div class="mc" onclick="map.zoomOut()"><i class="fas fa-minus"></i></div>
     <div class="mc" onclick="fitAll()"><i class="fas fa-expand"></i></div>
     <div class="mc" id="mcAuto" onclick="toggleAutoFit()" title="Auto-centrage" style="margin-top:6px;"><i class="fas fa-crosshairs"></i></div>
+    <div class="mc" id="mcGeo" onclick="runGeocode()" title="Géocoder les adresses" style="margin-top:6px;background:rgba(59,130,246,0.2);border-color:rgba(59,130,246,0.4);color:var(--blue)"><i class="fas fa-satellite"></i></div>
+</div>
+
+<!-- Geocode progress -->
+<div id="geoProgress" style="display:none;position:fixed;bottom:68px;left:50%;transform:translateX(-50%);background:rgba(17,17,24,0.95);backdrop-filter:blur(16px);border:1px solid var(--border2);border-radius:12px;padding:14px 24px;z-index:300;min-width:300px;text-align:center;">
+    <div style="font-family:'Bebas Neue',cursive;font-size:14px;letter-spacing:1px;margin-bottom:8px;color:var(--blue)"><i class="fas fa-satellite"></i> GÉOCODAGE EN COURS</div>
+    <div style="height:5px;background:var(--border2);border-radius:100px;overflow:hidden;margin-bottom:8px;">
+        <div id="geoBar" style="height:100%;background:var(--blue);border-radius:100px;width:0%;transition:width 0.4s;"></div>
+    </div>
+    <div id="geoLabel" style="font-size:12px;color:var(--muted2);">Initialisation…</div>
 </div>
 
 <!-- Legend -->
@@ -218,7 +228,16 @@
         Object.values(markers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);});
         markers={};
 
-        const bounds=[[46.7785,6.6409]]; // Dépôt toujours visible
+        // Dépôt Yverdon
+        if(!window._depotM) {
+            window._depotM = L.marker([46.7785,6.6409],{icon:L.divIcon({
+                html:`<div style="width:18px;height:18px;background:#e8311a;border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 3px 10px rgba(0,0,0,0.5)"></div>`,
+                className:'',iconSize:[18,18],iconAnchor:[9,9]
+            })}).addTo(map).bindTooltip('🏭 Dépôt Yverdon-les-Bains',{permanent:true,direction:'right',offset:[12,0]});
+        }
+
+        const bounds=[[46.7785,6.6409]];
+        let markerCount = 0;
 
         allOrders.forEach(o=>{
             if(o.status==='delivered') return;
@@ -228,21 +247,24 @@
 
             if(o.pickup_lat){
                 mg.p=L.marker([o.pickup_lat,o.pickup_lng],{icon:makeIcon(color,pulse)}).addTo(map)
-                    .bindTooltip(`<b>${o.order_number}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
+                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
                 bounds.push([o.pickup_lat,o.pickup_lng]);
+                markerCount++;
             }
             if(o.delivery_lat){
                 mg.d=L.marker([o.delivery_lat,o.delivery_lng],{
-                    icon:L.divIcon({html:`<div style="width:10px;height:10px;background:${color};border:2px solid white;border-radius:2px;transform:rotate(45deg);box-shadow:0 2px 6px rgba(0,0,0,0.4)"></div>`,className:'',iconSize:[10,10],iconAnchor:[5,5]})
-                }).addTo(map).bindTooltip(`<b>${o.order_number}</b><br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
+                    icon:L.divIcon({html:`<div style="width:12px;height:12px;background:${color};border:2.5px solid white;border-radius:2px;transform:rotate(45deg);box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,className:'',iconSize:[12,12],iconAnchor:[6,6]})
+                }).addTo(map).bindTooltip(`<b>${o.order_number||'—'}</b><br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
                 bounds.push([o.delivery_lat,o.delivery_lng]);
+                markerCount++;
             }
             if(o.pickup_lat&&o.delivery_lat){
-                mg.l=L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]],{color,weight:1.5,opacity:0.25,dashArray:'4 6'}).addTo(map);
+                mg.l=L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]],{color,weight:2,opacity:0.3,dashArray:'5 6'}).addTo(map);
             }
             markers[o.id]=mg;
         });
 
+        console.log(`[Map] ${markerCount} markers rendus`);
         if(autoFit && bounds.length>1) { try{map.fitBounds(bounds,{padding:[60,60]});}catch(e){} }
         renderStats();
     }
@@ -360,9 +382,27 @@
     channel.onmessage = async (e) => {
         const { type, orders, tours, chauffeurs } = e.data;
         if(chauffeurs) window._chauffeurs = chauffeurs;
-        if(orders) { allOrders = orders; renderMap(); }
-        if(tours)  { allTours  = tours;  await renderTourRoutes(tours); }
-        if(type==='UPDATE') toast('info', '🔄 Mise à jour reçue');
+        if(orders) {
+            // Géocoder les coordonnées manquantes avant d'afficher
+            const enriched = orders;
+            for(const o of enriched) {
+                if(!o.pickup_lat && o.pickup_address && !geoCache2['t_'+o.id+'_p']) {
+                    geoCache2['t_'+o.id+'_p'] = true;
+                    const c = await geocodeAddr2(o.pickup_address);
+                    if(c) { o.pickup_lat=c.lat; o.pickup_lng=c.lng; }
+                }
+                if(!o.delivery_lat && o.delivery_address && !geoCache2['t_'+o.id+'_d']) {
+                    geoCache2['t_'+o.id+'_d'] = true;
+                    const c = await geocodeAddr2(o.delivery_address);
+                    if(c) { o.delivery_lat=c.lat; o.delivery_lng=c.lng; }
+                }
+            }
+            allOrders = enriched;
+            renderMap();
+            renderStats();
+        }
+        if(tours) { allTours=tours; await renderTourRoutes(tours); }
+        if(type==='UPDATE') toast('info','🔄 Mise à jour reçue');
     };
 
     /* ── Supabase Realtime (autonome) ── */
@@ -407,6 +447,88 @@
     db.channel('map_live')
         .on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},()=>{ loadFromDB(); toast('info','🔄 Nouveau transport'); })
         .subscribe();
+
+    /* ── GEOCODE FUNCTION ── */
+    window.runGeocode = async function() {
+        const btn = document.getElementById('mcGeo');
+        const progress = document.getElementById('geoProgress');
+        const bar   = document.getElementById('geoBar');
+        const label = document.getElementById('geoLabel');
+
+        // Désactiver le bouton
+        btn.style.background = 'rgba(245,158,11,0.2)';
+        btn.style.borderColor = 'rgba(245,158,11,0.4)';
+        btn.style.color = 'var(--yellow)';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        progress.style.display = 'block';
+
+        // Charger tous les transports sans coords depuis DB
+        const { data: orders } = await db.from('transport_orders_simple')
+            .select('id, order_number, pickup_address, delivery_address, pickup_lat, pickup_lng, delivery_lat, delivery_lng')
+            .neq('status', 'delivered');
+
+        const toProcess = (orders||[]).filter(o => !o.pickup_lat || !o.delivery_lat);
+
+        if(!toProcess.length) {
+            label.textContent = '✅ Toutes les adresses ont déjà des coordonnées !';
+            bar.style.width = '100%';
+            bar.style.background = 'var(--green)';
+            setTimeout(() => {
+                progress.style.display = 'none';
+                btn.innerHTML = '<i class="fas fa-check"></i>';
+                btn.style.background = 'rgba(34,197,94,0.2)';
+                btn.style.borderColor = 'rgba(34,197,94,0.4)';
+                btn.style.color = 'var(--green)';
+            }, 2000);
+            return;
+        }
+
+        toast('info', `Géocodage de ${toProcess.length} adresses…`);
+        let done = 0, ok = 0;
+
+        for(const o of toProcess) {
+            const pct = Math.round((done / toProcess.length) * 100);
+            bar.style.width = pct + '%';
+            label.textContent = `${done+1}/${toProcess.length} — ${(o.order_number||'').slice(0,20)}`;
+
+            const updates = {};
+
+            if(!o.pickup_lat && o.pickup_address) {
+                const c = await geocodeAddr2(o.pickup_address);
+                if(c) { updates.pickup_lat = c.lat; updates.pickup_lng = c.lng; }
+                await new Promise(r=>setTimeout(r,1100));
+            }
+            if(!o.delivery_lat && o.delivery_address) {
+                const c = await geocodeAddr2(o.delivery_address);
+                if(c) { updates.delivery_lat = c.lat; updates.delivery_lng = c.lng; }
+                await new Promise(r=>setTimeout(r,1100));
+            }
+
+            if(Object.keys(updates).length) {
+                await db.from('transport_orders_simple').update(updates).eq('id', o.id);
+                // Mettre à jour l'objet local aussi
+                Object.assign(o, updates);
+                ok++;
+            }
+            done++;
+        }
+
+        // Rafraîchir la carte avec les nouvelles coords
+        bar.style.width = '100%';
+        bar.style.background = 'var(--green)';
+        label.textContent = `✅ ${ok} adresses géocodées !`;
+
+        await loadFromDB();
+        toast('success', `✅ ${ok} adresses géocodées — markers mis à jour !`);
+
+        setTimeout(() => {
+            progress.style.display = 'none';
+            btn.innerHTML = '<i class="fas fa-satellite"></i>';
+            btn.style.background = 'rgba(34,197,94,0.2)';
+            btn.style.borderColor = 'rgba(34,197,94,0.4)';
+            btn.style.color = 'var(--green)';
+        }, 2000);
+    };
 
     /* ── Init ── */
     loadFromDB();
