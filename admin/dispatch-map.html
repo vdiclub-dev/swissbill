@@ -1,11 +1,9 @@
 <!DOCTYPE html>
-<!-- v20260316070443 -->
+<!-- LEMAN-DISPATCH-MAP-V3 -->
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Carte Dispatch | Léman</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -15,194 +13,201 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../config.js"></script>
     <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { width:100%; height:100%; overflow:hidden; background:#0a0a0f; }
         :root {
-            --red:    #e8311a;
-            --night:  #0a0a0f;
-            --night2: #111118;
-            --night3: #18181f;
-            --border: rgba(255,255,255,0.07);
-            --border2:rgba(255,255,255,0.13);
-            --white:  #ffffff;
-            --muted:  rgba(255,255,255,0.38);
-            --muted2: rgba(255,255,255,0.6);
-            --green:  #22c55e;
-            --blue:   #3b82f6;
-            --yellow: #f59e0b;
-            --orange: #f97316;
-            --purple: #a855f7;
+            --red:#e8311a; --night:#0a0a0f; --night2:#111118; --night3:#18181f;
+            --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+            --white:#ffffff; --muted:rgba(255,255,255,0.38); --muted2:rgba(255,255,255,0.6);
+            --green:#22c55e; --blue:#3b82f6; --yellow:#f59e0b; --orange:#f97316; --purple:#a855f7;
         }
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        html, body { height:100%; overflow:hidden; }
-        body { font-family:'Outfit',sans-serif; background:var(--night); color:var(--white); }
+        body { font-family:'Outfit',sans-serif; color:var(--white); }
 
-        /* ── MAP ── */
-        #map { 
-            position:absolute;
-            top:0; left:0;
-            width:100%; height:100%;
-            z-index:1;
-        }
-        html, body {
-            margin:0; padding:0;
-            width:100%; height:100%;
-            overflow:hidden;
-        }
-
-        /* Leaflet dark */
+        /* MAP */
+        #map { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1; }
         .leaflet-tile { filter:brightness(0.85) saturate(0.6) invert(1) hue-rotate(180deg); }
         .leaflet-container { background:#0a0a0f; }
         .leaflet-control-zoom { display:none; }
 
-        /* ── TOPBAR overlay ── */
+        /* TOPBAR */
         .topbar {
-            position:fixed; top:0; left:0; right:0; z-index:1000;
-            background:rgba(10,10,15,0.88); backdrop-filter:blur(16px);
+            position:fixed; top:0; left:0; right:0; height:52px; z-index:1000;
+            background:rgba(10,10,15,0.9); backdrop-filter:blur(16px);
             border-bottom:1px solid var(--border2);
-            padding:0 20px; height:52px;
-            display:flex; align-items:center; gap:12px;
+            display:flex; align-items:center; padding:0 20px; gap:12px;
         }
-        .logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; }
+        .logo { font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; display:flex; align-items:center; gap:8px; }
         .logo-mark { width:26px; height:26px; background:var(--red); border-radius:6px; display:grid; place-items:center; font-size:12px; }
         .logo em { color:var(--red); font-style:normal; }
-        .tb-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:2px; color:var(--muted2); }
-        .live-badge { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--green); background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25); padding:3px 10px; border-radius:100px; }
+        .live { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--green); background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25); padding:3px 10px; border-radius:100px; }
         .live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:lp 1.5s infinite; }
         @keyframes lp { 0%,100%{opacity:1}50%{opacity:0.3} }
-        .tb-right { margin-left:auto; display:flex; gap:8px; align-items:center; }
-        .tb-time { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:2px; color:var(--white); }
-        .tb-date { font-size:11px; color:var(--muted); }
+        .tb-right { margin-left:auto; }
+        .clock { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:2px; }
 
-        /* ── STATS BAR ── */
+        /* STATS BAR */
         .stats-bar {
-            position:fixed; bottom:0; left:0; right:0; z-index:1000;
-            background:rgba(10,10,15,0.88); backdrop-filter:blur(16px);
+            position:fixed; bottom:0; left:0; right:0; height:52px; z-index:1000;
+            background:rgba(10,10,15,0.9); backdrop-filter:blur(16px);
             border-top:1px solid var(--border2);
-            display:flex; align-items:center; height:56px;
+            display:flex; align-items:center;
         }
-        .stat-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-right:1px solid var(--border); padding:0 12px; }
-        .stat-item:last-child { border:none; }
-        .stat-val { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:1px; line-height:1; }
-        .stat-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:2px; }
+        .si { flex:1; text-align:center; border-right:1px solid var(--border); padding:6px; }
+        .si:last-child { border:none; }
+        .si-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; line-height:1; }
+        .si-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:2px; }
 
-        /* ── CONTROLS ── */
-        .map-ctrl { position:fixed; top:64px; right:12px; z-index:1000; display:flex; flex-direction:column; gap:5px; }
-        .mc { width:34px; height:34px; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:8px; display:grid; place-items:center; color:var(--muted2); font-size:13px; cursor:pointer; transition:all 0.2s; }
-        .mc:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
-        .mc.active { background:rgba(232,49,26,0.2); border-color:var(--red); color:var(--red); }
-
-        /* ── LEGEND ── */
-        .legend { position:fixed; bottom:68px; right:12px; z-index:1000; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:10px; padding:10px 14px; }
-        .leg-row { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--muted2); margin-bottom:4px; }
-        .leg-row:last-child { margin:0; }
-        .leg-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-
-        /* ── TOUR PANELS ── */
-        .tours-panel {
-            position:fixed; top:64px; left:12px; z-index:1000;
-            display:flex; flex-direction:column; gap:6px;
-            max-height:calc(100vh - 130px);
-            overflow-y:auto; pointer-events:none;
+        /* CONTROLS */
+        .ctrl {
+            position:fixed; top:64px; right:12px; z-index:1000;
+            display:flex; flex-direction:column; gap:5px;
         }
-        .tours-panel::-webkit-scrollbar { display:none; }
-        .tour-badge {
-            background:rgba(17,17,24,0.9); backdrop-filter:blur(10px);
-            border:1px solid var(--border2); border-radius:10px;
-            padding:8px 12px; min-width:180px; pointer-events:auto;
+        .cb {
+            width:36px; height:36px;
+            background:rgba(17,17,24,0.92); backdrop-filter:blur(10px);
+            border:1px solid var(--border2); border-radius:9px;
+            display:grid; place-items:center;
+            color:var(--muted2); font-size:13px;
             cursor:pointer; transition:all 0.2s;
         }
-        .tour-badge:hover { border-color:rgba(255,255,255,0.3); }
-        .tb-name { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; display:flex; align-items:center; gap:7px; margin-bottom:4px; }
-        .tb-color { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-        .tb-stats { display:flex; gap:8px; font-size:10px; color:var(--muted); }
-        .tb-driver { font-size:11px; color:var(--muted2); }
+        .cb:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .cb.blue  { background:rgba(59,130,246,0.15); border-color:rgba(59,130,246,0.35); color:var(--blue); }
+        .cb.green { background:rgba(34,197,94,0.15);  border-color:rgba(34,197,94,0.35);  color:var(--green); }
+        .cb.orange{ background:rgba(245,158,11,0.15); border-color:rgba(245,158,11,0.35); color:var(--yellow); }
 
-        /* ── TOAST ── */
-        .toast { position:fixed; top:64px; left:50%; transform:translateX(-50%) translateY(-60px); padding:10px 18px; border-radius:100px; font-size:13px; font-weight:600; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; transition:transform 0.35s cubic-bezier(0.4,0,0.2,1); white-space:nowrap; }
+        /* LEGEND */
+        .legend {
+            position:fixed; bottom:64px; right:12px; z-index:1000;
+            background:rgba(17,17,24,0.92); backdrop-filter:blur(10px);
+            border:1px solid var(--border2); border-radius:10px;
+            padding:10px 14px;
+        }
+        .lr { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--muted2); margin-bottom:4px; }
+        .lr:last-child { margin:0; }
+        .ldot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+        /* TOURS PANEL */
+        .tours-panel {
+            position:fixed; top:64px; left:12px; z-index:1000;
+            max-height:calc(100vh - 130px); overflow-y:auto;
+            display:flex; flex-direction:column; gap:6px;
+            pointer-events:none;
+        }
+        .tours-panel::-webkit-scrollbar { display:none; }
+        .tb2 {
+            background:rgba(17,17,24,0.92); backdrop-filter:blur(10px);
+            border:1px solid var(--border2); border-radius:10px;
+            padding:8px 12px; min-width:180px;
+            pointer-events:auto; cursor:pointer; transition:all 0.2s;
+        }
+        .tb2:hover { border-color:rgba(255,255,255,0.3); }
+        .tb2-name { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; display:flex; align-items:center; gap:7px; margin-bottom:4px; }
+        .tb2-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+        .tb2-info { font-size:11px; color:var(--muted2); }
+        .tb2-meta { font-size:10px; color:var(--muted); margin-top:2px; }
+
+        /* PROGRESS */
+        .geo-progress {
+            display:none; position:fixed; bottom:64px; left:50%; transform:translateX(-50%);
+            background:rgba(17,17,24,0.96); backdrop-filter:blur(16px);
+            border:1px solid var(--border2); border-radius:12px;
+            padding:14px 24px; z-index:1001; min-width:300px; text-align:center;
+        }
+        .gp-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; margin-bottom:8px; color:var(--blue); }
+        .gp-bar-wrap { height:5px; background:var(--border2); border-radius:100px; overflow:hidden; margin-bottom:8px; }
+        .gp-bar { height:100%; background:var(--blue); border-radius:100px; width:0%; transition:width 0.4s; }
+        .gp-label { font-size:12px; color:var(--muted2); }
+
+        /* TOAST */
+        .toast {
+            position:fixed; top:64px; left:50%; transform:translateX(-50%) translateY(-60px);
+            padding:10px 18px; border-radius:100px; font-size:13px; font-weight:600;
+            background:var(--night3); border:1px solid var(--border2);
+            box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:2000;
+            transition:transform 0.35s cubic-bezier(0.4,0,0.2,1); white-space:nowrap;
+        }
         .toast.show { transform:translateX(-50%) translateY(0); }
         .toast.success { background:rgba(34,197,94,0.15); border-color:rgba(34,197,94,0.3); color:var(--green); }
         .toast.info    { background:rgba(59,130,246,0.15); border-color:rgba(59,130,246,0.3); color:var(--blue); }
+        .toast.error   { background:rgba(232,49,26,0.15);  border-color:rgba(232,49,26,0.3);  color:var(--red); }
     </style>
 </head>
 <body>
 
 <div class="toast" id="toast"></div>
 
-<!-- Topbar -->
+<!-- TOPBAR -->
 <header class="topbar">
     <div class="logo"><div class="logo-mark">🚚</div>Léman<em>-Dispatch</em></div>
-    <div class="tb-title">CARTE LIVE</div>
-    <div class="live-badge"><div class="live-dot"></div> Temps réel</div>
-    <div class="tb-right">
-        <div>
-            <div class="tb-time" id="clock">--:--</div>
-            <div class="tb-date" id="dateStr"></div>
-        </div>
-    </div>
+    <div class="live"><div class="live-dot"></div> Temps réel</div>
+    <div class="tb-right"><div class="clock" id="clock">--:--:--</div></div>
 </header>
 
-<!-- Map -->
+<!-- MAP -->
 <div id="map"></div>
 
-<!-- Controls -->
-<div class="map-ctrl">
-    <div class="mc" onclick="map.zoomIn()"><i class="fas fa-plus"></i></div>
-    <div class="mc" onclick="map.zoomOut()"><i class="fas fa-minus"></i></div>
-    <div class="mc" onclick="fitAll()"><i class="fas fa-expand"></i></div>
-    <div class="mc" id="mcAuto" onclick="toggleAutoFit()" title="Auto-centrage" style="margin-top:6px;"><i class="fas fa-crosshairs"></i></div>
-    <div class="mc" id="mcGeo" onclick="runGeocode()" title="Géocoder les adresses" style="margin-top:6px;background:rgba(59,130,246,0.2);border-color:rgba(59,130,246,0.4);color:var(--blue)"><i class="fas fa-satellite"></i></div>
-    <div class="mc" id="mcRoutes" onclick="drawAllRoutes()" title="Tracer toutes les routes" style="margin-top:4px;background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.3);color:var(--green)"><i class="fas fa-route"></i></div>
-    <div class="mc" id="mcClearRoutes" onclick="clearAllRoutes()" title="Effacer les routes" style="margin-top:4px;"><i class="fas fa-eraser"></i></div>
+<!-- CONTROLS -->
+<div class="ctrl">
+    <div class="cb" onclick="map.zoomIn()"  title="Zoom +"><i class="fas fa-plus"></i></div>
+    <div class="cb" onclick="map.zoomOut()" title="Zoom -"><i class="fas fa-minus"></i></div>
+    <div class="cb" onclick="fitAll()"       title="Tout voir"><i class="fas fa-expand"></i></div>
+    <div class="cb blue"   id="cbGeo"    onclick="runGeocode()"    title="Géocoder" style="margin-top:8px;"><i class="fas fa-satellite"></i></div>
+    <div class="cb green"  id="cbRoutes" onclick="drawRoutes()"    title="Tracer routes"><i class="fas fa-route"></i></div>
+    <div class="cb"        id="cbClear"  onclick="clearRoutes()"   title="Effacer routes"><i class="fas fa-eraser"></i></div>
 </div>
 
-<!-- Geocode progress -->
-<div id="geoProgress" style="display:none;position:fixed;bottom:68px;left:50%;transform:translateX(-50%);background:rgba(17,17,24,0.95);backdrop-filter:blur(16px);border:1px solid var(--border2);border-radius:12px;padding:14px 24px;z-index:300;min-width:300px;text-align:center;">
-    <div style="font-family:'Bebas Neue',cursive;font-size:14px;letter-spacing:1px;margin-bottom:8px;color:var(--blue)"><i class="fas fa-satellite"></i> GÉOCODAGE EN COURS</div>
-    <div style="height:5px;background:var(--border2);border-radius:100px;overflow:hidden;margin-bottom:8px;">
-        <div id="geoBar" style="height:100%;background:var(--blue);border-radius:100px;width:0%;transition:width 0.4s;"></div>
-    </div>
-    <div id="geoLabel" style="font-size:12px;color:var(--muted2);">Initialisation…</div>
-</div>
-
-<!-- Legend -->
+<!-- LEGEND -->
 <div class="legend">
-    <div class="leg-row"><div class="leg-dot" style="background:var(--yellow)"></div> En attente</div>
-    <div class="leg-row"><div class="leg-dot" style="background:var(--orange)"></div> Urgent</div>
-    <div class="leg-row"><div class="leg-dot" style="background:var(--green)"></div> Planifié</div>
-    <div class="leg-row"><div class="leg-dot" style="background:var(--purple)"></div> En route</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#888)"></div> Livré</div>
+    <div class="lr"><div class="ldot" style="background:var(--yellow)"></div>En attente</div>
+    <div class="lr"><div class="ldot" style="background:var(--orange)"></div>Urgent</div>
+    <div class="lr"><div class="ldot" style="background:var(--blue)"></div>Planifié</div>
+    <div class="lr"><div class="ldot" style="background:var(--purple)"></div>En route</div>
+    <div class="lr"><div class="ldot" style="background:var(--green)"></div>Livré</div>
 </div>
 
-<!-- Tour badges -->
+<!-- TOURS PANEL -->
 <div class="tours-panel" id="toursPanel"></div>
 
-<!-- Stats bar -->
+<!-- GEO PROGRESS -->
+<div class="geo-progress" id="geoProgress">
+    <div class="gp-title"><i class="fas fa-satellite"></i> GÉOCODAGE</div>
+    <div class="gp-bar-wrap"><div class="gp-bar" id="geoBar"></div></div>
+    <div class="gp-label" id="geoLabel">Initialisation…</div>
+</div>
+
+<!-- STATS BAR -->
 <div class="stats-bar">
-    <div class="stat-item"><div class="stat-val" id="sTotal" style="color:var(--white)">0</div><div class="stat-lbl">Total</div></div>
-    <div class="stat-item"><div class="stat-val" id="sPending" style="color:var(--yellow)">0</div><div class="stat-lbl">En attente</div></div>
-    <div class="stat-item"><div class="stat-val" id="sUrgent" style="color:var(--orange)">0</div><div class="stat-lbl">Urgents</div></div>
-    <div class="stat-item"><div class="stat-val" id="sPlanned" style="color:var(--blue)">0</div><div class="stat-lbl">Planifiés</div></div>
-    <div class="stat-item"><div class="stat-val" id="sTransit" style="color:var(--purple)">0</div><div class="stat-lbl">En route</div></div>
-    <div class="stat-item"><div class="stat-val" id="sDelivered" style="color:var(--green)">0</div><div class="stat-lbl">Livrés</div></div>
+    <div class="si"><div class="si-val" id="sTotal">0</div><div class="si-lbl">Total</div></div>
+    <div class="si"><div class="si-val" id="sPending" style="color:var(--yellow)">0</div><div class="si-lbl">Attente</div></div>
+    <div class="si"><div class="si-val" id="sUrgent"  style="color:var(--orange)">0</div><div class="si-lbl">Urgents</div></div>
+    <div class="si"><div class="si-val" id="sPlanned" style="color:var(--blue)">0</div><div class="si-lbl">Planifiés</div></div>
+    <div class="si"><div class="si-val" id="sTransit" style="color:var(--purple)">0</div><div class="si-lbl">En route</div></div>
+    <div class="si"><div class="si-val" id="sDone"    style="color:var(--green)">0</div><div class="si-lbl">Livrés</div></div>
 </div>
 
 <script>
-(function () {
+(function() {
     'use strict';
 
-    if (!window.SUPABASE_CONFIG) return;
+    if(!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;font-family:sans-serif;">❌ config.js manquant</div>';
+        return;
+    }
     const db = window.SUPABASE_CLIENT;
-    const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
+    const ORSKEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
 
-    let allOrders = [], allTours = [], markers = {}, tourLayers = {}, autoFit = true;
+    /* ── State ── */
+    let allOrders = [];
+    let routeLayers = [];
+    const geoCache = {};
+    const SC = { pending:'#f59e0b', planned:'#3b82f6', urgent:'#f97316', in_transit:'#a855f7', delivered:'#22c55e' };
+    const shortAddr = a => a ? a.split(',').slice(0,2).join(',').trim() : '—';
 
     /* ── Clock ── */
-    function updateClock() {
-        const now  = new Date();
-        document.getElementById('clock').textContent   = now.toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        document.getElementById('dateStr').textContent = now.toLocaleDateString('fr-CH',{weekday:'long',day:'2-digit',month:'long'});
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
+    setInterval(() => {
+        document.getElementById('clock').textContent =
+            new Date().toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    }, 1000);
 
     /* ── Toast ── */
     const toastEl = document.getElementById('toast');
@@ -211,431 +216,266 @@
         clearTimeout(toastTimer);
         toastEl.className = 'toast ' + type + ' show';
         toastEl.textContent = msg;
-        toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 3500);
+        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 4000);
     }
 
     /* ── Map ── */
-    const map = L.map('map',{zoomControl:false,attributionControl:false}).setView([46.7785,6.6409],9);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-        maxZoom:19,
-        attribution:''
-    }).addTo(map);
+    const map = L.map('map', {zoomControl:false, attributionControl:false}).setView([46.7785, 6.6409], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
 
-    // Forcer le rendu correct après ouverture de la fenêtre
+    // Force resize after window load
     window.addEventListener('load', () => {
-        setTimeout(() => { map.invalidateSize(); }, 100);
-        setTimeout(() => { map.invalidateSize(); }, 500);
-        setTimeout(() => { map.invalidateSize(); }, 1000);
+        [100, 300, 600, 1000].forEach(t => setTimeout(() => map.invalidateSize(), t));
     });
-    document.addEventListener('visibilitychange', () => {
-        if(!document.hidden) map.invalidateSize();
-    });
+    window.addEventListener('resize', () => map.invalidateSize());
 
     // Dépôt marker
-    L.marker([46.7785,6.6409],{icon:L.divIcon({
-        html:`<div style="width:16px;height:16px;background:#e8311a;border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,
-        className:'',iconSize:[16,16],iconAnchor:[8,8]
-    })}).addTo(map).bindTooltip('🏭 Dépôt Yverdon-les-Bains',{permanent:false,direction:'right'});
+    L.marker([46.7785, 6.6409], {
+        icon: L.divIcon({
+            html: `<div style="width:18px;height:18px;background:#e8311a;border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 3px 10px rgba(0,0,0,0.5)"></div>`,
+            className:'', iconSize:[18,18], iconAnchor:[9,9]
+        })
+    }).addTo(map).bindTooltip('🏭 Dépôt — Yverdon-les-Bains', {permanent:true, direction:'right', offset:[12,0]});
 
-    const STATUS_COLORS = {pending:'#f59e0b',planned:'#3b82f6',urgent:'#f97316',in_transit:'#a855f7',delivered:'#22c55e'};
-    const shortAddr = a => a ? a.split(',').slice(0,2).join(',').trim() : '—';
-
-    function makeIcon(color, pulse=false) {
-        const s=14;
+    /* ── Icons ── */
+    function mkIcon(color, pulse=false) {
         return L.divIcon({
-            html:`<div style="position:relative;">
-                <div style="width:${s}px;height:${s}px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.5);${pulse?'animation:mp 1.2s ease-in-out infinite':''}"></div>
-                ${pulse?`<div style="position:absolute;inset:-5px;border-radius:50%;border:2px solid ${color};opacity:0.4;animation:mr 1.2s ease-in-out infinite"></div>`:''}
+            html: `<div style="position:relative;">
+                <div style="width:13px;height:13px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5);${pulse?'animation:mp 1.2s ease-in-out infinite':''}"></div>
+                ${pulse?`<div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid ${color};opacity:0.4;animation:mr 1.2s ease-in-out infinite"></div>`:''}
                 <style>@keyframes mp{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}@keyframes mr{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(2.2);opacity:0}}</style>
             </div>`,
-            className:'',iconSize:[s,s],iconAnchor:[s/2,s/2]
+            className:'', iconSize:[13,13], iconAnchor:[6,6]
+        });
+    }
+    function mkSquare(color) {
+        return L.divIcon({
+            html: `<div style="width:11px;height:11px;background:${color};border:2.5px solid white;border-radius:2px;transform:rotate(45deg);box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>`,
+            className:'', iconSize:[11,11], iconAnchor:[5,5]
         });
     }
 
-    /* ── Render map ── */
+    /* ── Markers ── */
+    let mks = {};
     function renderMap() {
-        // Clear markers
-        Object.values(markers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);});
-        markers={};
+        Object.values(mks).forEach(m => { try{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);}catch(e){} });
+        mks = {};
+        const bounds = [[46.7785, 6.6409]];
 
-        // Dépôt Yverdon
-        if(!window._depotM) {
-            window._depotM = L.marker([46.7785,6.6409],{icon:L.divIcon({
-                html:`<div style="width:18px;height:18px;background:#e8311a;border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 3px 10px rgba(0,0,0,0.5)"></div>`,
-                className:'',iconSize:[18,18],iconAnchor:[9,9]
-            })}).addTo(map).bindTooltip('🏭 Dépôt Yverdon-les-Bains',{permanent:true,direction:'right',offset:[12,0]});
-        }
-
-        const bounds=[[46.7785,6.6409]];
-        let markerCount = 0;
-
-        allOrders.forEach(o=>{
-            if(o.status==='delivered') return;
-            const color=STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')];
-            const pulse=o.status==='pending'||o.priority==='urgent';
-            const mg={};
-
-            if(o.pickup_lat){
-                mg.p=L.marker([o.pickup_lat,o.pickup_lng],{icon:makeIcon(color,pulse)}).addTo(map)
-                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
-                bounds.push([o.pickup_lat,o.pickup_lng]);
-                markerCount++;
+        allOrders.forEach(o => {
+            if(o.status === 'delivered') return;
+            const color = SC[o.priority==='urgent'?'urgent':(o.status||'pending')] || SC.pending;
+            const pulse = o.status === 'pending' || o.priority === 'urgent';
+            const mg = {};
+            if(o.pickup_lat) {
+                mg.p = L.marker([o.pickup_lat, o.pickup_lng], {icon:mkIcon(color, pulse)})
+                    .addTo(map)
+                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>📍 ${shortAddr(o.pickup_address)}`, {direction:'top'});
+                bounds.push([o.pickup_lat, o.pickup_lng]);
             }
-            if(o.delivery_lat){
-                mg.d=L.marker([o.delivery_lat,o.delivery_lng],{
-                    icon:L.divIcon({html:`<div style="width:12px;height:12px;background:${color};border:2.5px solid white;border-radius:2px;transform:rotate(45deg);box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,className:'',iconSize:[12,12],iconAnchor:[6,6]})
-                }).addTo(map).bindTooltip(`<b>${o.order_number||'—'}</b><br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
-                bounds.push([o.delivery_lat,o.delivery_lng]);
-                markerCount++;
+            if(o.delivery_lat) {
+                mg.d = L.marker([o.delivery_lat, o.delivery_lng], {icon:mkSquare(color)})
+                    .addTo(map)
+                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>🏁 ${shortAddr(o.delivery_address)}`, {direction:'top'});
+                bounds.push([o.delivery_lat, o.delivery_lng]);
             }
-            if(o.pickup_lat&&o.delivery_lat){
-                mg.l=L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]],{color,weight:2,opacity:0.3,dashArray:'5 6'}).addTo(map);
+            if(o.pickup_lat && o.delivery_lat) {
+                mg.l = L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]],
+                    {color, weight:1.5, opacity:0.25, dashArray:'4 6'}).addTo(map);
             }
-            markers[o.id]=mg;
+            mks[o.id] = mg;
         });
 
-        console.log(`[Map] ${markerCount} markers rendus`);
-        if(autoFit && bounds.length>1) { try{map.fitBounds(bounds,{padding:[60,60]});}catch(e){} }
+        if(bounds.length > 1) { try { map.fitBounds(bounds, {padding:[60,60]}); } catch(e){} }
         renderStats();
-    }
-
-    /* ── Render tour routes ── */
-    async function renderTourRoutes(tours) {
-        // Clear old routes
-        Object.values(tourLayers).forEach(layers=>layers.forEach(l=>{try{map.removeLayer(l);}catch(e){}}));
-        tourLayers={};
-
-        const panel = document.getElementById('toursPanel');
-        panel.innerHTML = '';
-
-        for(const tour of tours) {
-            if(!tour.orderIds?.length) continue;
-            const orders = tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
-            const wpts   = [];
-            orders.forEach((o,i)=>{
-                if(i===0&&o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
-                if(o.delivery_lat)      wpts.push([o.delivery_lat,o.delivery_lng]);
-                else if(o.pickup_lat)   wpts.push([o.pickup_lat,o.pickup_lng]);
-            });
-
-            const layers = [];
-
-            if(wpts.length>=2) {
-                try {
-                    const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{
-                        method:'POST',
-                        headers:{'Authorization':ORS_KEY,'Content-Type':'application/json'},
-                        body:JSON.stringify({coordinates:wpts.map(p=>[p[1],p[0]])})
-                    });
-                    if(res.ok) {
-                        const data = await res.json();
-                        if(data.features?.[0]) {
-                            const line = L.geoJSON(data.features[0].geometry,{style:{color:tour.color,weight:4,opacity:0.8}}).addTo(map);
-                            layers.push(line);
-                        }
-                    }
-                } catch(e) {
-                    // Fallback ligne droite
-                    const line = L.polyline(wpts,{color:tour.color,weight:3,opacity:0.6,dashArray:'8 4'}).addTo(map);
-                    layers.push(line);
-                }
-            }
-
-            // Stop markers
-            orders.forEach((o,i)=>{
-                if(!o.delivery_lat) return;
-                const m = L.marker([o.delivery_lat,o.delivery_lng],{
-                    icon:L.divIcon({
-                        html:`<div style="width:20px;height:20px;background:${tour.color};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:11px;color:white;box-shadow:0 2px 8px rgba(0,0,0,0.5);">${i+1}</div>`,
-                        className:'',iconSize:[20,20],iconAnchor:[10,10]
-                    })
-                }).addTo(map).bindTooltip(`<b>Stop ${i+1}</b> — ${tour.name}<br>${shortAddr(o.delivery_address)}`,{direction:'top'});
-                layers.push(m);
-            });
-
-            tourLayers[tour.id] = layers;
-
-            // Badge tournée
-            const badge = document.createElement('div');
-            badge.className = 'tour-badge';
-            badge.style.borderColor = tour.color+'44';
-            badge.innerHTML = `
-                <div class="tb-name">
-                    <div class="tb-color" style="background:${tour.color}"></div>
-                    ${tour.name}
-                </div>
-                <div class="tb-driver"><i class="fas fa-user" style="color:${tour.color}"></i> ${getDriverName(tour.driverId)}</div>
-                <div class="tb-stats">
-                    <span><i class="fas fa-box"></i> ${orders.length} stops</span>
-                    ${tour.planning ? `<span><i class="fas fa-clock"></i> ${tour.planning.depart}→${tour.planning.fin}</span>` : ''}
-                </div>`;
-            badge.onclick = () => {
-                const b = [];
-                orders.forEach(o=>{if(o.delivery_lat)b.push([o.delivery_lat,o.delivery_lng]);});
-                if(b.length) map.fitBounds(b,{padding:[80,80]});
-            };
-            panel.appendChild(badge);
-        }
-    }
-
-    function getDriverName(driverId) {
-        if(!driverId) return 'Non assigné';
-        // On stocke les chauffeurs si passés via broadcast
-        const c = (window._chauffeurs||[]).find(x=>x.id===driverId);
-        return c ? `${c.prenom||''} ${c.nom||''}`.trim() : '—';
     }
 
     /* ── Stats ── */
     function renderStats() {
-        document.getElementById('sTotal').textContent    = allOrders.filter(o=>o.status!=='delivered').length;
-        document.getElementById('sPending').textContent  = allOrders.filter(o=>o.status==='pending'&&o.priority!=='urgent').length;
-        document.getElementById('sUrgent').textContent   = allOrders.filter(o=>o.priority==='urgent').length;
-        document.getElementById('sPlanned').textContent  = allOrders.filter(o=>o.status==='planned').length;
-        document.getElementById('sTransit').textContent  = allOrders.filter(o=>o.status==='in_transit').length;
-        document.getElementById('sDelivered').textContent= allOrders.filter(o=>o.status==='delivered').length;
+        document.getElementById('sTotal').textContent   = allOrders.filter(o=>o.status!=='delivered').length;
+        document.getElementById('sPending').textContent = allOrders.filter(o=>o.status==='pending'&&o.priority!=='urgent').length;
+        document.getElementById('sUrgent').textContent  = allOrders.filter(o=>o.priority==='urgent').length;
+        document.getElementById('sPlanned').textContent = allOrders.filter(o=>o.status==='planned').length;
+        document.getElementById('sTransit').textContent = allOrders.filter(o=>o.status==='in_transit').length;
+        document.getElementById('sDone').textContent    = allOrders.filter(o=>o.status==='delivered').length;
     }
 
     /* ── Controls ── */
     window.fitAll = function() {
-        const b=[[46.7785,6.6409]];
+        const b = [[46.7785,6.6409]];
         allOrders.forEach(o=>{if(o.pickup_lat)b.push([o.pickup_lat,o.pickup_lng]);if(o.delivery_lat)b.push([o.delivery_lat,o.delivery_lng]);});
-        map.fitBounds(b,{padding:[60,60]});
-    };
-    window.toggleAutoFit = function() {
-        autoFit=!autoFit;
-        document.getElementById('mcAuto').classList.toggle('active',autoFit);
-        toast('info', autoFit ? 'Auto-centrage activé' : 'Auto-centrage désactivé');
+        if(b.length>1) map.fitBounds(b, {padding:[60,60]});
     };
 
-    /* ── BroadcastChannel — recevoir données du dispatch ── */
-    const channel = new BroadcastChannel('leman_dispatch');
-    channel.onmessage = async (e) => {
-        const { type, orders, tours, chauffeurs } = e.data;
-        if(chauffeurs) window._chauffeurs = chauffeurs;
-        if(orders) {
-            // Géocoder les coordonnées manquantes avant d'afficher
-            const enriched = orders;
-            for(const o of enriched) {
-                if(!o.pickup_lat && o.pickup_address && !geoCache2['t_'+o.id+'_p']) {
-                    geoCache2['t_'+o.id+'_p'] = true;
-                    const c = await geocodeAddr2(o.pickup_address);
-                    if(c) { o.pickup_lat=c.lat; o.pickup_lng=c.lng; }
-                }
-                if(!o.delivery_lat && o.delivery_address && !geoCache2['t_'+o.id+'_d']) {
-                    geoCache2['t_'+o.id+'_d'] = true;
-                    const c = await geocodeAddr2(o.delivery_address);
-                    if(c) { o.delivery_lat=c.lat; o.delivery_lng=c.lng; }
-                }
-            }
-            allOrders = enriched;
-            renderMap();
-            renderStats();
-        }
-        if(tours) { allTours=tours; await renderTourRoutes(tours); }
-        if(type==='UPDATE') toast('info','🔄 Mise à jour reçue');
-    };
-
-    /* ── Supabase Realtime (autonome) ── */
-    // Geocode cache
-    const geoCache2 = {};
-    async function geocodeAddr2(addr) {
-        if(!addr) return null;
-        const key = addr.slice(0,60);
-        if(geoCache2[key]) return geoCache2[key];
-        try {
-            await new Promise(r=>setTimeout(r,350));
-            const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr+', Suisse')}&format=json&limit=1`,{headers:{'Accept-Language':'fr'}});
-            const d = await r.json();
-            if(d[0]) { const c={lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}; geoCache2[key]=c; return c; }
-        } catch(e) {}
-        return null;
-    }
-
-    async function loadFromDB() {
-        const { data:orders } = await db.from('transport_orders_simple').select('*').order('created_at',{ascending:false});
-        const { data:chauf  } = await db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur');
-
-        // Géocoder les adresses manquantes
-        const enriched = orders||[];
-        for(const o of enriched) {
-            if(!o.pickup_lat && o.pickup_address) {
-                const c = await geocodeAddr2(o.pickup_address);
-                if(c) { o.pickup_lat=c.lat; o.pickup_lng=c.lng; }
-            }
-            if(!o.delivery_lat && o.delivery_address) {
-                const c = await geocodeAddr2(o.delivery_address);
-                if(c) { o.delivery_lat=c.lat; o.delivery_lng=c.lng; }
-            }
-        }
-
-        allOrders = enriched;
-        window._chauffeurs = chauf||[];
-        renderMap();
-        renderStats();
-    }
-
-    db.channel('map_live')
-        .on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},()=>{ loadFromDB(); toast('info','🔄 Nouveau transport'); })
-        .subscribe();
-
-    /* ── ORS ROUTES ── */
-    let routeLayers = [];
-
-    window.clearAllRoutes = function() {
-        routeLayers.forEach(l => { try { map.removeLayer(l); } catch(e){} });
+    /* ── Routes ── */
+    window.clearRoutes = function() {
+        routeLayers.forEach(l => { try{map.removeLayer(l);}catch(e){} });
         routeLayers = [];
-        toast('info', 'Routes effacées');
     };
 
-    window.drawAllRoutes = async function() {
-        clearAllRoutes();
-        const btn = document.getElementById('mcRoutes');
+    window.drawRoutes = async function() {
+        clearRoutes();
+        const btn = document.getElementById('cbRoutes');
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-        // Tracer une ligne par transport (pickup → delivery)
-        const STATUS_COLORS2 = { pending:'#f59e0b', planned:'#3b82f6', urgent:'#f97316', in_transit:'#a855f7', delivered:'#22c55e' };
-        const ordersWithCoords = allOrders.filter(o => o.pickup_lat && o.delivery_lat && o.status !== 'delivered');
-
-        if(!ordersWithCoords.length) {
-            toast('info', 'Aucun transport avec coordonnées GPS — cliquez 🛰️ d'abord');
-            btn.innerHTML = '<i class="fas fa-route"></i>';
-            return;
-        }
-
-        toast('info', `Calcul de ${ordersWithCoords.length} routes…`);
-        let done = 0;
-
-        for(const o of ordersWithCoords) {
-            const color = STATUS_COLORS2[o.priority==='urgent'?'urgent':(o.status||'pending')];
+        const orders = allOrders.filter(o => o.pickup_lat && o.delivery_lat && o.status !== 'delivered');
+        if(!orders.length) { toast('info','Aucun transport avec GPS — cliquez 🛰️ d\'abord'); btn.innerHTML='<i class="fas fa-route"></i>'; return; }
+        toast('info', `Calcul de ${orders.length} routes…`);
+        for(const o of orders) {
+            const color = SC[o.priority==='urgent'?'urgent':(o.status||'pending')];
             try {
                 const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
-                    method: 'POST',
-                    headers: { 'Authorization': ORS_KEY, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ coordinates: [[o.pickup_lng, o.pickup_lat],[o.delivery_lng, o.delivery_lat]] })
+                    method:'POST',
+                    headers:{'Authorization':ORSKEY,'Content-Type':'application/json'},
+                    body:JSON.stringify({coordinates:[[o.pickup_lng,o.pickup_lat],[o.delivery_lng,o.delivery_lat]]})
                 });
                 if(res.ok) {
-                    const data = await res.json();
-                    if(data.features?.[0]) {
-                        const line = L.geoJSON(data.features[0].geometry, {
-                            style: { color, weight:3, opacity:0.75 }
-                        }).addTo(map);
+                    const d = await res.json();
+                    if(d.features?.[0]) {
+                        const line = L.geoJSON(d.features[0].geometry, {style:{color,weight:3,opacity:0.75}}).addTo(map);
                         routeLayers.push(line);
-
-                        // Label distance/durée au milieu
-                        const props = data.features[0].properties;
+                        const props = d.features[0].properties;
                         const km  = (props.summary.distance/1000).toFixed(1);
                         const min = Math.round(props.summary.duration/60);
-                        const coords = data.features[0].geometry.coordinates;
+                        const coords = d.features[0].geometry.coordinates;
                         const mid = coords[Math.floor(coords.length/2)];
                         const lbl = L.marker([mid[1],mid[0]], {
-                            icon: L.divIcon({
-                                html: `<div style="background:rgba(17,17,24,0.9);border:1px solid ${color};border-radius:6px;padding:2px 7px;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;color:white;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4);"><span style="color:${color}">▶</span> ${km}km·${min}min</div>`,
-                                className: '', iconAnchor: [35, 10]
-                            }),
-                            interactive: false
+                            icon:L.divIcon({
+                                html:`<div style="background:rgba(17,17,24,0.9);border:1px solid ${color};border-radius:6px;padding:2px 7px;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;color:white;white-space:nowrap;"><span style="color:${color}">▶</span> ${km}km·${min}min</div>`,
+                                className:'', iconAnchor:[35,10]
+                            }), interactive:false
                         }).addTo(map);
                         routeLayers.push(lbl);
                     }
                 }
             } catch(e) {
-                // Fallback ligne droite
-                const line = L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]],
-                    {color, weight:2, opacity:0.5, dashArray:'6 4'}).addTo(map);
+                const line = L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]], {color,weight:2,opacity:0.5,dashArray:'6 4'}).addTo(map);
                 routeLayers.push(line);
             }
-            done++;
-            await new Promise(r=>setTimeout(r,600)); // Respecter rate limit ORS
+            await new Promise(r=>setTimeout(r,700));
         }
-
         btn.innerHTML = '<i class="fas fa-route"></i>';
-        toast('success', `✅ ${done} routes tracées`);
+        toast('success', `✅ ${orders.length} routes tracées`);
     };
 
-    /* ── GEOCODE FUNCTION ── */
+    /* ── Geocode ── */
+    async function geocodeOne(addr) {
+        if(!addr) return null;
+        const key = addr.slice(0,60);
+        if(geoCache[key]) return geoCache[key];
+        try {
+            const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr+', Suisse')}&format=json&limit=1`,{headers:{'Accept-Language':'fr'}});
+            const d = await r.json();
+            if(d[0]) { const c={lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}; geoCache[key]=c; return c; }
+        } catch(e){}
+        return null;
+    }
+
     window.runGeocode = async function() {
-        const btn = document.getElementById('mcGeo');
-        const progress = document.getElementById('geoProgress');
-        const bar   = document.getElementById('geoBar');
-        const label = document.getElementById('geoLabel');
-
-        // Désactiver le bouton
-        btn.style.background = 'rgba(245,158,11,0.2)';
-        btn.style.borderColor = 'rgba(245,158,11,0.4)';
-        btn.style.color = 'var(--yellow)';
+        const btn = document.getElementById('cbGeo');
+        const prog = document.getElementById('geoProgress');
+        const bar  = document.getElementById('geoBar');
+        const lbl  = document.getElementById('geoLabel');
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        progress.style.display = 'block';
+        prog.style.display = 'block';
 
-        // Charger tous les transports sans coords depuis DB
-        const { data: orders } = await db.from('transport_orders_simple')
-            .select('id, order_number, pickup_address, delivery_address, pickup_lat, pickup_lng, delivery_lat, delivery_lng')
-            .neq('status', 'delivered');
-
-        const toProcess = (orders||[]).filter(o => !o.pickup_lat || !o.delivery_lat);
-
+        const toProcess = allOrders.filter(o => (!o.pickup_lat || !o.delivery_lat) && o.status!=='delivered');
         if(!toProcess.length) {
-            label.textContent = '✅ Toutes les adresses ont déjà des coordonnées !';
-            bar.style.width = '100%';
-            bar.style.background = 'var(--green)';
-            setTimeout(() => {
-                progress.style.display = 'none';
-                btn.innerHTML = '<i class="fas fa-check"></i>';
-                btn.style.background = 'rgba(34,197,94,0.2)';
-                btn.style.borderColor = 'rgba(34,197,94,0.4)';
-                btn.style.color = 'var(--green)';
-            }, 2000);
+            lbl.textContent = '✅ Toutes les adresses ont déjà des coordonnées !';
+            bar.style.width = '100%'; bar.style.background = 'var(--green)';
+            setTimeout(()=>{ prog.style.display='none'; btn.innerHTML='<i class="fas fa-check"></i>'; }, 2000);
             return;
         }
 
-        toast('info', `Géocodage de ${toProcess.length} adresses…`);
-        let done = 0, ok = 0;
-
+        let done=0, ok=0;
         for(const o of toProcess) {
-            const pct = Math.round((done / toProcess.length) * 100);
-            bar.style.width = pct + '%';
-            label.textContent = `${done+1}/${toProcess.length} — ${(o.order_number||'').slice(0,20)}`;
-
-            const updates = {};
-
+            bar.style.width = Math.round(done/toProcess.length*100)+'%';
+            lbl.textContent = `${done+1}/${toProcess.length} — ${o.order_number||''}`;
+            const upd = {};
             if(!o.pickup_lat && o.pickup_address) {
-                const c = await geocodeAddr2(o.pickup_address);
-                if(c) { updates.pickup_lat = c.lat; updates.pickup_lng = c.lng; }
+                const c = await geocodeOne(o.pickup_address);
+                if(c) { upd.pickup_lat=c.lat; upd.pickup_lng=c.lng; o.pickup_lat=c.lat; o.pickup_lng=c.lng; }
                 await new Promise(r=>setTimeout(r,1100));
             }
             if(!o.delivery_lat && o.delivery_address) {
-                const c = await geocodeAddr2(o.delivery_address);
-                if(c) { updates.delivery_lat = c.lat; updates.delivery_lng = c.lng; }
+                const c = await geocodeOne(o.delivery_address);
+                if(c) { upd.delivery_lat=c.lat; upd.delivery_lng=c.lng; o.delivery_lat=c.lat; o.delivery_lng=c.lng; }
                 await new Promise(r=>setTimeout(r,1100));
             }
-
-            if(Object.keys(updates).length) {
-                await db.from('transport_orders_simple').update(updates).eq('id', o.id);
-                // Mettre à jour l'objet local aussi
-                Object.assign(o, updates);
+            if(Object.keys(upd).length) {
+                await db.from('transport_orders_simple').update(upd).eq('id',o.id);
                 ok++;
             }
             done++;
         }
 
-        // Rafraîchir la carte avec les nouvelles coords
-        bar.style.width = '100%';
-        bar.style.background = 'var(--green)';
-        label.textContent = `✅ ${ok} adresses géocodées !`;
-
-        await loadFromDB();
-        toast('success', `✅ ${ok} adresses géocodées — markers mis à jour !`);
-
-        setTimeout(() => {
-            progress.style.display = 'none';
-            btn.innerHTML = '<i class="fas fa-satellite"></i>';
-            btn.style.background = 'rgba(34,197,94,0.2)';
-            btn.style.borderColor = 'rgba(34,197,94,0.4)';
-            btn.style.color = 'var(--green)';
-        }, 2000);
+        bar.style.width='100%'; bar.style.background='var(--green)';
+        lbl.textContent = `✅ ${ok} adresses géocodées !`;
+        renderMap();
+        toast('success', `✅ ${ok} adresses géocodées`);
+        setTimeout(()=>{ prog.style.display='none'; btn.innerHTML='<i class="fas fa-satellite"></i>'; btn.className='cb blue'; }, 2000);
     };
+
+    /* ── Load from DB ── */
+    async function loadFromDB() {
+        const { data:orders } = await db.from('transport_orders_simple').select('*').order('created_at',{ascending:false});
+        const { data:chauf  } = await db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur');
+        allOrders = orders||[];
+        window._chauffeurs = chauf||[];
+
+        // Auto-géocoder les adresses manquantes (silencieusement, sans bloquer)
+        for(const o of allOrders) {
+            if(!o.pickup_lat && o.pickup_address && !geoCache['_'+o.id+'p']) {
+                geoCache['_'+o.id+'p'] = true;
+                const c = await geocodeOne(o.pickup_address);
+                if(c) { o.pickup_lat=c.lat; o.pickup_lng=c.lng; }
+                await new Promise(r=>setTimeout(r,500));
+            }
+            if(!o.delivery_lat && o.delivery_address && !geoCache['_'+o.id+'d']) {
+                geoCache['_'+o.id+'d'] = true;
+                const c = await geocodeOne(o.delivery_address);
+                if(c) { o.delivery_lat=c.lat; o.delivery_lng=c.lng; }
+                await new Promise(r=>setTimeout(r,500));
+            }
+        }
+
+        renderMap();
+    }
+
+    /* ── BroadcastChannel ── */
+    const bc = new BroadcastChannel('leman_dispatch');
+    bc.onmessage = async (e) => {
+        const { type, orders, tours } = e.data;
+        if(orders) {
+            // Enrichir avec géocodage
+            for(const o of orders) {
+                if(!o.pickup_lat && o.pickup_address && !geoCache['_'+o.id+'p']) {
+                    geoCache['_'+o.id+'p']=true;
+                    const c=await geocodeOne(o.pickup_address);
+                    if(c){o.pickup_lat=c.lat;o.pickup_lng=c.lng;}
+                    await new Promise(r=>setTimeout(r,500));
+                }
+                if(!o.delivery_lat && o.delivery_address && !geoCache['_'+o.id+'d']) {
+                    geoCache['_'+o.id+'d']=true;
+                    const c=await geocodeOne(o.delivery_address);
+                    if(c){o.delivery_lat=c.lat;o.delivery_lng=c.lng;}
+                    await new Promise(r=>setTimeout(r,500));
+                }
+            }
+            allOrders = orders;
+            renderMap();
+        }
+        if(type==='UPDATE') toast('info','🔄 Mise à jour');
+    };
+
+    /* ── Realtime ── */
+    db.channel('map_realtime')
+        .on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},()=>loadFromDB())
+        .subscribe();
 
     /* ── Init ── */
     loadFromDB();
-    toast('info', '🖥️ Carte dispatch — 2ème écran actif');
+    toast('info','🖥️ Carte 2ème écran active');
+
 })();
 </script>
 </body>
