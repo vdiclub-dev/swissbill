@@ -556,9 +556,16 @@
         <div style="width:100%;max-width:340px;">
             <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;">— OU SAISIR MANUELLEMENT —</div>
             <div style="display:flex;gap:8px;">
-                <input type="text" id="qrManual" placeholder="Numéro de commande ex: LC-2026-xxxxx"
+                <input type="text" id="qrManual" placeholder="Numéro ex: LC-2026-xxxxx"
                     style="flex:1;padding:10px 12px;background:var(--night3);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
                 <button onclick="searchManual()" style="background:var(--red);border:none;border-radius:10px;padding:10px 14px;cursor:pointer;color:white;font-size:14px;"><i class="fas fa-search"></i></button>
+            </div>
+            <!-- Fallback: photo du QR -->
+            <div style="margin-top:10px;text-align:center;">
+                <label style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;cursor:pointer;font-size:13px;color:var(--muted2);">
+                    <i class="fas fa-camera" style="color:var(--yellow)"></i> Photographier le QR code
+                    <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)">
+                </label>
             </div>
         </div>
     </div>
@@ -577,7 +584,7 @@
         <div class="bn-item" id="bnMap" onclick="showScreen('map')">
             <i class="fas fa-map"></i><span>Carte</span>
         </div>
-        <div class="bn-item" id="bnQR" onclick="showScreen('qr');startScan()">
+        <div class="bn-item" id="bnQR" onclick="openScanner()">
             <i class="fas fa-qrcode"></i><span>Scanner</span>
         </div>
         <div class="bn-item" id="bnRh" onclick="showScreen('rh')">
@@ -718,93 +725,76 @@
     /* ── QR SCANNER ── */
     let scanStream = null;
     let scanInterval = null;
+    let scanning = false;
 
-    window.startScan = async function() {
+    // Appelé directement par le bouton onclick (contexte utilisateur requis pour getUserMedia)
+    window.openScanner = function() {
+        showScreen('qr');
+        document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
+        document.getElementById('bnQR')?.classList.add('active');
         document.getElementById('scanResult').style.display = 'none';
         document.getElementById('scanStatus').textContent = 'Démarrage caméra…';
 
-        // Stop any existing stream first
+        // Stop stream précédent
         if(scanStream) { scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
         if(scanInterval) { clearInterval(scanInterval); scanInterval=null; }
+        scanning = false;
 
-        try {
-            // iOS Safari: doit être déclenché par geste utilisateur
-            const constraints = {
-                video: {
-                    facingMode: { ideal: 'environment' },
-                    width:  { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            };
-            scanStream = await navigator.mediaDevices.getUserMedia(constraints);
+        // Appel direct dans le même tick utilisateur
+        navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal:'environment' }, width:{ideal:1280}, height:{ideal:720} }
+        }).then(stream => {
+            scanStream = stream;
             const video = document.getElementById('qrVideo');
-            video.srcObject = scanStream;
-            video.setAttribute('playsinline', true); // iOS requis
-            video.setAttribute('muted', true);
-
-            await new Promise((res, rej) => {
-                video.onloadedmetadata = () => res();
-                video.onerror = rej;
-                setTimeout(rej, 5000); // timeout 5s
+            video.srcObject = stream;
+            video.play().then(() => {
+                document.getElementById('scanStatus').textContent = '📷 Pointez le QR code dans le cadre';
+                scanInterval = setInterval(decodeFrame, 400);
+            }).catch(e => {
+                document.getElementById('scanStatus').textContent = '❌ Erreur lecture vidéo — utilisez la saisie manuelle';
             });
-            await video.play();
-
-            document.getElementById('scanStatus').textContent = '📷 Pointez vers le QR code';
-            scanning = false; // flag anti-doublon
-            scanInterval = setInterval(() => decodeFrame(), 400);
-        } catch(e) {
-            let msg = '❌ Caméra non disponible';
-            if(e.name === 'NotAllowedError')    msg = '❌ Accès caméra refusé — autorisez dans les réglages';
-            if(e.name === 'NotFoundError')      msg = '❌ Aucune caméra trouvée';
-            if(e.name === 'NotSupportedError')  msg = '❌ HTTPS requis pour la caméra';
-            document.getElementById('scanStatus').textContent = msg + ' — utilisez la saisie manuelle ci-dessous';
-            console.error('Camera error:', e.name, e.message);
-        }
+        }).catch(e => {
+            let msg = '❌ Caméra non disponible — utilisez la saisie manuelle';
+            if(e.name==='NotAllowedError')   msg = '❌ Permission caméra refusée — autorisez dans les réglages Android';
+            if(e.name==='NotFoundError')     msg = '❌ Aucune caméra détectée';
+            if(e.name==='NotReadableError')  msg = '❌ Caméra déjà utilisée par une autre app';
+            document.getElementById('scanStatus').textContent = msg;
+            console.error('Camera:', e.name, e.message);
+        });
     };
 
     window.stopScan = function() {
-        if(scanInterval) { clearInterval(scanInterval); scanInterval = null; }
-        if(scanStream)   { scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+        if(scanInterval) { clearInterval(scanInterval); scanInterval=null; }
+        if(scanStream)   { scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
         scanning = false;
         showScreen('home');
     };
 
-    let scanning = false; // anti-doublon
-
     function decodeFrame() {
-        if(scanning) return; // déjà en traitement
+        if(scanning) return;
         const video  = document.getElementById('qrVideo');
         const canvas = document.getElementById('qrCanvas');
-        if(!video || !video.videoWidth || video.paused || video.ended) return;
+        if(!video || !video.videoWidth || video.paused) return;
 
         canvas.width  = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0);
 
-        // BarcodeDetector (Chrome Android natif — le plus rapide)
         if('BarcodeDetector' in window) {
             scanning = true;
             const bd = new BarcodeDetector({formats:['qr_code']});
             bd.detect(canvas).then(codes => {
                 if(codes.length > 0) {
-                    clearInterval(scanInterval); scanInterval = null;
+                    clearInterval(scanInterval); scanInterval=null;
                     handleQRResult(codes[0].rawValue);
-                } else {
-                    scanning = false;
-                }
-            }).catch(() => { scanning = false; });
-            return;
-        }
-
-        // jsQR fallback (Safari, Firefox)
-        if(window.jsQR) {
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imgData.data, imgData.width, imgData.height, {
-                inversionAttempts: 'dontInvert'
-            });
-            if(code && code.data) {
-                clearInterval(scanInterval); scanInterval = null;
+                } else { scanning = false; }
+            }).catch(()=>{ scanning=false; });
+        } else if(window.jsQR) {
+            const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+            const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'dontInvert'});
+            if(code?.data) {
+                clearInterval(scanInterval); scanInterval=null;
                 handleQRResult(code.data);
             }
         }
@@ -837,6 +827,46 @@
         if(!val) return;
         await searchByNum(val);
     };
+
+    // Lire un QR depuis une photo prise avec l'appareil photo
+    window.scanFromPhoto = function(input) {
+        if(!input.files?.[0]) return;
+        const file = input.files[0];
+        document.getElementById('scanStatus').textContent = 'Analyse de la photo…';
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.getElementById('qrCanvas');
+                canvas.width  = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+
+                if('BarcodeDetector' in window) {
+                    const bd = new BarcodeDetector({formats:['qr_code']});
+                    bd.detect(canvas).then(codes => {
+                        if(codes.length > 0) handleQRResult(codes[0].rawValue);
+                        else document.getElementById('scanStatus').textContent = '❌ QR non reconnu — essayez une photo plus nette';
+                    }).catch(()=>{
+                        // Fallback jsQR
+                        tryJsQR(ctx, canvas);
+                    });
+                } else if(window.jsQR) {
+                    tryJsQR(ctx, canvas);
+                }
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    function tryJsQR(ctx, canvas) {
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'attemptBoth'});
+        if(code?.data) handleQRResult(code.data);
+        else document.getElementById('scanStatus').textContent = '❌ QR non reconnu — essayez une photo plus nette';
+    }
 
     async function searchByNum(num) {
         document.getElementById('scanStatus').textContent = 'Recherche…';
