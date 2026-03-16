@@ -136,6 +136,8 @@
     <div class="mc" onclick="fitAll()"><i class="fas fa-expand"></i></div>
     <div class="mc" id="mcAuto" onclick="toggleAutoFit()" title="Auto-centrage" style="margin-top:6px;"><i class="fas fa-crosshairs"></i></div>
     <div class="mc" id="mcGeo" onclick="runGeocode()" title="Géocoder les adresses" style="margin-top:6px;background:rgba(59,130,246,0.2);border-color:rgba(59,130,246,0.4);color:var(--blue)"><i class="fas fa-satellite"></i></div>
+    <div class="mc" id="mcRoutes" onclick="drawAllRoutes()" title="Tracer toutes les routes" style="margin-top:4px;background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.3);color:var(--green)"><i class="fas fa-route"></i></div>
+    <div class="mc" id="mcClearRoutes" onclick="clearAllRoutes()" title="Effacer les routes" style="margin-top:4px;"><i class="fas fa-eraser"></i></div>
 </div>
 
 <!-- Geocode progress -->
@@ -448,6 +450,80 @@
     db.channel('map_live')
         .on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},()=>{ loadFromDB(); toast('info','🔄 Nouveau transport'); })
         .subscribe();
+
+    /* ── ORS ROUTES ── */
+    const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
+    let routeLayers = [];
+
+    window.clearAllRoutes = function() {
+        routeLayers.forEach(l => { try { map.removeLayer(l); } catch(e){} });
+        routeLayers = [];
+        toast('info', 'Routes effacées');
+    };
+
+    window.drawAllRoutes = async function() {
+        clearAllRoutes();
+        const btn = document.getElementById('mcRoutes');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        // Tracer une ligne par transport (pickup → delivery)
+        const STATUS_COLORS2 = { pending:'#f59e0b', planned:'#3b82f6', urgent:'#f97316', in_transit:'#a855f7', delivered:'#22c55e' };
+        const ordersWithCoords = allOrders.filter(o => o.pickup_lat && o.delivery_lat && o.status !== 'delivered');
+
+        if(!ordersWithCoords.length) {
+            toast('info', 'Aucun transport avec coordonnées GPS — cliquez 🛰️ d'abord');
+            btn.innerHTML = '<i class="fas fa-route"></i>';
+            return;
+        }
+
+        toast('info', `Calcul de ${ordersWithCoords.length} routes…`);
+        let done = 0;
+
+        for(const o of ordersWithCoords) {
+            const color = STATUS_COLORS2[o.priority==='urgent'?'urgent':(o.status||'pending')];
+            try {
+                const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+                    method: 'POST',
+                    headers: { 'Authorization': ORS_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ coordinates: [[o.pickup_lng, o.pickup_lat],[o.delivery_lng, o.delivery_lat]] })
+                });
+                if(res.ok) {
+                    const data = await res.json();
+                    if(data.features?.[0]) {
+                        const line = L.geoJSON(data.features[0].geometry, {
+                            style: { color, weight:3, opacity:0.75 }
+                        }).addTo(map);
+                        routeLayers.push(line);
+
+                        // Label distance/durée au milieu
+                        const props = data.features[0].properties;
+                        const km  = (props.summary.distance/1000).toFixed(1);
+                        const min = Math.round(props.summary.duration/60);
+                        const coords = data.features[0].geometry.coordinates;
+                        const mid = coords[Math.floor(coords.length/2)];
+                        const lbl = L.marker([mid[1],mid[0]], {
+                            icon: L.divIcon({
+                                html: `<div style="background:rgba(17,17,24,0.9);border:1px solid ${color};border-radius:6px;padding:2px 7px;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;color:white;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4);"><span style="color:${color}">▶</span> ${km}km·${min}min</div>`,
+                                className: '', iconAnchor: [35, 10]
+                            }),
+                            interactive: false
+                        }).addTo(map);
+                        routeLayers.push(lbl);
+                    }
+                }
+            } catch(e) {
+                // Fallback ligne droite
+                const line = L.polyline([[o.pickup_lat,o.pickup_lng],[o.delivery_lat,o.delivery_lng]],
+                    {color, weight:2, opacity:0.5, dashArray:'6 4'}).addTo(map);
+                routeLayers.push(line);
+            }
+            done++;
+            await new Promise(r=>setTimeout(r,600)); // Respecter rate limit ORS
+        }
+
+        btn.innerHTML = '<i class="fas fa-route"></i>';
+        toast('success', `✅ ${done} routes tracées`);
+    };
 
     /* ── GEOCODE FUNCTION ── */
     window.runGeocode = async function() {
