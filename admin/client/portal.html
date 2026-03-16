@@ -775,104 +775,115 @@ ${clientEntreprise.adresse||''}, ${clientEntreprise.npa||''} ${clientEntreprise.
 
         let colis = [];
         try {
-            const instr = o.instructions||'';
-            const m = instr.match(/COLIS:(\[.*\])/);
+            const m = (o.instructions||'').match(/COLIS:(\[.*\])/);
             if(m) colis = JSON.parse(m[1]);
         } catch(e){}
         if(!colis.length) colis = [{poids:o.weight||0, qty:o.quantity||1, type:o.package_type||'colis', description:''}];
 
-        // Adresse départ formatée
-        const pickup = (o.pickup_address||'—').replace(/·/g,'<br>').replace(/\n/g,'<br>');
+        const pickup   = (o.pickup_address||'—').replace(/·/g,' ').replace(/
+/g,' | ');
         const delivery = o.delivery_address||'—';
-        const dest = o.destinataire_nom||'—';
-        const tel  = o.destinataire_tel||'';
+        const dest     = o.destinataire_nom||'—';
+        const tel      = o.destinataire_tel||'';
+        const dateStr  = new Date(o.created_at).toLocaleDateString('fr-CH');
+        const svc      = (o.service_type||'normal').toUpperCase()+(o.night_delivery?' NUIT':'');
 
-        // Générer 1 étiquette par colis (qty×)
-        let labelIndex = 1;
+        // Expand qty into individual labels
         const labels = [];
+        let idx = 1;
         colis.forEach(c => {
-            const q = parseInt(c.qty||1);
-            for(let i=0;i<q;i++) {
-                labels.push({...c, labelNum:labelIndex++, totalLabels:0});
-            }
+            for(let i=0;i<parseInt(c.qty||1);i++) labels.push({...c, labelNum:idx++});
         });
-        const totalLabels = labels.length;
-        labels.forEach(l => l.totalLabels = totalLabels);
+        const total = labels.length;
 
-        const w = window.open('','_blank','width=700,height=900');
-        w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-        <title>Étiquettes — ${o.order_number}</title>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-        <style>
-            *{margin:0;padding:0;box-sizing:border-box;}
-            body{font-family:Arial,sans-serif;background:#fff;}
-            .label{width:100%;max-width:600px;margin:0 auto 30px;border:2px solid #000;page-break-after:always;}
-            .label:last-child{page-break-after:auto;}
-            .label-header{background:#e8311a;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;}
-            .label-logo{font-size:18px;font-weight:bold;letter-spacing:2px;}
-            .label-num{font-size:13px;}
-            .label-body{display:grid;grid-template-columns:1fr auto;gap:0;}
-            .addr-block{padding:14px 16px;border-right:1px solid #ddd;}
-            .addr-section{margin-bottom:12px;}
-            .addr-title{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#e8311a;margin-bottom:4px;border-bottom:1px solid #e8311a;padding-bottom:2px;}
-            .addr-content{font-size:13px;line-height:1.6;}
-            .addr-main{font-weight:bold;font-size:15px;}
-            .qr-block{padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f9f9f9;min-width:160px;}
-            .qr-label{font-size:10px;color:#666;margin-top:6px;text-align:center;}
-            .label-footer{background:#f5f5f5;padding:8px 16px;display:flex;justify-content:space-between;font-size:11px;color:#666;border-top:1px solid #ddd;}
-            .service-badge{background:#e8311a;color:white;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:bold;}
-            @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-        </style></head><body>
-        ${labels.map((l,i)=>`
-        <div class="label">
-            <div class="label-header">
-                <div class="label-logo">🚚 LÉMAN-COURSES</div>
-                <div class="label-num">${o.order_number} · ${l.labelNum}/${l.totalLabels}</div>
-            </div>
-            <div class="label-body">
-                <div class="addr-block">
-                    <div class="addr-section">
-                        <div class="addr-title">📍 Enlèvement</div>
-                        <div class="addr-content">${pickup}</div>
-                    </div>
-                    <div class="addr-section">
-                        <div class="addr-title">🏁 Livraison</div>
-                        <div class="addr-content">
-                            <div class="addr-main">${dest}</div>
-                            ${delivery}<br>
-                            ${tel?`📞 ${tel}`:''}
-                        </div>
-                    </div>
-                    <div class="addr-section">
-                        <div class="addr-title">📦 Colis</div>
-                        <div class="addr-content">
-                            ${l.type||'colis'} · ${l.poids}kg
-                            ${l.description?`<br><em>${l.description}</em>`:''}
-                        </div>
-                    </div>
-                </div>
-                <div class="qr-block">
-                    <div id="qr${i}"></div>
-                    <div class="qr-label">Scanner à la<br>prise en charge</div>
-                </div>
-            </div>
-            <div class="label-footer">
-                <span>${new Date(o.created_at).toLocaleDateString('fr-CH')}</span>
-                <span class="service-badge">${(o.service_type||'normal').toUpperCase()} ${o.night_delivery?'🌙':''}</span>
-                <span>Léman-Courses SA</span>
-            </div>
-        </div>`).join('')}
-        <script>
-            ${labels.map((l,i)=>`
-            new QRCode(document.getElementById('qr${i}'), {
-                text: JSON.stringify({id:'${o.id}',num:'${o.order_number}',colis:${l.labelNum},total:${l.totalLabels},poids:${l.poids},type:'${l.type}'}),
-                width:130, height:130, colorDark:'#000', colorLight:'#fff',
+        // Generate QR codes as base64 in hidden div
+        const tmp = document.createElement('div');
+        tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+        document.body.appendChild(tmp);
+
+        labels.forEach((l,i) => {
+            const d = document.createElement('div');
+            d.id = 'tmpqr'+i;
+            tmp.appendChild(d);
+            new QRCode(d, {
+                text: JSON.stringify({id:o.id,num:o.order_number,c:l.labelNum,t:total,kg:l.poids}),
+                width:128, height:128,
+                colorDark:'#000000', colorLight:'#ffffff',
                 correctLevel:QRCode.CorrectLevel.M
-            });`).join('')}
-            setTimeout(()=>window.print(), 800);
-        <\/script>
-        </body></html>`);
-        w.document.close();
+            });
+        });
+
+        setTimeout(() => {
+            // Extract base64 images
+            const imgs = labels.map((_,i) => {
+                const canvas = tmp.querySelector('#tmpqr'+i+' canvas');
+                return canvas ? canvas.toDataURL('image/png') : '';
+            });
+            document.body.removeChild(tmp);
+
+            // Build pure HTML - NO external scripts, NO config.js
+            const css = `*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,sans-serif;}
+.pg{width:148mm;min-height:105mm;margin:0 auto 8mm;border:2px solid #000;page-break-after:always;display:flex;flex-direction:column;}
+.pg:last-child{page-break-after:auto;}
+.hd{background:#e8311a;color:#fff;padding:6px 12px;display:flex;justify-content:space-between;align-items:center;}
+.hd-l{font-size:14px;font-weight:bold;letter-spacing:2px;}
+.hd-r{font-size:11px;}
+.bd{display:flex;flex:1;}
+.ad{flex:1;padding:10px 12px;border-right:2px solid #ddd;}
+.sec{margin-bottom:8px;}
+.sec-t{font-size:8px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#e8311a;border-bottom:1px solid #e8311a;padding-bottom:1px;margin-bottom:3px;}
+.sec-v{font-size:11px;line-height:1.4;}
+.sec-v b{font-size:13px;}
+.qr{padding:10px;background:#fafafa;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:140px;}
+.qr img{width:120px;height:120px;}
+.qr-l{font-size:8px;color:#666;margin-top:4px;text-align:center;}
+.ft{background:#f5f5f5;padding:5px 12px;display:flex;justify-content:space-between;font-size:9px;color:#666;border-top:1px solid #ddd;}
+.svc{background:#e8311a;color:#fff;padding:1px 6px;border-radius:2px;font-weight:bold;}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}`;
+
+            const body = labels.map((l,i) => `
+<div class="pg">
+  <div class="hd">
+    <div class="hd-l">&#x1F69A; LEMAN-COURSES</div>
+    <div class="hd-r">${o.order_number} &bull; Colis ${l.labelNum}/${total}</div>
+  </div>
+  <div class="bd">
+    <div class="ad">
+      <div class="sec">
+        <div class="sec-t">Enlevement</div>
+        <div class="sec-v">${pickup}</div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">Livraison</div>
+        <div class="sec-v"><b>${dest}</b><br>${delivery}${tel?'<br>Tel: '+tel:''}</div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">Colis ${l.labelNum}/${total}</div>
+        <div class="sec-v">${l.type||'colis'} &bull; ${l.poids} kg${l.description?' &bull; '+l.description:''}</div>
+      </div>
+    </div>
+    <div class="qr">
+      <img src="${imgs[i]}" alt="QR">
+      <div class="qr-l">Scanner a la<br>prise en charge</div>
+    </div>
+  </div>
+  <div class="ft">
+    <span>${dateStr}</span>
+    <span class="svc">${svc}</span>
+    <span>Leman-Courses SA</span>
+  </div>
+</div>`).join('');
+
+            const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquettes '+o.order_number+'</title><style>'+css+'</style></head><body>'+body+'</body></html>';
+
+            // Use blob URL — aucune dépendance externe, aucun config.js
+            const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+            const url  = URL.createObjectURL(blob);
+            const w    = window.open(url, '_blank');
+            if(w) setTimeout(() => { w.print(); URL.revokeObjectURL(url); }, 600);
+            else { toast('error','Popup bloqué — autorisez les popups pour ce site'); URL.revokeObjectURL(url); }
+        }, 400);
     };
 
     /* ── ORDERS LIST ── */
