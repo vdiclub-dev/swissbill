@@ -1531,21 +1531,21 @@
             const note = document.getElementById('deliveryNote').value.trim();
 
             // Récupérer signature
-            // Signature — vérifier directement le canvas
+            // Signature — lire le canvas directement
             let signatureData = null;
             const sigCanvas = document.getElementById('sigCanvas');
-            if(sigCanvas) {
-                // Vérifier si le canvas contient quelque chose
-                const ctx = sigCanvas.getContext('2d');
-                const pixels = ctx.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
-                const hasContent = pixels.some((v,i) => i%4!==3 && v>0); // cherche pixels non-transparents
-                if(hasContent || hasSig) {
-                    signatureData = sigCanvas.toDataURL('image/png');
-                    window._sigB64 = signatureData;
+            if(sigCanvas && sigCanvas.width > 0) {
+                const sigCtxCheck = sigCanvas.getContext('2d');
+                const pd = sigCtxCheck.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
+                // Chercher pixels dessinés (non-blanc, non-transparent)
+                let drawn = false;
+                for(let i=0;i<pd.length;i+=4){
+                    if(pd[i+3]>10){ drawn=true; break; } // pixel non-transparent
+                }
+                if(drawn || hasSig || window._sigB64) {
+                    signatureData = drawn ? sigCanvas.toDataURL('image/png') : window._sigB64;
                 }
             }
-            // Fallback sur la variable globale
-            if(!signatureData && window._sigB64) signatureData = window._sigB64;
 
             // Photo — stockée dans window._photoB64 par handlePhoto
             const photoData = window._photoB64 || null;
@@ -1687,17 +1687,63 @@
             el.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted);">Aucune notification</div>';
             return;
         }
-        el.innerHTML = notifications.map(n => `
-            <div style="padding:10px 12px;border-radius:10px;margin-bottom:4px;background:${n.read?'transparent':'rgba(232,49,26,0.06)'};border:1px solid ${n.read?'transparent':'rgba(232,49,26,0.15)'};" onclick="markRead('${n.id}')">
-                <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px;">${n.title}</div>
-                <div style="font-size:12px;color:var(--muted);">${n.body||''}</div>
-                <div style="font-size:10px;color:var(--muted);margin-top:4px;">${new Date(n.created_at).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit'})}</div>
-            </div>`).join('');
+        el.innerHTML = notifications.map(n => {
+            const data = (() => { try { return JSON.parse(n.data||'{}'); } catch(e){ return {}; } })();
+            const orderId = data.order_id || data.orderId || null;
+            const time = new Date(n.created_at).toLocaleTimeString('fr-CH',{
+                timeZone:'Europe/Zurich', hour:'2-digit', minute:'2-digit'
+            });
+            return `<div style="padding:10px 12px;border-radius:10px;margin-bottom:4px;background:${n.read?'transparent':'rgba(232,49,26,0.06)'};border:1px solid ${n.read?'transparent':'rgba(232,49,26,0.15)'};cursor:pointer;"
+                onclick="handleNotifClick('${n.id}','${orderId||''}')">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                    <div style="flex:1;">
+                        <div style="font-size:13px;font-weight:600;color:${n.read?'var(--muted2)':'var(--white)'};margin-bottom:2px;">${n.title}</div>
+                        <div style="font-size:12px;color:var(--muted);line-height:1.4;">${n.body||''}</div>
+                        <div style="font-size:10px;color:var(--muted);margin-top:4px;">🕐 ${time}</div>
+                    </div>
+                    ${!n.read?'<div style="width:8px;height:8px;background:var(--red);border-radius:50%;flex-shrink:0;margin-top:4px;"></div>':''}
+                </div>
+                ${orderId?`<div style="margin-top:6px;">
+                    <button onclick="event.stopPropagation();openMissionById('${orderId}')" 
+                        style="background:var(--red);color:white;border:none;border-radius:7px;padding:5px 12px;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-truck"></i> Voir la mission
+                    </button>
+                </div>`:''}
+            </div>`;
+        }).join('');
     }
 
     window.toggleNotifs = function() {
         const dd = document.getElementById('notifDropdown');
         if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+    };
+
+    window.handleNotifClick = async function(notifId, orderId) {
+        await window.SUPABASE_CLIENT.from('notifications').update({read:true}).eq('id',notifId);
+        if(driver) await loadNotifications(driver.id);
+        // Fermer dropdown
+        const dd = document.getElementById('notifDropdown');
+        if(dd) dd.style.display = 'none';
+    };
+
+    window.openMissionById = async function(orderId) {
+        // Fermer dropdown
+        const dd = document.getElementById('notifDropdown');
+        if(dd) dd.style.display = 'none';
+
+        // Chercher la mission dans la liste
+        let mission = missions?.find(m => m.id === orderId);
+        if(!mission) {
+            // Charger depuis DB si pas en mémoire
+            const { data } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
+            mission = data;
+        }
+        if(mission) {
+            showScreen('home');
+            setTimeout(() => openMission(mission), 200);
+        } else {
+            toast('error', 'Mission introuvable');
+        }
     };
 
     window.markRead = async function(id) {
@@ -1719,6 +1765,15 @@
             dd.style.display = 'none';
         }
     });
+
+    /* ── AUTO-REFRESH ── */
+    // Actualiser les missions toutes les 30 secondes
+    setInterval(async () => {
+        if(driver) {
+            await loadMissions();
+            await loadNotifications(driver.id);
+        }
+    }, 30000);
 
     /* ── INIT ── */
     checkSession();
