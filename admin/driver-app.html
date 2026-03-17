@@ -1459,25 +1459,63 @@
 
     /* ── SIGNATURE ── */
     function initSig() {
-        const canvas=document.getElementById('sigCanvas');
-        const rect=canvas.getBoundingClientRect();
-        canvas.width=rect.width*window.devicePixelRatio;
-        canvas.height=rect.height*window.devicePixelRatio;
-        sigCtx=canvas.getContext('2d');
-        sigCtx.scale(window.devicePixelRatio,window.devicePixelRatio);
-        sigCtx.strokeStyle='#ffffff'; sigCtx.lineWidth=2.5; sigCtx.lineCap='round'; sigCtx.lineJoin='round';
-        const gp = e => { const r=canvas.getBoundingClientRect(), t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top}; };
-        canvas.onmousedown  = e => { drawing=true; const p=gp(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); };
-        canvas.onmousemove  = e => { if(!drawing) return; const p=gp(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); hasSig=true; canvas.classList.add('signed'); window._sigB64=canvas.toDataURL('image/png'); };
-        canvas.onmouseup    = () => drawing=false;
-        canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing=true; const p=gp(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); },{passive:false});
-        canvas.addEventListener('touchmove',  e => { e.preventDefault(); if(!drawing) return; const p=gp(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); hasSig=true; canvas.classList.add('signed'); window._sigB64=canvas.toDataURL('image/png'); },{passive:false});
-        canvas.addEventListener('touchend', ()=>drawing=false);
+        const canvas = document.getElementById('sigCanvas');
+        if(!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        // Taille physique = taille CSS (pas de devicePixelRatio — plus simple et fiable)
+        canvas.width  = rect.width  || 300;
+        canvas.height = rect.height || 150;
+        sigCtx = canvas.getContext('2d');
+        sigCtx.strokeStyle = '#ffffff';
+        sigCtx.lineWidth   = 2.5;
+        sigCtx.lineCap     = 'round';
+        sigCtx.lineJoin    = 'round';
+        sigCtx.fillStyle   = '#18181f'; // fond sombre
+        sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        function getPos(e) {
+            const r = canvas.getBoundingClientRect();
+            const src = e.touches ? e.touches[0] : e;
+            return { x: src.clientX - r.left, y: src.clientY - r.top };
+        }
+
+        canvas.onmousedown = e => {
+            drawing = true;
+            const p = getPos(e);
+            sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
+        };
+        canvas.onmousemove = e => {
+            if(!drawing) return;
+            const p = getPos(e);
+            sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
+            hasSig = true;
+            canvas.classList.add('signed');
+        };
+        canvas.onmouseup = () => { drawing = false; };
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault(); drawing = true;
+            const p = getPos(e);
+            sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
+        }, {passive: false});
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if(!drawing) return;
+            const p = getPos(e);
+            sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
+            hasSig = true;
+            canvas.classList.add('signed');
+        }, {passive: false});
+        canvas.addEventListener('touchend', () => { drawing = false; }, {passive: false});
     }
+
     window.clearSig = function() {
-        const c=document.getElementById('sigCanvas');
-        if(sigCtx) sigCtx.clearRect(0,0,c.width,c.height);
-        c.classList.remove('signed'); hasSig=false;
+        const c = document.getElementById('sigCanvas');
+        if(!c || !sigCtx) return;
+        sigCtx.fillStyle = '#18181f';
+        sigCtx.fillRect(0, 0, c.width, c.height);
+        c.classList.remove('signed');
+        hasSig = false;
     };
 
     window.handlePhoto = function(input) {
@@ -1531,20 +1569,11 @@
             const note = document.getElementById('deliveryNote').value.trim();
 
             // Récupérer signature
-            // Signature — lire le canvas directement
+            // Signature — lire directement le canvas
             let signatureData = null;
-            const sigCanvas = document.getElementById('sigCanvas');
-            if(sigCanvas && sigCanvas.width > 0) {
-                const sigCtxCheck = sigCanvas.getContext('2d');
-                const pd = sigCtxCheck.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
-                // Chercher pixels dessinés (non-blanc, non-transparent)
-                let drawn = false;
-                for(let i=0;i<pd.length;i+=4){
-                    if(pd[i+3]>10){ drawn=true; break; } // pixel non-transparent
-                }
-                if(drawn || hasSig || window._sigB64) {
-                    signatureData = drawn ? sigCanvas.toDataURL('image/png') : window._sigB64;
-                }
+            if(hasSig) {
+                const sigC = document.getElementById('sigCanvas');
+                if(sigC) signatureData = sigC.toDataURL('image/jpeg', 0.8);
             }
 
             // Photo — stockée dans window._photoB64 par handlePhoto
