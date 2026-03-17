@@ -1112,37 +1112,58 @@ body{font-family:Arial,sans-serif;}
         loadOrders();
     };
 
-    /* ── REALTIME ── */
+    /* ── REALTIME + POLLING ── */
+    let lastOrderStates = {};
+
     function setupRealtime() {
         if(!client) return;
-        db.channel('client_orders_'+client.id)
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'transport_orders_simple'
-            }, (payload) => {
-                // Recharger seulement si c'est une commande de ce client
-                const rec = payload.new || payload.old;
-                if(rec && rec.entreprise_id && rec.entreprise_id !== client.entreprise_id) return;
 
-                // Recharger l'onglet actif
-                const activePane = document.querySelector('.ptab.active')?.dataset?.pane;
-                if(activePane === 'orders')  loadOrders();
-                if(activePane === 'history') loadHistory();
-                // Toujours recharger les deux pour le badge
-                loadOrders();
+        // 1. Supabase Realtime
+        try {
+            db.channel('portal_rt_' + Date.now())
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'transport_orders_simple'
+                }, () => {
+                    refreshOrders();
+                })
+                .subscribe();
+        } catch(e) { console.warn('Realtime:', e); }
 
-                // Notification visuelle
-                const st = rec?.status;
-                const adminSt = rec?.admin_status;
-                if(adminSt === 'accepted')   toast('success', '✅ Votre expédition a été acceptée !');
-                if(adminSt === 'refused')    toast('error',   '❌ Expédition refusée — voir détails');
-                if(st === 'in_transit')      toast('info',    '🚚 Votre colis est en route !');
-                if(st === 'delivered')       toast('success', '🎉 Votre colis a été livré !');
-            })
-            .subscribe((status) => {
-                console.log('Realtime status:', status);
-            });
+        // 2. Polling toutes les 15s en fallback
+        setInterval(refreshOrders, 15000);
+    }
+
+    async function refreshOrders() {
+        if(!client) return;
+        const { data } = await db.from('transport_orders_simple')
+            .select('id,status,admin_status,order_number')
+            .eq('entreprise_id', client.entreprise_id||'__none')
+            .order('created_at', {ascending:false}).limit(20);
+
+        let changed = false;
+        (data||[]).forEach(o => {
+            const prev = lastOrderStates[o.id];
+            if(prev && prev !== o.status+'|'+o.admin_status) {
+                changed = true;
+                if(o.admin_status === 'accepted' && prev.includes('pending_validation'))
+                    toast('success', `✅ ${o.order_number} acceptée !`);
+                if(o.admin_status === 'refused')
+                    toast('error', `❌ ${o.order_number} refusée`);
+                if(o.status === 'in_transit')
+                    toast('info', `🚚 ${o.order_number} en route !`);
+                if(o.status === 'delivered')
+                    toast('success', `🎉 ${o.order_number} livré !`);
+            }
+            lastOrderStates[o.id] = o.status+'|'+o.admin_status;
+        });
+
+        if(changed || Object.keys(lastOrderStates).length === 0) {
+            const activePane = document.querySelector('.ptab.active')?.dataset?.pane;
+            if(activePane === 'orders' || !activePane) loadOrders();
+            if(activePane === 'history') loadHistory();
+        }
     }
 
     /* ── INIT ── */
