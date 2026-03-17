@@ -1566,9 +1566,16 @@
             };
 
             try {
-                await db.from('deliveries').insert([deliveryRecord]);
+                // Upsert pour éviter les doublons (trigger auto peut déjà avoir créé la ligne)
+                const { error: e2 } = await db.from('deliveries')
+                    .upsert([deliveryRecord], { onConflict: 'order_id' });
+                if(e2) {
+                    // Si upsert échoue essayer insert simple
+                    const { error: e3 } = await db.from('deliveries').insert([deliveryRecord]);
+                    if(e3) toast('error', 'Photo non sauvegardée: ' + e3.message);
+                }
             } catch(e2) {
-                console.warn('Table deliveries:', e2.message);
+                toast('error', 'Erreur livraison: ' + e2.message);
             }
 
             hideLoad();
