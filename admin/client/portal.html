@@ -537,6 +537,7 @@
         showScreen('portal');
         initColis();
         loadOrders();
+        setupRealtime();
     }
 
     async function loadDestinatairesSaved() {
@@ -1112,10 +1113,37 @@ body{font-family:Arial,sans-serif;}
     };
 
     /* ── REALTIME ── */
-    db.channel('client_orders')
-        .on('postgres_changes',{event:'UPDATE',schema:'public',table:'transport_orders_simple'},()=>{
-            loadOrders(); loadHistory();
-        }).subscribe();
+    function setupRealtime() {
+        if(!client) return;
+        db.channel('client_orders_'+client.id)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'transport_orders_simple'
+            }, (payload) => {
+                // Recharger seulement si c'est une commande de ce client
+                const rec = payload.new || payload.old;
+                if(rec && rec.entreprise_id && rec.entreprise_id !== client.entreprise_id) return;
+
+                // Recharger l'onglet actif
+                const activePane = document.querySelector('.ptab.active')?.dataset?.pane;
+                if(activePane === 'orders')  loadOrders();
+                if(activePane === 'history') loadHistory();
+                // Toujours recharger les deux pour le badge
+                loadOrders();
+
+                // Notification visuelle
+                const st = rec?.status;
+                const adminSt = rec?.admin_status;
+                if(adminSt === 'accepted')   toast('success', '✅ Votre expédition a été acceptée !');
+                if(adminSt === 'refused')    toast('error',   '❌ Expédition refusée — voir détails');
+                if(st === 'in_transit')      toast('info',    '🚚 Votre colis est en route !');
+                if(st === 'delivered')       toast('success', '🎉 Votre colis a été livré !');
+            })
+            .subscribe((status) => {
+                console.log('Realtime status:', status);
+            });
+    }
 
     /* ── INIT ── */
     checkSession();
