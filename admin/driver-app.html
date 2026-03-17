@@ -886,41 +886,59 @@
     // Lire un QR depuis une photo prise avec l'appareil photo
     window.scanFromPhoto = function(input) {
         if(!input.files?.[0]) return;
-        const file = input.files[0];
-        document.getElementById('scanStatus').textContent = 'Analyse de la photo…';
+        const el = document.getElementById('scanStatus');
+        el.textContent = '🔍 Analyse en cours…';
+        el.style.color = 'var(--yellow)';
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
-                const canvas = document.getElementById('qrCanvas');
-                canvas.width  = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
+                // Agrandir pour meilleure détection
+                const MAX = 1200;
+                let w = img.width, h = img.height;
+                if(w < MAX && h < MAX) { w = Math.round(w*1.5); h = Math.round(h*1.5); }
+                const cv = document.getElementById('qrCanvas');
+                cv.width = w; cv.height = h;
+                cv.getContext('2d').drawImage(img, 0, 0, w, h);
 
                 if('BarcodeDetector' in window) {
-                    const bd = new BarcodeDetector({formats:['qr_code']});
-                    bd.detect(canvas).then(codes => {
-                        if(codes.length > 0) handleQRResult(codes[0].rawValue);
-                        else document.getElementById('scanStatus').textContent = '❌ QR non reconnu — essayez une photo plus nette';
-                    }).catch(()=>{
-                        // Fallback jsQR
-                        tryJsQR(ctx, canvas);
-                    });
+                    new BarcodeDetector({formats:['qr_code']}).detect(cv).then(codes => {
+                        if(codes.length > 0) {
+                            el.style.color = 'var(--green)';
+                            el.textContent = '✅ QR détecté !';
+                            handleQRResult(codes[0].rawValue);
+                        } else {
+                            tryJsQR(cv, el);
+                        }
+                    }).catch(() => tryJsQR(cv, el));
                 } else if(window.jsQR) {
-                    tryJsQR(ctx, canvas);
+                    tryJsQR(cv, el);
+                } else {
+                    el.textContent = '❌ jsQR non chargé — saisie manuelle';
+                    el.style.color = 'var(--red)';
                 }
             };
             img.src = e.target.result;
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(input.files[0]);
+        input.value = ''; // reset pour permettre re-scan
     };
 
-    function tryJsQR(ctx, canvas) {
+        function tryJsQR(canvas, el) {
+        if(!window.jsQR) { el.textContent = '❌ Bibliothèque QR non disponible'; return; }
+        const ctx = canvas.getContext('2d');
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'attemptBoth'});
-        if(code?.data) handleQRResult(code.data);
-        else document.getElementById('scanStatus').textContent = '❌ QR non reconnu — essayez une photo plus nette';
+        if(code?.data) {
+            el.style.color = 'var(--green)';
+            el.textContent = '✅ QR détecté !';
+            handleQRResult(code.data);
+        } else {
+            el.style.color = 'var(--red)';
+            el.textContent = '❌ QR non reconnu — rapprochez-vous ou réessayez';
+            el.style.color = 'var(--red)';
+            document.getElementById('scanPhotoInput').value = '';
+        }
     }
 
     async function searchByNum(num) {
@@ -1463,46 +1481,49 @@
     };
 
     window.handlePhoto = function(input) {
-        const f = input.files[0]; if(!f) return;
+        const f = input.files[0];
+        if(!f) return;
         const reader = new FileReader();
         reader.onload = function(e) {
-            // Compresser via canvas pour rester sous 500kb
+            const raw = e.target.result;
+            // Compresser via canvas
             const img = new Image();
             img.onload = function() {
-                const MAX = 600;
-                let w = img.width, h = img.height;
-                if(w > MAX || h > MAX) {
-                    if(w > h) { h = Math.round(h*MAX/w); w = MAX; }
-                    else      { w = Math.round(w*MAX/h); h = MAX; }
+                try {
+                    const MAX = 600;
+                    let w = img.width, h = img.height;
+                    if(w > MAX) { h = Math.round(h*MAX/w); w = MAX; }
+                    if(h > MAX) { w = Math.round(w*MAX/h); h = MAX; }
+                    const cv = document.createElement('canvas');
+                    cv.width = w; cv.height = h;
+                    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+                    const b64 = cv.toDataURL('image/jpeg', 0.65);
+                    window._photoB64 = b64;
+                    const preview = document.getElementById('photoPreview');
+                    preview.src = b64;
+                    preview.style.display = 'block';
+                    document.getElementById('photoBtn').style.display = 'none';
+                    toast('success', '📷 Photo OK ' + Math.round(b64.length/1024) + 'kb');
+                } catch(err) {
+                    // Fallback sans compression
+                    window._photoB64 = raw;
+                    const preview = document.getElementById('photoPreview');
+                    preview.src = raw;
+                    preview.style.display = 'block';
+                    document.getElementById('photoBtn').style.display = 'none';
+                    toast('success', '📷 Photo ajoutée');
                 }
-                const cv = document.createElement('canvas');
-                cv.width = w; cv.height = h;
-                cv.getContext('2d').drawImage(img, 0, 0, w, h);
-                const b64 = cv.toDataURL('image/jpeg', 0.7);
-                const preview = document.getElementById('photoPreview');
-                preview.src = b64;
-                preview._base64 = b64;
-                preview.style.display = 'block';
-                document.getElementById('photoBtn').style.display = 'none';
-                toast('success', `📷 Photo OK (${Math.round(b64.length/1024)}kb)`);
             };
             img.onerror = function() {
-                // Fallback sans compression si l'image ne charge pas
-                const b64 = e.target.result;
-                const preview = document.getElementById('photoPreview');
-                preview.src = b64;
-                preview._base64 = b64;
-                preview.style.display = 'block';
-                document.getElementById('photoBtn').style.display = 'none';
-                toast('success', '📷 Photo ajoutée');
+                window._photoB64 = raw;
+                toast('info', '📷 Photo chargée');
             };
-            img.src = e.target.result;
+            img.src = raw;
         };
-        reader.onerror = function() { toast('error', 'Erreur lecture photo'); };
         reader.readAsDataURL(f);
     };
 
-    window.confirmDelivery = async function() {
+        window.confirmDelivery = async function() {
         if(!curMission) return;
         showLoad();
         try {
@@ -1516,29 +1537,8 @@
                 signatureData = sigCanvas.toDataURL('image/png');
             }
 
-            // Récupérer photo base64 (convertie dans handlePhoto)
-            let photoData = null;
-            const photoPreview = document.getElementById('photoPreview');
-            if(photoPreview && photoPreview.style.display !== 'none') {
-                photoData = photoPreview._base64 || null;
-                if(!photoData && photoPreview.src?.startsWith('data:')) photoData = photoPreview.src;
-                // Vérifier taille — Supabase limite à ~1MB par champ text
-                if(photoData && photoData.length > 900000) {
-                    toast('info', 'Photo trop grande, compression supplémentaire…');
-                    // Re-compresser davantage
-                    const img2 = new Image();
-                    await new Promise(res => {
-                        img2.onload = function() {
-                            const cv = document.createElement('canvas');
-                            cv.width = 400; cv.height = Math.round(400 * img2.height / img2.width);
-                            cv.getContext('2d').drawImage(img2, 0, 0, cv.width, cv.height);
-                            photoData = cv.toDataURL('image/jpeg', 0.5);
-                            res();
-                        };
-                        img2.src = photoData;
-                    });
-                }
-            }
+            // Photo — stockée dans window._photoB64 par handlePhoto
+            const photoData = window._photoB64 || null;
 
             // 1. Mettre à jour le statut du transport
             const { error } = await db.from('transport_orders_simple').update({
@@ -1579,6 +1579,7 @@
             }
 
             hideLoad();
+            window._photoB64 = null; // reset photo
             document.getElementById('successMsg').textContent = `Transport ${curMission.order_number||''} livré avec succès !`;
             showScreen('success');
             await loadMissions();
