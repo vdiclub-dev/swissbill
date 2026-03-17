@@ -770,7 +770,7 @@
 
         // Date livraison — depuis deliveries OU depuis le transport
         const deliveredAt = delivery?.delivered_at || o.delivered_at;
-        const deliveredStr = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH') : null;
+        const deliveredStr = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH',{timeZone:'Europe/Zurich'}) : null;
 
         const deliveryProof = o.status === 'delivered' ? `
             <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
@@ -804,7 +804,7 @@
                 <div><b>👤 Destinataire :</b> ${o.destinataire_nom||'—'}${o.destinataire_tel?' · '+o.destinataire_tel:''}</div>
                 <div><b>📦 Colis :</b> ${colis.length} type(s) · ${nbLabels} étiquette(s)</div>
                 <div><b>⚡ Service :</b> ${o.service_type||'normal'} ${o.night_delivery?'🌙 Nuit':''}</div>
-                <div><b>📅 Créé :</b> ${new Date(o.created_at).toLocaleString('fr-CH')}</div>
+                <div><b>📅 Créé :</b> ${new Date(o.created_at).toLocaleString('fr-CH',{timeZone:'Europe/Zurich'})}</div>
             </div>
             ${deliveryProof}
             ${o.status !== 'delivered' ? `<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12px;color:var(--green);">
@@ -828,7 +828,7 @@
         const delivery = o.delivery_address||'—';
         const dest     = o.destinataire_nom||'—';
         const tel      = o.destinataire_tel||'';
-        const dateStr  = new Date(o.created_at).toLocaleDateString('fr-CH');
+        const dateStr  = new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'});
         const svc      = (o.service_type||'normal').toUpperCase()+(o.night_delivery?' NUIT':'');
 
         // Expand qty into individual labels
@@ -942,9 +942,9 @@ body{font-family:Arial,sans-serif;}
         hideLoad();
         if(!o) return;
 
-        const dateStr = new Date(o.created_at).toLocaleDateString('fr-CH');
+        const dateStr = new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'});
         const deliveredAt = dlv?.delivered_at || o.delivered_at;
-        const dlvDate = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH') : '—';
+        const dlvDate = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH',{timeZone:'Europe/Zurich'}) : '—';
         const pickup  = (o.pickup_address||'—').replace(/\|/g,'<br>').replace(/\n/g,'<br>');
 
         const proofHTML = dlv ? `
@@ -1072,35 +1072,71 @@ body{font-family:Arial,sans-serif;}
         </div>`;
     }
 
+    // Formatter heure en timezone Zurich (UTC+1 hiver, UTC+2 été)
+    function fmtHeure(isoStr) {
+        if(!isoStr) return null;
+        return new Date(isoStr).toLocaleTimeString('fr-CH', {
+            timeZone: 'Europe/Zurich',
+            hour: '2-digit', minute: '2-digit'
+        });
+    }
+    function fmtDateTime(isoStr) {
+        if(!isoStr) return null;
+        return new Date(isoStr).toLocaleString('fr-CH', {
+            timeZone: 'Europe/Zurich',
+            day:'2-digit', month:'2-digit',
+            hour:'2-digit', minute:'2-digit'
+        });
+    }
+
     function renderTracking(o){
         const steps=[
-            {key:'pending_validation', label:'Demande reçue',        icon:'fa-inbox'},
-            {key:'accepted',           label:'Validée par Léman',     icon:'fa-check-circle'},
-            {key:'planned',            label:'Chauffeur assigné',     icon:'fa-user-check'},
-            {key:'in_transit',         label:'En cours de livraison', icon:'fa-truck'},
-            {key:'delivered',          label:'Livré',                 icon:'fa-flag-checkered'}
+            {key:'pending_validation', label:'Demande reçue',        ts: o.created_at},
+            {key:'accepted',           label:'Validée par Léman',     ts: o.validated_at},
+            {key:'planned',            label:'Chauffeur assigné',     ts: o.assigned_at},
+            {key:'in_transit',         label:'En cours de livraison', ts: o.picked_up_at},
+            {key:'delivered',          label:'Livré',                 ts: o.delivered_at}
         ];
         const current = o.admin_status==='refused' ? 'refused'
-            : o.status==='in_transit'  ? 'in_transit'
             : o.status==='delivered'   ? 'delivered'
+            : o.status==='in_transit'  ? 'in_transit'
             : o.status==='planned'     ? 'planned'
             : o.admin_status==='accepted' ? 'accepted'
             : 'pending_validation';
 
         const currentIdx = steps.findIndex(s=>s.key===current);
-        return `<div class="timeline">${steps.map((s,i)=>{
-            const done   = i < currentIdx || current==='delivered';
-            const active = i === currentIdx && current !== 'delivered';
-            return `<div class="tl-item">
-                <div class="tl-dot ${done?'done':active?'active':'pending'}"></div>
-                <div>
-                    <div class="tl-label" style="color:${done?'var(--green)':active?'var(--white)':'var(--muted)'}">
-                        ${s.label}
-                        ${active?'<span style="font-size:10px;background:rgba(59,130,246,0.15);color:var(--blue);padding:1px 7px;border-radius:100px;margin-left:6px;vertical-align:middle;">En cours</span>':''}
+
+        // Estimation livraison si en transit
+        let estimation = null;
+        if(current==='in_transit' && o.picked_up_at) {
+            const svc = o.service_type||'normal';
+            const delayH = {eco:24, normal:12, express:6, urgent:2}[svc]||12;
+            const est = new Date(new Date(o.picked_up_at).getTime() + delayH*3600000);
+            estimation = `Livraison estimée avant ${fmtHeure(est.toISOString())}`;
+        }
+
+        return `<div class="timeline">
+            ${steps.map((s,i)=>{
+                const done   = i < currentIdx || current==='delivered';
+                const active = i === currentIdx && current !== 'delivered';
+                const heure  = s.ts ? fmtHeure(s.ts) : null;
+                return `<div class="tl-item">
+                    <div class="tl-dot ${done?'done':active?'active':'pending'}"></div>
+                    <div style="flex:1;">
+                        <div class="tl-label" style="color:${done?'var(--green)':active?'var(--white)':'var(--muted)'}">
+                            ${s.label}
+                            ${active?'<span style="font-size:10px;background:rgba(59,130,246,0.15);color:var(--blue);padding:1px 7px;border-radius:100px;margin-left:6px;">En cours</span>':''}
+                        </div>
+                        ${heure&&(done||active) ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">🕐 ${heure}</div>` : ''}
+                        ${active&&estimation ? `<div style="font-size:11px;color:var(--yellow);margin-top:2px;">⏱ ${estimation}</div>` : ''}
                     </div>
-                </div>
-            </div>`;
-        }).join('')}</div>`;
+                </div>`;
+            }).join('')}
+            ${current==='refused'?`<div class="tl-item">
+                <div class="tl-dot" style="background:var(--red);"></div>
+                <div><div class="tl-label" style="color:var(--red)">Refusée${o.admin_note?' — '+o.admin_note:''}</div></div>
+            </div>`:''}
+        </div>`;
     }
 
     /* ── SUCCESS ACTIONS ── */
