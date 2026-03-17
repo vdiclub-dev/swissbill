@@ -1468,10 +1468,10 @@
         sigCtx.strokeStyle='#ffffff'; sigCtx.lineWidth=2.5; sigCtx.lineCap='round'; sigCtx.lineJoin='round';
         const gp = e => { const r=canvas.getBoundingClientRect(), t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top}; };
         canvas.onmousedown  = e => { drawing=true; const p=gp(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); };
-        canvas.onmousemove  = e => { if(!drawing) return; const p=gp(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); hasSig=true; canvas.classList.add('signed'); };
+        canvas.onmousemove  = e => { if(!drawing) return; const p=gp(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); hasSig=true; canvas.classList.add('signed'); window._sigB64=canvas.toDataURL('image/png'); };
         canvas.onmouseup    = () => drawing=false;
         canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing=true; const p=gp(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); },{passive:false});
-        canvas.addEventListener('touchmove',  e => { e.preventDefault(); if(!drawing) return; const p=gp(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); hasSig=true; canvas.classList.add('signed'); },{passive:false});
+        canvas.addEventListener('touchmove',  e => { e.preventDefault(); if(!drawing) return; const p=gp(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); hasSig=true; canvas.classList.add('signed'); window._sigB64=canvas.toDataURL('image/png'); },{passive:false});
         canvas.addEventListener('touchend', ()=>drawing=false);
     }
     window.clearSig = function() {
@@ -1531,11 +1531,21 @@
             const note = document.getElementById('deliveryNote').value.trim();
 
             // Récupérer signature
+            // Signature — vérifier directement le canvas
             let signatureData = null;
             const sigCanvas = document.getElementById('sigCanvas');
-            if(hasSig && sigCanvas) {
-                signatureData = sigCanvas.toDataURL('image/png');
+            if(sigCanvas) {
+                // Vérifier si le canvas contient quelque chose
+                const ctx = sigCanvas.getContext('2d');
+                const pixels = ctx.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
+                const hasContent = pixels.some((v,i) => i%4!==3 && v>0); // cherche pixels non-transparents
+                if(hasContent || hasSig) {
+                    signatureData = sigCanvas.toDataURL('image/png');
+                    window._sigB64 = signatureData;
+                }
             }
+            // Fallback sur la variable globale
+            if(!signatureData && window._sigB64) signatureData = window._sigB64;
 
             // Photo — stockée dans window._photoB64 par handlePhoto
             const photoData = window._photoB64 || null;
@@ -1580,6 +1590,7 @@
 
             hideLoad();
             window._photoB64 = null; // reset photo
+            window._sigB64   = null; // reset signature
             document.getElementById('successMsg').textContent = `Transport ${curMission.order_number||''} livré avec succès !`;
             showScreen('success');
             await loadMissions();
