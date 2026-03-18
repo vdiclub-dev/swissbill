@@ -3,226 +3,89 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tableau de bord – Admin Swissbill</title>
+  <title>Admin – Tableau de bord Swissbill</title>
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f8f9fa;
-      margin: 0;
-      padding: 0;
-    }
-    header {
-      background: #343a40;
-      color: #fff;
-      padding: 1rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    h1 {
-      font-size: 1.4rem;
-      margin: 0;
-    }
-    button {
-      background: #f0f0f0;
-      color: #343a40;
-      border: none;
-      border-radius: 5px;
-      padding: .5rem 1rem;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    button:hover {
-      background: #ddd;
-    }
-    main {
-      padding: 2rem;
-      max-width: 1100px;
-      margin: auto;
-    }
-    section {
-      margin-bottom: 2rem;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: .8rem;
-      background: white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-      border-radius: 5px;
-      overflow: hidden;
-    }
-    th, td {
-      text-align: left;
-      padding: 0.75rem 1rem;
-      border-bottom: 1px solid #eee;
-      font-size: 0.95rem;
-    }
-    th {
-      background: #e9ecef;
-      color: #333;
-    }
-    tr:hover {
-      background: #f8f9fa;
-    }
-    .loading {
-      text-align: center;
-      padding: 2rem;
-      color: #777;
-    }
-    select {
-      padding: .3rem;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
+    body { font-family: Arial, sans-serif; background: #f4f6f8; margin: 0; padding: 0; }
+    header { background: #111; color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0; font-size: 1.2rem; }
+    main { padding: 2rem; max-width: 900px; margin: auto; }
+    button { background: #d32f2f; color: white; border: none; border-radius: 4px; padding: 8px 14px; font-weight: bold; cursor: pointer; }
+    button:hover { background: #b71c1c; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 10px rgba(0,0,0,0.05); }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+    th { background: #fafafa; font-weight: 600; color: #333; }
   </style>
 </head>
 
 <body>
   <header>
-    <h1>Tableau de bord – Admin Swissbill</h1>
-    <button id="logout">Se déconnecter</button>
+    <h1>🧭 Tableau admin – Swissbill</h1>
+    <button id="logout">Déconnexion</button>
   </header>
 
   <main>
-    <!-- SECTION COMMANDES -->
-    <section id="commandes-section">
-      <h2>Commandes en cours</h2>
-      <div id="loading-cmd" class="loading">Chargement des commandes...</div>
-      <table id="table-commandes" style="display:none;">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Date</th>
-            <th>Client</th>
-            <th>Destination</th>
-            <th>Statut</th>
-            <th>Chauffeur assigné</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-    <!-- SECTION CHAUFFEURS -->
-    <section id="chauffeurs-section">
-      <h2>Chauffeurs disponibles</h2>
-      <div id="loading-ch" class="loading">Chargement des chauffeurs...</div>
-      <table id="table-chauffeurs" style="display:none;">
-        <thead>
-          <tr>
-            <th>Nom</th>
-            <th>Email</th>
-            <th>Statut</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+    <h2>Commandes récentes</h2>
+    <div id="loading">Chargement...</div>
+    <table id="ordersTable" style="display:none;">
+      <thead>
+        <tr><th>ID</th><th>Client</th><th>Destination</th><th>Statut</th><th>Chauffeur</th><th>Modifier</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </main>
 
   <script type="module">
-    import { checkSession, logout } from "/js/core/auth.js";
-    import { DB } from "/js/core/db.js";
     import { supabase } from "/js/core/supabase-client.js";
 
-    // Vérifie que l'admin est connecté
-    await checkSession("admin");
-
-    // Sélecteurs DOM
+    const db = supabase;
     const logoutBtn = document.getElementById("logout");
-    const tableCmd = document.getElementById("table-commandes");
-    const tbodyCmd = tableCmd.querySelector("tbody");
-    const loadingCmd = document.getElementById("loading-cmd");
+    const table = document.getElementById("ordersTable");
+    const tbody = table.querySelector("tbody");
+    const loading = document.getElementById("loading");
 
-    const tableCh = document.getElementById("table-chauffeurs");
-    const tbodyCh = tableCh.querySelector("tbody");
-    const loadingCh = document.getElementById("loading-ch");
+    logoutBtn.onclick = async () => { await db.auth.signOut(); location.href = "/login/index.html"; };
 
-    // Déconnexion
-    logoutBtn.addEventListener("click", logout);
+    // Vérifie la session
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) { location.href = "/login/index.html"; }
 
-    // Charge les commandes depuis Supabase
-    async function loadCommandes() {
-      loadingCmd.textContent = "Chargement des commandes...";
-      const commandes = await DB.getCommandes();
-      if (!commandes || commandes.length === 0) {
-        loadingCmd.textContent = "Aucune commande trouvée.";
-        return;
-      }
+    const { data: profile } = await db.from("utilisateurs").select("*").eq("id", session.user.id).single();
+    if (!["admin", "super_admin"].includes(profile.role)) {
+      await db.auth.signOut();
+      alert("Accès réservé aux administrateurs");
+      location.href = "/login/index.html";
+    }
 
-      tbodyCmd.innerHTML = "";
-      for (const c of commandes) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+    // Chargement des commandes
+    async function loadOrders() {
+      const { data, error } = await db.from("commandes").select("*").order("created_at", { ascending: false }).limit(15);
+      if (error) { loading.textContent = "Erreur : " + error.message; return; }
+      if (!data.length) { loading.textContent = "Aucune commande."; return; }
+
+      table.style.display = "table";
+      loading.style.display = "none";
+      tbody.innerHTML = data.map(c => `
+        <tr>
           <td>${c.id}</td>
-          <td>${new Date(c.created_at).toLocaleDateString()}</td>
-          <td>${c.client || "—"}</td>
-          <td>${c.destination || "—"}</td>
-          <td>${c.statut || "En attente"}</td>
-          <td>${c.chauffeur || "Aucun"}</td>
-          <td>
-            <button class="assign" data-id="${c.id}">Assigner</button>
-          </td>
-        `;
-        tbodyCmd.appendChild(tr);
-      }
-
-      loadingCmd.style.display = "none";
-      tableCmd.style.display = "table";
+          <td>${c.client || "-"}</td>
+          <td>${c.destination || "-"}</td>
+          <td>${c.statut || "—"}</td>
+          <td>${c.chauffeur || "—"}</td>
+          <td><button onclick='editOrder("${c.id}")'>✎</button></td>
+        </tr>
+      `).join("");
     }
 
-    // Charge la liste des chauffeurs
-    async function loadChauffeurs() {
-      loadingCh.textContent = "Chargement des chauffeurs...";
-      const chauffeurs = await DB.getChauffeurs();
-      if (!chauffeurs || chauffeurs.length === 0) {
-        loadingCh.textContent = "Aucun chauffeur trouvé.";
-        return;
-      }
+    window.editOrder = async function(id) {
+      const chauffeur = prompt("Nom du chauffeur à assigner :");
+      if (!chauffeur) return;
+      const { error } = await db.from("commandes").update({ chauffeur }).eq("id", id);
+      if (error) alert("Erreur : " + error.message);
+      else loadOrders();
+    };
 
-      tbodyCh.innerHTML = "";
-      for (const ch of chauffeurs) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${ch.nom || "—"}</td>
-          <td>${ch.email || "—"}</td>
-          <td>${ch.statut || "disponible"}</td>
-        `;
-        tbodyCh.appendChild(tr);
-      }
-
-      loadingCh.style.display = "none";
-      tableCh.style.display = "table";
-    }
-
-    // Événement pour assigner un chauffeur à une commande
-    document.body.addEventListener("click", async (e) => {
-      if (e.target.classList.contains("assign")) {
-        const id = e.target.dataset.id;
-        const chauffeurNom = prompt("Nom du chauffeur à assigner :");
-        if (!chauffeurNom) return;
-
-        const { error } = await supabase
-          .from("commandes")
-          .update({ chauffeur: chauffeurNom, statut: "En préparation" })
-          .eq("id", id);
-
-        if (error) {
-          alert("Erreur : " + error.message);
-          console.error(error);
-        } else {
-          alert("✅ Chauffeur assigné !");
-          await loadCommandes();
-        }
-      }
-    });
-
-    // Chargement initial
-    loadCommandes();
-    loadChauffeurs();
+    loadOrders();
   </script>
 </body>
 </html>
