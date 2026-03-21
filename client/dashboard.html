@@ -303,19 +303,19 @@
         <h2 style="margin:30px 0 20px;">Actions rapides</h2>
         
         <div class="menu-grid">
-            <a href="nouveau-transport.html" class="menu-card">
+            <a href="/admin/client/portal.html" class="menu-card">
                 <div class="menu-icon"><i class="fas fa-plus-circle"></i></div>
                 <h3>Nouveau transport</h3>
                 <p>Créez une nouvelle demande de transport</p>
             </a>
             
-            <a href="mes-transports.html" class="menu-card">
+            <a href="/admin/client/portal.html#orders" class="menu-card">
                 <div class="menu-icon"><i class="fas fa-list"></i></div>
                 <h3>Mes transports</h3>
                 <p>Suivez tous vos transports en cours</p>
             </a>
             
-            <a href="profil.html" class="menu-card">
+            <a href="/admin/client/portal.html" class="menu-card">
                 <div class="menu-icon"><i class="fas fa-user"></i></div>
                 <h3>Mon profil</h3>
                 <p>Gérez vos informations personnelles</p>
@@ -325,7 +325,7 @@
         <div class="recent-orders">
             <div class="section-header">
                 <h2>Derniers transports</h2>
-                <a href="mes-transports.html" style="color:#e53935;">Voir tout</a>
+                <a href="/admin/client/portal.html" style="color:#e53935;">Voir tout →</a>
             </div>
             
             <div id="recentOrders">
@@ -338,81 +338,80 @@
     </div>
 
     <script>
-        const supabase = window.supabase.createClient(
-            window.SUPABASE_CONFIG.url,
-            window.SUPABASE_CONFIG.key
-        );
-        
+    (function() {
+        'use strict';
+        if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
+            window.location.href = '/login/index.html'; return;
+        }
+        const db = window.SUPABASE_CLIENT;
+
         async function checkAuth() {
-            const { data: { user } } = await supabase.auth.getUser();
-            
-            if (!user) {
-                window.location.href = '/login/';
-                return;
-            }
-            
-            // Vérifier le rôle
-            const { data: utilisateur } = await supabase
-                .from('utilisateurs')
-                .select('role, prenom, nom')
-                .eq('id', user.id)
-                .single();
-            
+            const { data: { session } } = await db.auth.getSession();
+            if (!session) { window.location.href = '/login/index.html'; return; }
+
+            const { data: utilisateur } = await db.from('utilisateurs')
+                .select('role, prenom, nom').eq('id', session.user.id).single();
+
             if (!utilisateur || utilisateur.role !== 'client') {
-                alert('Accès non autorisé - Espace client uniquement');
-                window.location.href = '/login/';
+                await db.auth.signOut();
+                window.location.href = '/login/index.html';
                 return;
             }
-            
-            document.getElementById('userEmail').textContent = user.email;
-            document.getElementById('userName').textContent = 
-                utilisateur.prenom || utilisateur.nom || user.email.split('@')[0];
-            
-            loadStats();
-            loadRecentOrders();
+
+            document.getElementById('userEmail').textContent = session.user.email;
+            document.getElementById('userName').textContent =
+                utilisateur.prenom || utilisateur.nom || session.user.email.split('@')[0];
+
+            loadStats(session.user.id);
+            loadRecentOrders(session.user.id);
         }
-        
-        async function loadStats() {
-            // Stats fictives pour l'exemple
-            document.getElementById('enCours').textContent = '3';
-            document.getElementById('livres').textContent = '12';
-            document.getElementById('attente').textContent = '2';
+
+        async function loadStats(userId) {
+            const thisMonth = new Date().toISOString().slice(0, 7);
+            const [r1, r2, r3] = await Promise.all([
+                db.from('transport_orders_simple').select('id',{count:'exact',head:true}).eq('entreprise_id', userId).in('status',['in_transit','planned','accepted']),
+                db.from('transport_orders_simple').select('id',{count:'exact',head:true}).eq('status','delivered').gte('created_at', thisMonth + '-01'),
+                db.from('transport_orders_simple').select('id',{count:'exact',head:true}).in('admin_status',['pending','pending_validation'])
+            ]);
+            document.getElementById('enCours').textContent = r1.count ?? 0;
+            document.getElementById('livres').textContent   = r2.count ?? 0;
+            document.getElementById('attente').textContent  = r3.count ?? 0;
         }
-        
-        async function loadRecentOrders() {
-            const orders = [
-                { id: 'TR-2025-001', date: '14/03/2025', status: 'en-cours', destination: 'Lausanne' },
-                { id: 'TR-2025-002', date: '13/03/2025', status: 'livre', destination: 'Genève' },
-                { id: 'TR-2025-003', date: '12/03/2025', status: 'attente', destination: 'Fribourg' }
-            ];
-            
-            let html = '';
-            orders.forEach(order => {
-                const statusClass = order.status === 'livre' ? 'status-delivered' : 
-                                   order.status === 'en-cours' ? 'status-transit' : 'status-pending';
-                const statusText = order.status === 'livre' ? 'Livré' :
-                                  order.status === 'en-cours' ? 'En cours' : 'En attente';
-                
-                html += `
-                    <div class="order-item">
-                        <div class="order-info">
-                            <h4>${order.id}</h4>
-                            <p>${order.destination} • ${order.date}</p>
-                        </div>
-                        <span class="order-status ${statusClass}">${statusText}</span>
+
+        async function loadRecentOrders(userId) {
+            const { data } = await db.from('transport_orders_simple')
+                .select('*').order('created_at',{ascending:false}).limit(5);
+
+            if (!data || !data.length) {
+                document.getElementById('recentOrders').innerHTML = '<div style="padding:30px;text-align:center;color:#94a3b8;">Aucun transport pour le moment.</div>';
+                return;
+            }
+
+            const statusClass = { in_transit:'status-transit', delivered:'status-delivered', planned:'status-transit', accepted:'status-transit' };
+            const statusText  = { pending:'En attente', pending_validation:'En validation', in_transit:'En transit', delivered:'Livré', planned:'Planifié', accepted:'Accepté', refused:'Refusé' };
+
+            document.getElementById('recentOrders').innerHTML = data.map(o => {
+                const status = o.admin_status || o.status || 'pending';
+                const cls  = statusClass[status] || 'status-pending';
+                const lbl  = statusText[status]  || status;
+                const date = new Date(o.created_at).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'2-digit'});
+                return `<div class="order-item">
+                    <div class="order-info">
+                        <h4>${o.order_number || o.id.slice(0,8)}</h4>
+                        <p>${(o.delivery_address||'—').split(',').slice(0,2).join(',').trim()} • ${date}</p>
                     </div>
-                `;
-            });
-            
-            document.getElementById('recentOrders').innerHTML = html;
+                    <span class="order-status ${cls}">${lbl}</span>
+                </div>`;
+            }).join('');
         }
-        
+
         window.logout = async function() {
-            await supabase.auth.signOut();
-            window.location.href = '/login/';
+            await db.auth.signOut();
+            window.location.href = '/login/index.html';
         };
-        
+
         checkAuth();
+    })();
     </script>
 </body>
 </html>

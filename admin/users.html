@@ -3,881 +3,570 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Léman-Courses — Transport express Suisse romande</title>
+    <title>Gestion Utilisateurs | Léman Dispatch</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
+    <script src="../config.js"></script>
     <style>
         :root {
-            --red:       #e8311a;
-            --red-dark:  #c0280f;
-            --red-glow:  rgba(232,49,26,0.22);
-            --night:     #0a0a0f;
-            --night2:    #111118;
-            --night3:    #18181f;
-            --surface:   #1e1e28;
-            --border:    rgba(255,255,255,0.07);
-            --border2:   rgba(255,255,255,0.12);
-            --white:     #ffffff;
-            --muted:     rgba(255,255,255,0.38);
-            --muted2:    rgba(255,255,255,0.6);
-            --green:     #22c55e;
-            --blue:      #3b82f6;
+            --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
+            --night:#0a0a0f; --night2:#111118; --night3:#18181f; --surface:#1e1e28;
+            --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+            --white:#ffffff; --muted:rgba(255,255,255,0.38); --muted2:rgba(255,255,255,0.6);
+            --green:#22c55e; --blue:#3b82f6; --yellow:#f59e0b; --orange:#f97316; --purple:#a855f7;
+            --sidebar:220px;
         }
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        html { scroll-behavior:smooth; }
-        body {
-            font-family: 'Outfit', sans-serif;
-            background: var(--night);
-            color: var(--white);
-            overflow-x: hidden;
-            cursor: none;
-        }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+        html,body{height:100%;}
+        body{font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);display:flex;}
 
-        /* ── Custom cursor ── */
-        .cursor {
-            position:fixed; width:10px; height:10px;
-            background:var(--red); border-radius:50%;
-            pointer-events:none; z-index:9999;
-            transform:translate(-50%,-50%);
-            transition:width 0.2s, height 0.2s;
-        }
-        .cursor-ring {
-            position:fixed; width:36px; height:36px;
-            border:1.5px solid rgba(232,49,26,0.5); border-radius:50%;
-            pointer-events:none; z-index:9998;
-            transform:translate(-50%,-50%);
-            transition:width 0.2s, height 0.2s;
-        }
+        /* ── SIDEBAR ── */
+        .sidebar{width:var(--sidebar);flex-shrink:0;background:var(--night2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;}
+        .sb-logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;}
+        .sb-mark{width:34px;height:34px;background:var(--red);border-radius:9px;display:grid;place-items:center;font-size:15px;}
+        .sb-text{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;color:var(--white);}
+        .sb-text em{color:var(--red);font-style:normal;}
+        .nav-sec{padding:14px 12px 5px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;margin:2px 8px;font-size:13px;font-weight:500;color:var(--muted2);text-decoration:none;transition:all 0.2s;border:1px solid transparent;}
+        .nav-item i{width:16px;text-align:center;font-size:14px;}
+        .nav-item:hover{background:var(--night3);color:var(--white);}
+        .nav-item.active{background:rgba(232,49,26,0.1);color:var(--white);border-color:rgba(232,49,26,0.2);}
+        .nav-item.active i{color:var(--red);}
+        .sb-footer{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border);}
+        .user-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--night3);}
+        .user-av{width:30px;height:30px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:13px;flex-shrink:0;}
+        .user-name{font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;transition:color 0.2s;}
+        .btn-logout:hover{color:var(--red);}
 
-        /* ── Nav ── */
-        nav {
-            position:fixed; top:0; left:0; right:0; z-index:400;
-            padding:22px 60px;
-            display:flex; align-items:center; justify-content:space-between;
-            transition:all 0.4s;
-        }
-        nav.stuck {
-            padding:14px 60px;
-            background:rgba(10,10,15,0.92);
-            backdrop-filter:blur(20px);
-            border-bottom:1px solid var(--border);
-        }
-        .logo {
-            display:flex; align-items:center; gap:12px;
-            font-family:'Bebas Neue', cursive;
-            font-size:26px; letter-spacing:1px;
-            color:var(--white); text-decoration:none;
-        }
-        .logo-mark {
-            width:38px; height:38px; background:var(--red);
-            border-radius:10px; display:grid; place-items:center;
-            font-size:18px; transition:transform 0.3s;
-        }
-        .logo:hover .logo-mark { transform:rotate(-10deg) scale(1.1); }
-        .logo em { color:var(--red); font-style:normal; }
-        .nav-right { display:flex; gap:10px; }
+        /* ── MAIN ── */
+        .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+        .topbar{background:var(--night2);border-bottom:1px solid var(--border);padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+        .page-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;}
+        .topbar-right{display:flex;gap:10px;align-items:center;}
 
-        /* ── Buttons ── */
-        .btn {
-            font-family:'Outfit', sans-serif; font-weight:600; font-size:14px;
-            padding:11px 26px; border-radius:100px; border:none;
-            cursor:none; display:inline-flex; align-items:center; gap:8px;
-            transition:all 0.25s; white-space:nowrap; text-decoration:none;
-        }
-        .btn-outline {
-            background:transparent; color:var(--muted2);
-            border:1.5px solid var(--border2);
-        }
-        .btn-outline:hover { border-color:rgba(255,255,255,0.35); color:var(--white); }
-        .btn-red {
-            background:var(--red); color:var(--white);
-            box-shadow:0 4px 20px var(--red-glow);
-        }
-        .btn-red:hover { background:var(--red-dark); transform:translateY(-2px); box-shadow:0 8px 32px var(--red-glow); }
-        .btn-white {
-            background:var(--white); color:var(--night);
-        }
-        .btn-white:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(255,255,255,0.15); }
-        .btn-lg { padding:16px 36px; font-size:16px; border-radius:14px; }
+        /* ── BUTTONS ── */
+        .btn{font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;padding:8px 16px;border-radius:9px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;text-decoration:none;white-space:nowrap;}
+        .btn-red{background:var(--red);color:var(--white);}
+        .btn-red:hover{background:var(--red-dark);}
+        .btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border2);}
+        .btn-ghost:hover{color:var(--white);border-color:rgba(255,255,255,0.3);}
+        .btn-green{background:var(--green);color:var(--night);font-weight:700;}
+        .btn-green:hover{filter:brightness(1.1);}
+        .btn-sm{padding:5px 10px;font-size:12px;border-radius:7px;}
 
-        /* ── Hero ── */
-        .hero {
-            min-height:100vh;
-            display:grid; grid-template-columns:1fr 1fr;
-            align-items:center; gap:0;
-            padding:130px 60px 80px;
-            position:relative; overflow:hidden;
-        }
-        .hero-bg {
-            position:absolute; inset:0;
-            background-image:
-                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-            background-size:60px 60px;
-            animation:gridMove 20s linear infinite;
-        }
-        @keyframes gridMove { from{background-position:0 0} to{background-position:60px 60px} }
-        .hero-bg::after {
-            content:''; position:absolute; inset:0;
-            background:radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, var(--night) 100%);
-        }
-        .hero-glow {
-            position:absolute; width:800px; height:800px;
-            background:radial-gradient(circle, rgba(232,49,26,0.1) 0%, transparent 65%);
-            top:-200px; right:-100px; pointer-events:none;
-            animation:breathe 6s ease-in-out infinite;
-        }
-        @keyframes breathe { 0%,100%{transform:scale(1);opacity:0.8} 50%{transform:scale(1.15);opacity:1} }
+        /* ── CONTENT ── */
+        .content{padding:28px 32px;flex:1;overflow-y:auto;}
 
-        .hero-left { position:relative; z-index:2; }
-        .hero-pill {
-            display:inline-flex; align-items:center; gap:10px;
-            background:rgba(255,255,255,0.05); border:1px solid var(--border2);
-            padding:8px 18px; border-radius:100px;
-            font-size:12px; font-weight:500; color:var(--muted2);
-            letter-spacing:0.5px; margin-bottom:32px;
-            animation:fadeUp 0.8s 0.1s both;
-        }
-        .live-dot {
-            width:8px; height:8px; background:var(--green);
-            border-radius:50%; box-shadow:0 0 8px var(--green);
-            animation:livePulse 1.5s infinite;
-        }
-        @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
+        /* ── FILTER BAR ── */
+        .filter-bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
+        .filter-bar input{flex:1;min-width:200px;padding:9px 14px;background:var(--night3);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);}
+        .filter-bar input:focus{outline:none;border-color:var(--red);}
+        .filter-bar input::placeholder{color:rgba(255,255,255,0.2);}
+        .role-tabs{display:flex;background:var(--night3);border-radius:10px;padding:3px;border:1px solid var(--border2);}
+        .rtab{padding:7px 13px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:7px;transition:all 0.2s;white-space:nowrap;}
+        .rtab.active{background:var(--surface);color:var(--white);}
 
-        .hero h1 {
-            font-family:'Bebas Neue', cursive;
-            font-size:clamp(72px, 8vw, 120px);
-            line-height:0.92; letter-spacing:2px;
-            color:var(--white); margin-bottom:28px;
-            animation:fadeUp 0.8s 0.2s both;
-        }
-        .hero h1 .accent { color:var(--red); }
-        .hero h1 .stroke { -webkit-text-stroke:1.5px rgba(255,255,255,0.3); color:transparent; }
-        .hero-desc {
-            font-size:17px; font-weight:300; color:var(--muted2);
-            line-height:1.7; max-width:460px; margin-bottom:44px;
-            animation:fadeUp 0.8s 0.3s both;
-        }
-        .hero-actions { display:flex; gap:14px; flex-wrap:wrap; animation:fadeUp 0.8s 0.4s both; }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(32px)} to{opacity:1;transform:translateY(0)} }
+        /* ── TABLE ── */
+        .card{background:var(--night2);border:1px solid var(--border2);border-radius:16px;overflow:hidden;}
+        table{width:100%;border-collapse:collapse;}
+        thead{background:var(--night3);}
+        th{padding:11px 16px;text-align:left;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);}
+        td{padding:13px 16px;font-size:13px;border-bottom:1px solid var(--border);color:var(--muted2);vertical-align:middle;}
+        tr:last-child td{border:none;}
+        tr:hover td{background:rgba(255,255,255,0.02);}
 
-        /* ── Hero tracker card ── */
-        .hero-right {
-            position:relative; z-index:2;
-            display:flex; justify-content:center;
-            animation:fadeUp 0.8s 0.3s both;
-        }
-        .tracker {
-            background:var(--night3); border:1px solid var(--border2);
-            border-radius:28px; padding:32px; width:100%; max-width:420px;
-            box-shadow:0 40px 80px rgba(0,0,0,0.5);
-            position:relative;
-        }
-        .tracker-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
-        .tracker-title { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; color:var(--muted2); }
-        .live-badge {
-            display:inline-flex; align-items:center; gap:6px;
-            background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25);
-            color:var(--green); font-size:11px; font-weight:600;
-            padding:5px 12px; border-radius:100px;
-        }
-        .route-stops { margin-bottom:24px; }
-        .stop { display:flex; align-items:center; gap:16px; padding:14px 0; border-bottom:1px solid var(--border); }
-        .stop:last-child { border:none; }
-        .stop-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
-        .stop-dot.a { background:var(--blue); box-shadow:0 0 12px rgba(59,130,246,0.5); }
-        .stop-dot.b { background:var(--red); box-shadow:0 0 12px var(--red-glow); }
-        .stop-info { flex:1; }
-        .stop-city { font-weight:600; font-size:15px; color:var(--white); }
-        .stop-time { font-size:12px; color:var(--muted); margin-top:2px; }
-        .stop-chip { font-size:11px; font-weight:600; padding:4px 11px; border-radius:8px; }
-        .stop-chip.done { background:rgba(59,130,246,0.12); color:var(--blue); }
-        .stop-chip.eta  { background:rgba(232,49,26,0.12); color:var(--red); }
-        .prog-bar { width:100%; height:3px; background:var(--border2); border-radius:100px; overflow:hidden; margin-bottom:8px; }
-        .prog-fill { height:100%; background:linear-gradient(90deg,var(--blue),var(--red)); border-radius:100px; width:67%; animation:progAnim 4s ease-in-out infinite alternate; }
-        @keyframes progAnim { from{width:60%} to{width:74%} }
-        .prog-info { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:24px; }
-        .tracker-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-        .t-stat { background:var(--surface); border-radius:14px; padding:14px 12px; text-align:center; }
-        .t-stat-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; color:var(--white); }
-        .t-stat-val sup { font-family:'Outfit',sans-serif; font-size:11px; color:var(--muted); }
-        .t-stat-lbl { font-size:11px; color:var(--muted); margin-top:3px; }
-        .notif-pop {
-            position:absolute; bottom:-20px; left:-20px;
-            background:var(--night2); border:1px solid var(--border2);
-            border-radius:16px; padding:14px 18px;
-            display:flex; align-items:center; gap:12px;
-            box-shadow:0 20px 50px rgba(0,0,0,0.5);
-            animation:floatNotif 5s ease-in-out infinite; min-width:240px;
-        }
-        @keyframes floatNotif { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
-        .notif-ico { width:36px; height:36px; background:rgba(34,197,94,0.15); border-radius:10px; display:grid; place-items:center; font-size:16px; }
-        .notif-body strong { display:block; font-size:13px; color:var(--white); font-weight:600; }
-        .notif-body small  { font-size:11px; color:var(--muted); }
+        /* Role badges */
+        .role-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:100px;}
+        .role-super_admin{background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.2);}
+        .role-admin{background:rgba(249,115,22,0.12);color:var(--orange);border:1px solid rgba(249,115,22,0.2);}
+        .role-chauffeur{background:rgba(59,130,246,0.12);color:var(--blue);border:1px solid rgba(59,130,246,0.2);}
+        .role-magasinier{background:rgba(168,85,247,0.12);color:var(--purple);border:1px solid rgba(168,85,247,0.2);}
+        .role-client{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.2);}
 
-        /* ── Ticker ── */
-        .ticker { background:var(--red); padding:12px 0; overflow:hidden; white-space:nowrap; }
-        .ticker-inner { display:inline-flex; gap:60px; animation:tickerMove 18s linear infinite; }
-        @keyframes tickerMove { from{transform:translateX(0)} to{transform:translateX(-50%)} }
-        .ticker-item { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:2px; color:rgba(255,255,255,0.85); display:inline-flex; align-items:center; gap:20px; }
-        .ticker-sep { color:rgba(255,255,255,0.4); }
+        /* Status dot */
+        .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;}
+        .dot-active{background:var(--green);box-shadow:0 0 6px var(--green);}
+        .dot-inactive{background:var(--muted);}
 
-        /* ── Stats band ── */
-        .stats-band { background:var(--night2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); display:grid; grid-template-columns:repeat(4,1fr); }
-        .stat-block { padding:48px 40px; border-right:1px solid var(--border); transition:background 0.3s; }
-        .stat-block:last-child { border:none; }
-        .stat-block:hover { background:var(--night3); }
-        .stat-num { font-family:'Bebas Neue',cursive; font-size:56px; letter-spacing:1px; line-height:1; color:var(--white); }
-        .stat-num em { font-style:normal; color:var(--red); }
-        .stat-lbl { font-size:14px; color:var(--muted); margin-top:8px; font-weight:300; }
+        /* Avatar */
+        .user-avatar{width:32px;height:32px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:13px;font-weight:700;color:var(--white);}
 
-        /* ── Sections ── */
-        section { padding:120px 60px; }
-        .s-tag { font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--red); margin-bottom:16px; }
-        .s-title { font-family:'Bebas Neue',cursive; font-size:clamp(40px,5vw,64px); line-height:0.95; letter-spacing:1px; color:var(--white); margin-bottom:60px; }
-        .s-title .dim { color:rgba(255,255,255,0.25); }
+        /* Empty state */
+        .empty{padding:60px 20px;text-align:center;}
+        .empty-ico{font-size:40px;opacity:0.15;margin-bottom:12px;}
+        .empty-txt{font-size:14px;color:var(--muted);}
 
-        /* ── Services ── */
-        .services-bg { background:var(--night); }
-        .services-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:2px; border:2px solid var(--border2); border-radius:24px; overflow:hidden; }
-        .svc { background:var(--night2); padding:40px 36px; transition:background 0.3s; position:relative; overflow:hidden; }
-        .svc::before { content:''; position:absolute; bottom:-60px; right:-60px; width:160px; height:160px; background:var(--red); border-radius:50%; opacity:0; transition:opacity 0.4s, transform 0.4s; transform:scale(0.5); }
-        .svc:hover { background:var(--night3); }
-        .svc:hover::before { opacity:0.06; transform:scale(1); }
-        .svc-num { font-family:'Bebas Neue',cursive; font-size:48px; color:var(--border2); letter-spacing:1px; margin-bottom:20px; line-height:1; transition:color 0.3s; }
-        .svc:hover .svc-num { color:rgba(232,49,26,0.3); }
-        .svc-icon { width:52px; height:52px; background:var(--surface); border-radius:14px; display:grid; place-items:center; font-size:22px; color:var(--red); margin-bottom:24px; }
-        .svc-name { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:0.5px; color:var(--white); margin-bottom:12px; }
-        .svc-desc { font-size:14px; color:var(--muted); line-height:1.7; margin-bottom:20px; font-weight:300; }
-        .svc-price { font-size:12px; font-weight:600; color:var(--red); display:inline-flex; align-items:center; gap:6px; }
-        .svc-price::before { content:'→'; }
+        /* ── STATS ── */
+        .stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;}
+        .stat-card{background:var(--night2);border:1px solid var(--border2);border-radius:12px;padding:16px;text-align:center;}
+        .stat-val{font-family:'Bebas Neue',cursive;font-size:28px;letter-spacing:1px;}
+        .stat-lbl{font-size:11px;color:var(--muted);margin-top:2px;}
 
-        /* ── Why ── */
-        .why-bg { background:var(--night2); }
-        .why-grid { display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center; }
-        .why-list { display:flex; flex-direction:column; gap:4px; }
-        .why-item { display:flex; align-items:flex-start; gap:20px; padding:24px; border-radius:18px; border:1px solid transparent; transition:all 0.3s; }
-        .why-item:hover { background:var(--night3); border-color:var(--border2); }
-        .why-num { font-family:'Bebas Neue',cursive; font-size:36px; letter-spacing:1px; color:var(--red); flex-shrink:0; line-height:1; width:48px; }
-        .why-title { font-size:17px; font-weight:600; color:var(--white); margin-bottom:6px; }
-        .why-desc  { font-size:14px; color:var(--muted); line-height:1.65; font-weight:300; }
-        .why-visual { display:flex; flex-direction:column; gap:20px; }
-        .big-metric { background:var(--night3); border:1px solid var(--border2); border-radius:24px; padding:36px; }
-        .big-metric-num { font-family:'Bebas Neue',cursive; font-size:80px; line-height:0.9; letter-spacing:1px; color:var(--white); }
-        .big-metric-num em { font-style:normal; color:var(--red); }
-        .big-metric-lbl { font-size:14px; color:var(--muted); margin-top:16px; font-weight:300; }
-        .metric-row { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-        .small-metric { background:var(--night3); border:1px solid var(--border2); border-radius:20px; padding:28px; }
-        .small-metric-num { font-family:'Bebas Neue',cursive; font-size:48px; letter-spacing:1px; line-height:1; color:var(--white); }
-        .small-metric-num em { font-style:normal; color:var(--red); }
-        .small-metric-lbl { font-size:13px; color:var(--muted); margin-top:8px; font-weight:300; }
+        /* ── MODAL ── */
+        .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(12px);z-index:500;align-items:center;justify-content:center;padding:20px;}
+        .modal.open{display:flex;}
+        .modal-box{background:var(--night3);border:1px solid var(--border2);border-radius:20px;padding:28px;width:100%;max-width:480px;box-shadow:0 40px 100px rgba(0,0,0,0.6);animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1);max-height:90vh;overflow-y:auto;}
+        @keyframes boxIn{from{opacity:0;transform:scale(0.94) translateY(14px)}to{opacity:1;transform:none}}
+        .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+        .modal-title{font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;}
+        .modal-close{width:28px;height:28px;background:var(--surface);border:none;border-radius:50%;cursor:pointer;display:grid;place-items:center;font-size:12px;color:var(--muted);}
+        .modal-close:hover{color:var(--white);}
+        .field{margin-bottom:14px;}
+        .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+        .field input,.field select{width:100%;padding:11px 14px;background:var(--night);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);}
+        .field input:focus,.field select:focus{outline:none;border-color:var(--red);}
+        .field select option{background:var(--night2);}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .modal-actions{display:flex;gap:10px;margin-top:20px;}
 
-        /* ── CTA ── */
-        .cta-section { background:var(--night); padding:120px 60px; text-align:center; position:relative; overflow:hidden; }
-        .cta-section::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 60% 60% at 50% 100%, rgba(232,49,26,0.12), transparent); }
-        .cta-inner { position:relative; z-index:1; max-width:700px; margin:0 auto; }
-        .cta-section .s-title { margin-bottom:20px; }
-        .cta-sub { font-size:18px; color:var(--muted); margin-bottom:48px; font-weight:300; line-height:1.6; }
-        .cta-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+        /* ── TOAST ── */
+        .toast{position:fixed;top:16px;right:16px;padding:12px 18px;border-radius:10px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;background:var(--night3);border:1px solid var(--border2);box-shadow:0 12px 40px rgba(0,0,0,0.4);z-index:9999;transform:translateX(calc(100% + 40px));transition:transform 0.4s cubic-bezier(0.4,0,0.2,1);}
+        .toast.show{transform:translateX(0);}
+        .toast.success .ti{color:var(--green);}
+        .toast.error   .ti{color:var(--red);}
+        .toast.info    .ti{color:var(--blue);}
+        .ti{font-size:15px;}
 
-        /* ── Footer ── */
-        footer { background:var(--night2); border-top:1px solid var(--border); padding:36px 60px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
-        .foot-logo { font-family:'Bebas Neue',cursive; font-size:20px; color:var(--white); letter-spacing:1px; }
-        .foot-logo em { font-style:normal; color:var(--red); }
-        .foot-copy { font-size:13px; color:var(--muted); }
-        .foot-links { display:flex; gap:24px; }
-        .foot-links a { font-size:13px; color:var(--muted); text-decoration:none; transition:color 0.2s; }
-        .foot-links a:hover { color:var(--white); }
+        /* ── LOADER ── */
+        .loader{display:none;position:fixed;inset:0;background:rgba(10,10,15,0.85);backdrop-filter:blur(4px);place-items:center;z-index:2000;}
+        .loader.on{display:grid;}
+        .spin{width:38px;height:38px;border:2.5px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:spin 0.8s linear infinite;}
+        @keyframes spin{to{transform:rotate(360deg)}}
 
-        /* ── Modals ── */
-        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(12px); z-index:600; align-items:center; justify-content:center; padding:20px; }
-        .modal.open { display:flex; }
-        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:28px; padding:44px; width:100%; max-width:420px; box-shadow:0 40px 100px rgba(0,0,0,0.6); animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); }
-        @keyframes boxIn { from{opacity:0;transform:scale(0.93) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
-        .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:32px; }
-        .modal-title { font-family:'Bebas Neue',cursive; font-size:28px; letter-spacing:1px; color:var(--white); }
-        .modal-close { width:36px; height:36px; background:var(--surface); border:none; border-radius:50%; cursor:none; display:grid; place-items:center; font-size:16px; color:var(--muted); transition:background 0.2s, color 0.2s; }
-        .modal-close:hover { background:var(--border2); color:var(--white); }
-        .field { margin-bottom:14px; }
-        .field label { display:block; font-size:12px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
-        .field input { width:100%; padding:13px 16px; background:var(--surface); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:15px; color:var(--white); transition:border-color 0.2s; }
-        .field input::placeholder { color:rgba(255,255,255,0.2); }
-        .field input:focus { outline:none; border-color:var(--red); }
-        .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
-        .field-row .field { margin:0; }
-        .modal-submit { width:100%; margin-top:8px; }
-        .modal-foot { text-align:center; margin-top:16px; font-size:14px; color:var(--muted); }
-        .modal-foot a { color:var(--red); font-weight:600; text-decoration:none; }
-        .modal-foot a:hover { text-decoration:underline; }
-
-        /* ── Toast ── */
-        .toast { position:fixed; top:24px; right:24px; padding:16px 22px; border-radius:14px; display:flex; align-items:center; gap:12px; font-size:14px; font-weight:500; box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; border:1px solid var(--border2); transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); background:var(--night3); }
-        .toast.show { transform:translateX(0); }
-        .toast.success .t-ico { color:var(--green); }
-        .toast.error   .t-ico { color:var(--red); }
-        .t-ico { font-size:18px; }
-
-        /* ── Loader ── */
-        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; }
-        .loader.on { display:grid; }
-        .spin { width:44px; height:44px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
-        @keyframes spin { to{transform:rotate(360deg)} }
-
-        /* ── Reveal ── */
-        [data-r] { opacity:0; transform:translateY(28px); transition:opacity 0.7s ease, transform 0.7s ease; }
-        [data-r].vis { opacity:1; transform:none; }
-
-        /* ── Responsive ── */
-        @media(max-width:1100px) {
-            .hero { grid-template-columns:1fr; }
-            .hero-right { display:none; }
-            .why-grid { grid-template-columns:1fr; }
-            .why-visual { display:none; }
-            .stats-band { grid-template-columns:1fr 1fr; }
-        }
-        @media(max-width:768px) {
-            nav { padding:16px 20px; }
-            nav.stuck { padding:12px 20px; }
-            .hero { padding:100px 20px 60px; }
-            section { padding:80px 20px; }
-            .services-grid { grid-template-columns:1fr; }
-            .stats-band { grid-template-columns:1fr 1fr; }
-            footer { padding:28px 20px; flex-direction:column; }
-            .modal-box { padding:28px; }
-            .cta-section { padding:80px 20px; }
-        }
+        @media(max-width:900px){.stats-grid{grid-template-columns:repeat(3,1fr);}}
+        @media(max-width:640px){.stats-grid{grid-template-columns:repeat(2,1fr);}.content{padding:16px;}}
     </style>
 </head>
 <body>
 
-<!-- Curseur personnalisé -->
-<div class="cursor"     id="cur"></div>
-<div class="cursor-ring" id="curRing"></div>
-
-<!-- Toast -->
-<div class="toast" id="toast">
-    <span class="t-ico" id="toastIco"></span>
-    <span id="toastTxt"></span>
-</div>
-
-<!-- Loader -->
+<div class="toast" id="toast"><span class="ti" id="tIco"></span><span id="tTxt"></span></div>
 <div class="loader" id="loader"><div class="spin"></div></div>
 
-<!-- ═══ NAV ═══ -->
-<nav id="nav">
-    <a href="#" class="logo">
-        <div class="logo-mark">🚚</div>
-        Léman<em>-Courses</em>
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+    <a href="dashboard.html" class="sb-logo">
+        <div class="sb-mark">🚚</div>
+        <div class="sb-text">Léman<em>-Courses</em></div>
     </a>
-    <div class="nav-right">
-        <button class="btn btn-outline" id="btnLogin">
-            <i class="fas fa-user"></i> Connexion
-        </button>
-        <button class="btn btn-red" id="btnSignup">
-            <i class="fas fa-user-plus"></i> S'inscrire
-        </button>
-    </div>
-</nav>
-
-<!-- ═══ HERO ═══ -->
-<section class="hero">
-    <div class="hero-bg"></div>
-    <div class="hero-glow"></div>
-
-    <div class="hero-left">
-        <div class="hero-pill">
-            <div class="live-dot"></div>
-            247 livraisons actives en ce moment
+    <div class="nav-sec">Navigation</div>
+    <a href="dashboard.html"    class="nav-item"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+    <a href="dispatch.html"     class="nav-item"><i class="fas fa-map-marked-alt"></i> Dispatch</a>
+    <a href="new-transport.html"class="nav-item"><i class="fas fa-plus-circle"></i> Nouveau transport</a>
+    <div class="nav-sec">Admin</div>
+    <a href="users.html"        class="nav-item active"><i class="fas fa-users"></i> Utilisateurs</a>
+    <a href="finances.html"     class="nav-item"><i class="fas fa-chart-line"></i> Finances</a>
+    <a href="rh.html"           class="nav-item"><i class="fas fa-id-badge"></i> RH</a>
+    <a href="tarification.html" class="nav-item"><i class="fas fa-tags"></i> Tarification</a>
+    <a href="analytics.html"    class="nav-item"><i class="fas fa-chart-bar"></i> Analytiques</a>
+    <div class="sb-footer">
+        <div class="user-chip">
+            <div class="user-av" id="sbAv">SA</div>
+            <div class="user-name" id="sbName">Admin</div>
+            <button class="btn-logout" id="btnLogout" title="Déconnexion"><i class="fas fa-sign-out-alt"></i></button>
         </div>
-        <h1>
-            TRANS<br>
-            <span class="accent">PORT</span><br>
-            <span class="stroke">EXPRESS</span>
-        </h1>
-        <p class="hero-desc">
-            Plateforme de dispatch professionnelle pour vos livraisons urgentes en Suisse romande. Suivi GPS temps réel, interface intuitive, fiabilité garantie.
+    </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+    <div class="topbar">
+        <div class="page-title">GESTION UTILISATEURS</div>
+        <div class="topbar-right">
+            <button class="btn btn-red" onclick="openModalCreate()"><i class="fas fa-user-plus"></i> Nouvel utilisateur</button>
+        </div>
+    </div>
+
+    <div class="content">
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-val" id="statTotal">—</div>
+                <div class="stat-lbl">Total</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" style="color:var(--blue);" id="statChauffeurs">—</div>
+                <div class="stat-lbl">Chauffeurs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" style="color:var(--green);" id="statClients">—</div>
+                <div class="stat-lbl">Clients</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" style="color:var(--purple);" id="statMagasiniers">—</div>
+                <div class="stat-lbl">Magasiniers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" style="color:var(--orange);" id="statAdmins">—</div>
+                <div class="stat-lbl">Admins</div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-bar">
+            <input type="text" id="searchInput" placeholder="🔍 Rechercher par nom, email, téléphone…" oninput="applyFilters()">
+            <div class="role-tabs">
+                <div class="rtab active" data-r="all"         onclick="setRoleFilter(this)">Tous</div>
+                <div class="rtab"        data-r="chauffeur"   onclick="setRoleFilter(this)">Chauffeurs</div>
+                <div class="rtab"        data-r="client"      onclick="setRoleFilter(this)">Clients</div>
+                <div class="rtab"        data-r="magasinier"  onclick="setRoleFilter(this)">Magasiniers</div>
+                <div class="rtab"        data-r="admin"       onclick="setRoleFilter(this)">Admins</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadUsers()"><i class="fas fa-sync-alt"></i></button>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Utilisateur</th>
+                        <th>Email</th>
+                        <th>Rôle</th>
+                        <th>Téléphone</th>
+                        <th>Statut</th>
+                        <th>Créé le</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+
+<!-- ═══ MODAL CREATE/EDIT ═══ -->
+<div class="modal" id="modalUser">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title" id="modalUserTitle">NOUVEL UTILISATEUR</div>
+            <button class="modal-close" onclick="closeModal('modalUser')">✕</button>
+        </div>
+        <input type="hidden" id="editUserId">
+        <div class="field-row">
+            <div class="field">
+                <label>Prénom</label>
+                <input type="text" id="uPrenom" placeholder="Jean">
+            </div>
+            <div class="field">
+                <label>Nom</label>
+                <input type="text" id="uNom" placeholder="Dupont">
+            </div>
+        </div>
+        <div class="field">
+            <label>Email *</label>
+            <input type="email" id="uEmail" placeholder="jean.dupont@exemple.ch" required>
+        </div>
+        <div class="field" id="pwdField">
+            <label>Mot de passe *</label>
+            <input type="password" id="uPassword" placeholder="6 caractères minimum" minlength="6">
+        </div>
+        <div class="field">
+            <label>Rôle *</label>
+            <select id="uRole">
+                <option value="client">Client</option>
+                <option value="chauffeur">Chauffeur</option>
+                <option value="magasinier">Magasinier</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Téléphone</label>
+            <input type="tel" id="uTel" placeholder="+41 79 000 00 00">
+        </div>
+        <div class="field" id="activeField">
+            <label>Statut</label>
+            <select id="uActif">
+                <option value="true">Actif</option>
+                <option value="false">Inactif</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" style="flex:1;" onclick="saveUser()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalUser')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL CONFIRM DELETE ═══ -->
+<div class="modal" id="modalConfirmDelete">
+    <div class="modal-box" style="max-width:380px;">
+        <div class="modal-head">
+            <div class="modal-title" style="color:var(--red);">SUPPRIMER</div>
+            <button class="modal-close" onclick="closeModal('modalConfirmDelete')">✕</button>
+        </div>
+        <p style="font-size:14px;color:var(--muted2);margin-bottom:20px;line-height:1.6;">
+            Êtes-vous sûr de vouloir désactiver <strong id="deleteUserName" style="color:var(--white)"></strong> ?<br>
+            <span style="color:var(--muted);font-size:12px;">L'utilisateur ne pourra plus se connecter.</span>
         </p>
-        <div class="hero-actions">
-            <button class="btn btn-red btn-lg" id="heroSignup">
-                <i class="fas fa-rocket"></i> Commencer gratuitement
-            </button>
-            <button class="btn btn-outline btn-lg" id="heroLogin">
-                <i class="fas fa-sign-in-alt"></i> Se connecter
-            </button>
+        <input type="hidden" id="deleteUserId">
+        <div style="display:flex;gap:10px;">
+            <button class="btn btn-red" style="flex:1;" onclick="confirmDeactivate()"><i class="fas fa-user-slash"></i> Désactiver</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalConfirmDelete')">Annuler</button>
         </div>
-    </div>
-
-    <div class="hero-right">
-        <div class="tracker">
-            <div class="tracker-top">
-                <div class="tracker-title">SUIVI EN DIRECT</div>
-                <div class="live-badge"><div class="live-dot"></div> Live</div>
-            </div>
-            <div class="route-stops">
-                <div class="stop">
-                    <div class="stop-dot a"></div>
-                    <div class="stop-info">
-                        <div class="stop-city">Genève, GE</div>
-                        <div class="stop-time">Départ · 08h30</div>
-                    </div>
-                    <div class="stop-chip done">✓ Parti</div>
-                </div>
-                <div class="stop">
-                    <div class="stop-dot b"></div>
-                    <div class="stop-info">
-                        <div class="stop-city">Lausanne, VD</div>
-                        <div class="stop-time">Arrivée prévue · 10h15</div>
-                    </div>
-                    <div class="stop-chip eta">~43 min</div>
-                </div>
-            </div>
-            <div class="prog-bar"><div class="prog-fill"></div></div>
-            <div class="prog-info">
-                <span>Genève</span>
-                <span>67% du trajet</span>
-                <span>Lausanne</span>
-            </div>
-            <div class="tracker-stats">
-                <div class="t-stat">
-                    <div class="t-stat-val">42<sup>km</sup></div>
-                    <div class="t-stat-lbl">Distance</div>
-                </div>
-                <div class="t-stat">
-                    <div class="t-stat-val">98<sup>%</sup></div>
-                    <div class="t-stat-lbl">Ponctualité</div>
-                </div>
-                <div class="t-stat">
-                    <div class="t-stat-val">3<sup>h</sup></div>
-                    <div class="t-stat-lbl">Express max</div>
-                </div>
-            </div>
-            <div class="notif-pop">
-                <div class="notif-ico">✅</div>
-                <div class="notif-body">
-                    <strong>Livraison confirmée</strong>
-                    <small>Colis #LC-2851 · Sion → Martigny</small>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ═══ TICKER ═══ -->
-<div class="ticker">
-    <div class="ticker-inner">
-        <span class="ticker-item">TRANSPORT EXPRESS <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">SUIVI GPS TEMPS RÉEL <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">SUISSE ROMANDE <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">LIVRAISON EN 3H <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">98% PONCTUALITÉ <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">DISPATCH PROFESSIONNEL <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">TRANSPORT EXPRESS <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">SUIVI GPS TEMPS RÉEL <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">SUISSE ROMANDE <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">LIVRAISON EN 3H <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">98% PONCTUALITÉ <span class="ticker-sep">✦</span></span>
-        <span class="ticker-item">DISPATCH PROFESSIONNEL <span class="ticker-sep">✦</span></span>
     </div>
 </div>
 
-<!-- ═══ STATS ═══ -->
-<div class="stats-band">
-    <div class="stat-block" data-r>
-        <div class="stat-num">12<em>k+</em></div>
-        <div class="stat-lbl">Livraisons réalisées</div>
-    </div>
-    <div class="stat-block" data-r>
-        <div class="stat-num">98<em>%</em></div>
-        <div class="stat-lbl">Taux de ponctualité</div>
-    </div>
-    <div class="stat-block" data-r>
-        <div class="stat-num">3<em>h</em></div>
-        <div class="stat-lbl">Délai express maximum</div>
-    </div>
-    <div class="stat-block" data-r>
-        <div class="stat-num">7<em>/7</em></div>
-        <div class="stat-lbl">Disponibilité service</div>
-    </div>
-</div>
-
-<!-- ═══ SERVICES ═══ -->
-<section class="services-bg">
-    <div class="s-tag" data-r>Services</div>
-    <div class="s-title" data-r>CE QUE NOUS<br><span class="dim">FAISONS</span></div>
-    <div class="services-grid">
-        <div class="svc" data-r>
-            <div class="svc-num">01</div>
-            <div class="svc-icon"><i class="fas fa-bolt"></i></div>
-            <div class="svc-name">EXPRESS MÊME JOUR</div>
-            <div class="svc-desc">Livraison urgente dans les 3 heures sur toute la Suisse romande. Idéal pour les documents et colis prioritaires.</div>
-            <div class="svc-price">Dès CHF 35.–</div>
-        </div>
-        <div class="svc" data-r>
-            <div class="svc-num">02</div>
-            <div class="svc-icon"><i class="fas fa-map-marked-alt"></i></div>
-            <div class="svc-name">SUIVI GPS LIVE</div>
-            <div class="svc-desc">Interface de suivi en temps réel pour vous et votre destinataire. Notifications automatiques à chaque étape.</div>
-            <div class="svc-price">Inclus dans tous les envois</div>
-        </div>
-        <div class="svc" data-r>
-            <div class="svc-num">03</div>
-            <div class="svc-icon"><i class="fas fa-building"></i></div>
-            <div class="svc-name">COMPTES ENTREPRISES</div>
-            <div class="svc-desc">Dashboard dédié, facturation mensuelle, API d'intégration et tarifs négociés pour les volumes importants.</div>
-            <div class="svc-price">Sur devis</div>
-        </div>
-    </div>
-</section>
-
-<!-- ═══ POURQUOI NOUS ═══ -->
-<section class="why-bg">
-    <div class="s-tag" data-r>Pourquoi nous</div>
-    <div class="why-grid">
-        <div>
-            <div class="s-title" data-r>QUATRE<br><span class="dim">ENGAGEMENTS</span></div>
-            <div class="why-list">
-                <div class="why-item" data-r>
-                    <div class="why-num">01</div>
-                    <div>
-                        <div class="why-title">Ponctualité garantie</div>
-                        <div class="why-desc">98% de nos livraisons arrivent dans la fenêtre horaire promise. Remboursement si dépassement de 30 min.</div>
-                    </div>
-                </div>
-                <div class="why-item" data-r>
-                    <div class="why-num">02</div>
-                    <div>
-                        <div class="why-title">Colis assurés jusqu'à CHF 2'000</div>
-                        <div class="why-desc">Chaque envoi est automatiquement couvert. Extension disponible pour les colis de haute valeur.</div>
-                    </div>
-                </div>
-                <div class="why-item" data-r>
-                    <div class="why-num">03</div>
-                    <div>
-                        <div class="why-title">Interface professionnelle</div>
-                        <div class="why-desc">Dashboard pour gérer vos envois, consulter l'historique complet et exporter vos factures en PDF.</div>
-                    </div>
-                </div>
-                <div class="why-item" data-r>
-                    <div class="why-num">04</div>
-                    <div>
-                        <div class="why-title">Support 7j/7</div>
-                        <div class="why-desc">Une équipe réactive par téléphone, chat et email pour répondre à toutes vos questions urgentes.</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="why-visual">
-            <div class="big-metric" data-r>
-                <div class="big-metric-num">98<em>%</em></div>
-                <div class="big-metric-lbl">Taux de ponctualité sur les 12 derniers mois</div>
-            </div>
-            <div class="metric-row">
-                <div class="small-metric" data-r>
-                    <div class="small-metric-num">12<em>k</em></div>
-                    <div class="small-metric-lbl">Livraisons réalisées</div>
-                </div>
-                <div class="small-metric" data-r>
-                    <div class="small-metric-num">3<em>h</em></div>
-                    <div class="small-metric-lbl">Délai express garanti</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ═══ CTA ═══ -->
-<section class="cta-section">
-    <div class="cta-inner">
-        <div class="s-tag">Commencer</div>
-        <div class="s-title" data-r>PRÊT À<br>EXPÉDIER ?</div>
-        <p class="cta-sub" data-r>Créez votre compte en 2 minutes. Aucune carte bancaire requise pour commencer.</p>
-        <div class="cta-btns" data-r>
-            <button class="btn btn-red btn-lg" id="ctaSignup">
-                <i class="fas fa-user-plus"></i> Créer un compte gratuit
-            </button>
-            <button class="btn btn-outline btn-lg" id="ctaLogin">
-                <i class="fas fa-sign-in-alt"></i> Se connecter
-            </button>
-        </div>
-    </div>
-</section>
-
-<!-- ═══ FOOTER ═══ -->
-<footer>
-    <div class="foot-logo">LÉMAN<em>-COURSES</em></div>
-    <div class="foot-copy">© 2025 Léman-Courses — Suisse romande</div>
-    <div class="foot-links">
-        <a href="#">CGU</a>
-        <a href="#">Confidentialité</a>
-        <a href="#">Contact</a>
-    </div>
-</footer>
-
-<!-- ═══ MODAL CONNEXION ═══ -->
-<div id="modalLogin" class="modal" role="dialog" aria-modal="true">
-    <div class="modal-box">
-        <div class="modal-head">
-            <div class="modal-title">CONNEXION</div>
-            <button class="modal-close" data-close="modalLogin">✕</button>
-        </div>
-        <form id="formLogin">
-            <div class="field">
-                <label>Email</label>
-                <input type="email" id="loginEmail" placeholder="vous@exemple.ch" required autocomplete="email">
-            </div>
-            <div class="field">
-                <label>Mot de passe</label>
-                <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn btn-red modal-submit">
-                <i class="fas fa-sign-in-alt"></i> Se connecter
-            </button>
-        </form>
-        <div class="modal-foot"><a href="#" id="linkForgot">Mot de passe oublié ?</a></div>
-        <div class="modal-foot">Pas de compte ? <a href="#" id="linkToSignup">S'inscrire</a></div>
-    </div>
-</div>
-
-<!-- ═══ MODAL INSCRIPTION ═══ -->
-<div id="modalSignup" class="modal" role="dialog" aria-modal="true">
-    <div class="modal-box">
-        <div class="modal-head">
-            <div class="modal-title">INSCRIPTION</div>
-            <button class="modal-close" data-close="modalSignup">✕</button>
-        </div>
-        <form id="formSignup">
-            <div class="field">
-                <label>Email *</label>
-                <input type="email" id="signupEmail" placeholder="vous@exemple.ch" required autocomplete="email">
-            </div>
-            <div class="field">
-                <label>Mot de passe *</label>
-                <input type="password" id="signupPassword" placeholder="6 caractères min." minlength="6" required autocomplete="new-password">
-            </div>
-            <div class="field-row">
-                <div class="field">
-                    <label>Nom</label>
-                    <input type="text" id="signupNom" placeholder="Dupont" autocomplete="family-name">
-                </div>
-                <div class="field">
-                    <label>Prénom</label>
-                    <input type="text" id="signupPrenom" placeholder="Jean" autocomplete="given-name">
-                </div>
-            </div>
-            <div class="field">
-                <label>Téléphone</label>
-                <input type="tel" id="signupTel" placeholder="+41 79 000 00 00" autocomplete="tel">
-            </div>
-            <button type="submit" class="btn btn-red modal-submit">
-                <i class="fas fa-user-plus"></i> Créer mon compte
-            </button>
-        </form>
-        <div class="modal-foot">Déjà un compte ? <a href="#" id="linkToLogin">Se connecter</a></div>
-    </div>
-</div>
-
-<!-- ═══ MODAL MOT DE PASSE OUBLIÉ ═══ -->
-<div id="modalForgot" class="modal" role="dialog" aria-modal="true">
-    <div class="modal-box">
-        <div class="modal-head">
-            <div class="modal-title">RÉINITIALISATION</div>
-            <button class="modal-close" data-close="modalForgot">✕</button>
-        </div>
-        <p style="font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.6;font-weight:300;">
-            Entrez votre email et nous vous enverrons un lien pour réinitialiser votre mot de passe.
-        </p>
-        <form id="formForgot">
-            <div class="field">
-                <label>Votre email</label>
-                <input type="email" id="forgotEmail" placeholder="vous@exemple.ch" required autocomplete="email">
-            </div>
-            <button type="submit" class="btn btn-red modal-submit">
-                <i class="fas fa-paper-plane"></i> Envoyer le lien
-            </button>
-        </form>
-        <div class="modal-foot"><a href="#" id="linkBackLogin">← Retour à la connexion</a></div>
-    </div>
-</div>
-
-<!-- ═══ SCRIPT ═══ -->
 <script>
 (function () {
     'use strict';
 
-    /* ── Supabase ── */
-    if (!window.SUPABASE_CONFIG) {
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;font-size:18px;">❌ config.js manquant ou introuvable</div>';
+    if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
+        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;"><h2>❌ config.js manquant</h2></div>';
         return;
     }
     const db = window.SUPABASE_CLIENT;
 
-    /* ── Curseur personnalisé ── */
-    const cur     = document.getElementById('cur');
-    const curRing = document.getElementById('curRing');
-    let mx = 0, my = 0, rx = 0, ry = 0;
-    document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
-    (function loop() {
-        rx += (mx - rx) * 0.13;
-        ry += (my - ry) * 0.13;
-        cur.style.left     = mx + 'px';
-        cur.style.top      = my + 'px';
-        curRing.style.left = rx + 'px';
-        curRing.style.top  = ry + 'px';
-        requestAnimationFrame(loop);
-    })();
-
-    /* ── Nav sticky ── */
-    window.addEventListener('scroll', () => {
-        document.getElementById('nav').classList.toggle('stuck', window.scrollY > 50);
-    }, { passive: true });
-
-    /* ── Scroll reveal ── */
-    const revObs = new IntersectionObserver(entries => {
-        entries.forEach((en, i) => {
-            if (en.isIntersecting) {
-                setTimeout(() => en.target.classList.add('vis'), i * 70);
-                revObs.unobserve(en.target);
-            }
-        });
-    }, { threshold: 0.1 });
-    document.querySelectorAll('[data-r]').forEach(el => revObs.observe(el));
-
-    /* ── Toast ── */
-    const toastEl  = document.getElementById('toast');
-    const toastIco = document.getElementById('toastIco');
-    const toastTxt = document.getElementById('toastTxt');
-    let toastTimer;
+    /* ── Helpers ── */
+    const toastEl = document.getElementById('toast');
+    let tt;
     function toast(type, msg) {
-        clearTimeout(toastTimer);
+        clearTimeout(tt);
         toastEl.className = 'toast ' + type + ' show';
-        toastIco.textContent = type === 'success' ? '✓' : '✕';
-        toastTxt.textContent = msg;
-        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 5000);
+        document.getElementById('tIco').textContent = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+        document.getElementById('tTxt').textContent = msg;
+        tt = setTimeout(() => toastEl.classList.remove('show'), 4000);
     }
-
-    /* ── Loader ── */
     const loaderEl = document.getElementById('loader');
     const showLoad = () => loaderEl.classList.add('on');
     const hideLoad = () => loaderEl.classList.remove('on');
 
-    /* ── Modals ── */
-    function open(id) {
-        const m = document.getElementById(id);
-        if (!m) return;
-        m.style.display = 'flex';
-        m.classList.add('open');
+    window.closeModal = id => { const m = document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} };
+    function openModal(id) { const m = document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
+    document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if(e.target===m) window.closeModal(m.id); }));
+
+    const roleColors = { super_admin:'#e8311a', admin:'#f97316', chauffeur:'#3b82f6', magasinier:'#a855f7', client:'#22c55e' };
+    const roleIcons  = { super_admin:'👑', admin:'⚙️', chauffeur:'🚚', magasinier:'🏭', client:'👤' };
+
+    /* ── State ── */
+    let allUsers = [];
+    let currentRole = 'all';
+
+    /* ── Filters ── */
+    window.setRoleFilter = function(el) {
+        document.querySelectorAll('.rtab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        currentRole = el.dataset.r;
+        renderTable();
+    };
+    window.applyFilters = renderTable;
+
+    function getFiltered() {
+        const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+        return allUsers.filter(u => {
+            if (currentRole !== 'all') {
+                const isAdmin = currentRole === 'admin' && ['admin','super_admin'].includes(u.role);
+                if (!isAdmin && u.role !== currentRole) return false;
+            }
+            if (!q) return true;
+            return (u.nom||'').toLowerCase().includes(q) ||
+                   (u.prenom||'').toLowerCase().includes(q) ||
+                   (u.email||'').toLowerCase().includes(q) ||
+                   (u.telephone||'').toLowerCase().includes(q);
+        });
     }
-    function close(id) {
-        const m = document.getElementById(id);
-        if (!m) return;
-        m.style.display = 'none';
-        m.classList.remove('open');
+
+    /* ── Load ── */
+    window.loadUsers = async function() {
+        const { data, error } = await db.from('utilisateurs').select('*').order('created_at', { ascending: false });
+        if (error) { toast('error', error.message); return; }
+        allUsers = data || [];
+        updateStats();
+        renderTable();
+    };
+
+    function updateStats() {
+        document.getElementById('statTotal').textContent      = allUsers.length;
+        document.getElementById('statChauffeurs').textContent = allUsers.filter(u => u.role === 'chauffeur').length;
+        document.getElementById('statClients').textContent    = allUsers.filter(u => u.role === 'client').length;
+        document.getElementById('statMagasiniers').textContent= allUsers.filter(u => u.role === 'magasinier').length;
+        document.getElementById('statAdmins').textContent     = allUsers.filter(u => ['admin','super_admin'].includes(u.role)).length;
     }
-    function swap(from, to) {
-        close(from);
-        open(to);
-    }
 
-    /* Ouvrir depuis boutons */
-    ['btnLogin','heroLogin','ctaLogin'].forEach(id => {
-        document.getElementById(id)?.addEventListener('click', () => open('modalLogin'));
-    });
-    ['btnSignup','heroSignup','ctaSignup'].forEach(id => {
-        document.getElementById(id)?.addEventListener('click', () => open('modalSignup'));
-    });
+    /* ── Render ── */
+    function renderTable() {
+        const users = getFiltered();
+        const tbody = document.getElementById('usersTableBody');
 
-    /* Fermer via data-close */
-    document.querySelectorAll('[data-close]').forEach(btn => {
-        btn.addEventListener('click', () => close(btn.dataset.close));
-    });
-
-    /* Liens de switch */
-    document.getElementById('linkToSignup')?.addEventListener('click',  e => { e.preventDefault(); swap('modalLogin','modalSignup'); });
-    document.getElementById('linkToLogin')?.addEventListener('click',   e => { e.preventDefault(); swap('modalSignup','modalLogin'); });
-    document.getElementById('linkForgot')?.addEventListener('click',    e => { e.preventDefault(); swap('modalLogin','modalForgot'); });
-    document.getElementById('linkBackLogin')?.addEventListener('click', e => { e.preventDefault(); swap('modalForgot','modalLogin'); });
-
-    /* Fermer en cliquant le fond */
-    document.querySelectorAll('.modal').forEach(m => {
-        m.addEventListener('click', e => { if (e.target === m) close(m.id); });
-    });
-
-    /* Fermer avec Échap */
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') {
-            document.querySelectorAll('.modal').forEach(m => {
-                if (m.style.display === 'flex') close(m.id);
-            });
+        if (!users.length) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:50px;color:var(--muted);"><div style="font-size:32px;opacity:0.15;margin-bottom:10px;">👥</div>Aucun utilisateur trouvé</td></tr>`;
+            return;
         }
-    });
 
-    /* ── Connexion ── */
-    document.getElementById('formLogin').addEventListener('submit', async e => {
-        e.preventDefault();
-        const email    = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value;
+        tbody.innerHTML = users.map(u => {
+            const name = [u.prenom, u.nom].filter(Boolean).join(' ') || '—';
+            const initials = ((u.prenom?.[0]||'') + (u.nom?.[0]||'')).toUpperCase() || '?';
+            const color = roleColors[u.role] || 'var(--muted)';
+            const isActive = u.actif !== false;
+            const dateStr = u.created_at ? new Date(u.created_at).toLocaleDateString('fr-CH', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+
+            return `<tr>
+                <td>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div class="user-avatar" style="background:${color}20;color:${color};">${initials}</div>
+                        <div>
+                            <div style="font-weight:600;color:var(--white);font-size:13px;">${name}</div>
+                            <div style="font-size:11px;color:var(--muted);">#${u.id.slice(0,8)}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>${u.email || '—'}</td>
+                <td><span class="role-badge role-${u.role}">${roleIcons[u.role]||''} ${u.role}</span></td>
+                <td>${u.telephone || '—'}</td>
+                <td>
+                    <span class="status-dot ${isActive ? 'dot-active' : 'dot-inactive'}"></span>
+                    <span style="font-size:12px;color:${isActive ? 'var(--green)' : 'var(--muted)'};">${isActive ? 'Actif' : 'Inactif'}</span>
+                </td>
+                <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
+                <td>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-ghost btn-sm" onclick="openModalEdit('${u.id}')"><i class="fas fa-edit"></i></button>
+                        ${isActive
+                            ? `<button class="btn btn-sm" style="background:rgba(232,49,26,0.1);color:var(--red);border:1px solid rgba(232,49,26,0.2);" onclick="openConfirmDeactivate('${u.id}','${name.replace(/'/g,"\\'")}')"><i class="fas fa-user-slash"></i></button>`
+                            : `<button class="btn btn-green btn-sm" onclick="activateUser('${u.id}')"><i class="fas fa-user-check"></i></button>`
+                        }
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    /* ── Create ── */
+    window.openModalCreate = function() {
+        document.getElementById('modalUserTitle').textContent = 'NOUVEL UTILISATEUR';
+        document.getElementById('editUserId').value = '';
+        document.getElementById('uPrenom').value = '';
+        document.getElementById('uNom').value = '';
+        document.getElementById('uEmail').value = '';
+        document.getElementById('uEmail').disabled = false;
+        document.getElementById('uPassword').value = '';
+        document.getElementById('uRole').value = 'client';
+        document.getElementById('uTel').value = '';
+        document.getElementById('uActif').value = 'true';
+        document.getElementById('pwdField').style.display = '';
+        document.getElementById('activeField').style.display = 'none';
+        openModal('modalUser');
+    };
+
+    /* ── Edit ── */
+    window.openModalEdit = function(id) {
+        const u = allUsers.find(x => x.id === id);
+        if (!u) return;
+        document.getElementById('modalUserTitle').textContent = 'MODIFIER UTILISATEUR';
+        document.getElementById('editUserId').value = u.id;
+        document.getElementById('uPrenom').value = u.prenom || '';
+        document.getElementById('uNom').value = u.nom || '';
+        document.getElementById('uEmail').value = u.email || '';
+        document.getElementById('uEmail').disabled = true;
+        document.getElementById('uPassword').value = '';
+        document.getElementById('uRole').value = u.role || 'client';
+        document.getElementById('uTel').value = u.telephone || '';
+        document.getElementById('uActif').value = (u.actif !== false) ? 'true' : 'false';
+        document.getElementById('pwdField').style.display = 'none';
+        document.getElementById('activeField').style.display = '';
+        openModal('modalUser');
+    };
+
+    /* ── Save ── */
+    window.saveUser = async function() {
+        const id     = document.getElementById('editUserId').value;
+        const prenom = document.getElementById('uPrenom').value.trim();
+        const nom    = document.getElementById('uNom').value.trim();
+        const email  = document.getElementById('uEmail').value.trim();
+        const pwd    = document.getElementById('uPassword').value;
+        const role   = document.getElementById('uRole').value;
+        const tel    = document.getElementById('uTel').value.trim();
+        const actif  = document.getElementById('uActif').value === 'true';
+
+        if (!email) { toast('error', 'L\'email est requis'); return; }
+        if (!id && pwd.length < 6) { toast('error', 'Le mot de passe doit faire au moins 6 caractères'); return; }
+
         showLoad();
         try {
-            const { error } = await db.auth.signInWithPassword({ email, password });
-            if (error) throw error;
-            toast('success', 'Connexion réussie — redirection…');
-            setTimeout(() => window.location.href = '/admin/dashboard.html', 1200);
-        } catch (err) {
-            hideLoad();
-            toast('error', err.message);
-        }
-    });
-
-    /* ── Inscription ── */
-    document.getElementById('formSignup').addEventListener('submit', async e => {
-        e.preventDefault();
-        const email    = document.getElementById('signupEmail').value.trim();
-        const password = document.getElementById('signupPassword').value;
-        const nom      = document.getElementById('signupNom').value.trim();
-        const prenom   = document.getElementById('signupPrenom').value.trim();
-        const tel      = document.getElementById('signupTel').value.trim();
-        showLoad();
-        try {
-            const { data, error: authErr } = await db.auth.signUp({ email, password });
-            if (authErr) throw authErr;
-            const { error: dbErr } = await db.from('utilisateurs').insert([{
-                id: data.user.id, email,
-                nom: nom || null, prenom: prenom || null,
-                telephone: tel || null, role: 'client'
-            }]);
-            if (dbErr) throw dbErr;
-            toast('success', 'Compte créé ! Vérifiez vos emails.');
-            close('modalSignup');
+            if (!id) {
+                // Create via auth
+                const { data, error: authErr } = await db.auth.signUp({ email, password: pwd });
+                if (authErr) throw authErr;
+                const { error: dbErr } = await db.from('utilisateurs').upsert([{
+                    id: data.user.id, email,
+                    nom: nom || null, prenom: prenom || null,
+                    telephone: tel || null, role, actif: true
+                }]);
+                if (dbErr) throw dbErr;
+                toast('success', '✅ Utilisateur créé !');
+            } else {
+                // Update existing
+                const { error } = await db.from('utilisateurs').update({
+                    nom: nom || null, prenom: prenom || null,
+                    telephone: tel || null, role, actif
+                }).eq('id', id);
+                if (error) throw error;
+                toast('success', '✅ Utilisateur mis à jour !');
+            }
+            window.closeModal('modalUser');
+            await loadUsers();
         } catch (err) {
             toast('error', err.message);
         } finally {
             hideLoad();
         }
-    });
+    };
 
-    /* ── Mot de passe oublié ── */
-    document.getElementById('formForgot').addEventListener('submit', async e => {
-        e.preventDefault();
-        const email = document.getElementById('forgotEmail').value.trim();
+    /* ── Deactivate ── */
+    window.openConfirmDeactivate = function(id, name) {
+        document.getElementById('deleteUserId').value = id;
+        document.getElementById('deleteUserName').textContent = name;
+        openModal('modalConfirmDelete');
+    };
+
+    window.confirmDeactivate = async function() {
+        const id = document.getElementById('deleteUserId').value;
         showLoad();
-        try {
-            const { error } = await db.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin + '/admin/reset-password.html'
-            });
-            if (error) throw error;
-            toast('success', 'Email envoyé — vérifiez votre boîte.');
-            close('modalForgot');
-        } catch (err) {
-            toast('error', err.message);
-        } finally {
-            hideLoad();
-        }
-    });
+        const { error } = await db.from('utilisateurs').update({ actif: false }).eq('id', id);
+        hideLoad();
+        if (error) { toast('error', error.message); return; }
+        toast('success', 'Utilisateur désactivé');
+        window.closeModal('modalConfirmDelete');
+        await loadUsers();
+    };
 
+    window.activateUser = async function(id) {
+        showLoad();
+        const { error } = await db.from('utilisateurs').update({ actif: true }).eq('id', id);
+        hideLoad();
+        if (error) { toast('error', error.message); return; }
+        toast('success', '✅ Utilisateur réactivé');
+        await loadUsers();
+    };
+
+    /* ── AUTH ── */
+    async function init() {
+        const { data: { session } } = await db.auth.getSession();
+        if (!session) { window.location.href = '../login/index.html'; return; }
+        const { data: user } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
+        if (!user || !['admin','super_admin'].includes(user.role)) {
+            await db.auth.signOut();
+            window.location.href = '../login/index.html';
+            return;
+        }
+        const initials = ((user.prenom?.[0]||'') + (user.nom?.[0]||'')).toUpperCase() || 'SA';
+        document.getElementById('sbAv').textContent   = initials;
+        document.getElementById('sbName').textContent = [user.prenom, user.nom].filter(Boolean).join(' ') || 'Admin';
+        document.getElementById('btnLogout').addEventListener('click', async () => {
+            await db.auth.signOut();
+            window.location.href = '../login/index.html';
+        });
+        await loadUsers();
+    }
+
+    init();
 })();
 </script>
 </body>
