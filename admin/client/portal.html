@@ -418,7 +418,7 @@
 
     /* ── COLIS MANAGEMENT ── */
     function initColis() {
-        colisList=[{poids:1, qty:1, type:'colis', description:''}];
+        colisList=[{poids:0, qty:1, type:'colis', description:''}];
         renderColis();
     }
 
@@ -444,7 +444,7 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
                     <div>
                         <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Poids (kg) *</div>
-                        <input type="number" value="${c.poids}" min="0.1" step="0.1" onchange="colisList[${i}].poids=parseFloat(this.value)||1"
+                        <input type="number" value="${c.poids||''}" min="0" step="0.1" placeholder="kg" onchange="colisList[${i}].poids=parseFloat(this.value)||0"
                             style="width:100%;padding:8px 10px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);">
                     </div>
                     <div>
@@ -1072,29 +1072,58 @@ body{font-family:Arial,sans-serif;}
     function renderOrderCard(o,compact=false){
         const stLabel={pending_validation:'⏳ En attente de validation',accepted:'✅ Accepté',pending:'⏳ En cours',planned:'📋 Planifié',in_transit:'🚚 En route',delivered:'✅ Livré',refused:'❌ Refusé'}[o.admin_status||o.status]||o.status;
         const stClass='st-'+(o.admin_status||o.status);
-        const shortAddr=a=>a?a.split(',').slice(0,2).join(',').trim():'—';
         const tracking=!compact?renderTracking(o):'';
+
+        // Adresse expéditeur complète (nettoyer les pipes)
+        const pickupFull = (o.pickup_address||'—').replace(/\|/g,' ').replace(/  +/g,' ').trim();
+        // Adresse livraison complète
+        const delivFull  = (o.delivery_address||'—').trim();
+
+        // Poids et quantité depuis colisDetails si disponible
+        let poidsAff = parseFloat(o.weight)||0;
+        let qtyAff   = parseInt(o.quantity)||1;
+        try {
+            const instr = o.instructions||'';
+            const m = instr.match(/COLIS:(\[.*?\])/);
+            if(m) {
+                const colis = JSON.parse(m[1]);
+                qtyAff   = colis.reduce((s,c)=>s+parseInt(c.qty||1),0);
+                poidsAff = colis.reduce((s,c)=>s+(parseFloat(c.poids||0)*parseInt(c.qty||1)),0);
+            }
+        } catch(e){}
+
         return `<div class="order-card">
             <div class="oc-head">
                 <div>
                     <div class="oc-num">${o.order_number||o.id.slice(0,8)}</div>
-                    <div class="oc-date">${new Date(o.created_at).toLocaleDateString('fr-CH',{day:'2-digit',month:'short',year:'numeric'})}</div>
+                    <div class="oc-date">${new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'short',year:'numeric'})}</div>
                 </div>
                 <span class="oc-status ${stClass}">${stLabel}</span>
             </div>
-            <div class="oc-route">
-                <div class="oc-dot" style="background:var(--blue)"></div>
-                <div class="oc-addr">${shortAddr(o.pickup_address)}</div>
+            <!-- Adresse expéditeur -->
+            <div class="oc-route" style="align-items:flex-start;">
+                <div class="oc-dot" style="background:var(--blue);margin-top:4px;flex-shrink:0;"></div>
+                <div>
+                    <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;">Enlèvement</div>
+                    <div class="oc-addr">${pickupFull}</div>
+                </div>
             </div>
-            <div class="oc-route">
-                <div class="oc-dot" style="background:var(--red)"></div>
-                <div class="oc-addr">${shortAddr(o.delivery_address)}</div>
+            <!-- Adresse destinataire -->
+            <div class="oc-route" style="align-items:flex-start;">
+                <div class="oc-dot" style="background:var(--red);border-radius:2px;transform:rotate(45deg);margin-top:4px;flex-shrink:0;"></div>
+                <div>
+                    <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;">Livraison</div>
+                    ${o.destinataire_nom?`<div style="font-size:13px;font-weight:600;color:var(--white);">${o.destinataire_nom}</div>`:''}
+                    <div class="oc-addr">${delivFull}</div>
+                </div>
             </div>
-            <div class="oc-meta">
-                <span class="oc-tag">📦 ${o.quantity||1}× ${o.weight||0}kg</span>
+            <!-- Méta -->
+            <div class="oc-meta" style="margin-top:8px;">
+                <span class="oc-tag">📦 <strong>${qtyAff}</strong> colis</span>
+                <span class="oc-tag">⚖️ <strong>${poidsAff.toFixed(1)}</strong> kg</span>
                 <span class="oc-tag">⚡ ${o.service_type||'normal'}</span>
                 ${o.night_delivery?'<span class="oc-tag">🌙 Nuit</span>':''}
-                ${o.destinataire_nom?`<span class="oc-tag">👤 ${o.destinataire_nom}</span>`:''}
+                ${o.poids_reel?`<span class="oc-tag" style="color:var(--green);">✅ <strong>${o.poids_reel}kg</strong> réel</span>`:''}
             </div>
             ${tracking}
             ${o.admin_status==='refused'&&o.admin_note?`<div style="background:rgba(232,49,26,0.08);border:1px solid rgba(232,49,26,0.2);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--muted2);margin-bottom:10px;"><i class="fas fa-info-circle" style="color:var(--red)"></i> ${o.admin_note}</div>`:''}
