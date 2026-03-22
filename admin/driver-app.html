@@ -1017,12 +1017,39 @@
     window.confirmPickup = async function(id) {
         showLoad();
         try {
+            const now = new Date().toISOString();
             await db.from('transport_orders_simple').update({
                 status:      'in_transit',
                 driver_id:   driver.id,
-                assigned_at: new Date().toISOString(),
-                picked_up_at:new Date().toISOString()
+                assigned_at: now,
+                picked_up_at: now
             }).eq('id', id);
+
+            // Charger les détails du transport
+            const { data:o } = await db.from('transport_orders_simple')
+                .select('order_number, delivery_address, destinataire_nom')
+                .eq('id', id).single();
+
+            // Notifier tous les admins/super_admins
+            const { data:admins } = await db.from('utilisateurs')
+                .select('id')
+                .in('role', ['admin', 'super_admin'])
+                .eq('actif', true);
+
+            const driverName = [driver.prenom, driver.nom].filter(Boolean).join(' ') || 'Chauffeur';
+            const destAddr   = (o?.delivery_address||'').split(',')[0];
+
+            for(const admin of admins||[]) {
+                await db.from('notifications').insert([{
+                    user_id:    admin.id,
+                    title:      `🚚 Pris en charge — ${o?.order_number||id.slice(0,8)}`,
+                    body:       `${driverName} a pris en charge le colis pour ${o?.destinataire_nom||destAddr}`,
+                    data:       JSON.stringify({ order_id: id, type: 'pickup' }),
+                    read:       false,
+                    created_at: now
+                }]);
+            }
+
             toast('success', '✅ Prise en charge confirmée !');
             stopScan();
             await loadMissions();
