@@ -518,10 +518,11 @@
 
     // ── Modal facture ──
     window.openModalFacture=function(entId=null){
+        // S'assurer que les selects sont peuplés
+        populateSelects();
         const m=document.getElementById('modalFacture');
         m.style.display='flex';m.classList.add('open');
         document.getElementById('modalFactureTitre').textContent='NOUVELLE FACTURE';
-        // Période : derniers 7 jours
         const fin=today();
         const deb=addDays(fin,-7);
         document.getElementById('fDebut').value=deb;
@@ -530,7 +531,10 @@
         document.getElementById('fConditions').value='Net 30 jours, virement bancaire';
         document.getElementById('fLignesSection').style.display='none';
         currentFactureLignes=[];
-        if(entId){document.getElementById('fEntreprise').value=entId;onClientChange();}
+        if(entId){
+            document.getElementById('fEntreprise').value=entId;
+            window.onClientChange();
+        }
     };
 
     window.onClientChange=async function(){
@@ -613,8 +617,10 @@
     window.saveFacture=async function(statut){
         const entId=document.getElementById('fEntreprise').value;
         if(!entId){toast('error','Sélectionnez un client');return;}
-        if(!currentFactureLignes.length){toast('error','Aucune livraison sur cette période');return;}
-
+        if(!currentFactureLignes.length){
+            toast('error','Aucune livraison non facturée sur cette période pour ce client');
+            return;
+        }
         showLoad('Création facture…');
         try{
             const tarif=getTarif(entId);
@@ -634,7 +640,6 @@
                 periode_debut:document.getElementById('fDebut').value,
                 periode_fin:fin,
                 statut,
-                nb_colis:totalColis,
                 montant_ht:parseFloat(fmt(montantHT)),
                 remise_pct:remisePct,
                 remise_mnt:parseFloat(fmt(remiseMnt)),
@@ -732,7 +737,6 @@
                     periode_debut:deb,
                     periode_fin:fin,
                     statut:'envoyee',
-                    nb_colis:totalColis,
                     montant_ht:parseFloat(fmt(montantHT)),
                     remise_pct:remisePct,
                     remise_mnt:parseFloat(fmt(remiseMnt)),
