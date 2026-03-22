@@ -482,8 +482,9 @@
             .select('*,entreprises(nom)')
             .eq('status','delivered')
             .is('facture_id',null)
+            .not('entreprise_id','is',null)
             .order('delivered_at',{ascending:false});
-        ordersAfacturer=data||[];
+        ordersAfacturer=(data||[]).filter(o=>o.entreprise_id);
         const tbody=document.getElementById('aFacturerList');
         if(!ordersAfacturer.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--green);">✅ Tout est facturé !</td></tr>';return;}
         tbody.innerHTML=ordersAfacturer.map(o=>{
@@ -812,7 +813,7 @@
             }
             const s = document.createElement('script');
             s.id = 'qrcodeLib';
-            s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
             s.onload = () => resolve();
             s.onerror = () => resolve();
             document.head.appendChild(s);
@@ -829,7 +830,7 @@
         const ent=f.entreprises||{};
         const svcColor={eco:'#6b7280',prioritaire:'#3b82f6',express:'#f59e0b',urgent:'#ef4444'};
 
-        // Générer QR Bill en base64 avant de construire le HTML
+        // Générer QR Bill en base64
         let qrBillBase64 = '';
         try {
             await loadQRLib();
@@ -845,10 +846,26 @@
                 'EPD',''
             ].join('\n');
             if(typeof QRCode !== 'undefined') {
-                qrBillBase64 = await new Promise((resolve) => {
-                    QRCode.toDataURL(spcData, {width:160,margin:1,errorCorrectionLevel:'M'}, (err,url)=>{
-                        resolve(err ? '' : url);
+                // QRCodeJS utilise un canvas DOM
+                const tmpDiv = document.createElement('div');
+                tmpDiv.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+                document.body.appendChild(tmpDiv);
+                await new Promise((resolve) => {
+                    const qr = new QRCode(tmpDiv, {
+                        text: spcData,
+                        width: 160, height: 160,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.M
                     });
+                    setTimeout(() => {
+                        const canvas = tmpDiv.querySelector('canvas');
+                        const img = tmpDiv.querySelector('img');
+                        if(canvas) qrBillBase64 = canvas.toDataURL('image/png');
+                        else if(img) qrBillBase64 = img.src;
+                        document.body.removeChild(tmpDiv);
+                        resolve();
+                    }, 300);
                 });
             }
         } catch(e) { console.warn('QR Bill:', e); }
@@ -877,7 +894,7 @@
         </style></head><body>
         <div class="header">
             <div>
-                <div class="logo">LÉMAN<span>-COURSES</span></div>
+                <div class="logo">COLIXO<span> — Didier Gysling</span></div>
                 <p style="color:#6b7280;margin-top:6px;">Transport express — Suisse romande<br>1462 Yvonand, VD</p>
             </div>
             <div style="text-align:right;">
