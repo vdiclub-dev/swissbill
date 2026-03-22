@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0a0a0f">
-    <title>Léman Driver</title>
+    <title>Colixo Driver</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -310,7 +310,7 @@
 
 <!-- ═══ STATUS BAR ═══ -->
 <div class="status-bar" id="statusBar">
-    <div class="sb-logo"><div class="sb-mark">🚚</div> Léman<em>-Driver</em></div>
+    <div class="sb-logo"><div class="sb-mark">🚚</div> Colixo<em>-Driver</em></div>
     <div class="sb-right">
         <div class="gps-dot" id="gpsDot"></div>
         <button id="btnNotifBell" onclick="toggleNotifs()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:4px;position:relative;">
@@ -334,7 +334,7 @@
 <div class="screen login-screen active" id="screenLogin">
     <div class="login-wrap">
         <div class="login-icon">🚚</div>
-        <div class="login-title">LÉMAN DRIVER</div>
+        <div class="login-title">COLIXO DRIVER</div>
         <div class="login-sub">Application chauffeur</div>
         <div class="login-form">
             <div class="lf"><label>Email</label><input type="email" id="lEmail" placeholder="chauffeur@leman.ch" inputmode="email" autocomplete="email"></div>
@@ -1018,23 +1018,20 @@
         showLoad();
         try {
             const now = new Date().toISOString();
+            // Ne PAS assigner driver_id — c'est le rôle du dispatch uniquement
             await db.from('transport_orders_simple').update({
-                status:      'in_transit',
-                driver_id:   driver.id,
-                assigned_at: now,
+                status:       'in_transit',
                 picked_up_at: now
             }).eq('id', id);
 
             // Charger les détails du transport
             const { data:o } = await db.from('transport_orders_simple')
-                .select('order_number, delivery_address, destinataire_nom')
+                .select('order_number, delivery_address, destinataire_nom, driver_id')
                 .eq('id', id).single();
 
-            // Notifier tous les admins/super_admins
+            // Notifier les admins
             const { data:admins } = await db.from('utilisateurs')
-                .select('id')
-                .in('role', ['admin', 'super_admin'])
-                .eq('actif', true);
+                .select('id').in('role', ['admin','super_admin']).eq('actif', true);
 
             const driverName = [driver.prenom, driver.nom].filter(Boolean).join(' ') || 'Chauffeur';
             const destAddr   = (o?.delivery_address||'').split(',')[0];
@@ -1754,10 +1751,10 @@
         // Demander permission push
         if ('Notification' in window && Notification.permission === 'default') {
             setTimeout(async () => {
-                await window.LémanPush?.subscribePush(userId);
+                await window.ColixoPush?.subscribePush(userId);
             }, 3000);
         } else if (Notification.permission === 'granted') {
-            await window.LémanPush?.subscribePush(userId);
+            await window.ColixoPush?.subscribePush(userId);
         }
 
         // Charger notifications existantes
@@ -1775,7 +1772,7 @@
                 console.log('[Notif] Nouvelle:', notif.title);
 
                 // Afficher notification push locale
-                await window.LémanPush?.showLocalNotification(
+                await window.ColixoPush?.showLocalNotification(
                     notif.title,
                     notif.body || '',
                     { tag: notif.id, requireInteraction: true }
