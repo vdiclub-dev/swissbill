@@ -524,7 +524,16 @@
             db.from('transport_orders_simple').select('*').order('created_at',{ascending:false}),
             db.from('utilisateurs').select('id,nom,prenom,email,actif').eq('role','chauffeur')
         ]);
-        allOrders  = orders||[];
+        // Trier : les transports planifiés avec tour_position d'abord
+        const raw = orders||[];
+        allOrders = raw.sort((a,b) => {
+            // Si même tournée, trier par position
+            if(a.tour_id && a.tour_id===b.tour_id) {
+                return (a.tour_position||999) - (b.tour_position||999);
+            }
+            // Sinon tri par date décroissante
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
         chauffeurs = (chauf||[]).filter(c => c.actif !== false);
         window._chauffeurs = chauffeurs;
         console.log('[Dispatch] Chauffeurs chargés:', chauffeurs.length);
@@ -1479,11 +1488,15 @@
 
         showLoad('Sauvegarde…');
         try {
-            for(const orderId of tour.orderIds){
+            // Sauvegarder avec position dans la tournée
+            for(let i=0; i<tour.orderIds.length; i++){
                 await db.from('transport_orders_simple').update({
-                    status:'planned', driver_id:tour.driverId,
-                    assigned_at:new Date().toISOString()
-                }).eq('id',orderId);
+                    status:      'planned',
+                    driver_id:   tour.driverId,
+                    assigned_at: new Date().toISOString(),
+                    tour_id:     tour.id,
+                    tour_position: i+1  // Position dans la tournée
+                }).eq('id', tour.orderIds[i]);
             }
             const driver=chauffeurs.find(c=>c.id===tour.driverId);
             const dName=driver?`${driver.prenom||''} ${driver.nom||''}`.trim():'Chauffeur';
