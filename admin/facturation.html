@@ -798,6 +798,14 @@
     };
 
     // ── Impression facture ──
+    // Charger QRCode lib une seule fois
+    if(!document.getElementById('qrcodeLib')) {
+        const s = document.createElement('script');
+        s.id = 'qrcodeLib';
+        s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+        document.head.appendChild(s);
+    }
+
     window.imprimerFacture=async function(id){
         showLoad('Préparation PDF…');
         const{data:f}=await db.from('factures').select('*,entreprises(*)').eq('id',id).single();
@@ -807,6 +815,31 @@
 
         const ent=f.entreprises||{};
         const svcColor={eco:'#6b7280',prioritaire:'#3b82f6',express:'#f59e0b',urgent:'#ef4444'};
+
+        // Générer QR Bill en base64 avant de construire le HTML
+        let qrBillBase64 = '';
+        try {
+            const qrCanvas = document.createElement('canvas');
+            const spcData = [
+                'SPC','0200','1',
+                'CH953000529114788940K',
+                'S','Colixo Sarl','Yverdon-les-Bains','','1400','Yverdon-les-Bains','CH',
+                '','','','','','','',
+                fmt(f.montant_ttc),'CHF',
+                'S', (ent.nom||'').substring(0,70), (ent.adresse||'').substring(0,70), '',
+                (ent.npa||'').substring(0,16), (ent.ville||'').substring(0,35), 'CH',
+                'NON','', ('Facture '+f.numero).substring(0,140),
+                'EPD',''
+            ].join('\n');
+            await new Promise((resolve) => {
+                if(typeof QRCode !== 'undefined') {
+                    QRCode.toDataURL(spcData, {width:140,margin:1,errorCorrectionLevel:'M'}, (err,url)=>{
+                        if(!err) qrBillBase64 = url;
+                        resolve();
+                    });
+                } else resolve();
+            });
+        } catch(e) { console.warn('QR Bill:', e); }
 
         const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
         <style>
@@ -935,7 +968,7 @@
                     <div style="display:flex;gap:5mm;">
                         <!-- QR Code -->
                         <div>
-                            <div id="qrBillCode"></div>
+                            <img src="${qrBillBase64}" style="width:140px;height:140px;" alt="QR Bill">
                             <div style="font-size:7pt;text-align:center;margin-top:1mm;color:#666;">QR-IBAN</div>
                         </div>
 
@@ -979,42 +1012,7 @@
             </div>
         </div>
 
-        <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-        <div id="qrData"
-            data-iban="CH953000529114788940K"
-            data-montant="${fmt(f.montant_ttc)}"
-            data-ref="${f.numero}"
-            data-nom="${(ent.nom||'').replace(/"/g,'&quot;')}"
-            data-adr="${(ent.adresse||'').replace(/"/g,'&quot;')}"
-            data-npa="${ent.npa||''}"
-            data-ville="${ent.ville||''}"
-            style="display:none;">
-        </div>
-        <script>
-        window.addEventListener('load', function() {
-            var d = document.getElementById('qrData').dataset;
-            var spc = [
-                'SPC','0200','1',
-                d.iban,
-                'S','Colixo Sarl','Yverdon-les-Bains','','1400','Yverdon-les-Bains','CH',
-                '','','','','','','',
-                d.montant,'CHF',
-                'S', d.nom, d.adr, '', d.npa, d.ville, 'CH',
-                'NON','', 'Facture ' + d.ref,
-                'EPD',''
-            ].join('\n');
 
-            if(typeof QRCode !== 'undefined') {
-                QRCode.toCanvas(document.createElement('canvas'), spc, {
-                    width:140, margin:1, errorCorrectionLevel:'M'
-                }, function(err, canvas) {
-                    var el = document.getElementById('qrBillCode');
-                    if(!err && el) el.appendChild(canvas);
-                    else if(el) el.innerHTML = '<div style="width:140px;height:140px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;text-align:center;">QR Code</div>';
-                });
-            }
-        });
-        </script>
         <br><button onclick="window.print()" style="background:#e8311a;color:white;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:8px;">🖨 Imprimer / PDF</button>
         <button onclick="window.close()" style="background:#f3f4f6;border:none;padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer;">Fermer</button>
         </body></html>`;
