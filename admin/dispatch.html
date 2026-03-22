@@ -623,7 +623,7 @@
 
     /* ── MAP render ── */
     async function renderMap() {
-        Object.values(mapMarkers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);});
+        Object.values(mapMarkers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);if(m.label)map.removeLayer(m.label);});
         mapMarkers={};
         mapLines.forEach(l=>map.removeLayer(l)); mapLines=[];
 
@@ -638,14 +638,18 @@
         }
 
         const bounds=[[46.7785,6.6409]];
-        const ordersToRender = allOrders.filter(o=>o.status!=='delivered');
+        // Afficher tous sauf livrés — in_transit EN PREMIER pour visibilité
+        const ordersToRender = [
+            ...allOrders.filter(o=>o.status==='in_transit'),
+            ...allOrders.filter(o=>o.status!=='delivered'&&o.status!=='in_transit')
+        ];
 
         for(const o of ordersToRender) {
+            const isMoving = o.status==='in_transit';
             const color=STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')]||STATUS_COLORS.pending;
-            const pulse=o.status==='pending'||o.priority==='urgent';
+            const pulse=isMoving||o.priority==='urgent';
             const mg={};
 
-            // Utiliser coords existantes ou géocoder
             let pLat=o.pickup_lat,   pLng=o.pickup_lng;
             let dLat=o.delivery_lat, dLng=o.delivery_lng;
 
@@ -661,19 +665,47 @@
             }
 
             if(pLat) {
-                mg.p=L.marker([pLat,pLng],{icon:makeIcon(color,pulse,'circle')}).addTo(map)
+                mg.p=L.marker([pLat,pLng],{icon:makeIcon(color,pulse,'circle'), zIndexOffset: isMoving?1000:0})
+                    .addTo(map)
                     .on('click',()=>focusOrderMap(o.id))
-                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
+                    .bindTooltip(`<b>${o.order_number||'—'}</b>${isMoving?'<br>🚚 <b>EN ROUTE</b>':''}<br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
                 bounds.push([pLat,pLng]);
             }
             if(dLat) {
-                mg.d=L.marker([dLat,dLng],{icon:makeIcon(color,false,'square')}).addTo(map)
+                // Marqueur livraison plus grand si en transit
+                const iconSize = isMoving ? [16,16] : [12,12];
+                mg.d=L.marker([dLat,dLng],{
+                    icon:isMoving
+                        ? L.divIcon({
+                            html:`<div style="position:relative;">
+                                <div style="width:20px;height:20px;background:${color};border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 0 12px ${color};animation:pulse 1s infinite;"></div>
+                                <style>@keyframes pulse{0%,100%{box-shadow:0 0 8px ${color}}50%{box-shadow:0 0 20px ${color}}}</style>
+                            </div>`,
+                            className:'',iconSize:[20,20],iconAnchor:[10,10]
+                          })
+                        : makeIcon(color,false,'square'),
+                    zIndexOffset: isMoving?1000:0
+                }).addTo(map)
                     .on('click',()=>focusOrderMap(o.id))
-                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
+                    .bindTooltip(`<b>${o.order_number||'—'}</b>${isMoving?'<br>🎯 <b>DESTINATION</b>':''}<br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
                 bounds.push([dLat,dLng]);
+
+                // Label "EN ROUTE" flottant pour in_transit
+                if(isMoving && dLat) {
+                    mg.label = L.marker([dLat,dLng],{
+                        icon:L.divIcon({
+                            html:`<div style="background:${color};color:white;padding:2px 7px;border-radius:100px;font-size:10px;font-weight:700;white-space:nowrap;margin-top:-28px;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🚚 EN ROUTE</div>`,
+                            className:'',iconAnchor:[-4,28]
+                        }),
+                        interactive:false
+                    }).addTo(map);
+                }
             }
             if(pLat&&dLat) {
-                mg.l=L.polyline([[pLat,pLng],[dLat,dLng]],{color,weight:1.5,opacity:0.25,dashArray:'4 6'}).addTo(map);
+                const lineStyle = isMoving
+                    ? {color,weight:3,opacity:0.7,dashArray:'8 4'}
+                    : {color,weight:1.5,opacity:0.2,dashArray:'4 6'};
+                mg.l=L.polyline([[pLat,pLng],[dLat,dLng]],lineStyle).addTo(map);
                 mapLines.push(mg.l);
             }
             mapMarkers[o.id]=mg;
