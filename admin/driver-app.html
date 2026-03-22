@@ -2,628 +2,899 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0a0a0f">
-    <title>Léman Driver</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Admin | Léman-Courses</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../config.js"></script>
-    <script src="../push-manager.js"></script>
     <style>
         :root {
-            --red:     #e8311a;
-            --night:   #0a0a0f;
-            --night2:  #111118;
-            --night3:  #18181f;
-            --surface: #1e1e28;
-            --border:  rgba(255,255,255,0.08);
-            --border2: rgba(255,255,255,0.14);
-            --white:   #ffffff;
-            --muted:   rgba(255,255,255,0.38);
-            --muted2:  rgba(255,255,255,0.65);
-            --green:   #22c55e;
-            --blue:    #3b82f6;
-            --yellow:  #f59e0b;
-            --orange:  #f97316;
-            --purple:  #a855f7;
-            --safe-b:  env(safe-area-inset-bottom, 0px);
+            --red:      #e8311a;
+            --red-dark: #c0280f;
+            --red-glow: rgba(232,49,26,0.2);
+            --night:    #0a0a0f;
+            --night2:   #111118;
+            --night3:   #18181f;
+            --surface:  #1e1e28;
+            --border:   rgba(255,255,255,0.07);
+            --border2:  rgba(255,255,255,0.12);
+            --white:    #ffffff;
+            --muted:    rgba(255,255,255,0.38);
+            --muted2:   rgba(255,255,255,0.6);
+            --green:    #22c55e;
+            --blue:     #3b82f6;
+            --yellow:   #f59e0b;
+            --purple:   #a855f7;
+            --sidebar:  220px;
         }
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { height:100%; overflow:hidden; }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; }
         body {
-            font-family:'Outfit',sans-serif;
+            font-family:'Outfit', sans-serif;
             background:var(--night);
             color:var(--white);
-            display:flex; flex-direction:column;
-            max-width:430px; margin:0 auto;
+            display:flex;
         }
 
-        /* ── STATUS BAR ── */
-        .status-bar {
-            background:var(--night2); border-bottom:1px solid var(--border);
-            padding:12px 18px; display:flex; align-items:center; justify-content:space-between;
-            flex-shrink:0; display:none;
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width: var(--sidebar);
+            background: var(--night2);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top:0; left:0; bottom:0;
+            z-index: 100;
+            transition: width 0.3s;
         }
-        .sb-logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:1px; }
-        .sb-mark { width:26px; height:26px; background:var(--red); border-radius:6px; display:grid; place-items:center; font-size:12px; }
-        .sb-logo em { color:var(--red); font-style:normal; }
-        .sb-right { display:flex; align-items:center; gap:12px; }
-        .gps-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); transition:all 0.3s; }
-        .gps-dot.on { background:var(--green); box-shadow:0 0 6px var(--green); animation:gp 1.5s infinite; }
-        @keyframes gp { 0%,100%{opacity:1}50%{opacity:0.4} }
-
-        /* ── SCREENS ── */
-        .screen { display:none; flex:1; flex-direction:column; overflow:hidden; }
-        .screen.active { display:flex; }
-
-        /* ── LOGIN ── */
-        .login-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 24px; }
-        .login-icon { width:80px; height:80px; background:var(--red); border-radius:20px; display:grid; place-items:center; font-size:36px; margin:0 auto 20px; box-shadow:0 8px 32px rgba(232,49,26,0.35); }
-        .login-title { font-family:'Bebas Neue',cursive; font-size:32px; letter-spacing:2px; text-align:center; margin-bottom:6px; }
-        .login-sub { font-size:14px; color:var(--muted); text-align:center; margin-bottom:36px; }
-        .login-form { width:100%; }
-        .lf { margin-bottom:14px; }
-        .lf label { display:block; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
-        .lf input { width:100%; padding:15px 16px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; color:var(--white); }
-        .lf input:focus { outline:none; border-color:var(--red); }
-        .lf input::placeholder { color:rgba(255,255,255,0.2); }
-        .btn-login { width:100%; padding:16px; background:var(--red); color:var(--white); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 6px 24px rgba(232,49,26,0.35); margin-top:8px; }
-        .btn-login:active { transform:scale(0.98); }
-
-        /* ── HOME ── */
-        .home-header { background:var(--night2); padding:16px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
-        .home-greeting { font-size:12px; color:var(--muted); }
-        .home-name { font-family:'Bebas Neue',cursive; font-size:26px; letter-spacing:1px; }
-        .home-date { font-size:12px; color:var(--muted); margin-top:2px; }
-
-        /* Pointage card */
-        .pointage-card {
-            margin:14px; background:var(--night3); border:1px solid var(--border2);
-            border-radius:18px; padding:16px; flex-shrink:0;
+        .sidebar-logo {
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 10px;
+            text-decoration: none;
         }
-        .pc-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; color:var(--muted2); margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; }
-        .pc-status { font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px; }
-        .pc-status.off  { background:rgba(255,255,255,0.06); color:var(--muted); }
-        .pc-status.work { background:rgba(34,197,94,0.15); color:var(--green); border:1px solid rgba(34,197,94,0.3); }
-        .pc-status.pause{ background:rgba(245,158,11,0.15); color:var(--yellow); border:1px solid rgba(245,158,11,0.3); }
-        .pc-times { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
-        .pc-time { background:var(--surface); border-radius:10px; padding:10px 6px; text-align:center; }
-        .pc-time-val { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; }
-        .pc-time-lbl { font-size:9px; color:var(--muted); margin-top:2px; text-transform:uppercase; letter-spacing:0.5px; }
-        .pc-actions { display:flex; gap:8px; }
-        .pc-btn { flex:1; padding:12px 8px; border-radius:10px; border:none; font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s; }
-        .pc-btn:active { transform:scale(0.97); }
-        .pc-btn.start  { background:var(--green); color:var(--night); }
-        .pc-btn.pause  { background:var(--yellow); color:var(--night); }
-        .pc-btn.resume { background:var(--blue); color:var(--white); }
-        .pc-btn.stop   { background:var(--red); color:var(--white); }
-        .pc-btn:disabled { opacity:0.35; cursor:not-allowed; }
+        .logo-mark {
+            width:36px; height:36px; background:var(--red);
+            border-radius:9px; display:grid; place-items:center;
+            font-size:16px; flex-shrink:0;
+        }
+        .logo-text {
+            font-family:'Bebas Neue', cursive;
+            font-size:18px; letter-spacing:1px; color:var(--white);
+        }
+        .logo-text em { color:var(--red); font-style:normal; }
 
-        /* Stats row */
-        .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); flex-shrink:0; }
+        .sidebar-section {
+            padding: 20px 12px 8px;
+            font-size:10px; font-weight:700;
+            letter-spacing:2px; text-transform:uppercase;
+            color:var(--muted);
+        }
+        .nav-item {
+            display: flex; align-items: center; gap:12px;
+            padding: 11px 14px;
+            border-radius: 10px;
+            margin: 2px 8px;
+            font-size:14px; font-weight:500;
+            color: var(--muted2);
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            text-decoration: none;
+        }
+        .nav-item i { width:18px; text-align:center; font-size:15px; }
+        .nav-item:hover { background:var(--night3); color:var(--white); }
+        .nav-item.active {
+            background: rgba(232,49,26,0.1);
+            color: var(--white);
+            border-color: rgba(232,49,26,0.2);
+        }
+        .nav-item.active i { color: var(--red); }
+        .nav-badge {
+            margin-left:auto;
+            background: var(--red);
+            color:white; font-size:10px; font-weight:700;
+            padding:2px 7px; border-radius:100px;
+        }
 
-        /* KM CARD */
-        .km-card { margin:0 14px 10px; background:var(--night3); border:1.5px solid var(--border2); border-radius:14px; padding:14px; flex-shrink:0; }
-        .km-title { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; color:var(--muted2); margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
-        .km-inputs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
-        .km-field { display:flex; flex-direction:column; gap:4px; }
-        .km-field label { font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); }
-        .km-field input { padding:9px 10px; background:var(--surface); border:1.5px solid var(--border2); border-radius:9px; font-family:'Outfit',sans-serif; font-size:16px; color:var(--white); text-align:center; }
-        .km-field input:focus { outline:none; border-color:var(--green); }
-        .km-total { display:flex; align-items:center; justify-content:space-between; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:9px; padding:8px 12px; }
-        .km-total-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; color:var(--green); }
-        .km-total-lbl { font-size:11px; color:var(--muted2); }
-        .km-save { width:100%; padding:10px; background:var(--green); color:var(--night); border:none; border-radius:9px; font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; cursor:pointer; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; }
-        .km-save:active { transform:scale(0.98); }
-        .sr-item { background:var(--night2); padding:12px 8px; text-align:center; }
-        .sr-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
-        .sr-lbl { font-size:10px; color:var(--muted); margin-top:1px; }
+        .sidebar-footer {
+            margin-top:auto;
+            padding:16px 8px;
+            border-top:1px solid var(--border);
+        }
+        .user-chip {
+            display:flex; align-items:center; gap:10px;
+            padding:10px 12px; border-radius:10px;
+            background:var(--night3);
+        }
+        .user-avatar {
+            width:32px; height:32px;
+            background:var(--red); border-radius:8px;
+            display:grid; place-items:center;
+            font-family:'Bebas Neue',cursive; font-size:14px;
+            flex-shrink:0;
+        }
+        .user-info { flex:1; overflow:hidden; }
+        .user-name  { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .user-role  { font-size:11px; color:var(--red); font-weight:600; }
+        .btn-logout {
+            background:none; border:none; cursor:pointer;
+            color:var(--muted); font-size:14px; padding:4px;
+            transition:color 0.2s;
+        }
+        .btn-logout:hover { color:var(--red); }
 
-        /* Missions section */
-        .section-header { padding:12px 16px 6px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
-        .section-title { font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:1px; color:var(--muted2); }
-        .scroll-list { flex:1; overflow-y:auto; padding:0 12px 80px; }
-        .scroll-list::-webkit-scrollbar { display:none; }
+        /* ── MAIN ── */
+        .main {
+            margin-left: var(--sidebar);
+            flex:1; display:flex; flex-direction:column;
+            min-height:100vh;
+        }
 
-        /* Mission card */
-        .mission-card { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:14px; margin-bottom:8px; cursor:pointer; position:relative; overflow:hidden; }
-        .mission-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; }
-        .mission-card.pending::before   { background:var(--yellow); }
-        .mission-card.planned::before   { background:var(--blue); }
-        .mission-card.urgent::before    { background:var(--orange); }
-        .mission-card.in_transit::before{ background:var(--purple); }
-        .mission-card:active { transform:scale(0.99); }
-        .mc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-        .mc-num { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; color:var(--muted2); }
-        .mc-badge { font-size:9px; font-weight:700; text-transform:uppercase; padding:2px 8px; border-radius:100px; }
-        .mc-badge.pending   { background:rgba(245,158,11,0.15); color:var(--yellow); }
-        .mc-badge.planned   { background:rgba(59,130,246,0.15);  color:var(--blue); }
-        .mc-badge.urgent    { background:rgba(249,115,22,0.15);  color:var(--orange); }
-        .mc-badge.in_transit{ background:rgba(168,85,247,0.15);  color:var(--purple); }
-        .mc-stop { display:flex; align-items:center; gap:8px; padding:4px 0; }
-        .mc-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-        .mc-dot.p { background:var(--blue); }
-        .mc-dot.d { background:var(--red); }
-        .mc-addr { font-size:12px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .mc-footer { display:flex; gap:8px; margin-top:10px; }
-        .mc-btn { flex:1; padding:9px; border-radius:8px; border:none; font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; }
-        .mc-btn.nav     { background:rgba(59,130,246,0.15); color:var(--blue); }
-        .mc-btn.start   { background:var(--orange); color:var(--white); }
-        .mc-btn.deliver { background:var(--green); color:var(--night); font-weight:700; }
+        /* ── TOPBAR ── */
+        .topbar {
+            background:var(--night2);
+            border-bottom:1px solid var(--border);
+            padding:0 32px; height:60px;
+            display:flex; align-items:center; justify-content:space-between;
+            position:sticky; top:0; z-index:50;
+        }
+        .page-title {
+            font-family:'Bebas Neue',cursive;
+            font-size:22px; letter-spacing:1px;
+        }
+        .topbar-right { display:flex; gap:10px; align-items:center; }
+        .btn {
+            font-family:'Outfit',sans-serif; font-weight:600; font-size:13px;
+            padding:9px 20px; border-radius:10px; border:none;
+            cursor:pointer; display:inline-flex; align-items:center; gap:7px;
+            transition:all 0.2s; text-decoration:none; white-space:nowrap;
+        }
+        .btn-red { background:var(--red); color:var(--white); box-shadow:0 4px 16px var(--red-glow); }
+        .btn-red:hover { background:var(--red-dark); transform:translateY(-1px); }
+        .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .btn-sm { padding:7px 14px; font-size:12px; border-radius:8px; }
 
-        /* ── MAP SCREEN ── */
-        .map-screen { position:relative; }
-        #driverMap { width:100%; height:100%; }
-        .map-back { position:absolute; top:14px; left:14px; z-index:100; width:38px; height:38px; background:rgba(10,10,15,0.9); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:10px; display:grid; place-items:center; cursor:pointer; font-size:15px; }
-        .map-panel { position:absolute; bottom:0; left:0; right:0; z-index:100; background:rgba(17,17,24,0.97); backdrop-filter:blur(20px); border-top:1px solid var(--border2); border-radius:20px 20px 0 0; padding:16px 18px calc(16px + var(--safe-b)); }
-        .mp-handle { width:32px; height:3px; background:var(--border2); border-radius:100px; margin:0 auto 14px; }
-        .mp-title { font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; margin-bottom:10px; }
-        .mp-stop { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
-        .mp-stop:last-child { border:none; }
-        .mp-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; margin-top:3px; }
-        .mp-dot.p { background:var(--blue); }
-        .mp-dot.d { background:var(--red); }
-        .mp-addr { font-size:13px; color:var(--muted2); flex:1; line-height:1.4; }
-        .mp-actions { display:flex; gap:10px; margin-top:14px; }
-        .mp-btn { flex:1; padding:13px; border-radius:12px; border:none; font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
-        .mp-btn.nav     { background:var(--blue); color:var(--white); }
-        .mp-btn.deliver { background:var(--green); color:var(--night); }
+        /* ── CONTENT ── */
+        .content { padding:32px; flex:1; }
 
-        /* ── RH SCREEN ── */
-        .rh-screen { overflow-y:auto; padding-bottom:calc(60px + var(--safe-b)); }
-        .rh-screen::-webkit-scrollbar { display:none; }
-        .rh-header { background:var(--night2); padding:16px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
-        .rh-title { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:1px; }
-        .rh-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+        /* ── SECTIONS (tabs) ── */
+        .section { display:none; }
+        .section.active { display:block; }
 
-        /* Soldes cards */
-        .soldes-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px; }
-        .solde-card { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:16px; }
-        .sc-icon { font-size:24px; margin-bottom:10px; }
-        .sc-val { font-family:'Bebas Neue',cursive; font-size:32px; letter-spacing:1px; line-height:1; }
-        .sc-val em { font-style:normal; font-size:14px; color:var(--muted); font-family:'Outfit',sans-serif; }
-        .sc-lbl { font-size:11px; color:var(--muted); margin-top:4px; }
+        /* ── STAT CARDS ── */
+        .stats-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:28px; }
+        .stat-card {
+            background:var(--night2); border:1px solid var(--border2);
+            border-radius:16px; padding:22px 20px;
+            transition:border-color 0.3s, transform 0.2s;
+            cursor:default;
+        }
+        .stat-card:hover { border-color:rgba(232,49,26,0.3); transform:translateY(-2px); }
+        .stat-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+        .stat-icon { width:38px; height:38px; border-radius:10px; display:grid; place-items:center; font-size:16px; }
+        .stat-icon.red    { background:rgba(232,49,26,0.12); color:var(--red); }
+        .stat-icon.blue   { background:rgba(59,130,246,0.12); color:var(--blue); }
+        .stat-icon.green  { background:rgba(34,197,94,0.12);  color:var(--green); }
+        .stat-icon.yellow { background:rgba(245,158,11,0.12); color:var(--yellow); }
+        .stat-icon.purple { background:rgba(168,85,247,0.12); color:var(--purple); }
+        .stat-num { font-family:'Bebas Neue',cursive; font-size:38px; letter-spacing:1px; line-height:1; }
+        .stat-lbl { font-size:12px; color:var(--muted); margin-top:4px; font-weight:300; }
 
-        /* Historique pointages */
-        .rh-section { padding:0 14px 14px; }
-        .rh-section-title { font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:1px; color:var(--muted2); margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
-        .rh-btn-new { font-size:11px; font-weight:600; padding:5px 12px; background:rgba(232,49,26,0.15); color:var(--red); border:1px solid rgba(232,49,26,0.3); border-radius:8px; cursor:pointer; font-family:'Outfit',sans-serif; }
+        /* ── GRID 2 COL ── */
+        .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
+        .grid3 { display:grid; grid-template-columns:2fr 1fr; gap:20px; margin-bottom:20px; }
 
-        .pointage-item { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:12px 14px; margin-bottom:6px; display:flex; align-items:center; gap:12px; }
-        .pi-date { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; line-height:1; text-align:center; min-width:36px; }
-        .pi-date small { display:block; font-family:'Outfit',sans-serif; font-size:10px; color:var(--muted); letter-spacing:0; }
-        .pi-times { flex:1; }
-        .pi-row { font-size:12px; color:var(--muted2); display:flex; gap:10px; }
-        .pi-row span { color:var(--muted); }
-        .pi-hours { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; text-align:right; }
-        .pi-hours small { display:block; font-family:'Outfit',sans-serif; font-size:10px; color:var(--muted); letter-spacing:0; text-align:right; }
-        .pi-supp { color:var(--orange); }
+        /* ── CARD ── */
+        .card {
+            background:var(--night2); border:1px solid var(--border2);
+            border-radius:20px; overflow:hidden;
+        }
+        .card-head {
+            padding:20px 24px 16px;
+            display:flex; align-items:center; justify-content:space-between;
+            border-bottom:1px solid var(--border);
+        }
+        .card-title {
+            font-family:'Bebas Neue',cursive;
+            font-size:17px; letter-spacing:1px; color:var(--white);
+        }
+        .card-body { padding:0; }
 
-        /* Congés */
-        .conge-item { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:12px 14px; margin-bottom:6px; }
-        .ci-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
-        .ci-type { font-size:12px; font-weight:600; color:var(--muted2); }
-        .ci-status { font-size:10px; font-weight:700; padding:2px 8px; border-radius:100px; }
-        .ci-status.en_attente { background:rgba(245,158,11,0.15); color:var(--yellow); }
-        .ci-status.approuve   { background:rgba(34,197,94,0.15);  color:var(--green); }
-        .ci-status.refuse     { background:rgba(232,49,26,0.15);  color:var(--red); }
-        .ci-dates { font-size:12px; color:var(--muted); }
+        /* ── TABLE ── */
+        .tbl { width:100%; border-collapse:collapse; }
+        .tbl th { padding:12px 20px; text-align:left; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); background:var(--night3); }
+        .tbl td { padding:14px 20px; border-top:1px solid var(--border); font-size:13px; }
+        .tbl tbody tr { transition:background 0.15s; }
+        .tbl tbody tr:hover { background:rgba(255,255,255,0.02); }
 
-        /* ── CONFIRM DELIVERY ── */
-        .confirm-screen { overflow-y:auto; padding:20px 18px calc(20px + var(--safe-b)); }
-        .confirm-screen::-webkit-scrollbar { display:none; }
-        .confirm-back { display:flex; align-items:center; gap:10px; margin-bottom:20px; cursor:pointer; }
-        .cb-btn { width:34px; height:34px; background:var(--night3); border:1px solid var(--border2); border-radius:9px; display:grid; place-items:center; font-size:14px; }
-        .cb-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
-        .confirm-order { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:14px; margin-bottom:18px; }
-        .co-num { font-family:'Bebas Neue',cursive; font-size:14px; color:var(--red); margin-bottom:6px; letter-spacing:1px; }
-        .co-addr { font-size:13px; color:var(--muted2); display:flex; align-items:center; gap:8px; margin-bottom:4px; }
-        .sig-label { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
-        .sig-canvas { width:100%; height:150px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; cursor:crosshair; touch-action:none; display:block; margin-bottom:6px; }
-        .sig-canvas.signed { border-color:var(--green); }
-        .sig-clear { font-size:12px; color:var(--muted); background:none; border:none; cursor:pointer; float:right; }
-        .photo-btn { width:100%; padding:14px; border-radius:12px; background:var(--night3); border:1.5px dashed var(--border2); color:var(--muted2); font-family:'Outfit',sans-serif; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; margin:14px 0; }
-        .photo-preview { width:100%; height:130px; object-fit:cover; border-radius:12px; display:none; margin:10px 0; }
-        .note-input { width:100%; padding:12px 14px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:14px; color:var(--white); resize:none; min-height:70px; margin-bottom:18px; }
-        .note-input:focus { outline:none; border-color:var(--green); }
-        .note-input::placeholder { color:rgba(255,255,255,0.2); }
-        .btn-confirm { width:100%; padding:16px; background:var(--green); color:var(--night); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; }
+        .chip {
+            display:inline-flex; align-items:center; gap:5px;
+            padding:3px 10px; border-radius:100px;
+            font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
+        }
+        .chip.admin     { background:rgba(232,49,26,0.12); color:var(--red);    border:1px solid rgba(232,49,26,0.2); }
+        .chip.client    { background:rgba(59,130,246,0.12); color:var(--blue);  border:1px solid rgba(59,130,246,0.2); }
+        .chip.chauffeur { background:rgba(34,197,94,0.12);  color:var(--green); border:1px solid rgba(34,197,94,0.2); }
+        .chip.magasinier{ background:rgba(245,158,11,0.12); color:var(--yellow);border:1px solid rgba(245,158,11,0.2); }
+        .chip.actif     { background:rgba(34,197,94,0.12);  color:var(--green); border:1px solid rgba(34,197,94,0.2); }
+        .chip.inactif   { background:rgba(255,255,255,0.05);color:var(--muted); border:1px solid var(--border2); }
+        .chip.en_cours  { background:rgba(59,130,246,0.12); color:var(--blue);  border:1px solid rgba(59,130,246,0.2); }
+        .chip.termine   { background:rgba(34,197,94,0.12);  color:var(--green); border:1px solid rgba(34,197,94,0.2); }
+        .chip.en_attente{ background:rgba(245,158,11,0.12); color:var(--yellow);border:1px solid rgba(245,158,11,0.2); }
 
-        /* ── SUCCESS ── */
-        .success-screen { align-items:center; justify-content:center; padding:40px 24px; text-align:center; }
-        .success-ico { width:90px; height:90px; background:rgba(34,197,94,0.12); border:2px solid rgba(34,197,94,0.3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:44px; margin:0 auto 24px; animation:pop 0.5s cubic-bezier(0.4,0,0.2,1); }
-        @keyframes pop { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
-        .success-title { font-family:'Bebas Neue',cursive; font-size:36px; letter-spacing:2px; color:var(--green); margin-bottom:10px; }
-        .success-sub { font-size:14px; color:var(--muted); margin-bottom:32px; line-height:1.6; }
-        .btn-home { padding:14px 36px; background:var(--red); color:var(--white); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:15px; font-weight:700; cursor:pointer; }
+        .avatar-sm {
+            width:30px; height:30px; border-radius:8px;
+            display:grid; place-items:center;
+            font-family:'Bebas Neue',cursive; font-size:12px;
+            flex-shrink:0;
+        }
+        .cell-user { display:flex; align-items:center; gap:10px; }
+        .cell-main { font-weight:600; font-size:13px; }
+        .cell-sub  { font-size:11px; color:var(--muted); margin-top:1px; }
 
-        /* ── MODALS ── */
-        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:500; align-items:flex-end; justify-content:center; padding-bottom:var(--safe-b); }
+        .action-btn {
+            width:28px; height:28px; border-radius:7px; border:none;
+            background:transparent; cursor:pointer;
+            display:inline-grid; place-items:center; font-size:12px;
+            color:var(--muted); transition:all 0.2s;
+        }
+        .action-btn:hover.edit   { background:rgba(59,130,246,0.12); color:var(--blue); }
+        .action-btn:hover.delete { background:rgba(232,49,26,0.12);  color:var(--red); }
+        .action-btn:hover.view   { background:rgba(255,255,255,0.08); color:var(--white); }
+
+        /* ── ACTIVITY FEED ── */
+        .feed { padding:8px 0; }
+        .feed-item {
+            display:flex; align-items:flex-start; gap:14px;
+            padding:14px 24px;
+            border-bottom:1px solid var(--border);
+        }
+        .feed-item:last-child { border:none; }
+        .feed-dot {
+            width:32px; height:32px; border-radius:9px;
+            display:grid; place-items:center; font-size:14px;
+            flex-shrink:0; margin-top:2px;
+        }
+        .feed-content { flex:1; }
+        .feed-text { font-size:13px; line-height:1.5; }
+        .feed-text strong { color:var(--white); font-weight:600; }
+        .feed-time { font-size:11px; color:var(--muted); margin-top:3px; }
+
+        /* ── EMPTY ── */
+        .empty {
+            padding:60px 20px; text-align:center;
+        }
+        .empty-ico { font-size:36px; opacity:0.2; margin-bottom:12px; }
+        .empty-txt { font-size:14px; color:var(--muted); }
+
+        /* ── MODAL ── */
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:500; align-items:center; justify-content:center; padding:20px; }
         .modal.open { display:flex; }
-        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:20px 20px 0 0; padding:24px 20px; width:100%; box-shadow:0 -20px 60px rgba(0,0,0,0.5); animation:slideUp 0.3s cubic-bezier(0.4,0,0.2,1); }
-        @keyframes slideUp { from{transform:translateY(100%)}to{transform:translateY(0)} }
-        .modal-handle { width:32px; height:3px; background:var(--border2); border-radius:100px; margin:0 auto 16px; }
-        .modal-title { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; margin-bottom:16px; }
-        .mfield { margin-bottom:12px; }
-        .mfield label { display:block; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
-        .mfield input, .mfield select, .mfield textarea { width:100%; padding:12px 14px; background:var(--surface); border:1.5px solid var(--border2); border-radius:10px; font-family:'Outfit',sans-serif; font-size:14px; color:var(--white); }
-        .mfield input:focus, .mfield select:focus, .mfield textarea:focus { outline:none; border-color:var(--red); }
-        .mfield select option { background:var(--night3); }
-        .mfield-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-        .modal-actions { display:flex; gap:10px; margin-top:16px; }
-        .modal-actions button { flex:1; padding:13px; border-radius:10px; border:none; font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; cursor:pointer; }
-        .btn-save   { background:var(--red); color:var(--white); }
-        .btn-cancel { background:var(--surface); color:var(--muted2); border:1px solid var(--border2) !important; }
+        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:24px; padding:40px; width:100%; max-width:500px; box-shadow:0 40px 100px rgba(0,0,0,0.6); animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes boxIn { from{opacity:0;transform:scale(0.94) translateY(16px)} to{opacity:1;transform:none} }
+        .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+        .modal-title { font-family:'Bebas Neue',cursive; font-size:26px; letter-spacing:1px; }
+        .modal-close { width:34px; height:34px; background:var(--surface); border:none; border-radius:50%; cursor:pointer; display:grid; place-items:center; font-size:15px; color:var(--muted); transition:all 0.2s; }
+        .modal-close:hover { background:var(--border2); color:var(--white); }
+        .field { margin-bottom:14px; }
+        .field label { display:block; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+        .field input, .field select, .field textarea { width:100%; padding:11px 14px; background:var(--surface); border:1.5px solid var(--border2); border-radius:10px; font-family:'Outfit',sans-serif; font-size:14px; color:var(--white); transition:border-color 0.2s; }
+        .field input::placeholder, .field textarea::placeholder { color:rgba(255,255,255,0.2); }
+        .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:var(--red); }
+        .field select option { background:var(--night3); }
+        .field textarea { resize:vertical; min-height:80px; }
+        .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .modal-actions { display:flex; gap:10px; margin-top:24px; }
+        .modal-actions .btn { flex:1; justify-content:center; padding:13px; }
 
-        /* ── BOTTOM NAV ── */
-        .bottom-nav { background:var(--night2); border-top:1px solid var(--border); display:none; flex-shrink:0; padding-bottom:var(--safe-b); }
-        .bn-wrap { display:flex; }
-        .bn-item { flex:1; padding:11px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; color:var(--muted); transition:color 0.2s; position:relative; }
-        .bn-item.active { color:var(--red); }
-        .bn-item i { font-size:18px; }
-        .bn-item span { font-size:9px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; }
-        .bn-badge { position:absolute; top:8px; right:calc(50% - 18px); width:16px; height:16px; background:var(--red); border-radius:50%; display:none; place-items:center; font-size:9px; font-weight:700; color:var(--white); }
-        .bn-badge.show { display:grid; }
+        /* ── CONFIRM ── */
+        .confirm-box { background:var(--night3); border:1px solid rgba(232,49,26,0.25); border-radius:24px; padding:40px; width:100%; max-width:360px; box-shadow:0 40px 100px rgba(0,0,0,0.6); animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); text-align:center; }
+        .confirm-ico { font-size:40px; margin-bottom:16px; }
+        .confirm-title { font-family:'Bebas Neue',cursive; font-size:24px; margin-bottom:10px; }
+        .confirm-text  { font-size:14px; color:var(--muted); margin-bottom:28px; line-height:1.6; }
+        .confirm-actions { display:flex; gap:10px; }
 
         /* ── TOAST ── */
-        .toast { position:fixed; top:14px; left:50%; transform:translateX(-50%) translateY(-70px); padding:10px 18px; border-radius:100px; font-size:13px; font-weight:600; z-index:9999; transition:transform 0.35s cubic-bezier(0.4,0,0.2,1); white-space:nowrap; max-width:calc(100% - 32px); }
-        .toast.show { transform:translateX(-50%) translateY(0); }
-        .toast.success { background:rgba(34,197,94,0.2); border:1px solid rgba(34,197,94,0.4); color:var(--green); }
-        .toast.error   { background:rgba(232,49,26,0.2);  border:1px solid rgba(232,49,26,0.4);  color:var(--red); }
-        .toast.info    { background:rgba(59,130,246,0.2);  border:1px solid rgba(59,130,246,0.4);  color:var(--blue); }
+        .toast { position:fixed; top:20px; right:20px; padding:14px 20px; border-radius:12px; display:flex; align-items:center; gap:10px; font-size:14px; font-weight:500; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .toast.show { transform:translateX(0); }
+        .toast.success .t-ico { color:var(--green); }
+        .toast.error   .t-ico { color:var(--red); }
+        .t-ico { font-size:16px; }
 
-        /* Loader */
-        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); place-items:center; z-index:2000; }
+        /* ── LOADER ── */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.8); backdrop-filter:blur(4px); place-items:center; z-index:2000; }
         .loader.on { display:grid; }
         .spin { width:40px; height:40px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
         @keyframes spin { to{transform:rotate(360deg)} }
 
-        /* Leaflet dark */
-        .leaflet-tile { filter:brightness(0.85) saturate(0.6) invert(1) hue-rotate(180deg); }
-        .leaflet-container { background:#0a0a0f; }
-        .leaflet-control-zoom { display:none; }
-
-        .empty-state { padding:40px 20px; text-align:center; }
-        .empty-ico { font-size:40px; opacity:0.15; margin-bottom:12px; }
-        .empty-txt { font-size:13px; color:var(--muted); line-height:1.6; }
+        /* ── RESPONSIVE ── */
+        @media(max-width:1200px) { .stats-grid { grid-template-columns:repeat(3,1fr); } }
+        @media(max-width:900px)  { .grid2, .grid3 { grid-template-columns:1fr; } .stats-grid { grid-template-columns:1fr 1fr; } }
+        @media(max-width:768px)  {
+            .sidebar { width:60px; }
+            .logo-text, .nav-item span, .sidebar-section, .user-info { display:none; }
+            .main { margin-left:60px; }
+            .content { padding:16px; }
+        }
     </style>
 </head>
 <body>
 
-<div class="toast" id="toast"></div>
+<!-- Toast -->
+<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<!-- Loader -->
 <div class="loader" id="loader"><div class="spin"></div></div>
 
-<!-- ═══ STATUS BAR ═══ -->
-<div class="status-bar" id="statusBar">
-    <div class="sb-logo"><div class="sb-mark">🚚</div> Léman<em>-Driver</em></div>
-    <div class="sb-right">
-        <div class="gps-dot" id="gpsDot"></div>
-        <button id="btnNotifBell" onclick="toggleNotifs()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:4px;position:relative;">
-            <i class="fas fa-bell"></i>
-            <span id="notifBadge" style="display:none;position:absolute;top:-2px;right:-2px;width:14px;height:14px;background:var(--red);border-radius:50%;font-size:9px;font-weight:700;color:white;place-items:center;">0</span>
-        </button>
-        <button onclick="logout()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;"><i class="fas fa-sign-out-alt"></i></button>
-    </div>
-</div>
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+    <a href="#" class="sidebar-logo">
+        <div class="logo-mark">🚚</div>
+        <div class="logo-text">Léman<em>-Courses</em></div>
+    </a>
 
-<!-- Notification dropdown -->
-<div id="notifDropdown" style="display:none;position:fixed;top:56px;right:8px;width:300px;background:var(--night3);border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.5);z-index:300;max-height:400px;overflow-y:auto;">
-    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-family:'Bebas Neue',cursive;font-size:15px;letter-spacing:1px;">NOTIFICATIONS</div>
-        <button onclick="markAllRead()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--muted);font-family:'Outfit',sans-serif;">Tout lire</button>
-    </div>
-    <div id="notifList" style="padding:8px;"></div>
-</div>
+    <div class="sidebar-section">Principal</div>
+    <a class="nav-item active" data-section="dashboard" href="#">
+        <i class="fas fa-th-large"></i> <span>Dashboard</span>
+    </a>
+    <a class="nav-item" data-section="clients" href="#">
+        <i class="fas fa-building"></i> <span>Entreprises</span>
+        <span class="nav-badge" id="badgeClients">0</span>
+    </a>
+    <a class="nav-item" data-section="utilisateurs" href="#">
+        <i class="fas fa-users"></i> <span>Utilisateurs</span>
+    </a>
 
-<!-- ═══ LOGIN ═══ -->
-<div class="screen login-screen active" id="screenLogin">
-    <div class="login-wrap">
-        <div class="login-icon">🚚</div>
-        <div class="login-title">LÉMAN DRIVER</div>
-        <div class="login-sub">Application chauffeur</div>
-        <div class="login-form">
-            <div class="lf"><label>Email</label><input type="email" id="lEmail" placeholder="chauffeur@leman.ch" inputmode="email" autocomplete="email"></div>
-            <div class="lf"><label>Mot de passe</label><input type="password" id="lPwd" placeholder="••••••••" autocomplete="current-password"></div>
-            <button class="btn-login" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> Se connecter</button>
-        </div>
-    </div>
-</div>
+    <div class="sidebar-section">Opérations</div>
+    <a class="nav-item" data-section="transports" href="#">
+        <i class="fas fa-truck"></i> <span>Transports</span>
+    </a>
+    <a class="nav-item" data-section="chauffeurs" href="#">
+        <i class="fas fa-id-card"></i> <span>Chauffeurs</span>
+    </a>
+    <a class="nav-item" href="new-transport.html">
+        <i class="fas fa-plus-circle"></i> <span>Nouveau transport</span>
+    </a>
+    <a class="nav-item" href="dispatch.html">
+        <i class="fas fa-map-marked-alt"></i> <span>Carte Dispatch</span>
+    </a>
+    <a class="nav-item" href="../commandes-client.html">
+        <i class="fas fa-inbox"></i> <span>Commandes clients</span>
+        <span class="nav-badge" id="badgeCommandes" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 7px;border-radius:100px;margin-left:auto;">0</span>
+    </a>
 
-<!-- ═══ HOME ═══ -->
-<div class="screen" id="screenHome">
-    <div class="home-header">
-        <div class="home-greeting">Bonjour,</div>
-        <div class="home-name" id="homeName">Chauffeur</div>
-        <div class="home-date" id="homeDate"></div>
-    </div>
+    <div class="sidebar-section">Analytiques</div>
+    <a class="nav-item" href="analytics.html">
+        <i class="fas fa-chart-bar"></i> <span>Analytics</span>
+    </a>
+    <a class="nav-item" href="rh.html">
+        <i class="fas fa-users-cog"></i> <span>Gestion RH</span>
+    </a>
+    <a class="nav-item" href="tarification.html">
+        <i class="fas fa-tags"></i> <span>Tarification</span>
+    </a>
+    <a class="nav-item" href="finances.html">
+        <i class="fas fa-euro-sign"></i> <span>Finances</span>
+    </a>
 
-    <!-- Pointage -->
-    <div class="pointage-card">
-        <div class="pc-title">
-            POINTAGE DU JOUR
-            <span class="pc-status off" id="pcStatus">Non pointé</span>
-        </div>
-        <div class="pc-times">
-            <div class="pc-time">
-                <div class="pc-time-val" id="ptDebut">--:--</div>
-                <div class="pc-time-lbl">Début</div>
+    <div class="sidebar-section">Application</div>
+    <a class="nav-item" href="driver-app.html" target="_blank">
+        <i class="fas fa-mobile-alt"></i> <span>App Chauffeur</span>
+    </a>
+
+    <div class="sidebar-section">Système</div>
+    <a class="nav-item" data-section="activite" href="#">
+        <i class="fas fa-clock"></i> <span>Activité</span>
+    </a>
+
+    <div class="sidebar-footer">
+        <div class="user-chip">
+            <div class="user-avatar" id="sideAvatar">SA</div>
+            <div class="user-info">
+                <div class="user-name" id="sideName">Super Admin</div>
+                <div class="user-role">super_admin</div>
             </div>
-            <div class="pc-time">
-                <div class="pc-time-val" id="ptPauseD">--:--</div>
-                <div class="pc-time-lbl">↓ Pause</div>
-            </div>
-            <div class="pc-time">
-                <div class="pc-time-val" id="ptPauseF">--:--</div>
-                <div class="pc-time-lbl">↑ Reprise</div>
-            </div>
-            <div class="pc-time">
-                <div class="pc-time-val" id="ptFin">--:--</div>
-                <div class="pc-time-lbl">Fin</div>
-            </div>
-        </div>
-        <div class="pc-actions">
-            <button class="pc-btn start"  id="btnStart"  onclick="pointageAction('start')"><i class="fas fa-play"></i> Démarrer</button>
-            <button class="pc-btn pause"  id="btnPause"  onclick="pointageAction('pause')"  disabled><i class="fas fa-pause"></i> Pause</button>
-            <button class="pc-btn resume" id="btnResume" onclick="pointageAction('resume')" disabled style="display:none"><i class="fas fa-play"></i> Reprendre</button>
-            <button class="pc-btn stop"   id="btnStop"   onclick="pointageAction('stop')"   disabled><i class="fas fa-stop"></i> Fin</button>
+            <button class="btn-logout" id="btnLogout" title="Déconnexion">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
         </div>
     </div>
+</aside>
 
-    <!-- Stats -->
-    <div class="stats-row">
-        <div class="sr-item">
-            <div class="sr-val" id="srMissions" style="color:var(--yellow)">0</div>
-            <div class="sr-lbl">Missions</div>
-        </div>
-        <div class="sr-item">
-            <div class="sr-val" id="srDone" style="color:var(--green)">0</div>
-            <div class="sr-lbl">Livrés</div>
-        </div>
-        <div class="sr-item">
-            <div class="sr-val" id="srHours" style="color:var(--blue)">0h</div>
-            <div class="sr-lbl">Travaillé</div>
-        </div>
-    </div>
+<!-- ═══ MAIN ═══ -->
+<div class="main">
 
-    <!-- Missions -->
-    <!-- KM JOURNALIERS -->
-    <div class="km-card" id="kmCard" style="display:none;">
-        <div class="km-title">
-            KM DU JOUR
-            <span id="kmStatus" class="pc-status off">Non saisi</span>
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="page-title" id="pageTitle">DASHBOARD</div>
+        <div class="topbar-right">
+            <button class="btn btn-red btn-sm" id="btnAction" style="display:none"></button>
         </div>
-        <div class="km-inputs">
-            <div class="km-field">
-                <label>🔢 Km début</label>
-                <input type="number" id="kmDebut" placeholder="Ex: 45230" inputmode="numeric">
-            </div>
-            <div class="km-field">
-                <label>🏁 Km fin</label>
-                <input type="number" id="kmFin" placeholder="Ex: 45580" inputmode="numeric">
-            </div>
-        </div>
-        <div class="km-total">
-            <div class="km-total-lbl">Km parcourus aujourd'hui</div>
-            <div class="km-total-val" id="kmTotal">— km</div>
-        </div>
-        <button class="km-save" onclick="saveKm()">
-            <i class="fas fa-save"></i> Enregistrer les km
-        </button>
-    </div>
+    </header>
 
-    <div class="section-header">
-        <div class="section-title">MES MISSIONS</div>
-        <button onclick="loadMissions()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;"><i class="fas fa-sync-alt"></i></button>
-    </div>
-    <div class="scroll-list" id="missionsList"></div>
-</div>
+    <div class="content">
 
-<!-- ═══ MAP ═══ -->
-<div class="screen map-screen" id="screenMap">
-    <div id="driverMap"></div>
-    <div class="map-back" onclick="showScreen('home')"><i class="fas fa-arrow-left"></i></div>
-    <div class="map-panel">
-        <div class="mp-handle"></div>
-        <div class="mp-title" id="mpTitle">TRANSPORT</div>
-        <div id="mpRoute"></div>
-        <div class="mp-actions">
-            <button class="mp-btn nav" onclick="openGPS()"><i class="fas fa-directions"></i> GPS</button>
-            <button class="mp-btn deliver" id="mpDeliverBtn"><i class="fas fa-check"></i> Livré</button>
-        </div>
-    </div>
-</div>
+        <!-- ══ SECTION : DASHBOARD ══ -->
+        <div class="section active" id="sec-dashboard">
 
-<!-- ═══ RH ═══ -->
-<div class="screen" id="screenRh">
-    <div class="rh-header">
-        <div class="rh-title">MON ESPACE RH</div>
-        <div class="rh-sub">Soldes, pointages et congés</div>
-    </div>
-    <div class="rh-screen">
-        <!-- Soldes -->
-        <div class="soldes-grid">
-            <div class="solde-card">
-                <div class="sc-icon">🏖️</div>
-                <div class="sc-val" id="soldeVac">20<em> j</em></div>
-                <div class="sc-lbl">Solde vacances</div>
-            </div>
-            <div class="solde-card">
-                <div class="sc-icon">⚖️</div>
-                <div class="sc-val" id="soldeComp">0<em> j</em></div>
-                <div class="sc-lbl">Jours compensation</div>
-            </div>
-            <div class="solde-card">
-                <div class="sc-icon">⏱️</div>
-                <div class="sc-val" id="soldeHSupp">0<em> h</em></div>
-                <div class="sc-lbl">Heures suppl.</div>
-            </div>
-            <div class="solde-card" style="cursor:pointer;" onclick="openModalConge()">
-                <div class="sc-icon">📅</div>
-                <div class="sc-val" style="font-size:22px;color:var(--red)">+</div>
-                <div class="sc-lbl">Demander congé</div>
-            </div>
-        </div>
-
-        <!-- Pointages récents -->
-        <div class="rh-section">
-            <div class="rh-section-title">
-                POINTAGES RÉCENTS
-            </div>
-            <div id="pointagesList"></div>
-        </div>
-
-        <!-- Congés -->
-        <div class="rh-section">
-            <div class="rh-section-title">
-                MES CONGÉS
-                <button class="rh-btn-new" onclick="openModalConge()"><i class="fas fa-plus"></i> Demander</button>
-            </div>
-            <div id="congesList"></div>
-        </div>
-    </div>
-</div>
-
-<!-- ═══ CONFIRM DELIVERY ═══ -->
-<div class="screen" id="screenConfirm">
-    <div class="confirm-screen">
-        <div class="confirm-back" onclick="showScreen('home')">
-            <div class="cb-btn"><i class="fas fa-arrow-left"></i></div>
-            <div class="cb-title">CONFIRMER LIVRAISON</div>
-        </div>
-        <div class="confirm-order" id="confirmInfo"></div>
-        <div class="sig-label"><i class="fas fa-pen-nib"></i> Signature destinataire</div>
-        <canvas class="sig-canvas" id="sigCanvas"></canvas>
-        <button class="sig-clear" onclick="clearSig()"><i class="fas fa-eraser"></i> Effacer</button>
-        <div style="clear:both;margin-bottom:14px;"></div>
-        <img id="photoPreview" class="photo-preview" alt="">
-        <button class="photo-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()">
-            <i class="fas fa-camera"></i> Photo de confirmation
-        </button>
-        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhoto(this)">
-        <div class="sig-label" style="margin-top:4px;"><i class="fas fa-weight-hanging" style="color:var(--yellow)"></i> Poids réel pesé (kg)</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-            <input type="number" id="poidsReel" step="0.1" min="0" placeholder="Ex: 12.5"
-                style="flex:1;padding:12px 14px;background:var(--night3);border:1.5px solid var(--border2);border-radius:12px;font-family:'Outfit',sans-serif;font-size:16px;color:var(--white);-moz-appearance:textfield;"
-                inputmode="decimal">
-            <span style="font-size:14px;color:var(--muted2);font-weight:600;">kg</span>
-        </div>
-        <div class="sig-label" style="margin-top:4px;"><i class="fas fa-sticky-note"></i> Note (optionnel)</div>
-        <textarea class="note-input" id="deliveryNote" placeholder="Laissé en réception, remis à…"></textarea>
-        <button class="btn-confirm" onclick="confirmDelivery()">
-            <i class="fas fa-check-circle"></i> Confirmer la livraison
-        </button>
-    </div>
-</div>
-
-<!-- ═══ SUCCESS ═══ -->
-<div class="screen success-screen" id="screenSuccess">
-    <div class="success-ico">✅</div>
-    <div class="success-title">LIVRÉ !</div>
-    <div class="success-sub" id="successMsg">Transport confirmé.</div>
-    <button class="btn-home" onclick="showScreen('home')"><i class="fas fa-home"></i> Mes missions</button>
-</div>
-
-<!-- ═══ BOTTOM NAV ═══ -->
-<!-- ═══ SCREEN QR SCANNER ═══ -->
-<div class="screen" id="screenQR">
-    <div class="home-header">
-        <div>
-            <div class="home-title">SCANNER QR</div>
-            <div class="home-sub">Prise en charge d'un transport</div>
-        </div>
-        <button onclick="showScreen('home')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;padding:8px;"><i class="fas fa-times"></i></button>
-    </div>
-    <div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:24px 20px;gap:16px;overflow-y:auto;">
-
-        <!-- Bouton principal — ouvre l'appareil photo natif -->
-        <div style="width:100%;max-width:340px;">
-            <label id="scanPhotoLabel" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--night3);border:2px dashed var(--red);border-radius:18px;padding:36px 20px;cursor:pointer;transition:all 0.2s;">
-                <div style="width:70px;height:70px;background:rgba(232,49,26,0.12);border-radius:50%;display:grid;place-items:center;font-size:32px;">📷</div>
-                <div style="text-align:center;">
-                    <div style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;color:var(--white);">PHOTOGRAPHIER LE QR</div>
-                    <div style="font-size:13px;color:var(--muted);margin-top:4px;">Ouvre l'appareil photo Android</div>
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <div class="stat-icon red"><i class="fas fa-building"></i></div>
+                    </div>
+                    <div class="stat-num" id="s-entreprises">—</div>
+                    <div class="stat-lbl">Entreprises</div>
                 </div>
-                <input type="file" id="scanPhotoInput" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)">
-            </label>
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <div class="stat-icon blue"><i class="fas fa-users"></i></div>
+                    </div>
+                    <div class="stat-num" id="s-utilisateurs">—</div>
+                    <div class="stat-lbl">Utilisateurs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <div class="stat-icon green"><i class="fas fa-truck"></i></div>
+                    </div>
+                    <div class="stat-num" id="s-chauffeurs">—</div>
+                    <div class="stat-lbl">Chauffeurs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <div class="stat-icon yellow"><i class="fas fa-box"></i></div>
+                    </div>
+                    <div class="stat-num" id="s-employees">—</div>
+                    <div class="stat-lbl">Employés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <div class="stat-icon purple"><i class="fas fa-route"></i></div>
+                    </div>
+                    <div class="stat-num" id="s-transports">—</div>
+                    <div class="stat-lbl">Transports</div>
+                </div>
+            </div>
+
+            <!-- Quick actions -->
+            <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+                <a href="new-transport.html" class="btn btn-red">
+                    <i class="fas fa-plus"></i> Nouveau transport
+                </a>
+                <a href="dispatch.html" class="btn btn-ghost">
+                    <i class="fas fa-map-marked-alt"></i> Carte Dispatch
+                </a>
+                <a href="../commandes-client.html" class="btn btn-ghost">
+                    <i class="fas fa-inbox"></i> Commandes clients
+                </a>
+                <a href="analytics.html" class="btn btn-ghost">
+                    <i class="fas fa-chart-bar"></i> Analytics
+                </a>
+                <a href="rh.html" class="btn btn-ghost">
+                    <i class="fas fa-users-cog"></i> Gestion RH
+                </a>
+                <a href="tarification.html" class="btn btn-ghost">
+                    <i class="fas fa-tags"></i> Tarification
+                </a>
+                <a href="finances.html" class="btn btn-ghost">
+                    <i class="fas fa-euro-sign"></i> Finances
+                </a>
+                <a href="driver-app.html" target="_blank" class="btn btn-ghost">
+                    <i class="fas fa-mobile-alt"></i> App Chauffeur
+                </a>
+            </div>
+
+            <!-- Widget commandes clients en attente -->
+            <div class="card" id="widgetCommandes" style="margin-bottom:20px;border-color:rgba(245,158,11,0.3);">
+                <div class="card-head" style="background:rgba(245,158,11,0.05);">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:10px;height:10px;background:var(--yellow);border-radius:50%;animation:lp 1.5s infinite;"></div>
+                        <div class="card-title">COMMANDES CLIENTS EN ATTENTE</div>
+                        <span id="badgeCommandesWidget" style="background:var(--yellow);color:var(--night);font-size:11px;font-weight:700;padding:2px 9px;border-radius:100px;">0</span>
+                    </div>
+                    <a href="../commandes-client.html" class="btn btn-ghost btn-sm"><i class="fas fa-external-link-alt"></i> Gérer</a>
+                </div>
+                <div id="commandesList" style="max-height:280px;overflow-y:auto;">
+                    <div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">Aucune commande en attente</div></div>
+                </div>
+            </div>
+
+            <!-- Recent tables -->
+            <div class="grid3">
+                <!-- Dernières entreprises -->
+                <div class="card">
+                    <div class="card-head">
+                        <div class="card-title">DERNIÈRES ENTREPRISES</div>
+                        <button class="btn btn-ghost btn-sm" onclick="goSection('clients')">Voir tout</button>
+                    </div>
+                    <div class="card-body">
+                        <table class="tbl">
+                            <thead><tr><th>Entreprise</th><th>Ville</th><th>Statut</th></tr></thead>
+                            <tbody id="recentClients">
+                                <tr><td colspan="3"><div class="empty"><div class="empty-ico"><i class="fas fa-spinner fa-spin"></i></div></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Activité récente -->
+                <div class="card">
+                    <div class="card-head">
+                        <div class="card-title">ACTIVITÉ</div>
+                    </div>
+                    <div class="feed" id="activityFeed">
+                        <div class="empty"><div class="empty-ico"><i class="fas fa-spinner fa-spin"></i></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dernières inscriptions -->
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">DERNIÈRES INSCRIPTIONS</div>
+                    <button class="btn btn-ghost btn-sm" onclick="goSection('utilisateurs')">Voir tout</button>
+                </div>
+                <div class="card-body">
+                    <table class="tbl">
+                        <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Entreprise</th><th>Date</th></tr></thead>
+                        <tbody id="recentUsers">
+                            <tr><td colspan="4"><div class="empty"><div class="empty-ico"><i class="fas fa-spinner fa-spin"></i></div></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
-        <!-- Status -->
-        <div id="scanStatus" style="font-size:13px;color:var(--muted2);text-align:center;min-height:20px;"></div>
-
-        <!-- Résultat -->
-        <div id="scanResult" style="display:none;width:100%;max-width:340px;"></div>
-
-        <!-- Séparateur -->
-        <div style="width:100%;max-width:340px;display:flex;align-items:center;gap:10px;">
-            <div style="flex:1;height:1px;background:var(--border);"></div>
-            <span style="font-size:11px;color:var(--muted);">OU SAISIR MANUELLEMENT</span>
-            <div style="flex:1;height:1px;background:var(--border);"></div>
+        <!-- ══ SECTION : ENTREPRISES ══ -->
+        <div class="section" id="sec-clients">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:32px;letter-spacing:1px;">ENTREPRISES</div>
+                    <div style="font-size:13px;color:var(--muted);margin-top:2px;">Gestion de tous vos clients</div>
+                </div>
+                <button class="btn btn-red" id="btnNouvelleEntreprise">
+                    <i class="fas fa-plus"></i> Nouvelle entreprise
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <input type="text" id="searchEntreprises" placeholder="🔍  Rechercher…" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;width:260px;">
+                </div>
+                <div class="card-body">
+                    <table class="tbl">
+                        <thead><tr><th>Entreprise</th><th>Contact</th><th>Ville</th><th>N° client</th><th>Utilisateurs</th><th>Actions</th></tr></thead>
+                        <tbody id="entreprisesList"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
-        <!-- Saisie manuelle -->
-        <div style="width:100%;max-width:340px;display:flex;gap:8px;">
-            <input type="text" id="qrManual" placeholder="N° commande : LC-2026-xxxxx"
-                style="flex:1;padding:12px 14px;background:var(--night3);border:1.5px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);"
-                onkeydown="if(event.key==='Enter')searchManual()">
-            <button onclick="searchManual()" style="background:var(--red);border:none;border-radius:11px;padding:12px 16px;cursor:pointer;color:white;font-size:15px;"><i class="fas fa-search"></i></button>
+        <!-- ══ SECTION : UTILISATEURS ══ -->
+        <div class="section" id="sec-utilisateurs">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:32px;letter-spacing:1px;">UTILISATEURS</div>
+                    <div style="font-size:13px;color:var(--muted);margin-top:2px;">Tous les comptes de la plateforme</div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-ghost" id="btnNouvelClient" onclick="openNouveauClient()">
+                        <i class="fas fa-building"></i> Accès client entreprise
+                    </button>
+                    <button class="btn btn-red" id="btnNouvelUser">
+                        <i class="fas fa-plus"></i> Nouvel utilisateur
+                    </button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-head" style="gap:10px;flex-wrap:wrap;">
+                    <input type="text" id="searchUsers" placeholder="🔍  Rechercher…" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;width:240px;">
+                    <select id="filterRole" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;">
+                        <option value="">Tous les rôles</option>
+                        <option value="super_admin">Super Admin</option>
+                        <option value="admin">Admin</option>
+                        <option value="client">Client</option>
+                        <option value="chauffeur">Chauffeur</option>
+                        <option value="magasinier">Magasinier</option>
+                    </select>
+                </div>
+                <div class="card-body">
+                    <table class="tbl">
+                        <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Entreprise</th><th>Statut</th><th>Actions</th></tr></thead>
+                        <tbody id="utilisateursList"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
-    </div>
-</div>
+        <!-- ══ SECTION : TRANSPORTS ══ -->
+        <div class="section" id="sec-transports">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:32px;letter-spacing:1px;">TRANSPORTS</div>
+                    <div style="font-size:13px;color:var(--muted);margin-top:2px;">Gestion de toutes les livraisons</div>
+                </div>
+                <button class="btn btn-red" id="btnNouvelTransport">
+                    <i class="fas fa-plus"></i> Nouveau transport
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <table class="tbl">
+                        <thead><tr><th>Référence</th><th>Client</th><th>Chauffeur</th><th>Départ</th><th>Arrivée</th><th>Statut</th><th>Actions</th></tr></thead>
+                        <tbody id="transportsList">
+                            <tr><td colspan="7"><div class="empty"><div class="empty-ico">🚚</div><div class="empty-txt">Aucun transport pour le moment</div></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-<div class="bottom-nav" id="bottomNav">
-    <!-- Canvas caché pour décodage QR -->
-    <canvas id="qrCanvas" style="display:none;"></canvas>
-    <div class="bn-wrap">
-        <div class="bn-item active" id="bnHome" onclick="showScreen('home')">
-            <i class="fas fa-home"></i><span>Missions</span>
-            <div class="bn-badge" id="bnBadge">0</div>
+        <!-- ══ SECTION : CHAUFFEURS ══ -->
+        <div class="section" id="sec-chauffeurs">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:32px;letter-spacing:1px;">CHAUFFEURS</div>
+                    <div style="font-size:13px;color:var(--muted);margin-top:2px;">Gestion des chauffeurs et leurs accès</div>
+                </div>
+                <button class="btn btn-red" id="btnNouvelChauffeur">
+                    <i class="fas fa-plus"></i> Nouveau chauffeur
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-head" style="gap:10px;flex-wrap:wrap;">
+                    <input type="text" id="searchChauffeurs" placeholder="🔍  Rechercher…" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;width:260px;" oninput="filterChauffeurs(this.value)">
+                </div>
+                <div class="card-body">
+                    <table class="tbl">
+                        <thead><tr><th>Chauffeur</th><th>Permis</th><th>Téléphone</th><th>Entreprise</th><th>Compte accès</th><th>Statut</th><th>Actions</th></tr></thead>
+                        <tbody id="chauffeursList"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        <div class="bn-item" id="bnMap" onclick="showScreen('map')">
-            <i class="fas fa-map"></i><span>Carte</span>
-        </div>
-        <div class="bn-item" id="bnQR" onclick="openScanner()">
-            <i class="fas fa-qrcode"></i><span>Scanner</span>
-        </div>
-        <div class="bn-item" id="bnRh" onclick="showScreen('rh')">
-            <i class="fas fa-user-clock"></i><span>Mon RH</span>
-        </div>
-    </div>
-</div>
 
-<!-- ═══ MODAL CONGÉ ═══ -->
-<div class="modal" id="modalConge">
+        <!-- ══ SECTION : ACTIVITÉ ══ -->
+        <div class="section" id="sec-activite">
+            <div style="font-family:'Bebas Neue',cursive;font-size:32px;letter-spacing:1px;margin-bottom:20px;">ACTIVITÉ RÉCENTE</div>
+            <div class="card">
+                <div class="feed" id="fullActivityFeed">
+                    <div class="empty"><div class="empty-ico"><i class="fas fa-spinner fa-spin"></i></div></div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ═══ MODAL ENTREPRISE ═══ -->
+<div id="modalEntreprise" class="modal">
     <div class="modal-box">
-        <div class="modal-handle"></div>
-        <div class="modal-title">DEMANDE DE CONGÉ</div>
-        <form id="formConge">
-            <div class="mfield">
-                <label>Type</label>
-                <select id="congeType">
-                    <option value="vacances">🏖️ Vacances</option>
-                    <option value="maladie">🤒 Maladie</option>
-                    <option value="compensation">⚖️ Compensation</option>
-                    <option value="autre">📌 Autre</option>
-                </select>
+        <div class="modal-head">
+            <div class="modal-title" id="modalEntrepriseTitle">NOUVELLE ENTREPRISE</div>
+            <button class="modal-close" data-close="modalEntreprise">✕</button>
+        </div>
+        <form id="formEntreprise">
+            <input type="hidden" id="entrepriseId">
+            <div class="field-row">
+                <div class="field"><label>Nom *</label><input type="text" id="eNom" placeholder="Transport SA" required></div>
+                <div class="field"><label>N° client *</label><input type="text" id="eNumeroClient" placeholder="LC-001" required></div>
             </div>
-            <div class="mfield-row">
-                <div class="mfield"><label>Date début</label><input type="date" id="congeDebut" required></div>
-                <div class="mfield"><label>Date fin</label><input type="date" id="congeFin" required></div>
+            <div class="field-row">
+                <div class="field"><label>Email *</label><input type="email" id="eEmail" placeholder="info@entreprise.ch" required></div>
+                <div class="field"><label>Téléphone</label><input type="tel" id="eTel" placeholder="+41 21 000 00 00"></div>
             </div>
-            <div class="mfield">
-                <label>Note</label>
-                <textarea id="congeNote" style="resize:none;min-height:60px;" placeholder="Motif, informations…"></textarea>
+            <div class="field"><label>Adresse</label><input type="text" id="eAdresse" placeholder="Rue de la Gare 1"></div>
+            <div class="field-row">
+                <div class="field"><label>NPA</label><input type="text" id="eNpa" placeholder="1000"></div>
+                <div class="field"><label>Ville</label><input type="text" id="eVille" placeholder="Lausanne"></div>
             </div>
             <div class="modal-actions">
-                <button type="submit" class="btn-save">Envoyer la demande</button>
-                <button type="button" class="btn-cancel" onclick="closeModal('modalConge')">Annuler</button>
+                <button type="submit" class="btn btn-red"><i class="fas fa-save"></i> Enregistrer</button>
+                <button type="button" class="btn btn-ghost" data-close="modalEntreprise">Annuler</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ═══ MODAL UTILISATEUR ═══ -->
+<div id="modalUser" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title" id="modalUserTitle">NOUVEL UTILISATEUR</div>
+            <button class="modal-close" data-close="modalUser">✕</button>
+        </div>
+        <form id="formUser">
+            <input type="hidden" id="userId">
+            <div class="field"><label>Email *</label><input type="email" id="uEmail" placeholder="prenom@exemple.ch" required autocomplete="off"></div>
+            <div class="field" id="uPwdField">
+                <label>Mot de passe *</label>
+                <input type="password" id="uPassword" placeholder="6 caractères min." minlength="6" autocomplete="new-password">
+            </div>
+            <div class="field-row">
+                <div class="field"><label>Nom</label><input type="text" id="uNom" placeholder="Dupont"></div>
+                <div class="field"><label>Prénom</label><input type="text" id="uPrenom" placeholder="Jean"></div>
+            </div>
+            <div class="field"><label>Téléphone</label><input type="tel" id="uTel" placeholder="+41 79 000 00 00"></div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Rôle</label>
+                    <select id="uRole">
+                        <option value="client">Client</option>
+                        <option value="chauffeur">Chauffeur</option>
+                        <option value="magasinier">Magasinier</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Super Admin</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Entreprise</label>
+                    <select id="uEntreprise">
+                        <option value="">— Aucune —</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-red"><i class="fas fa-save"></i> Enregistrer</button>
+                <button type="button" class="btn btn-ghost" data-close="modalUser">Annuler</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ═══ MODAL NOUVEAU CLIENT ═══ -->
+<div id="modalNouveauClient" class="modal">
+    <div class="modal-box" style="max-width:540px;">
+        <div class="modal-head">
+            <div class="modal-title">ACCÈS CLIENT — NOUVELLE ENTREPRISE</div>
+            <button class="modal-close" data-close="modalNouveauClient">✕</button>
+        </div>
+        <div id="clientCreated" style="display:none;">
+            <div style="text-align:center;padding:20px 0;">
+                <div style="font-size:48px;margin-bottom:14px;">✅</div>
+                <div style="font-family:'Bebas Neue',cursive;font-size:24px;letter-spacing:1px;color:var(--green);margin-bottom:10px;">COMPTE CRÉÉ !</div>
+                <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:left;margin-bottom:20px;">
+                    <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">INFORMATIONS D'ACCÈS</div>
+                    <div style="font-size:14px;line-height:2;color:var(--muted2);">
+                        <div>🌐 <strong style="color:var(--white);">URL :</strong> <span id="infoUrl" style="color:var(--blue)"></span></div>
+                        <div>📧 <strong style="color:var(--white);">Email :</strong> <span id="infoEmail"></span></div>
+                        <div>🔑 <strong style="color:var(--white);">Mot de passe :</strong> <span id="infoPwd" style="color:var(--yellow);font-family:monospace;font-size:16px;"></span></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn btn-green" onclick="copyAccess()" style="flex:1;justify-content:center;padding:12px;">
+                        <i class="fas fa-copy"></i> Copier les infos
+                    </button>
+                    <button class="btn btn-ghost" data-close="modalNouveauClient" style="flex:1;justify-content:center;padding:12px;">
+                        Fermer
+                    </button>
+                </div>
+            </div>
+        </div>
+        <form id="formNouveauClient" style="">
+            <div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px 14px;margin-bottom:20px;font-size:13px;color:var(--muted2);line-height:1.6;">
+                <i class="fas fa-info-circle" style="color:var(--blue)"></i>
+                Crée un compte client lié à une entreprise existante.
+                Le client pourra accéder au portail pour créer des expéditions.
+            </div>
+            <div class="field">
+                <label>Entreprise *</label>
+                <select id="ncEntreprise" required>
+                    <option value="">— Sélectionner l'entreprise —</option>
+                </select>
+            </div>
+            <div class="field"><label>Email du contact *</label>
+                <input type="email" id="ncEmail" placeholder="contact@entreprise.ch" required autocomplete="off">
+            </div>
+            <div class="field-row">
+                <div class="field"><label>Nom</label><input type="text" id="ncNom" placeholder="Nom"></div>
+                <div class="field"><label>Prénom</label><input type="text" id="ncPrenom" placeholder="Prénom"></div>
+            </div>
+            <div class="field"><label>Téléphone</label>
+                <input type="tel" id="ncTel" placeholder="+41 79 000 00 00">
+            </div>
+            <div class="field">
+                <label>Mot de passe temporaire</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="ncPwd" placeholder="Généré automatiquement" style="flex:1;font-family:monospace;">
+                    <button type="button" class="btn btn-ghost" onclick="genPwd()" style="flex-shrink:0;">
+                        <i class="fas fa-sync-alt"></i> Générer
+                    </button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-red" style="flex:1;justify-content:center;padding:12px;">
+                    <i class="fas fa-user-plus"></i> Créer l'accès client
+                </button>
+                <button type="button" class="btn btn-ghost" data-close="modalNouveauClient" style="flex:1;justify-content:center;padding:12px;">
+                    Annuler
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ═══ MODAL CONFIRM ═══ -->
+<div id="modalConfirm" class="modal">
+    <div class="confirm-box">
+        <div class="confirm-ico">🗑️</div>
+        <div class="confirm-title">SUPPRIMER ?</div>
+        <div class="confirm-text" id="confirmText">Cette action est irréversible.</div>
+        <div class="confirm-actions">
+            <button class="btn btn-red" id="confirmYes" style="flex:1;justify-content:center;"><i class="fas fa-trash"></i> Supprimer</button>
+            <button class="btn btn-ghost" data-close="modalConfirm" style="flex:1;justify-content:center;">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL CHAUFFEUR ═══ -->
+<div id="modalChauffeur" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-box" style="max-width:560px;">
+        <div class="modal-head">
+            <div class="modal-title" id="modalChauffeurTitle">NOUVEAU CHAUFFEUR</div>
+            <button class="modal-close" data-close="modalChauffeur">✕</button>
+        </div>
+        <form id="formChauffeur">
+            <input type="hidden" id="chauffeurId">
+            <input type="hidden" id="chauffeurUserId">
+
+            <!-- Infos perso -->
+            <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">INFORMATIONS PERSONNELLES</div>
+            <div class="field-row">
+                <div class="field"><label>Prénom *</label><input type="text" id="cPrenom" placeholder="Jean" required></div>
+                <div class="field"><label>Nom *</label><input type="text" id="cNom" placeholder="Dupont" required></div>
+            </div>
+            <div class="field-row">
+                <div class="field"><label>Téléphone</label><input type="tel" id="cTel" placeholder="+41 79 000 00 00"></div>
+                <div class="field"><label>Date de naissance</label><input type="date" id="cNaissance"></div>
+            </div>
+
+            <!-- Infos pro -->
+            <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:16px 0 12px;">INFORMATIONS PROFESSIONNELLES</div>
+            <div class="field-row">
+                <div class="field"><label>N° Permis</label><input type="text" id="cPermis" placeholder="VD123456"></div>
+                <div class="field"><label>Date d'embauche</label><input type="date" id="cEmbauche"></div>
+            </div>
+            <div class="field">
+                <label>Entreprise</label>
+                <select id="cEntreprise">
+                    <option value="">— Aucune —</option>
+                </select>
+            </div>
+
+            <!-- Compte accès -->
+            <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:16px 0 12px;display:flex;align-items:center;gap:8px;">
+                <i class="fas fa-key" style="color:var(--green)"></i> COMPTE D'ACCÈS APP CHAUFFEUR
+            </div>
+            <div class="field">
+                <label>Email de connexion *</label>
+                <input type="email" id="cEmail" placeholder="prenom.nom@leman-courses.ch" required autocomplete="off">
+            </div>
+            <div class="field" id="cPwdField">
+                <label>Mot de passe *</label>
+                <div style="position:relative;">
+                    <input type="text" id="cPassword" placeholder="Mot de passe temporaire" required autocomplete="off" style="padding-right:110px;">
+                    <button type="button" onclick="generatePwd()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:var(--green);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;">
+                        <i class="fas fa-dice"></i> Générer
+                    </button>
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-top:5px;"><i class="fas fa-info-circle"></i> Communiquez ce mot de passe au chauffeur</div>
+            </div>
+
+            <!-- Password display box -->
+            <div id="pwdDisplayBox" style="display:none;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:10px;padding:14px;margin-bottom:14px;">
+                <div style="font-size:11px;color:var(--green);font-weight:700;margin-bottom:6px;"><i class="fas fa-check-circle"></i> Identifiants de connexion</div>
+                <div style="font-size:13px;color:var(--muted2);">Email : <strong id="pwdDisplayEmail" style="color:var(--white)"></strong></div>
+                <div style="font-size:13px;color:var(--muted2);margin-top:4px;">Mot de passe : <strong id="pwdDisplayPwd" style="color:var(--white);font-family:monospace;font-size:14px;letter-spacing:1px;"></strong></div>
+                <div style="font-size:11px;color:var(--muted);margin-top:8px;"><i class="fas fa-exclamation-triangle" style="color:var(--yellow)"></i> Notez ces informations avant de fermer</div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-red"><i class="fas fa-save"></i> Enregistrer</button>
+                <button type="button" class="btn btn-ghost" data-close="modalChauffeur">Annuler</button>
             </div>
         </form>
     </div>
@@ -634,1190 +905,624 @@
     'use strict';
 
     if (!window.SUPABASE_CONFIG) {
-        document.body.innerHTML = '<div style="padding:40px;color:red;font-family:sans-serif;">❌ config.js manquant</div>';
+        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
         return;
     }
     const db = window.SUPABASE_CLIENT;
 
     /* ── State ── */
-    let driver     = null;
-    let missions   = [];
-    let curMission = null;
-    let pointage   = null; // today's pointage record
-    let gpsWatch   = null;
-    let myLat = null, myLng = null;
-    let dMap = null, dMarker = null, rLine = null;
-    let sigCtx = null, drawing = false, hasSig = false;
-    let workTimer = null, workSeconds = 0;
+    let entreprises = [], utilisateurs = [], chauffeurs = [], currentUser = null;
 
-    /* ── Helpers ── */
+    /* ── Toast ── */
     const toastEl = document.getElementById('toast');
     let toastTimer;
     function toast(type, msg) {
         clearTimeout(toastTimer);
         toastEl.className = 'toast ' + type + ' show';
-        toastEl.textContent = (type==='success'?'✓ ':type==='error'?'✕ ':'ℹ ') + msg;
-        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
+        document.getElementById('toastIco').textContent = type === 'success' ? '✓' : '✕';
+        document.getElementById('toastTxt').textContent = msg;
+        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 4000);
     }
+
+    /* ── Loader ── */
     const loaderEl = document.getElementById('loader');
     const showLoad = () => loaderEl.classList.add('on');
     const hideLoad = () => loaderEl.classList.remove('on');
-    const fmt = ts => ts ? new Date(ts).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit'}) : '--:--';
-    const today = () => new Date().toISOString().slice(0,10);
 
     /* ── Modals ── */
-    function openModal(id)  { const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
-    function closeModal(id) { const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} }
-    window.closeModal = closeModal;
+    function openModal(id)  { const m = document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
+    function closeModal(id) { const m = document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} }
+    document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(b.dataset.close)));
     document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
+    document.addEventListener('keydown', e => { if(e.key==='Escape') document.querySelectorAll('.modal.open').forEach(m=>closeModal(m.id)); });
 
-    /* ── Screen nav ── */
-    const NAV_SCREENS = ['home','map','rh'];
-    window.showScreen = function(name) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        const el = document.getElementById('screen' + name.charAt(0).toUpperCase() + name.slice(1));
-        if(el) el.classList.add('active');
-        document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
-        const bn = document.getElementById('bn' + name.charAt(0).toUpperCase() + name.slice(1));
-        if(bn) bn.classList.add('active');
-        const showNav = NAV_SCREENS.includes(name);
-        document.getElementById('bottomNav').style.display  = showNav ? 'block' : 'none';
-        document.getElementById('statusBar').style.display  = name!=='login' ? 'flex' : 'none';
-        if(name==='map' && !dMap) initMap();
-        if(name==='map' && dMap)  setTimeout(()=>dMap.invalidateSize(),100);
-        if(name==='rh') loadRH();
+    /* ── Navigation ── */
+    window.goSection = function(name) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const sec = document.getElementById('sec-' + name);
+        const nav = document.querySelector(`[data-section="${name}"]`);
+        if(sec) sec.classList.add('active');
+        if(nav) nav.classList.add('active');
+        const titles = { dashboard:'DASHBOARD', clients:'ENTREPRISES', utilisateurs:'UTILISATEURS', transports:'TRANSPORTS', chauffeurs:'CHAUFFEURS', activite:'ACTIVITÉ' };
+        document.getElementById('pageTitle').textContent = titles[name] || name.toUpperCase();
     };
+    document.querySelectorAll('.nav-item[data-section]').forEach(item => {
+        item.addEventListener('click', e => { e.preventDefault(); goSection(item.dataset.section); });
+    });
 
-    /* ── LOGIN ── */
-    window.doLogin = async function() {
-        const email = document.getElementById('lEmail').value.trim();
-        const pwd   = document.getElementById('lPwd').value;
-        if(!email||!pwd) { toast('error','Email et mot de passe requis'); return; }
-        showLoad();
-        try {
-            const { data, error } = await db.auth.signInWithPassword({ email, password:pwd });
-            if(error) throw error;
-            const { data:user } = await db.from('utilisateurs').select('*').eq('id',data.user.id).single();
-            if(!user||!['chauffeur','admin','super_admin'].includes(user.role)) {
-                await db.auth.signOut(); throw new Error('Accès réservé aux chauffeurs');
-            }
-            driver = user;
-            afterLogin();
-        } catch(e) { toast('error',e.message); }
-        finally { hideLoad(); }
-    };
+    /* ── Auth check ── */
+    async function init() {
+        await new Promise(r => setTimeout(r, 500));
+        const { data: { session } } = await db.auth.getSession();
+        if (!session) { window.location.href = '../index.html'; return; }
+        console.log('Session OK:', session.user.email);
 
-    async function checkSession() {
-        await new Promise(r=>setTimeout(r,400));
-        const { data:{session} } = await db.auth.getSession();
-        if(!session) return;
-        const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
-        if(user && ['chauffeur','admin','super_admin'].includes(user.role)) { driver=user; afterLogin(); }
-    }
+        const { data: user, error } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
+        console.log('User:', user, 'Error:', error);
 
-    function afterLogin() {
-        const name = [driver.prenom,driver.nom].filter(Boolean).join(' ')||'Chauffeur';
-        document.getElementById('homeName').textContent = name;
-        document.getElementById('homeDate').textContent = new Date().toLocaleDateString('fr-CH',{weekday:'long',day:'2-digit',month:'long'});
-        showScreen('home');
-        loadMissions();
-        loadTodayPointage();
-        loadVehicule();
-        startGPS();
-        initNotifications(driver.id);
-
-        // ── Vérifier si ouvert depuis un scan QR ──
-        const params = new URLSearchParams(window.location.search);
-        const orderId    = params.get('id');
-        const orderNum   = params.get('order');
-        const colisNum   = params.get('colis');
-        const colisTotal = params.get('total');
-
-        if(orderId || orderNum) {
-            // Afficher notification de scan
-            setTimeout(async () => {
-                toast('info', `📦 QR scanné — chargement du transport…`);
-                // Chercher le transport
-                let query = db.from('transport_orders_simple').select('*');
-                if(orderId)   query = query.eq('id', orderId);
-                else          query = query.eq('order_number', orderNum);
-                const { data:order } = await query.maybeSingle();
-                if(order) {
-                    // Afficher un modal de confirmation de prise en charge
-                    showQRPickup(order, colisNum, colisTotal);
-                } else {
-                    toast('error', `Transport introuvable : ${orderNum||orderId}`);
-                }
-                // Nettoyer l'URL sans recharger la page
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }, 800);
-        }
-    }
-
-    function showQRPickup(o, colisNum, colisTotal) {
-        // Créer un modal de prise en charge
-        const existing = document.getElementById('modalQRPickup');
-        if(existing) existing.remove();
-
-        const stColor = o.status==='in_transit'?'var(--purple)':o.status==='delivered'?'var(--green)':'var(--yellow)';
-        const overlay = document.createElement('div');
-        overlay.id = 'modalQRPickup';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;';
-        overlay.innerHTML = `
-            <div style="background:var(--night3);border:1.5px solid var(--border2);border-radius:22px;padding:28px;width:100%;max-width:360px;box-shadow:0 40px 100px rgba(0,0,0,0.6);">
-                <div style="text-align:center;margin-bottom:18px;">
-                    <div style="font-size:36px;margin-bottom:8px;">📦</div>
-                    <div style="font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;color:var(--white);">QR CODE SCANNÉ</div>
-                    ${colisNum?`<div style="font-size:12px;color:var(--yellow);margin-top:4px;">Colis ${colisNum}/${colisTotal||'?'}</div>`:''}
-                </div>
-                <div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;display:flex;flex-direction:column;gap:7px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span style="color:var(--muted2)">Commande</span>
-                        <strong>${o.order_number||'—'}</strong>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span style="color:var(--muted2)">Statut</span>
-                        <span style="color:${stColor};font-weight:600">${o.status}</span>
-                    </div>
-                    <div style="display:flex;gap:6px;margin-top:4px;">
-                        <div style="width:8px;height:8px;background:var(--blue);border-radius:50%;margin-top:3px;flex-shrink:0;"></div>
-                        <div style="font-size:12px;color:var(--muted2);line-height:1.4;">${(o.pickup_address||'—').split('|')[0].trim()}</div>
-                    </div>
-                    <div style="display:flex;gap:6px;">
-                        <div style="width:8px;height:8px;background:var(--red);border-radius:2px;transform:rotate(45deg);margin-top:3px;flex-shrink:0;"></div>
-                        <div style="font-size:12px;color:var(--white);font-weight:600;line-height:1.4;">${o.destinataire_nom||'—'}<br><span style="color:var(--muted2);font-weight:400">${(o.delivery_address||'—').split(',').slice(0,2).join(',')}</span></div>
-                    </div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
-                        <span style="background:var(--night);padding:3px 8px;border-radius:6px;font-size:11px;">📦 ${o.quantity||1}× ${o.weight||0}kg</span>
-                        <span style="background:var(--night);padding:3px 8px;border-radius:6px;font-size:11px;">⚡ ${o.service_type||'normal'}</span>
-                    </div>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${o.status!=='delivered'?`
-                    <button onclick="confirmPickup('${o.id}');document.getElementById('modalQRPickup').remove();"
-                        style="width:100%;padding:14px;background:var(--green);color:var(--night);border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;cursor:pointer;">
-                        <i class="fas fa-box"></i> Confirmer la prise en charge
-                    </button>`:'<div style="text-align:center;color:var(--green);font-weight:600;padding:8px;">✅ Déjà livré</div>'}
-                    <button onclick="document.getElementById('modalQRPickup').remove();"
-                        style="width:100%;padding:12px;background:transparent;color:var(--muted2);border:1px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;cursor:pointer;font-size:14px;">
-                        Fermer
-                    </button>
-                </div>
-            </div>`;
-
-        overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
-        document.body.appendChild(overlay);
-    }
-
-    /* ── QR SCANNER ── */
-    let scanStream = null;
-    let scanInterval = null;
-    let scanning = false;
-
-    window.openScanner = function() {
-        showScreen('qr');
-        document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
-        document.getElementById('bnQR')?.classList.add('active');
-        document.getElementById('scanResult').style.display = 'none';
-        document.getElementById('scanStatus').textContent = '';
-        // Reset input so same file can be re-selected
-        const inp = document.getElementById('scanPhotoInput');
-        if(inp) inp.value = '';
-    };
-
-    window.stopScan = function() {
-        if(scanInterval) { clearInterval(scanInterval); scanInterval=null; }
-        if(scanStream)   { scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
-        scanning = false;
-        showScreen('home');
-    };
-
-    function decodeFrame() {
-        if(scanning) return;
-        const video  = document.getElementById('qrVideo');
-        const canvas = document.getElementById('qrCanvas');
-        if(!video || !video.videoWidth || video.paused) return;
-
-        canvas.width  = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-
-        if('BarcodeDetector' in window) {
-            scanning = true;
-            const bd = new BarcodeDetector({formats:['qr_code']});
-            bd.detect(canvas).then(codes => {
-                if(codes.length > 0) {
-                    clearInterval(scanInterval); scanInterval=null;
-                    handleQRResult(codes[0].rawValue);
-                } else { scanning = false; }
-            }).catch(()=>{ scanning=false; });
-        } else if(window.jsQR) {
-            const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
-            const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'dontInvert'});
-            if(code?.data) {
-                clearInterval(scanInterval); scanInterval=null;
-                handleQRResult(code.data);
-            }
-        }
-    }
-
-    async function handleQRResult(raw) {
-        if(!raw) return;
-        // Stop scanning
-        clearInterval(scanInterval); scanInterval = null;
-        document.getElementById('scanStatus').textContent = '✅ QR Code détecté !';
-
-        try {
-            const data = JSON.parse(raw);
-            const orderId = data.id;
-            if(!orderId) throw new Error('QR invalide');
-
-            // Charger le transport
-            const { data:order } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
-            if(!order) throw new Error('Transport introuvable');
-
-            showScanResult(order, data);
-        } catch(e) {
-            // Essayer comme numéro de commande
-            await searchByNum(raw.trim());
-        }
-    }
-
-    window.searchManual = async function() {
-        const val = document.getElementById('qrManual').value.trim();
-        if(!val) return;
-        await searchByNum(val);
-    };
-
-    // Lire un QR depuis une photo prise avec l'appareil photo
-    window.scanFromPhoto = function(input) {
-        if(!input.files?.[0]) return;
-        const el = document.getElementById('scanStatus');
-        el.textContent = '🔍 Analyse en cours…';
-        el.style.color = 'var(--yellow)';
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = new Image();
-            img.onload = function() {
-                // Agrandir pour meilleure détection
-                const MAX = 1200;
-                let w = img.width, h = img.height;
-                if(w < MAX && h < MAX) { w = Math.round(w*1.5); h = Math.round(h*1.5); }
-                const cv = document.getElementById('qrCanvas');
-                cv.width = w; cv.height = h;
-                cv.getContext('2d').drawImage(img, 0, 0, w, h);
-
-                if('BarcodeDetector' in window) {
-                    new BarcodeDetector({formats:['qr_code']}).detect(cv).then(codes => {
-                        if(codes.length > 0) {
-                            el.style.color = 'var(--green)';
-                            el.textContent = '✅ QR détecté !';
-                            handleQRResult(codes[0].rawValue);
-                        } else {
-                            tryJsQR(cv, el);
-                        }
-                    }).catch(() => tryJsQR(cv, el));
-                } else if(window.jsQR) {
-                    tryJsQR(cv, el);
-                } else {
-                    el.textContent = '❌ jsQR non chargé — saisie manuelle';
-                    el.style.color = 'var(--red)';
-                }
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(input.files[0]);
-        input.value = ''; // reset pour permettre re-scan
-    };
-
-        function tryJsQR(canvas, el) {
-        if(!window.jsQR) { el.textContent = '❌ Bibliothèque QR non disponible'; return; }
-        const ctx = canvas.getContext('2d');
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'attemptBoth'});
-        if(code?.data) {
-            el.style.color = 'var(--green)';
-            el.textContent = '✅ QR détecté !';
-            handleQRResult(code.data);
-        } else {
-            el.style.color = 'var(--red)';
-            el.textContent = '❌ QR non reconnu — rapprochez-vous ou réessayez';
-            el.style.color = 'var(--red)';
-            document.getElementById('scanPhotoInput').value = '';
-        }
-    }
-
-    async function searchByNum(num) {
-        document.getElementById('scanStatus').textContent = 'Recherche…';
-        const { data } = await db.from('transport_orders_simple').select('*')
-            .or(`order_number.eq.${num},id.eq.${num}`).maybeSingle();
-        if(!data) {
-            document.getElementById('scanStatus').textContent = '❌ Transport introuvable : ' + num;
-            // Restart scan
-            if(scanStream) scanInterval = setInterval(()=>decodeFrame(), 500);
+        if (!user) {
+            document.getElementById('sideName').textContent = session.user.email;
+            await loadAll();
             return;
         }
-        showScanResult(data, {});
-    }
-
-    function showScanResult(o, qrData) {
-        const stColor = {pending:'var(--yellow)',planned:'var(--blue)',in_transit:'var(--purple)',delivered:'var(--green)'}[o.status]||'var(--yellow)';
-        const el = document.getElementById('scanResult');
-        el.style.display = 'block';
-        el.innerHTML = `
-            <div style="background:var(--night3);border:1.5px solid var(--border2);border-radius:14px;overflow:hidden;">
-                <div style="background:rgba(34,197,94,0.1);border-bottom:1px solid rgba(34,197,94,0.2);padding:12px 16px;display:flex;align-items:center;gap:10px;">
-                    <i class="fas fa-check-circle" style="color:var(--green);font-size:18px;"></i>
-                    <div>
-                        <div style="font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;">${o.order_number||'—'}</div>
-                        <div style="font-size:11px;color:var(--muted2);">Transport trouvé</div>
-                    </div>
-                    <span style="margin-left:auto;background:${stColor};color:var(--night);padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;">${o.status}</span>
-                </div>
-                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
-                    <div style="font-size:12px;color:var(--muted2);">
-                        <div style="display:flex;gap:8px;margin-bottom:6px;">
-                            <div style="width:8px;height:8px;background:var(--blue);border-radius:50%;margin-top:4px;flex-shrink:0;"></div>
-                            <div>${o.pickup_address||'—'}</div>
-                        </div>
-                        <div style="display:flex;gap:8px;">
-                            <div style="width:8px;height:8px;background:var(--red);border-radius:2px;transform:rotate(45deg);margin-top:4px;flex-shrink:0;"></div>
-                            <div><strong style="color:var(--white)">${o.destinataire_nom||'—'}</strong><br>${o.delivery_address||'—'}</div>
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <span style="background:var(--surface);padding:3px 9px;border-radius:6px;font-size:11px;">📦 ${o.quantity||1}× ${o.weight||0}kg</span>
-                        <span style="background:var(--surface);padding:3px 9px;border-radius:6px;font-size:11px;">⚡ ${o.service_type||'normal'}</span>
-                        ${qrData.c?`<span style="background:var(--surface);padding:3px 9px;border-radius:6px;font-size:11px;">🏷️ Colis ${qrData.c}/${qrData.t||'?'}</span>`:''}
-                    </div>
-                    <div style="display:flex;gap:8px;margin-top:6px;">
-                        ${o.status!=='delivered'?`<button onclick="confirmPickup('${o.id}')" style="flex:1;padding:11px;background:var(--green);color:var(--night);border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:pointer;"><i class="fas fa-box"></i> Prendre en charge</button>`:''}
-                        <button onclick="openOrder('${o.id}')" style="flex:1;padding:11px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;cursor:pointer;"><i class="fas fa-eye"></i> Détails</button>
-                    </div>
-                </div>
-            </div>`;
-        document.getElementById('scanStatus').textContent = '';
-    }
-
-    window.confirmPickup = async function(id) {
-        showLoad();
-        try {
-            await db.from('transport_orders_simple').update({
-                status:      'in_transit',
-                driver_id:   driver.id,
-                assigned_at: new Date().toISOString(),
-                picked_up_at:new Date().toISOString()
-            }).eq('id', id);
-            toast('success', '✅ Prise en charge confirmée !');
-            stopScan();
-            await loadMissions();
-        } catch(e) { toast('error', e.message); }
-        finally { hideLoad(); }
-    };
-
-    window.openOrder = function(id) {
-        stopScan();
-        // Trouver et ouvrir la mission
-        const mission = missions?.find(m=>m.id===id);
-        if(mission) openMission(mission);
-        else toast('info', 'Allez dans Missions pour voir ce transport');
-    };
-
-    /* ── KM JOURNALIERS ── */
-    let vehiculeId = null;
-
-    async function loadVehicule() {
-        if(!driver) return;
-        // Chercher le véhicule assigné au chauffeur
-        const { data } = await db.from('vehicules')
-            .select('*').eq('chauffeur_id', driver.id).eq('actif', true).maybeSingle();
-        if(data) {
-            vehiculeId = data.id;
-            document.getElementById('kmCard').style.display = 'block';
-            // Charger km du jour si déjà saisi
-            const { data:km } = await db.from('vehicule_km')
-                .select('*').eq('vehicule_id', data.id)
-                .eq('date', new Date().toISOString().slice(0,10)).maybeSingle();
-            if(km) {
-                document.getElementById('kmDebut').value = km.km_debut||'';
-                document.getElementById('kmFin').value   = km.km_fin||'';
-                updateKmTotal();
-                const status = document.getElementById('kmStatus');
-                status.className = 'pc-status work';
-                status.textContent = `${km.km_parcourus||0} km`;
-            }
+        if (!['super_admin','admin'].includes(user.role)) {
+            await db.auth.signOut();
+            window.location.href = '../index.html';
+            return;
         }
+        currentUser = user;
+        const initials = ((user.prenom?.[0]||'') + (user.nom?.[0]||'')).toUpperCase() || 'SA';
+        document.getElementById('sideAvatar').textContent = initials;
+        document.getElementById('sideName').textContent   = [user.prenom, user.nom].filter(Boolean).join(' ') || 'Super Admin';
+        await loadAll();
+
+        // ── Realtime nouvelles commandes clients ──
+        db.channel('dashboard_commandes')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'transport_orders_simple'
+            }, async (payload) => {
+                if(payload.new?.admin_status === 'pending_validation') {
+                    // Notification visuelle
+                    const num = payload.new.order_number || '—';
+                    toast('info', `📦 Nouvelle commande client : ${num}`);
+                    // Vibrer badge
+                    const badge = document.getElementById('badgeCommandes');
+                    if(badge) { badge.style.animation='none'; setTimeout(()=>badge.style.animation='',100); }
+                    await loadCommandes();
+                }
+            })
+            .subscribe();
+
+        // Polling toutes les 60s en fallback
+        setInterval(() => loadCommandes(), 60000);
     }
 
-    // Mise à jour temps réel
-    document.getElementById('kmDebut').addEventListener('input', updateKmTotal);
-    document.getElementById('kmFin').addEventListener('input', updateKmTotal);
-
-    function updateKmTotal() {
-        const debut = parseFloat(document.getElementById('kmDebut').value)||0;
-        const fin   = parseFloat(document.getElementById('kmFin').value)||0;
-        const total = fin > debut ? fin - debut : 0;
-        document.getElementById('kmTotal').textContent = total > 0 ? `${total} km` : '— km';
+    /* ── Load all data ── */
+    async function loadAll() {
+        await Promise.all([loadEntreprises(), loadUtilisateurs(), loadChauffeurs(), loadCommandes()]);
+        renderDashboard();
+        renderEntreprises();
+        renderUtilisateurs();
+        renderChauffeurs();
+        renderActivity();
     }
 
-    window.saveKm = async function() {
-        if(!vehiculeId) { toast('error','Aucun véhicule assigné'); return; }
-        const debut = parseFloat(document.getElementById('kmDebut').value)||0;
-        const fin   = parseFloat(document.getElementById('kmFin').value)||0;
-        if(!debut) { toast('error','Entrez le km de début'); return; }
-        if(fin && fin < debut) { toast('error','Km fin doit être > km début'); return; }
-
-        showLoad();
-        try {
-            const today = new Date().toISOString().slice(0,10);
-            const { error } = await db.from('vehicule_km').upsert([{
-                vehicule_id:  vehiculeId,
-                chauffeur_id: driver.id,
-                date:         today,
-                km_debut:     debut,
-                km_fin:       fin||debut
-            }], { onConflict: 'vehicule_id,date' });
-            if(error) throw error;
-
-            const total = fin > debut ? fin - debut : 0;
-            const status = document.getElementById('kmStatus');
-            status.className = 'pc-status work';
-            status.textContent = `${total} km`;
-            toast('success', `${total} km enregistrés ✓`);
-        } catch(e) { toast('error', e.message); }
-        finally { hideLoad(); }
-    };
-
-    window.logout = async function() {
-        stopGPS(); clearInterval(workTimer);
-        await db.auth.signOut();
-        driver=null; missions=[];
-        showScreen('login');
-    };
-
-    /* ── MISSIONS ── */
-    window.loadMissions = async function() {
-        if(!driver) return;
+    async function loadCommandes() {
         const { data } = await db.from('transport_orders_simple')
-            .select('*').eq('driver_id',driver.id).neq('status','delivered')
-            .order('created_at',{ascending:true});
-        missions = data||[];
+            .select('*')
+            .eq('admin_status', 'pending_validation')
+            .order('created_at', { ascending: false });
+        const commandes = data || [];
 
-        const { data:done } = await db.from('transport_orders_simple')
-            .select('id').eq('driver_id',driver.id).eq('status','delivered')
-            .gte('delivered_at', today()+'T00:00:00');
+        // Badge sidebar
+        const badge = document.getElementById('badgeCommandes');
+        const badgeW = document.getElementById('badgeCommandesWidget');
+        if(badge) {
+            badge.textContent = commandes.length;
+            badge.style.display = commandes.length > 0 ? 'inline' : 'none';
+        }
+        if(badgeW) badgeW.textContent = commandes.length;
 
-        document.getElementById('srMissions').textContent = missions.length;
-        document.getElementById('srDone').textContent     = done?.length||0;
-        const badge = document.getElementById('bnBadge');
-        if(missions.length>0) { badge.textContent=missions.length; badge.classList.add('show'); }
-        else badge.classList.remove('show');
-        renderMissions();
-    };
-
-    function renderMissions() {
-        const el = document.getElementById('missionsList');
-        if(!missions.length) {
-            el.innerHTML = `<div class="empty-state"><div class="empty-ico">🎉</div><div class="empty-txt">Toutes vos missions sont terminées !<br>Excellent travail.</div></div>`;
+        // Widget
+        const el = document.getElementById('commandesList');
+        if(!el) return;
+        if(!commandes.length) {
+            el.innerHTML = '<div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">Aucune commande en attente</div></div>';
             return;
         }
-        const sorted = [...missions].sort((a,b)=>{
-            if(a.priority==='urgent'&&b.priority!=='urgent') return -1;
-            if(b.priority==='urgent'&&a.priority!=='urgent') return 1;
-            return new Date(a.created_at)-new Date(b.created_at);
-        });
-        el.innerHTML = sorted.map(m => {
-            const st = m.priority==='urgent'?'urgent':(m.status||'pending');
-            const stl = {pending:'En attente',planned:'Planifié',urgent:'🔥 URGENT',in_transit:'En route'}[st]||st;
-            const isTransit = m.status==='in_transit';
-            return `<div class="mission-card ${st}">
-                <div class="mc-top">
-                    <span class="mc-num">${m.order_number||m.id.slice(0,8)}</span>
-                    <span class="mc-badge ${st}">${stl}</span>
+        el.innerHTML = commandes.map(o => {
+            const ent = entreprises.find(e => e.id === o.entreprise_id);
+            const date = new Date(o.created_at).toLocaleString('fr-CH', {
+                timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit',
+                hour:'2-digit', minute:'2-digit'
+            });
+            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border);gap:12px;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;font-size:13px;">${o.order_number||o.id.slice(0,8)}</div>
+                    <div style="font-size:12px;color:var(--muted2);margin-top:2px;">${ent?.nom||'Client'} · ${o.delivery_address?.split(',')[0]||'—'}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">${o.weight||0}kg · ${o.service_type||'normal'} · ${date}</div>
                 </div>
-                <div class="mc-stop"><div class="mc-dot p"></div><div class="mc-addr">${shortAddr(m.pickup_address)}</div></div>
-                <div class="mc-stop"><div class="mc-dot d"></div><div class="mc-addr">${shortAddr(m.delivery_address)}</div></div>
-                <div class="mc-footer">
-                    <button class="mc-btn nav" onclick="navMission('${m.id}')"><i class="fas fa-map"></i> Carte</button>
-                    ${!isTransit
-                        ? `<button class="mc-btn start" onclick="startMission('${m.id}')"><i class="fas fa-play"></i> Démarrer</button>`
-                        : `<button class="mc-btn deliver" onclick="openConfirm('${m.id}')"><i class="fas fa-check"></i> Livrer</button>`
-                    }
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                    <a href="../commandes-client.html" class="btn btn-ghost btn-sm" style="color:var(--green);border-color:rgba(34,197,94,0.3);">
+                        <i class="fas fa-check"></i> Traiter
+                    </a>
                 </div>
             </div>`;
         }).join('');
     }
 
-    function shortAddr(a) {
-        if(!a) return '—';
-        return a.split(',').slice(0,2).join(',').trim();
+    async function loadEntreprises() {
+        const { data } = await db.from('entreprises').select('*').order('created_at', { ascending: false });
+        entreprises = data || [];
+        document.getElementById('badgeClients').textContent = entreprises.length;
+        document.getElementById('s-entreprises').textContent = entreprises.length;
+        populateEntrepriseSelect();
     }
 
-    window.startMission = async function(id) {
-        showLoad();
-        try {
-            const { error } = await db.from('transport_orders_simple')
-                .update({status:'in_transit', picked_up_at:new Date().toISOString()}).eq('id',id);
-            if(error) throw error;
-            toast('success','Mission démarrée !');
-            await loadMissions();
-        } catch(e) { toast('error',e.message); }
-        finally { hideLoad(); }
-    };
-
-    window.navMission = function(id) {
-        curMission = missions.find(m=>m.id===id);
-        if(!curMission) return;
-        document.getElementById('mpTitle').textContent = curMission.order_number||'Transport';
-        document.getElementById('mpRoute').innerHTML = `
-            <div class="mp-stop"><div class="mp-dot p"></div><div class="mp-addr">${shortAddr(curMission.pickup_address)}</div></div>
-            <div class="mp-stop"><div class="mp-dot d"></div><div class="mp-addr">${shortAddr(curMission.delivery_address)}</div></div>`;
-        document.getElementById('mpDeliverBtn').onclick = () => openConfirm(curMission.id);
-        showScreen('map');
-        setTimeout(() => { if(!dMap) initMap(); drawMission(curMission); }, 200);
-    };
-
-    /* ── MAP ── */
-    function initMap() {
-        dMap = L.map('driverMap',{zoomControl:false,attributionControl:false}).setView([46.5197,6.6323],12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(dMap);
-    }
-    function drawMission(m) {
-        if(!dMap) return;
-        if(rLine) dMap.removeLayer(rLine);
-        const pts=[];
-        if(m.pickup_lat)   { L.marker([m.pickup_lat,m.pickup_lng],{icon:L.divIcon({html:`<div style="width:12px;height:12px;background:#3b82f6;border:2px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,className:'',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(dMap); pts.push([m.pickup_lat,m.pickup_lng]); }
-        if(m.delivery_lat) { L.marker([m.delivery_lat,m.delivery_lng],{icon:L.divIcon({html:`<div style="width:12px;height:12px;background:#e8311a;border:2px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,className:'',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(dMap); pts.push([m.delivery_lat,m.delivery_lng]); }
-        if(pts.length>1) { rLine=L.polyline(pts,{color:'#22c55e',weight:3,dashArray:'8 4'}).addTo(dMap); dMap.fitBounds(pts,{padding:[60,60]}); }
-        if(myLat) {
-            if(dMarker) dMap.removeLayer(dMarker);
-            dMarker = L.marker([myLat,myLng],{icon:L.divIcon({html:`<div style="width:14px;height:14px;background:#f59e0b;border:3px solid white;border-radius:50%;box-shadow:0 0 10px rgba(245,158,11,0.6)"></div>`,className:'',iconSize:[14,14],iconAnchor:[7,7]})}).addTo(dMap);
-        }
-    }
-    window.openGPS = function() {
-        if(!curMission) return;
-        const addr = curMission.status==='in_transit' ? curMission.delivery_address : curMission.pickup_address;
-        window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr||'')}&travelmode=driving`,'_blank');
-    };
-
-    /* ── POINTAGE ── */
-    async function loadTodayPointage() {
-        if(!driver) return;
-        const { data } = await db.from('pointages').select('*')
-            .eq('driver_id', driver.id).eq('date', today()).maybeSingle();
-        pointage = data;
-        renderPointage();
+    async function loadUtilisateurs() {
+        const { data } = await db.from('utilisateurs').select('*, entreprises(nom)').order('created_at', { ascending: false });
+        utilisateurs = data || [];
+        document.getElementById('s-utilisateurs').textContent = utilisateurs.length;
+        document.getElementById('s-chauffeurs').textContent   = utilisateurs.filter(u=>u.role==='chauffeur').length;
     }
 
-    function renderPointage() {
-        const p = pointage;
-        document.getElementById('ptDebut').textContent  = fmt(p?.debut_travail);
-        document.getElementById('ptPauseD').textContent = fmt(p?.debut_pause);
-        document.getElementById('ptPauseF').textContent = fmt(p?.fin_pause);
-        document.getElementById('ptFin').textContent    = fmt(p?.fin_travail);
-
-        const btnStart  = document.getElementById('btnStart');
-        const btnPause  = document.getElementById('btnPause');
-        const btnResume = document.getElementById('btnResume');
-        const btnStop   = document.getElementById('btnStop');
-        const pcStatus  = document.getElementById('pcStatus');
-
-        // Reset
-        btnStart.disabled=false; btnPause.disabled=true;
-        btnResume.style.display='none'; btnPause.style.display='flex';
-        btnStop.disabled=true;
-        pcStatus.className='pc-status off'; pcStatus.textContent='Non pointé';
-
-        if(!p) { updateWorkTimer(0); return; }
-
-        if(p.debut_travail && !p.fin_travail) {
-            btnStart.disabled=true; btnStop.disabled=false;
-            if(p.debut_pause && !p.fin_pause) {
-                // En pause
-                btnPause.style.display='none'; btnResume.style.display='flex';
-                btnResume.disabled=false;
-                btnStop.disabled=true;
-                pcStatus.className='pc-status pause'; pcStatus.textContent='En pause';
-            } else {
-                // En travail
-                btnPause.disabled=false;
-                btnPause.style.display='flex';
-                btnResume.style.display='none';
-                btnStop.disabled=false;
-                pcStatus.className='pc-status work'; pcStatus.textContent='En service';
-                // Start timer
-                startWorkTimer(p.debut_travail, p.debut_pause, p.fin_pause);
-            }
-        } else if(p.fin_travail) {
-            btnStart.disabled=true; btnStop.disabled=true; btnPause.disabled=true;
-            pcStatus.className='pc-status off'; pcStatus.textContent='Journée terminée';
-            // Calculate hours
-            const ms = new Date(p.fin_travail) - new Date(p.debut_travail);
-            updateWorkTimer(Math.floor(ms/1000));
-        }
+    async function loadChauffeurs() {
+        const { data } = await db.from('chauffeurs').select('*, entreprises(nom)').order('created_at', { ascending: false });
+        chauffeurs = data || [];
     }
 
-    function startWorkTimer(debut, pauseDebut, pauseFin) {
-        clearInterval(workTimer);
-        workTimer = setInterval(() => {
-            const now = new Date();
-            let ms = now - new Date(debut);
-            // Subtract pause time
-            if(pauseDebut) {
-                const pauseEnd = pauseFin ? new Date(pauseFin) : now;
-                ms -= (pauseEnd - new Date(pauseDebut));
-            }
-            updateWorkTimer(Math.floor(ms/1000));
-        }, 1000);
+    function populateEntrepriseSelect() {
+        const sel = document.getElementById('uEntreprise');
+        sel.innerHTML = '<option value="">— Aucune —</option>' +
+            entreprises.map(e => `<option value="${e.id}">${e.nom}</option>`).join('');
     }
 
-    function updateWorkTimer(secs) {
-        const h = Math.floor(secs/3600);
-        const m = Math.floor((secs%3600)/60);
-        document.getElementById('srHours').textContent = `${h}h${m.toString().padStart(2,'0')}`;
+    /* ── Dashboard ── */
+    function renderDashboard() {
+        document.getElementById('s-employees').textContent  = '—';
+        document.getElementById('s-transports').textContent = '—';
+
+        // Recent clients
+        const rc = entreprises.slice(0,5);
+        document.getElementById('recentClients').innerHTML = rc.length ? rc.map(e => `
+            <tr>
+                <td><div class="cell-user">
+                    <div class="avatar-sm" style="background:rgba(232,49,26,0.12);color:var(--red)">${e.nom[0].toUpperCase()}</div>
+                    <div><div class="cell-main">${e.nom}</div><div class="cell-sub">${e.email}</div></div>
+                </div></td>
+                <td style="color:var(--muted2)">${e.ville||'—'}</td>
+                <td><span class="chip actif">Actif</span></td>
+            </tr>`).join('') : `<tr><td colspan="3"><div class="empty"><div class="empty-ico">🏢</div><div class="empty-txt">Aucune entreprise</div></div></td></tr>`;
+
+        // Recent users
+        const ru = utilisateurs.slice(0,5);
+        document.getElementById('recentUsers').innerHTML = ru.length ? ru.map(u => {
+            const name = [u.prenom, u.nom].filter(Boolean).join(' ') || u.email;
+            const ent  = u.entreprises?.nom || '—';
+            const date = new Date(u.created_at).toLocaleDateString('fr-CH');
+            return `<tr>
+                <td><div class="cell-user">
+                    <div class="avatar-sm ${u.role}" style="${avatarStyle(u.role)}">${(u.prenom?.[0]||u.email[0]).toUpperCase()}</div>
+                    <div><div class="cell-main">${name}</div><div class="cell-sub">${u.email}</div></div>
+                </div></td>
+                <td><span class="chip ${u.role}">${u.role}</span></td>
+                <td style="color:var(--muted2)">${ent}</td>
+                <td style="color:var(--muted)">${date}</td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="4"><div class="empty"><div class="empty-ico">👤</div><div class="empty-txt">Aucun utilisateur</div></div></td></tr>`;
     }
 
-    window.pointageAction = async function(action) {
-        if(!driver) return;
-        console.log('pointageAction:', action, 'pointage:', JSON.stringify(pointage));
-        showLoad();
-        try {
-            const now = new Date().toISOString();
-            if(action==='start') {
-                if(pointage) { toast('info','Journée déjà démarrée'); hideLoad(); return; }
-                // Insert pointage
-                const { error: insErr } = await db.from('pointages').insert([{
-                    driver_id: driver.id,
-                    date: today(),
-                    debut_travail: now,
-                    statut: 'en_cours'
-                }]);
-                if(insErr) throw insErr;
-                // Recharger depuis DB
-                const { data: fresh } = await db.from('pointages').select('*')
-                    .eq('driver_id', driver.id).eq('date', today()).single();
-                pointage = fresh;
+    function avatarStyle(role) {
+        const map = { admin:'background:rgba(232,49,26,0.15);color:#e8311a', client:'background:rgba(59,130,246,0.15);color:#3b82f6', chauffeur:'background:rgba(34,197,94,0.15);color:#22c55e', magasinier:'background:rgba(245,158,11,0.15);color:#f59e0b', super_admin:'background:rgba(168,85,247,0.15);color:#a855f7' };
+        return map[role] || 'background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6)';
+    }
 
-                // ── Passer les transports assignés en "in_transit" ──
-                const { data: assigned } = await db.from('transport_orders_simple')
-                    .select('id, order_number')
-                    .eq('driver_id', driver.id)
-                    .in('status', ['pending', 'planned'])
-                    .neq('admin_status', 'refused');
+    /* ── Activity ── */
+    function renderActivity() {
+        const items = [...utilisateurs.slice(0,3).map(u=>({type:'user',  label:`Nouvel utilisateur <strong>${u.email}</strong>`, time:u.created_at, ico:'👤', bg:'rgba(59,130,246,0.12)'})),
+                       ...entreprises.slice(0,3).map(e=>({type:'ent',   label:`Nouvelle entreprise <strong>${e.nom}</strong>`,   time:e.created_at, ico:'🏢', bg:'rgba(232,49,26,0.12)'})),
+                       ...chauffeurs.slice(0,2).map(c=>({type:'chauf',  label:`Chauffeur ajouté <strong>${c.prenom} ${c.nom}</strong>`, time:c.created_at, ico:'🚚', bg:'rgba(34,197,94,0.12)'}))
+                      ].sort((a,b)=>new Date(b.time)-new Date(a.time)).slice(0,8);
 
-                if(assigned?.length) {
-                    await db.from('transport_orders_simple')
-                        .update({ status: 'in_transit', picked_up_at: now })
-                        .in('id', assigned.map(o=>o.id));
-                    toast('success', `Bonne journée ! ☀️ — ${assigned.length} transport(s) en route`);
-                } else {
-                    toast('success','Bonne journée ! ☀️');
-                }
-                await loadMissions();
-            }
-            else if(action==='pause') {
-                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
-                const { error: upErr } = await db.from('pointages')
-                    .update({ debut_pause:now, statut:'pause' })
-                    .eq('id', pointage.id);
-                if(upErr) throw upErr;
-                // Recharger
-                const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
-                pointage = fresh;
-                toast('info','Bonne pause ! ☕');
-            }
-            else if(action==='resume') {
-                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
-                const pid = pointage.id;
-                const { error: upErr } = await db.from('pointages')
-                    .update({ fin_pause:now, statut:'en_cours' })
-                    .eq('id', pid);
-                if(upErr) throw upErr;
-                // Recharger
-                const { data: fresh } = await db.from('pointages').select('*').eq('id', pid).single();
-                pointage = fresh;
-                console.log('After resume reload:', JSON.stringify(pointage));
-                toast('success','Reprise du travail 💪');
-            }
-            else if(action==='stop') {
-                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
-                // Calculate hours
-                const ms = new Date() - new Date(pointage.debut_travail);
-                let pauseMs = 0;
-                if(pointage.debut_pause && pointage.fin_pause)
-                    pauseMs = new Date(pointage.fin_pause) - new Date(pointage.debut_pause);
-                const heures = (ms - pauseMs) / 3600000;
-                const heuresSupp = Math.max(0, heures - 8.5);
-                const { error: upErr } = await db.from('pointages')
-                    .update({ fin_travail:now, statut:'termine',
-                        heures_travaillees: parseFloat(heures.toFixed(2)),
-                        heures_supp: parseFloat(heuresSupp.toFixed(2)) })
-                    .eq('id', pointage.id);
-                if(upErr) throw upErr;
-                // Recharger
-                const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
-                pointage = fresh;
-                clearInterval(workTimer);
-                toast('success',`Journée terminée — ${heures.toFixed(1)}h travaillées ✓`);
-            }
-            renderPointage();
-        } catch(e) { toast('error',e.message); }
-        finally { hideLoad(); }
-    };
-
-    /* ── RH ── */
-    async function loadRH() {
-        if(!driver) return;
-        // Soldes
-        const { data:solde } = await db.from('soldes_rh').select('*').eq('driver_id',driver.id).maybeSingle();
-        if(solde) {
-            document.getElementById('soldeVac').innerHTML  = `${solde.solde_vacances||20}<em> j</em>`;
-            document.getElementById('soldeComp').innerHTML = `${solde.jours_comp||0}<em> j</em>`;
-            document.getElementById('soldeHSupp').innerHTML= `${solde.heures_supp_total||0}<em> h</em>`;
-        }
-
-        // Pointages récents
-        const { data:pts } = await db.from('pointages').select('*')
-            .eq('chauffeur_id',driver.id).order('date',{ascending:false}).limit(7);
-        const ptEl = document.getElementById('pointagesList');
-        ptEl.innerHTML = pts?.length ? pts.map(p => {
-            const h  = p.heures_travaillees||0;
-            const hs = p.heures_supp||0;
-            const d  = new Date(p.date);
-            const dayName = d.toLocaleDateString('fr-CH',{weekday:'short'}).toUpperCase();
-            const dayNum  = d.getDate();
-            return `<div class="pointage-item">
-                <div class="pi-date">${dayNum}<small>${dayName}</small></div>
-                <div class="pi-times">
-                    <div class="pi-row"><span>↗</span>${fmt(p.debut_travail)} <span>↙</span>${fmt(p.fin_travail)}</div>
-                    ${p.debut_pause?`<div class="pi-row" style="margin-top:2px;"><span>☕</span>${fmt(p.debut_pause)} → ${fmt(p.fin_pause||null)}</div>`:''}
+        const html = items.length ? items.map(i=>`
+            <div class="feed-item">
+                <div class="feed-dot" style="background:${i.bg}">${i.ico}</div>
+                <div class="feed-content">
+                    <div class="feed-text">${i.label}</div>
+                    <div class="feed-time">${timeAgo(i.time)}</div>
                 </div>
-                <div class="pi-hours">${h.toFixed(1)}<small>h travaillé</small>${hs>0?`<div style="font-size:12px;" class="pi-supp">+${hs.toFixed(1)}h supp</div>`:''}</div>
-            </div>`;
-        }).join('')
-        : '<div class="empty-state"><div class="empty-ico">📋</div><div class="empty-txt">Aucun pointage</div></div>';
+            </div>`).join('') : `<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Aucune activité récente</div></div>`;
 
-        // Congés
-        const { data:cgs } = await db.from('conges').select('*')
-            .eq('driver_id',driver.id).order('created_at',{ascending:false}).limit(10);
-        const cgEl = document.getElementById('congesList');
-        const typeLabel = { vacances:'🏖️ Vacances', maladie:'🤒 Maladie', compensation:'⚖️ Compensation', autre:'📌 Autre' };
-        const statLabel = { en_attente:'En attente', approuve:'Approuvé', refuse:'Refusé' };
-        cgEl.innerHTML = cgs?.length ? cgs.map(c => `
-            <div class="conge-item">
-                <div class="ci-top">
-                    <span class="ci-type">${typeLabel[c.type]||c.type}</span>
-                    <span class="ci-status ${c.statut}">${statLabel[c.statut]||c.statut}</span>
-                </div>
-                <div class="ci-dates">${new Date(c.date_debut).toLocaleDateString('fr-CH')} → ${new Date(c.date_fin).toLocaleDateString('fr-CH')} · ${c.nb_jours||'?'} jour(s)</div>
-            </div>`).join('')
-        : '<div class="empty-state"><div class="empty-ico">📅</div><div class="empty-txt">Aucune demande de congé</div></div>';
+        document.getElementById('activityFeed').innerHTML   = html;
+        document.getElementById('fullActivityFeed').innerHTML = html;
     }
 
-    /* ── MODAL CONGÉ ── */
-    window.openModalConge = function() {
-        // Set default dates
-        const t = today();
-        document.getElementById('congeDebut').value = t;
-        document.getElementById('congeFin').value   = t;
-        openModal('modalConge');
+    function timeAgo(dateStr) {
+        const diff = (Date.now() - new Date(dateStr)) / 1000;
+        if (diff < 60)   return 'À l\'instant';
+        if (diff < 3600) return Math.floor(diff/60) + ' min';
+        if (diff < 86400)return Math.floor(diff/3600) + 'h';
+        return Math.floor(diff/86400) + 'j';
+    }
+
+    /* ── Entreprises ── */
+    function renderEntreprises(filter='') {
+        const list = filter ? entreprises.filter(e =>
+            e.nom.toLowerCase().includes(filter) || e.email.toLowerCase().includes(filter) || (e.ville||'').toLowerCase().includes(filter)
+        ) : entreprises;
+        window._entreprises = data;
+        const tbody = document.getElementById('entreprisesList');
+        tbody.innerHTML = list.length ? list.map(e => {
+            const nbUsers = utilisateurs.filter(u=>u.entreprise_id===e.id).length;
+            return `<tr>
+                <td><div class="cell-user">
+                    <div class="avatar-sm" style="background:rgba(232,49,26,0.12);color:var(--red)">${e.nom[0].toUpperCase()}</div>
+                    <div><div class="cell-main">${e.nom}</div><div class="cell-sub">${e.email}</div></div>
+                </div></td>
+                <td style="color:var(--muted2)">${e.telephone||'—'}</td>
+                <td style="color:var(--muted2)">${e.ville||'—'}</td>
+                <td><span class="chip client">${e.numero_client}</span></td>
+                <td style="color:var(--muted2)">${nbUsers} utilisateur${nbUsers>1?'s':''}</td>
+                <td><div style="display:flex;gap:4px;">
+                    <button class="action-btn edit"   onclick="editEntreprise('${e.id}')" title="Modifier"><i class="fas fa-pen"></i></button>
+                    <button class="action-btn delete" onclick="askDeleteEntreprise('${e.id}','${e.nom}')" title="Supprimer"><i class="fas fa-trash"></i></button>
+                </div></td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="6"><div class="empty"><div class="empty-ico">🏢</div><div class="empty-txt">Aucune entreprise trouvée</div></div></td></tr>`;
+    }
+
+    document.getElementById('searchEntreprises').addEventListener('input', e => renderEntreprises(e.target.value.toLowerCase()));
+
+    document.getElementById('btnNouvelleEntreprise').addEventListener('click', () => {
+        document.getElementById('modalEntrepriseTitle').textContent = 'NOUVELLE ENTREPRISE';
+        document.getElementById('formEntreprise').reset();
+        document.getElementById('entrepriseId').value = '';
+        openModal('modalEntreprise');
+    });
+
+    window.editEntreprise = function(id) {
+        const e = entreprises.find(x=>x.id===id); if(!e) return;
+        document.getElementById('modalEntrepriseTitle').textContent = 'MODIFIER ENTREPRISE';
+        document.getElementById('entrepriseId').value = e.id;
+        document.getElementById('eNom').value          = e.nom||'';
+        document.getElementById('eNumeroClient').value = e.numero_client||'';
+        document.getElementById('eEmail').value        = e.email||'';
+        document.getElementById('eTel').value          = e.telephone||'';
+        document.getElementById('eAdresse').value      = e.adresse||'';
+        document.getElementById('eNpa').value          = e.npa||'';
+        document.getElementById('eVille').value        = e.ville||'';
+        openModal('modalEntreprise');
     };
 
-    document.getElementById('formConge').addEventListener('submit', async e => {
+    document.getElementById('formEntreprise').addEventListener('submit', async e => {
         e.preventDefault();
-        if(!driver) return;
-        const type   = document.getElementById('congeType').value;
-        const debut  = document.getElementById('congeDebut').value;
-        const fin    = document.getElementById('congeFin').value;
-        const note   = document.getElementById('congeNote').value.trim();
-        if(!debut||!fin||new Date(debut)>new Date(fin)) { toast('error','Dates invalides'); return; }
-        const nbJours = Math.round((new Date(fin)-new Date(debut))/(1000*60*60*24))+1;
+        const id  = document.getElementById('entrepriseId').value;
+        const data = {
+            nom:           document.getElementById('eNom').value.trim(),
+            numero_client: document.getElementById('eNumeroClient').value.trim(),
+            email:         document.getElementById('eEmail').value.trim(),
+            telephone:     document.getElementById('eTel').value.trim()||null,
+            adresse:       document.getElementById('eAdresse').value.trim()||null,
+            npa:           document.getElementById('eNpa').value.trim()||null,
+            ville:         document.getElementById('eVille').value.trim()||null,
+        };
         showLoad();
         try {
-            const { error } = await db.from('conges').insert([{
-                driver_id: driver.id, type, date_debut:debut, date_fin:fin,
-                nb_jours:nbJours, note:note||null, statut:'en_attente'
-            }]);
+            const { error } = id
+                ? await db.from('entreprises').update(data).eq('id',id)
+                : await db.from('entreprises').insert([data]);
             if(error) throw error;
-            toast('success','Demande envoyée ✓');
-            closeModal('modalConge');
-            loadRH();
+            toast('success', id ? 'Entreprise mise à jour' : 'Entreprise créée');
+            closeModal('modalEntreprise');
+            await loadAll();
+        } catch(err) { toast('error', err.message); }
+        finally { hideLoad(); }
+    });
+
+    window.askDeleteEntreprise = function(id, nom) {
+        document.getElementById('confirmText').textContent = `Supprimer "${nom}" ? Tous les utilisateurs liés seront dissociés.`;
+        document.getElementById('confirmYes').onclick = async () => {
+            showLoad();
+            try {
+                const { error } = await db.from('entreprises').delete().eq('id',id);
+                if(error) throw error;
+                toast('success','Entreprise supprimée');
+                closeModal('modalConfirm');
+                await loadAll();
+            } catch(err) { toast('error',err.message); }
+            finally { hideLoad(); }
+        };
+        openModal('modalConfirm');
+    };
+
+    /* ── Utilisateurs ── */
+    function renderUtilisateurs(filter='', roleFilter='') {
+        let list = utilisateurs;
+        if(filter)     list = list.filter(u => u.email.toLowerCase().includes(filter)||(u.nom||'').toLowerCase().includes(filter)||(u.prenom||'').toLowerCase().includes(filter));
+        if(roleFilter) list = list.filter(u => u.role===roleFilter);
+        const tbody = document.getElementById('utilisateursList');
+        tbody.innerHTML = list.length ? list.map(u => {
+            const name = [u.prenom,u.nom].filter(Boolean).join(' ')||'—';
+            const ent  = u.entreprises?.nom||'—';
+            const init = ((u.prenom?.[0]||'')+(u.nom?.[0]||'')||u.email[0]).toUpperCase();
+            return `<tr>
+                <td><div class="cell-user">
+                    <div class="avatar-sm" style="${avatarStyle(u.role)}">${init}</div>
+                    <div><div class="cell-main">${name}</div><div class="cell-sub">${u.email}</div></div>
+                </div></td>
+                <td><span class="chip ${u.role}">${u.role}</span></td>
+                <td style="color:var(--muted2)">${ent}</td>
+                <td><span class="chip ${u.actif!==false?'actif':'inactif'}">${u.actif!==false?'Actif':'Inactif'}</span></td>
+                <td><div style="display:flex;gap:4px;">
+                    <button class="action-btn edit"   onclick="editUser('${u.id}')" title="Modifier"><i class="fas fa-pen"></i></button>
+                    <button class="action-btn delete" onclick="askDeleteUser('${u.id}','${u.email}')" title="Supprimer"><i class="fas fa-trash"></i></button>
+                </div></td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="5"><div class="empty"><div class="empty-ico">👤</div><div class="empty-txt">Aucun utilisateur trouvé</div></div></td></tr>`;
+    }
+
+    document.getElementById('searchUsers').addEventListener('input', () => renderUtilisateurs(document.getElementById('searchUsers').value.toLowerCase(), document.getElementById('filterRole').value));
+    document.getElementById('filterRole').addEventListener('change', () => renderUtilisateurs(document.getElementById('searchUsers').value.toLowerCase(), document.getElementById('filterRole').value));
+
+    document.getElementById('btnNouvelUser').addEventListener('click', () => {
+        document.getElementById('modalUserTitle').textContent = 'NOUVEL UTILISATEUR';
+        document.getElementById('formUser').reset();
+        document.getElementById('userId').value = '';
+        document.getElementById('uPassword').required = true;
+        openModal('modalUser');
+    });
+
+    window.editUser = function(id) {
+        const u = utilisateurs.find(x=>x.id===id); if(!u) return;
+        document.getElementById('modalUserTitle').textContent = 'MODIFIER UTILISATEUR';
+        document.getElementById('userId').value      = u.id;
+        document.getElementById('uEmail').value      = u.email;
+        document.getElementById('uPassword').value   = '';
+        document.getElementById('uPassword').required= false;
+        document.getElementById('uNom').value        = u.nom||'';
+        document.getElementById('uPrenom').value     = u.prenom||'';
+        document.getElementById('uTel').value        = u.telephone||'';
+        document.getElementById('uRole').value       = u.role;
+        document.getElementById('uEntreprise').value = u.entreprise_id||'';
+        openModal('modalUser');
+    };
+
+    document.getElementById('formUser').addEventListener('submit', async e => {
+        e.preventDefault();
+        const id      = document.getElementById('userId').value;
+        const email   = document.getElementById('uEmail').value.trim();
+        const password= document.getElementById('uPassword').value;
+        const nom     = document.getElementById('uNom').value.trim();
+        const prenom  = document.getElementById('uPrenom').value.trim();
+        const tel     = document.getElementById('uTel').value.trim();
+        const role    = document.getElementById('uRole').value;
+        const entId   = document.getElementById('uEntreprise').value||null;
+        showLoad();
+        try {
+            if(id) {
+                const { error } = await db.from('utilisateurs').update({ email, nom:nom||null, prenom:prenom||null, telephone:tel||null, role, entreprise_id:entId }).eq('id',id);
+                if(error) throw error;
+                toast('success','Utilisateur mis à jour');
+            } else {
+                const { data: auth, error: authErr } = await db.auth.signUp({ email, password });
+                if(authErr) throw authErr;
+                const { error: dbErr } = await db.from('utilisateurs').insert([{ id:auth.user.id, email, nom:nom||null, prenom:prenom||null, telephone:tel||null, role, entreprise_id:entId }]);
+                if(dbErr) throw dbErr;
+                toast('success','Utilisateur créé');
+            }
+            closeModal('modalUser');
+            await loadAll();
         } catch(err) { toast('error',err.message); }
         finally { hideLoad(); }
     });
 
-    /* ── CONFIRM DELIVERY ── */
-    window.openConfirm = function(id) {
-        curMission = missions.find(m=>m.id===id)||curMission;
-        if(!curMission) return;
-        document.getElementById('confirmInfo').innerHTML = `
-            <div class="co-num">${curMission.order_number||'Transport'}</div>
-            <div class="co-addr"><div style="width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;"></div>${shortAddr(curMission.delivery_address)}</div>
-            ${curMission.destinataire_nom?`<div class="co-addr" style="margin-top:4px;"><i class="fas fa-user" style="color:var(--muted);width:7px;"></i> ${curMission.destinataire_nom}</div>`:''}`;
-        clearSig();
-        document.getElementById('photoPreview').style.display='none';
-        document.getElementById('photoBtn').style.display='flex';
-        document.getElementById('deliveryNote').value='';
-        document.getElementById('poidsReel').value='';
-        hasSig=false;
-        showScreen('confirm');
-        setTimeout(initSig, 150);
-    };
-
-    /* ── SIGNATURE ── */
-    function initSig() {
-        const canvas = document.getElementById('sigCanvas');
-        if(!canvas) return;
-        const rect = canvas.getBoundingClientRect();
-        // Taille physique = taille CSS (pas de devicePixelRatio — plus simple et fiable)
-        canvas.width  = rect.width  || 300;
-        canvas.height = rect.height || 150;
-        sigCtx = canvas.getContext('2d');
-        sigCtx.strokeStyle = '#ffffff';
-        sigCtx.lineWidth   = 2.5;
-        sigCtx.lineCap     = 'round';
-        sigCtx.lineJoin    = 'round';
-        sigCtx.fillStyle   = '#18181f'; // fond sombre
-        sigCtx.fillRect(0, 0, canvas.width, canvas.height);
-
-        function getPos(e) {
-            const r = canvas.getBoundingClientRect();
-            const src = e.touches ? e.touches[0] : e;
-            return { x: src.clientX - r.left, y: src.clientY - r.top };
-        }
-
-        canvas.onmousedown = e => {
-            drawing = true;
-            const p = getPos(e);
-            sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
-        };
-        canvas.onmousemove = e => {
-            if(!drawing) return;
-            const p = getPos(e);
-            sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
-            hasSig = true;
-            canvas.classList.add('signed');
-        };
-        canvas.onmouseup = () => { drawing = false; };
-
-        canvas.addEventListener('touchstart', e => {
-            e.preventDefault(); drawing = true;
-            const p = getPos(e);
-            sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
-        }, {passive: false});
-        canvas.addEventListener('touchmove', e => {
-            e.preventDefault();
-            if(!drawing) return;
-            const p = getPos(e);
-            sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
-            hasSig = true;
-            canvas.classList.add('signed');
-        }, {passive: false});
-        canvas.addEventListener('touchend', () => { drawing = false; }, {passive: false});
-    }
-
-    window.clearSig = function() {
-        const c = document.getElementById('sigCanvas');
-        if(!c || !sigCtx) return;
-        sigCtx.fillStyle = '#18181f';
-        sigCtx.fillRect(0, 0, c.width, c.height);
-        c.classList.remove('signed');
-        hasSig = false;
-    };
-
-    window.handlePhoto = function(input) {
-        const f = input.files[0];
-        if(!f) return;
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const raw = e.target.result;
-            // Compresser via canvas
-            const img = new Image();
-            img.onload = function() {
-                try {
-                    const MAX = 600;
-                    let w = img.width, h = img.height;
-                    if(w > MAX) { h = Math.round(h*MAX/w); w = MAX; }
-                    if(h > MAX) { w = Math.round(w*MAX/h); h = MAX; }
-                    const cv = document.createElement('canvas');
-                    cv.width = w; cv.height = h;
-                    cv.getContext('2d').drawImage(img, 0, 0, w, h);
-                    const b64 = cv.toDataURL('image/jpeg', 0.65);
-                    window._photoB64 = b64;
-                    const preview = document.getElementById('photoPreview');
-                    preview.src = b64;
-                    preview.style.display = 'block';
-                    document.getElementById('photoBtn').style.display = 'none';
-                    toast('success', '📷 Photo OK ' + Math.round(b64.length/1024) + 'kb');
-                } catch(err) {
-                    // Fallback sans compression
-                    window._photoB64 = raw;
-                    const preview = document.getElementById('photoPreview');
-                    preview.src = raw;
-                    preview.style.display = 'block';
-                    document.getElementById('photoBtn').style.display = 'none';
-                    toast('success', '📷 Photo ajoutée');
-                }
-            };
-            img.onerror = function() {
-                window._photoB64 = raw;
-                toast('info', '📷 Photo chargée');
-            };
-            img.src = raw;
-        };
-        reader.readAsDataURL(f);
-    };
-
-        window.confirmDelivery = async function() {
-        if(!curMission) return;
-        showLoad();
-        try {
-            const now = new Date().toISOString();
-            const note      = document.getElementById('deliveryNote').value.trim();
-            const poidsReel = parseFloat(document.getElementById('poidsReel').value)||null;
-
-            // Récupérer signature
-            // Signature — lire directement le canvas
-            let signatureData = null;
-            if(hasSig) {
-                const sigC = document.getElementById('sigCanvas');
-                if(sigC) signatureData = sigC.toDataURL('image/jpeg', 0.8);
-            }
-
-            // Photo — stockée dans window._photoB64 par handlePhoto
-            const photoData = window._photoB64 || null;
-
-            // 1. Mettre à jour le statut du transport
-            const { error } = await db.from('transport_orders_simple').update({
-                status:        'delivered',
-                delivered_at:   now,
-                instructions:   note || curMission.instructions || null,
-                poids_reel:     poidsReel
-            }).eq('id', curMission.id);
-            if(error) throw error;
-
-            // 2. Enregistrement livraison avec photo + signature
-            const deliveryRecord = {
-                order_id:        curMission.id,
-                order_number:    curMission.order_number,
-                driver_id:       driver.id,
-                delivered_at:    now,
-                delivery_address:curMission.delivery_address,
-                destinataire_nom:curMission.destinataire_nom || null,
-                note_livraison:  note || null,
-                poids_reel:      poidsReel,
-                has_signature:   hasSig,
-                signature_data:  signatureData,
-                photo_data:      photoData,
-                gps_lat:         myLat,
-                gps_lng:         myLng,
-                created_at:      now
-            };
-
+    window.askDeleteUser = function(id, email) {
+        document.getElementById('confirmText').textContent = `Supprimer "${email}" ?`;
+        document.getElementById('confirmYes').onclick = async () => {
+            showLoad();
             try {
-                // Upsert pour éviter les doublons (trigger auto peut déjà avoir créé la ligne)
-                const { error: e2 } = await db.from('deliveries')
-                    .upsert([deliveryRecord], { onConflict: 'order_id' });
-                if(e2) {
-                    // Si upsert échoue essayer insert simple
-                    const { error: e3 } = await db.from('deliveries').insert([deliveryRecord]);
-                    if(e3) toast('error', 'Photo non sauvegardée: ' + e3.message);
-                }
-            } catch(e2) {
-                toast('error', 'Erreur livraison: ' + e2.message);
-            }
-
-            hideLoad();
-            window._photoB64 = null; // reset photo
-            window._sigB64   = null; // reset signature
-            document.getElementById('successMsg').textContent = `Transport ${curMission.order_number||''} livré avec succès !`;
-            showScreen('success');
-            await loadMissions();
-
-        } catch(e) { hideLoad(); toast('error',e.message); }
+                const { error } = await db.from('utilisateurs').delete().eq('id',id);
+                if(error) throw error;
+                toast('success','Utilisateur supprimé');
+                closeModal('modalConfirm');
+                await loadAll();
+            } catch(err) { toast('error',err.message); }
+            finally { hideLoad(); }
+        };
+        openModal('modalConfirm');
     };
 
-    /* ── GPS ── */
-    function startGPS() {
-        if(!navigator.geolocation) return;
-        gpsWatch = navigator.geolocation.watchPosition(pos => {
-            myLat=pos.coords.latitude; myLng=pos.coords.longitude;
-            document.getElementById('gpsDot').classList.add('on');
-            if(dMap&&myLat) {
-                if(dMarker) dMap.removeLayer(dMarker);
-                dMarker=L.marker([myLat,myLng],{icon:L.divIcon({html:`<div style="width:14px;height:14px;background:#f59e0b;border:3px solid white;border-radius:50%;"></div>`,className:'',iconSize:[14,14],iconAnchor:[7,7]})}).addTo(dMap);
-            }
-        }, ()=>document.getElementById('gpsDot').classList.remove('on'), {enableHighAccuracy:true,timeout:10000,maximumAge:5000});
-    }
-    function stopGPS() { if(gpsWatch) navigator.geolocation.clearWatch(gpsWatch); }
-
-    /* ── NOTIFICATIONS ── */
-    let notifications = [];
-
-    async function initNotifications(userId) {
-        // Demander permission push
-        if ('Notification' in window && Notification.permission === 'default') {
-            setTimeout(async () => {
-                await window.LémanPush?.subscribePush(userId);
-            }, 3000);
-        } else if (Notification.permission === 'granted') {
-            await window.LémanPush?.subscribePush(userId);
-        }
-
-        // Charger notifications existantes
-        await loadNotifications(userId);
-
-        // Écouter nouvelles notifications en temps réel
-        window.SUPABASE_CLIENT.channel('notif_' + userId)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'notifications',
-                filter: `user_id=eq.${userId}`
-            }, async (payload) => {
-                const notif = payload.new;
-                console.log('[Notif] Nouvelle:', notif.title);
-
-                // Afficher notification push locale
-                await window.LémanPush?.showLocalNotification(
-                    notif.title,
-                    notif.body || '',
-                    { tag: notif.id, requireInteraction: true }
-                );
-
-                // Vibrer
-                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-
-                // Recharger liste
-                await loadNotifications(userId);
-                await loadMissions();
-
-                // Toast in-app
-                toast('info', `🔔 ${notif.title}`);
-            })
-            .subscribe();
+    /* ── Chauffeurs ── */
+    /* ── Chauffeurs ── */
+    function renderChauffeurs(filter='') {
+        const list = filter
+            ? chauffeurs.filter(c => (c.nom||'').toLowerCase().includes(filter) || (c.prenom||'').toLowerCase().includes(filter) || (c.email||'').toLowerCase().includes(filter))
+            : chauffeurs;
+        const tbody = document.getElementById('chauffeursList');
+        tbody.innerHTML = list.length ? list.map(c=>`
+            <tr>
+                <td><div class="cell-user">
+                    <div class="avatar-sm" style="background:rgba(34,197,94,0.15);color:#22c55e">${(c.prenom?.[0]||'C').toUpperCase()}</div>
+                    <div><div class="cell-main">${c.prenom||''} ${c.nom||''}</div><div class="cell-sub">${c.email||'—'}</div></div>
+                </div></td>
+                <td style="color:var(--muted2)">${c.numero_permis||'—'}</td>
+                <td style="color:var(--muted2)">${c.telephone||'—'}</td>
+                <td style="color:var(--muted2)">${c.entreprises?.nom||'—'}</td>
+                <td>
+                    ${c.user_id
+                        ? `<span class="chip actif" style="font-size:10px;"><i class="fas fa-check"></i> Accès actif</span>`
+                        : `<span class="chip inactif" style="font-size:10px;"><i class="fas fa-times"></i> Sans accès</span>`
+                    }
+                </td>
+                <td><span class="chip ${c.actif!==false?'actif':'inactif'}">${c.actif!==false?'Actif':'Inactif'}</span></td>
+                <td><div style="display:flex;gap:4px;">
+                    <button class="action-btn edit"   onclick="editChauffeur('${c.id}')" title="Modifier"><i class="fas fa-pen"></i></button>
+                    <button class="action-btn delete" onclick="askDeleteChauffeur('${c.id}','${c.nom}','${c.user_id||''}')"><i class="fas fa-trash"></i></button>
+                </div></td>
+            </tr>`).join('')
+        : `<tr><td colspan="7"><div class="empty"><div class="empty-ico">🚚</div><div class="empty-txt">Aucun chauffeur enregistré</div></div></td></tr>`;
     }
 
-    async function loadNotifications(userId) {
-        const { data } = await window.SUPABASE_CLIENT
-            .from('notifications')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(20);
+    window.filterChauffeurs = function(q) { renderChauffeurs(q.toLowerCase()); };
 
-        notifications = data || [];
-        const unread = notifications.filter(n => !n.read).length;
-
-        // Badge
-        const badge = document.getElementById('notifBadge');
-        if (badge) {
-            badge.textContent = unread;
-            badge.style.display = unread > 0 ? 'grid' : 'none';
-        }
-
-        renderNotifications();
-    }
-
-    function renderNotifications() {
-        const el = document.getElementById('notifList');
-        if (!el) return;
-        if (!notifications.length) {
-            el.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted);">Aucune notification</div>';
-            return;
-        }
-        el.innerHTML = notifications.map(n => {
-            const data = (() => { try { return JSON.parse(n.data||'{}'); } catch(e){ return {}; } })();
-            const orderId = data.order_id || data.orderId || null;
-            const time = new Date(n.created_at).toLocaleTimeString('fr-CH',{
-                timeZone:'Europe/Zurich', hour:'2-digit', minute:'2-digit'
-            });
-            return `<div style="padding:10px 12px;border-radius:10px;margin-bottom:4px;background:${n.read?'transparent':'rgba(232,49,26,0.06)'};border:1px solid ${n.read?'transparent':'rgba(232,49,26,0.15)'};cursor:pointer;"
-                onclick="handleNotifClick('${n.id}','${orderId||''}')">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-                    <div style="flex:1;">
-                        <div style="font-size:13px;font-weight:600;color:${n.read?'var(--muted2)':'var(--white)'};margin-bottom:2px;">${n.title}</div>
-                        <div style="font-size:12px;color:var(--muted);line-height:1.4;">${n.body||''}</div>
-                        <div style="font-size:10px;color:var(--muted);margin-top:4px;">🕐 ${time}</div>
-                    </div>
-                    ${!n.read?'<div style="width:8px;height:8px;background:var(--red);border-radius:50%;flex-shrink:0;margin-top:4px;"></div>':''}
-                </div>
-                ${orderId?`<div style="margin-top:6px;">
-                    <button onclick="event.stopPropagation();openMissionById('${orderId}')" 
-                        style="background:var(--red);color:white;border:none;border-radius:7px;padding:5px 12px;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;cursor:pointer;">
-                        <i class="fas fa-truck"></i> Voir la mission
-                    </button>
-                </div>`:''}
-            </div>`;
-        }).join('');
-    }
-
-    window.toggleNotifs = function() {
-        const dd = document.getElementById('notifDropdown');
-        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
-    };
-
-    window.handleNotifClick = async function(notifId, orderId) {
-        await window.SUPABASE_CLIENT.from('notifications').update({read:true}).eq('id',notifId);
-        if(driver) await loadNotifications(driver.id);
-        // Fermer dropdown
-        const dd = document.getElementById('notifDropdown');
-        if(dd) dd.style.display = 'none';
-    };
-
-    window.openMissionById = async function(orderId) {
-        // Fermer dropdown
-        const dd = document.getElementById('notifDropdown');
-        if(dd) dd.style.display = 'none';
-
-        // Chercher la mission dans la liste
-        let mission = missions?.find(m => m.id === orderId);
-        if(!mission) {
-            // Charger depuis DB si pas en mémoire
-            const { data } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
-            mission = data;
-        }
-        if(mission) {
-            showScreen('home');
-            setTimeout(() => openMission(mission), 200);
-        } else {
-            toast('error', 'Mission introuvable');
-        }
-    };
-
-    window.markRead = async function(id) {
-        await window.SUPABASE_CLIENT.from('notifications').update({ read: true }).eq('id', id);
-        if (driver) await loadNotifications(driver.id);
-    };
-
-    window.markAllRead = async function() {
-        if (!driver) return;
-        await window.SUPABASE_CLIENT.from('notifications').update({ read: true }).eq('user_id', driver.id);
-        await loadNotifications(driver.id);
-    };
-
-    // Fermer dropdown en cliquant ailleurs
-    document.addEventListener('click', e => {
-        const dd = document.getElementById('notifDropdown');
-        const bell = document.getElementById('btnNotifBell');
-        if (dd && bell && !dd.contains(e.target) && !bell.contains(e.target)) {
-            dd.style.display = 'none';
-        }
+    /* ── New/Edit chauffeur ── */
+    document.getElementById('btnNouvelChauffeur')?.addEventListener('click', () => {
+        document.getElementById('modalChauffeurTitle').textContent = 'NOUVEAU CHAUFFEUR';
+        document.getElementById('formChauffeur').reset();
+        document.getElementById('chauffeurId').value   = '';
+        document.getElementById('chauffeurUserId').value= '';
+        document.getElementById('cPwdField').style.display = 'block';
+        document.getElementById('pwdDisplayBox').style.display = 'none';
+        document.getElementById('cPassword').required = true;
+        // Populate entreprises
+        const sel = document.getElementById('cEntreprise');
+        sel.innerHTML = '<option value="">— Aucune —</option>' + entreprises.map(e=>`<option value="${e.id}">${e.nom}</option>`).join('');
+        generatePwd();
+        openModal('modalChauffeur');
     });
 
-    /* ── AUTO-REFRESH ── */
-    // Actualiser les missions toutes les 30 secondes
-    setInterval(async () => {
-        if(driver) {
-            await loadMissions();
-            await loadNotifications(driver.id);
-        }
-    }, 30000);
+    window.generatePwd = function() {
+        const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#';
+        let pwd = '';
+        for(let i=0;i<10;i++) pwd += chars[Math.floor(Math.random()*chars.length)];
+        document.getElementById('cPassword').value = pwd;
+    };
 
-    /* ── INIT ── */
-    checkSession();
+    window.editChauffeur = function(id) {
+        const c = chauffeurs.find(x=>x.id===id); if(!c) return;
+        document.getElementById('modalChauffeurTitle').textContent = 'MODIFIER CHAUFFEUR';
+        document.getElementById('chauffeurId').value    = c.id;
+        document.getElementById('chauffeurUserId').value= c.user_id||'';;
+        document.getElementById('cPrenom').value        = c.prenom||'';;
+        document.getElementById('cNom').value           = c.nom||'';;
+        document.getElementById('cTel').value           = c.telephone||'';;
+        document.getElementById('cNaissance').value     = c.date_naissance||'';;
+        document.getElementById('cPermis').value        = c.numero_permis||'';;
+        document.getElementById('cEmbauche').value      = c.date_embauche||'';;
+        document.getElementById('cEmail').value         = c.email||'';;
+        document.getElementById('cPassword').required   = false;
+        document.getElementById('cPwdField').style.display = c.user_id ? 'none' : 'block';
+        document.getElementById('pwdDisplayBox').style.display = 'none';
+        const sel = document.getElementById('cEntreprise');
+        sel.innerHTML = '<option value="">— Aucune —</option>' + entreprises.map(e=>`<option value="${e.id}">${e.nom}</option>`).join('');
+        sel.value = c.entreprise_id||'';;
+        openModal('modalChauffeur');
+    };
+
+    document.getElementById('formChauffeur')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const id       = document.getElementById('chauffeurId').value;
+        const userId   = document.getElementById('chauffeurUserId').value;
+        const prenom   = document.getElementById('cPrenom').value.trim();
+        const nom      = document.getElementById('cNom').value.trim();
+        const tel      = document.getElementById('cTel').value.trim();
+        const naissance= document.getElementById('cNaissance').value;
+        const permis   = document.getElementById('cPermis').value.trim();
+        const embauche = document.getElementById('cEmbauche').value;
+        const email    = document.getElementById('cEmail').value.trim();
+        const pwd      = document.getElementById('cPassword').value;
+        const entId    = document.getElementById('cEntreprise').value||null;
+
+        showLoad();
+        try {
+            if (id) {
+                // MODIFICATION — update chauffeurs table only
+                const { error } = await db.from('chauffeurs').update({
+                    prenom, nom, telephone:tel||null,
+                    date_naissance:naissance||null,
+                    numero_permis:permis||null,
+                    date_embauche:embauche||null,
+                    email:email||null,
+                    entreprise_id:entId
+                }).eq('id', id);
+                if(error) throw error;
+                // Update utilisateurs if user exists
+                if(userId) {
+                    await db.from('utilisateurs').update({ nom, prenom, telephone:tel||null, entreprise_id:entId }).eq('id', userId);
+                }
+                toast('success', 'Chauffeur mis à jour');
+                document.getElementById('pwdDisplayBox').style.display = 'none';
+
+            } else {
+                // CRÉATION — 3 étapes
+                // 1. Créer compte auth
+                const { data: authData, error: authErr } = await db.auth.signUp({ email, password:pwd });
+                if(authErr) throw authErr;
+                const newUserId = authData.user.id;
+
+                // 2. Insérer dans utilisateurs
+                const { error: uErr } = await db.from('utilisateurs').insert([{
+                    id: newUserId, email, nom, prenom,
+                    telephone: tel||null,
+                    role: 'chauffeur',
+                    entreprise_id: entId,
+                    actif: true
+                }]);
+                if(uErr) throw uErr;
+
+                // 3. Insérer dans chauffeurs
+                const { error: cErr } = await db.from('chauffeurs').insert([{
+                    nom, prenom, email,
+                    telephone: tel||null,
+                    date_naissance: naissance||null,
+                    numero_permis: permis||null,
+                    date_embauche: embauche||null,
+                    entreprise_id: entId,
+                    user_id: newUserId,
+                    actif: true
+                }]);
+                if(cErr) throw cErr;
+
+                // Afficher les identifiants
+                document.getElementById('pwdDisplayEmail').textContent = email;
+                document.getElementById('pwdDisplayPwd').textContent   = pwd;
+                document.getElementById('pwdDisplayBox').style.display = 'block';
+                document.getElementById('cPwdField').style.display     = 'none';
+                document.getElementById('formChauffeur').querySelector('button[type=submit]').textContent = 'Fermer';
+                document.getElementById('formChauffeur').querySelector('button[type=submit]').onclick = () => closeModal('modalChauffeur');
+
+                toast('success', `Chauffeur ${prenom} ${nom} créé avec accès app !`);
+            }
+            await loadAll();
+        } catch(err) {
+            toast('error', err.message);
+        } finally { hideLoad(); }
+    });
+
+    window.askDeleteChauffeur = function(id, nom, userId) {
+        document.getElementById('confirmText').textContent = `Supprimer le chauffeur "${nom}" et son compte d'accès ?`;
+        document.getElementById('confirmYes').onclick = async () => {
+            showLoad();
+            try {
+                // Supprimer chauffeur
+                const { error } = await db.from('chauffeurs').delete().eq('id',id);
+                if(error) throw error;
+                // Supprimer utilisateur lié
+                if(userId) await db.from('utilisateurs').delete().eq('id',userId);
+                toast('success','Chauffeur et compte supprimés');
+                closeModal('modalConfirm');
+                await loadAll();
+            } catch(err) { toast('error',err.message); }
+            finally { hideLoad(); }
+        };
+        openModal('modalConfirm');
+    };
+
+    /* ── Logout ── */
+    document.getElementById('btnLogout').addEventListener('click', async () => {
+        await db.auth.signOut();
+        window.location.href = '../index.html';
+    });
+
+    /* ── Start ── */
+    init();
+
 })();
 </script>
+
+
 </body>
 </html>
