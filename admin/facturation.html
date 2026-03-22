@@ -387,6 +387,64 @@
         return 0;
     }
 
+    // ── Remise mensuelle ──
+    // Compte TOUS les colis livrés ce mois (facturés + courants)
+    // La remise n'est appliquée que si on est en fin de mois (dernière semaine)
+    async function getRemiseMensuelle(entId, tarif, periodeFin, colisFactureCourante) {
+        try {
+            const fin = periodeFin || today();
+            const moisDebut = fin.slice(0,7) + '-01';
+            // Dernière semaine du mois ?
+            const finDate    = new Date(fin);
+            const dernierJour = new Date(finDate.getFullYear(), finDate.getMonth()+1, 0);
+            const estFinMois  = (dernierJour.getDate() - finDate.getDate()) <= 7;
+
+            if(!estFinMois) {
+                // Pas fin de mois → afficher cumul mais sans remise
+                const {data} = await db.from('transport_orders_simple')
+                    .select('quantity')
+                    .eq('status','delivered')
+                    .eq('entreprise_id', entId)
+                    .not('facture_id','is',null)
+                    .gte('delivered_at', moisDebut+'T00:00:00')
+                    .lte('delivered_at', fin+'T23:59:59');
+                const colisDejaFactures = (data||[]).reduce((s,o)=>s+parseInt(o.quantity||1),0);
+                const totalMois = colisDejaFactures + colisFactureCourante;
+                return {
+                    remisePct: 0,
+                    info: `📊 Cumul mois : ${totalMois} colis — remise appliquée en fin de mois`,
+                    estFinMois: false,
+                    totalMois
+                };
+            }
+
+            // Fin de mois → compter TOUS les colis du mois
+            const {data} = await db.from('transport_orders_simple')
+                .select('quantity')
+                .eq('status','delivered')
+                .eq('entreprise_id', entId)
+                .not('facture_id','is',null)
+                .gte('delivered_at', moisDebut+'T00:00:00')
+                .lte('delivered_at', fin+'T23:59:59');
+
+            const colisDejaFactures = (data||[]).reduce((s,o)=>s+parseInt(o.quantity||1),0);
+            const totalMois = colisDejaFactures + colisFactureCourante;
+            const remisePct = calcRemise(totalMois, tarif);
+
+            return {
+                remisePct,
+                info: remisePct > 0
+                    ? `🎁 Remise volume ${remisePct}% — ${totalMois} colis ce mois`
+                    : `📊 ${totalMois} colis ce mois — seuil 50 colis non atteint`,
+                estFinMois: true,
+                totalMois
+            };
+        } catch(e) {
+            console.warn('getRemiseMensuelle:', e);
+            return { remisePct: 0, info: '—', estFinMois: false, totalMois: colisFactureCourante };
+        }
+    }
+
     function genNumeroFacture(){
         const d=new Date();
         return `FAC-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${Math.floor(Math.random()*9000+1000)}`;
@@ -596,20 +654,26 @@
         updateTotaux();
     }
 
-    function updateTotaux(){
+    async function updateTotaux(){
         const entId=document.getElementById('fEntreprise').value;
+        const fin=document.getElementById('fFin').value;
         const tarif=getTarif(entId);
         const totalColis=currentFactureLignes.reduce((s,o)=>s+parseInt(o.quantity||1),0);
         let montantHT=currentFactureLignes.reduce((s,o)=>s+calcPrixColis(o,tarif).total,0);
-        const remisePct=calcRemise(totalColis,tarif);
-        const remiseMnt=remisePct>0?montantHT*remisePct/100:0;
+
+        // Remise mensuelle
+        const remise = entId ? await getRemiseMensuelle(entId, tarif, fin, totalColis) : {remisePct:0,info:'—'};
+        const remisePct = remise.remisePct;
+        const remiseMnt = remisePct>0 ? montantHT*remisePct/100 : 0;
         const net=montantHT-remiseMnt;
         const tva=net*0.081;
         const ttc=net+tva;
 
         document.getElementById('fMontantHT').textContent=fmt(montantHT)+' CHF';
-        document.getElementById('fMontantRemise').textContent=remisePct>0?`-${fmt(remiseMnt)} CHF (${remisePct}% — ${totalColis} colis)`:'Aucune';
-        document.getElementById('fRemiseInfo').textContent=remisePct>0?`Remise volume ${remisePct}% appliquée (${totalColis} colis)`:`Pas de remise (< 50 colis)`;
+        document.getElementById('fMontantRemise').textContent=remisePct>0
+            ? `-${fmt(remiseMnt)} CHF (${remisePct}%)`
+            : 'Aucune';
+        document.getElementById('fRemiseInfo').textContent=remise.info;
         document.getElementById('fMontantTVA').textContent=fmt(tva)+' CHF';
         document.getElementById('fMontantTTC').textContent=fmt(ttc)+' CHF';
     }
@@ -627,7 +691,9 @@
             const tarif=getTarif(entId);
             const totalColis=currentFactureLignes.reduce((s,o)=>s+parseInt(o.quantity||1),0);
             const montantHT=currentFactureLignes.reduce((s,o)=>s+calcPrixColis(o,tarif).total,0);
-            const remisePct=calcRemise(totalColis,tarif);
+            // Remise mensuelle
+            const remise = await getRemiseMensuelle(entId, tarif, fin, totalColis);
+            const remisePct = remise.remisePct;
             const remiseMnt=remisePct>0?montantHT*remisePct/100:0;
             const net=montantHT-remiseMnt;
             const tva=net*0.081;
@@ -725,7 +791,9 @@
                 const tarif=getTarif(entId);
                 const totalColis=ords.reduce((s,o)=>s+parseInt(o.quantity||1),0);
                 const montantHT=ords.reduce((s,o)=>s+calcPrixColis(o,tarif).total,0);
-                const remisePct=calcRemise(totalColis,tarif);
+                // Remise mensuelle
+                const remise = await getRemiseMensuelle(entId, tarif, fin, totalColis);
+                const remisePct = remise.remisePct;
                 const remiseMnt=remisePct>0?montantHT*remisePct/100:0;
                 const net=montantHT-remiseMnt;
                 const tva=net*0.081;
