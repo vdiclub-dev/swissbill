@@ -546,19 +546,44 @@
         const sel=document.getElementById('destSaved');
         if(destinataires.length>0) {
             document.getElementById('destSavedWrap').style.display='block';
-            sel.innerHTML='<option value="">— Nouveau destinataire —</option>'+destinataires.map(d=>`<option value="${d.id}">${d.nom} — ${d.adresse||d.ville||''}</option>`).join('');
+            sel.innerHTML='<option value="">— Nouveau destinataire —</option>'+destinataires.map(d=>{
+                const infos = [d.entreprise, d.adresse, d.npa&&d.ville?d.npa+' '+d.ville:d.ville].filter(Boolean).join(' · ');
+                return `<option value="${d.id}">${d.nom}${infos?' — '+infos:''}`;
+            }).join('');
         }
     }
 
-    window.fillDestSaved=function(id){
-        if(!id) return;
-        const d=destinataires.find(x=>x.id===id); if(!d) return;
-        document.getElementById('destNom').value=d.nom||'';
-        document.getElementById('destTel').value=d.telephone||'';
-        document.getElementById('destEmail').value=d.email||'';
-        if(d.adresse) document.getElementById('livAdresse').value=d.adresse;
-        if(d.npa)     document.getElementById('livNpa').value=d.npa;
-        if(d.ville)   document.getElementById('livVille').value=d.ville;
+    window.fillDestSaved = function(id) {
+        if(!id) {
+            // Vider tous les champs si "Nouveau destinataire" sélectionné
+            ['livNom','livPrenom','livEntreprise','livAdresse','livNpa','livVille','destTel','destEmail']
+                .forEach(f => { const el=document.getElementById(f); if(el) el.value=''; });
+            return;
+        }
+        const d = destinataires.find(x=>x.id===id);
+        if(!d) return;
+
+        // Séparer nom / prénom si stocké ensemble
+        const nomParts = (d.nom||'').split(' ');
+        const prenom   = nomParts.length > 1 ? nomParts.slice(1).join(' ') : '';
+        const nom      = nomParts[0] || '';
+
+        const set = (id, val) => { const el=document.getElementById(id); if(el&&val) el.value=val; };
+        set('livNom',       nom);
+        set('livPrenom',    prenom);
+        set('livEntreprise',d.entreprise||'');
+        set('destTel',      d.telephone||'');
+        set('destEmail',    d.email||'');
+
+        // Adresse — peut être "Rue, NPA Ville" ou séparée
+        if(d.adresse) {
+            // Si l'adresse contient déjà npa et ville séparés
+            set('livAdresse', d.adresse);
+        }
+        if(d.npa)   set('livNpa',   d.npa);
+        if(d.ville) set('livVille', d.ville);
+
+        toast('success', `✓ ${d.nom} chargé`);
     };
 
     /* ── SESSION CHECK ── */
@@ -696,14 +721,20 @@
 
             // Sauvegarder destinataire
             if(saveDestEnabled) {
-                await db.from('client_destinataires').insert([{
-                    client_id:  client.id,
-                    nom:        livNom,
-                    adresse:    adresse+', '+npa+' '+ville,
-                    ville, npa,
-                    telephone:  tel||null,
-                    email:      email||null
-                }]);
+                const livPrenom   = document.getElementById('livPrenom').value.trim();
+                const livEntreprise = document.getElementById('livEntreprise').value.trim();
+                // Stocker nom complet pour réaffichage dans la liste
+                const nomComplet = [livNom, livPrenom].filter(Boolean).join(' ');
+                await db.from('client_destinataires').upsert([{
+                    client_id:   client.id,
+                    nom:         nomComplet,
+                    entreprise:  livEntreprise||null,
+                    adresse:     adresse,
+                    ville,
+                    npa,
+                    telephone:   tel||null,
+                    email:       email||null
+                }], { onConflict: 'client_id,nom' }).select();
             }
 
             hideLoad();
