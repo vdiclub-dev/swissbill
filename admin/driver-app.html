@@ -1142,8 +1142,16 @@
         if(!driver) return;
         const { data } = await db.from('transport_orders_simple')
             .select('*').eq('driver_id',driver.id).neq('status','delivered')
-            .order('created_at',{ascending:true});
-        missions = data||[];
+            .order('tour_position',{ascending:true, nullsFirst:false});
+        // Trier : d'abord par tour_position, puis urgent en tête
+        missions = (data||[]).sort((a,b) => {
+            if(a.priority==='urgent' && b.priority!=='urgent') return -1;
+            if(b.priority==='urgent' && a.priority!=='urgent') return 1;
+            if(a.tour_position && b.tour_position) return a.tour_position - b.tour_position;
+            if(a.tour_position) return -1;
+            if(b.tour_position) return 1;
+            return new Date(a.created_at) - new Date(b.created_at);
+        });
 
         const { data:done } = await db.from('transport_orders_simple')
             .select('id').eq('driver_id',driver.id).eq('status','delivered')
