@@ -798,12 +798,25 @@
     };
 
     // ── Impression facture ──
-    // Charger QRCode lib une seule fois
-    if(!document.getElementById('qrcodeLib')) {
-        const s = document.createElement('script');
-        s.id = 'qrcodeLib';
-        s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
-        document.head.appendChild(s);
+    // Charger QRCode lib et attendre qu'elle soit prête
+    function loadQRLib() {
+        return new Promise((resolve) => {
+            if(typeof QRCode !== 'undefined') { resolve(); return; }
+            if(document.getElementById('qrcodeLib')) {
+                // Déjà en cours de chargement — attendre
+                let tries = 0;
+                const check = setInterval(() => {
+                    if(typeof QRCode !== 'undefined' || ++tries > 30) { clearInterval(check); resolve(); }
+                }, 100);
+                return;
+            }
+            const s = document.createElement('script');
+            s.id = 'qrcodeLib';
+            s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+            s.onload = () => resolve();
+            s.onerror = () => resolve();
+            document.head.appendChild(s);
+        });
     }
 
     window.imprimerFacture=async function(id){
@@ -819,11 +832,11 @@
         // Générer QR Bill en base64 avant de construire le HTML
         let qrBillBase64 = '';
         try {
-            const qrCanvas = document.createElement('canvas');
+            await loadQRLib();
             const spcData = [
                 'SPC','0200','1',
                 'CH953000529114788940K',
-                'S','Colixo Sarl','Yverdon-les-Bains','','1400','Yverdon-les-Bains','CH',
+                'S','Didier Gysling','Yvonand','','1462','Yvonand','CH',
                 '','','','','','','',
                 fmt(f.montant_ttc),'CHF',
                 'S', (ent.nom||'').substring(0,70), (ent.adresse||'').substring(0,70), '',
@@ -831,14 +844,13 @@
                 'NON','', ('Facture '+f.numero).substring(0,140),
                 'EPD',''
             ].join('\n');
-            await new Promise((resolve) => {
-                if(typeof QRCode !== 'undefined') {
-                    QRCode.toDataURL(spcData, {width:140,margin:1,errorCorrectionLevel:'M'}, (err,url)=>{
-                        if(!err) qrBillBase64 = url;
-                        resolve();
+            if(typeof QRCode !== 'undefined') {
+                qrBillBase64 = await new Promise((resolve) => {
+                    QRCode.toDataURL(spcData, {width:160,margin:1,errorCorrectionLevel:'M'}, (err,url)=>{
+                        resolve(err ? '' : url);
                     });
-                } else resolve();
-            });
+                });
+            }
         } catch(e) { console.warn('QR Bill:', e); }
 
         const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -866,7 +878,7 @@
         <div class="header">
             <div>
                 <div class="logo">LÉMAN<span>-COURSES</span></div>
-                <p style="color:#6b7280;margin-top:6px;">Transport urgent — Suisse romande<br>Yverdon-les-Bains, VD</p>
+                <p style="color:#6b7280;margin-top:6px;">Transport express — Suisse romande<br>1462 Yvonand, VD</p>
             </div>
             <div style="text-align:right;">
                 <div class="facture-num">FACTURE ${f.numero}</div>
@@ -877,7 +889,7 @@
         <div class="info-grid">
             <div class="info-box">
                 <h4>Émetteur</h4>
-                <p><strong>Colixo Sàrl</strong><br>
+                <p><strong>Didier Gysling / Colixo</strong><br>
                 Yverdon-les-Bains<br>
                 Suisse</p>
             </div>
@@ -920,7 +932,7 @@
             <strong>Conditions de paiement :</strong> ${f.conditions_paiement||'Net 30 jours'}<br>
             <span style="color:#6b7280;font-size:12px;">Échéance au ${new Date(f.echeance_date).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'long',year:'numeric'})}</span>
         </div>
-        <div class="footer">Colixo Sàrl • Yverdon-les-Bains • Suisse • Merci pour votre confiance</div>
+        <div class="footer">Didier Gysling — Colixo • 1462 Yvonand • Suisse • Merci pour votre confiance</div>
 
         <!-- ══ QR BILL SUISSE ══ -->
         <div style="page-break-before:always;"></div>
@@ -936,9 +948,9 @@
                     <div style="font-size:7pt;font-weight:bold;color:#666;margin-bottom:1mm;">Compte / Payable à</div>
                     <div style="font-size:8pt;margin-bottom:3mm;">
                         <strong>CH95 3000 5291 1478 8940 K</strong><br>
-                        Colixo Sàrl<br>
-                        Yverdon-les-Bains<br>
-                        1400 Yverdon-les-Bains
+                        Didier Gysling<br>
+                        Colixo<br>
+                        1462 Yvonand
                     </div>
 
                     <div style="font-size:7pt;font-weight:bold;color:#666;margin-bottom:1mm;">Payable par</div>
@@ -977,7 +989,7 @@
                             <div style="font-size:7pt;font-weight:bold;color:#666;margin-bottom:1mm;">Compte / Payable à</div>
                             <div style="margin-bottom:3mm;">
                                 <strong>CH95 3000 5291 1478 8940 K</strong><br>
-                                Colixo Sàrl<br>
+                                Didier Gysling / Colixo<br>
                                 Yverdon-les-Bains<br>
                                 1400 Yverdon-les-Bains
                             </div>
