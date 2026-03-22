@@ -558,7 +558,7 @@
                     <div style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;color:var(--white);">PHOTOGRAPHIER LE QR</div>
                     <div style="font-size:13px;color:var(--muted);margin-top:4px;">Ouvre l'appareil photo Android</div>
                 </div>
-                <input type="file" id="scanPhotoInput" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)">
+                <input type="file" id="scanPhotoInput" accept="image/*" capture="camera" style="display:none;" onchange="scanFromPhoto(this)">
             </label>
         </div>
 
@@ -1142,14 +1142,34 @@
             const st = m.priority==='urgent'?'urgent':(m.status||'pending');
             const stl = {pending:'En attente',planned:'Planifié',urgent:'🔥 URGENT',in_transit:'En route'}[st]||st;
             const isTransit = m.status==='in_transit';
-            return `<div class="mission-card ${st}">
+
+            // Décomposer destinataire_nom (peut contenir "Entreprise · Nom Prénom")
+            const destParts = (m.destinataire_nom||'').split('·').map(s=>s.trim());
+            const destNom = destParts[destParts.length-1]||m.destinataire_nom||'';
+            const destEnt = destParts.length>1 ? destParts[0] : '';
+
+            return `<div class="mission-card ${st}" onclick="navMission('${m.id}')">
                 <div class="mc-top">
                     <span class="mc-num">${m.order_number||m.id.slice(0,8)}</span>
                     <span class="mc-badge ${st}">${stl}</span>
                 </div>
-                <div class="mc-stop"><div class="mc-dot p"></div><div class="mc-addr">${shortAddrLine1(m.pickup_address)}</div></div>
-                <div class="mc-stop"><div class="mc-dot d"></div><div class="mc-addr">${shortAddr(m.delivery_address)}</div></div>
-                <div class="mc-footer">
+                <div class="mc-stop"><div class="mc-dot p"></div><div class="mc-addr" style="font-size:11px;color:var(--muted2);">${shortAddrLine1(m.pickup_address)}</div></div>
+                <div class="mc-stop" style="align-items:flex-start;">
+                    <div class="mc-dot d" style="margin-top:3px;"></div>
+                    <div style="flex:1;">
+                        ${destEnt?`<div style="font-size:11px;font-weight:600;color:var(--muted2);">${destEnt}</div>`:''}
+                        ${destNom?`<div style="font-size:13px;font-weight:700;color:var(--white);">${destNom}</div>`:''}
+                        ${m.destinataire_tel?`<a href="tel:${m.destinataire_tel}" onclick="event.stopPropagation()" style="font-size:12px;color:var(--blue);text-decoration:none;display:block;">📞 ${m.destinataire_tel}</a>`:''}
+                        <div class="mc-addr" style="font-size:12px;">${shortAddr(m.delivery_address)}</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px;margin-top:8px;font-size:11px;color:var(--muted);">
+                    <span>📦 ${m.quantity||1}× ${m.weight||0}kg</span>
+                    <span>⚡ ${m.service_type||'normal'}</span>
+                    ${m.night_delivery?'<span>🌙 Nuit</span>':''}
+                    ${m.instructions&&!m.instructions.startsWith('COLIS:')?`<span>📋 ${m.instructions.split('|')[0].slice(0,30)}</span>`:''}
+                </div>
+                <div class="mc-footer" onclick="event.stopPropagation()">
                     <button class="mc-btn nav" onclick="navMission('${m.id}')"><i class="fas fa-map"></i> Carte</button>
                     ${!isTransit
                         ? `<button class="mc-btn start" onclick="startMission('${m.id}')"><i class="fas fa-play"></i> Démarrer</button>`
