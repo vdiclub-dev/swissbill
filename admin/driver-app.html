@@ -1,81 +1,1860 @@
-// ============================================================
-//  sw.js — Service Worker Léman Driver v3
-// ============================================================
-const CACHE_NAME = 'leman-driver-v3';
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Léman Driver</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="console.warn('Leaflet non chargé')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" onerror="console.warn('jsQR non chargé')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <script>
+        // Charger push-manager de façon non-bloquante
+        (function(){
+            var s=document.createElement('script');
+            s.src='../push-manager.js';
+            s.onerror=function(){ console.warn('push-manager.js introuvable'); };
+            document.head.appendChild(s);
+        })();
+    </script>
+    <style>
+        :root {
+            --red:     #e8311a;
+            --night:   #0a0a0f;
+            --night2:  #111118;
+            --night3:  #18181f;
+            --surface: #1e1e28;
+            --border:  rgba(255,255,255,0.08);
+            --border2: rgba(255,255,255,0.14);
+            --white:   #ffffff;
+            --muted:   rgba(255,255,255,0.38);
+            --muted2:  rgba(255,255,255,0.65);
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --yellow:  #f59e0b;
+            --orange:  #f97316;
+            --purple:  #a855f7;
+            --safe-b:  env(safe-area-inset-bottom, 0px);
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        html, body { height:100%; overflow:hidden; }
+        body {
+            font-family:'Outfit',sans-serif;
+            background:var(--night);
+            color:var(--white);
+            display:flex; flex-direction:column;
+            max-width:430px; margin:0 auto;
+        }
 
-// Installation
-self.addEventListener('install', e => {
-    console.log('[SW] Installé v3');
-    self.skipWaiting();
-});
+        /* ── STATUS BAR ── */
+        .status-bar {
+            background:var(--night2); border-bottom:1px solid var(--border);
+            padding:12px 18px; display:flex; align-items:center; justify-content:space-between;
+            flex-shrink:0; display:none;
+        }
+        .sb-logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:1px; }
+        .sb-mark { width:26px; height:26px; background:var(--red); border-radius:6px; display:grid; place-items:center; font-size:12px; }
+        .sb-logo em { color:var(--red); font-style:normal; }
+        .sb-right { display:flex; align-items:center; gap:12px; }
+        .gps-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); transition:all 0.3s; }
+        .gps-dot.on { background:var(--green); box-shadow:0 0 6px var(--green); animation:gp 1.5s infinite; }
+        @keyframes gp { 0%,100%{opacity:1}50%{opacity:0.4} }
 
-// Activation — vider TOUS les anciens caches
-self.addEventListener('activate', e => {
-    console.log('[SW] Activé v3 — nettoyage caches');
-    e.waitUntil(
-        caches.keys()
-            .then(keys => Promise.all(keys.map(k => {
-                console.log('[SW] Suppression cache:', k);
-                return caches.delete(k);
-            })))
-            .then(() => clients.claim())
-    );
-});
+        /* ── SCREENS ── */
+        .screen { display:none; flex:1; flex-direction:column; overflow:hidden; }
+        .screen.active { display:flex; }
 
-// Fetch — JAMAIS cacher les HTML, toujours réseau
-self.addEventListener('fetch', e => {
-    const req = e.request;
-    const url = new URL(req.url);
+        /* ── LOGIN ── */
+        .login-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 24px; }
+        .login-icon { width:80px; height:80px; background:var(--red); border-radius:20px; display:grid; place-items:center; font-size:36px; margin:0 auto 20px; box-shadow:0 8px 32px rgba(232,49,26,0.35); }
+        .login-title { font-family:'Bebas Neue',cursive; font-size:32px; letter-spacing:2px; text-align:center; margin-bottom:6px; }
+        .login-sub { font-size:14px; color:var(--muted); text-align:center; margin-bottom:36px; }
+        .login-form { width:100%; }
+        .lf { margin-bottom:14px; }
+        .lf label { display:block; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+        .lf input { width:100%; padding:15px 16px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; color:var(--white); }
+        .lf input:focus { outline:none; border-color:var(--red); }
+        .lf input::placeholder { color:rgba(255,255,255,0.2); }
+        .btn-login { width:100%; padding:16px; background:var(--red); color:var(--white); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 6px 24px rgba(232,49,26,0.35); margin-top:8px; }
+        .btn-login:active { transform:scale(0.98); }
 
-    // Pages HTML = toujours réseau
-    if (req.mode === 'navigate' ||
-        req.destination === 'document' ||
-        url.pathname.endsWith('.html') ||
-        url.pathname === '/') {
-        e.respondWith(
-            fetch(req, { cache: 'no-store' })
-                .catch(() => new Response('Hors ligne', { status: 503 }))
-        );
+        /* ── HOME ── */
+        .home-header { background:var(--night2); padding:16px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .home-greeting { font-size:12px; color:var(--muted); }
+        .home-name { font-family:'Bebas Neue',cursive; font-size:26px; letter-spacing:1px; }
+        .home-date { font-size:12px; color:var(--muted); margin-top:2px; }
+
+        /* Pointage card */
+        .pointage-card {
+            margin:14px; background:var(--night3); border:1px solid var(--border2);
+            border-radius:18px; padding:16px; flex-shrink:0;
+        }
+        .pc-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; color:var(--muted2); margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; }
+        .pc-status { font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px; }
+        .pc-status.off  { background:rgba(255,255,255,0.06); color:var(--muted); }
+        .pc-status.work { background:rgba(34,197,94,0.15); color:var(--green); border:1px solid rgba(34,197,94,0.3); }
+        .pc-status.pause{ background:rgba(245,158,11,0.15); color:var(--yellow); border:1px solid rgba(245,158,11,0.3); }
+        .pc-times { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
+        .pc-time { background:var(--surface); border-radius:10px; padding:10px 6px; text-align:center; }
+        .pc-time-val { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; }
+        .pc-time-lbl { font-size:9px; color:var(--muted); margin-top:2px; text-transform:uppercase; letter-spacing:0.5px; }
+        .pc-actions { display:flex; gap:8px; }
+        .pc-btn { flex:1; padding:12px 8px; border-radius:10px; border:none; font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s; }
+        .pc-btn:active { transform:scale(0.97); }
+        .pc-btn.start  { background:var(--green); color:var(--night); }
+        .pc-btn.pause  { background:var(--yellow); color:var(--night); }
+        .pc-btn.resume { background:var(--blue); color:var(--white); }
+        .pc-btn.stop   { background:var(--red); color:var(--white); }
+        .pc-btn:disabled { opacity:0.35; cursor:not-allowed; }
+
+        /* Stats row */
+        .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); flex-shrink:0; }
+
+        /* KM CARD */
+        .km-card { margin:0 14px 10px; background:var(--night3); border:1.5px solid var(--border2); border-radius:14px; padding:14px; flex-shrink:0; }
+        .km-title { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; color:var(--muted2); margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
+        .km-inputs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+        .km-field { display:flex; flex-direction:column; gap:4px; }
+        .km-field label { font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); }
+        .km-field input { padding:9px 10px; background:var(--surface); border:1.5px solid var(--border2); border-radius:9px; font-family:'Outfit',sans-serif; font-size:16px; color:var(--white); text-align:center; }
+        .km-field input:focus { outline:none; border-color:var(--green); }
+        .km-total { display:flex; align-items:center; justify-content:space-between; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:9px; padding:8px 12px; }
+        .km-total-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; color:var(--green); }
+        .km-total-lbl { font-size:11px; color:var(--muted2); }
+        .km-save { width:100%; padding:10px; background:var(--green); color:var(--night); border:none; border-radius:9px; font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; cursor:pointer; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; }
+        .km-save:active { transform:scale(0.98); }
+        .sr-item { background:var(--night2); padding:12px 8px; text-align:center; }
+        .sr-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
+        .sr-lbl { font-size:10px; color:var(--muted); margin-top:1px; }
+
+        /* Missions section */
+        .section-header { padding:12px 16px 6px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+        .section-title { font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:1px; color:var(--muted2); }
+        .scroll-list { flex:1; overflow-y:auto; padding:0 12px 80px; }
+        .scroll-list::-webkit-scrollbar { display:none; }
+
+        /* Mission card */
+        .mission-card { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:14px; margin-bottom:8px; cursor:pointer; position:relative; overflow:hidden; }
+        .mission-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; }
+        .mission-card.pending::before   { background:var(--yellow); }
+        .mission-card.planned::before   { background:var(--blue); }
+        .mission-card.urgent::before    { background:var(--orange); }
+        .mission-card.in_transit::before{ background:var(--purple); }
+        .mission-card:active { transform:scale(0.99); }
+        .mc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+        .mc-num { font-family:'Bebas Neue',cursive; font-size:13px; letter-spacing:1px; color:var(--muted2); }
+        .mc-badge { font-size:9px; font-weight:700; text-transform:uppercase; padding:2px 8px; border-radius:100px; }
+        .mc-badge.pending   { background:rgba(245,158,11,0.15); color:var(--yellow); }
+        .mc-badge.planned   { background:rgba(59,130,246,0.15);  color:var(--blue); }
+        .mc-badge.urgent    { background:rgba(249,115,22,0.15);  color:var(--orange); }
+        .mc-badge.in_transit{ background:rgba(168,85,247,0.15);  color:var(--purple); }
+        .mc-stop { display:flex; align-items:center; gap:8px; padding:4px 0; }
+        .mc-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .mc-dot.p { background:var(--blue); }
+        .mc-dot.d { background:var(--red); }
+        .mc-addr { font-size:12px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .mc-footer { display:flex; gap:8px; margin-top:10px; }
+        .mc-btn { flex:1; padding:9px; border-radius:8px; border:none; font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; }
+        .mc-btn.nav     { background:rgba(59,130,246,0.15); color:var(--blue); }
+        .mc-btn.start   { background:var(--orange); color:var(--white); }
+        .mc-btn.deliver { background:var(--green); color:var(--night); font-weight:700; }
+
+        /* ── MAP SCREEN ── */
+        .map-screen { position:relative; }
+        #driverMap { width:100%; height:100%; }
+        .map-back { position:absolute; top:14px; left:14px; z-index:100; width:38px; height:38px; background:rgba(10,10,15,0.9); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:10px; display:grid; place-items:center; cursor:pointer; font-size:15px; }
+        .map-panel { position:absolute; bottom:0; left:0; right:0; z-index:100; background:rgba(17,17,24,0.97); backdrop-filter:blur(20px); border-top:1px solid var(--border2); border-radius:20px 20px 0 0; padding:16px 18px calc(16px + var(--safe-b)); }
+        .mp-handle { width:32px; height:3px; background:var(--border2); border-radius:100px; margin:0 auto 14px; }
+        .mp-title { font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; margin-bottom:10px; }
+        .mp-stop { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+        .mp-stop:last-child { border:none; }
+        .mp-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; margin-top:3px; }
+        .mp-dot.p { background:var(--blue); }
+        .mp-dot.d { background:var(--red); }
+        .mp-addr { font-size:13px; color:var(--muted2); flex:1; line-height:1.4; }
+        .mp-actions { display:flex; gap:10px; margin-top:14px; }
+        .mp-btn { flex:1; padding:13px; border-radius:12px; border:none; font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
+        .mp-btn.nav     { background:var(--blue); color:var(--white); }
+        .mp-btn.deliver { background:var(--green); color:var(--night); }
+
+        /* ── RH SCREEN ── */
+        .rh-screen { overflow-y:auto; padding-bottom:calc(60px + var(--safe-b)); }
+        .rh-screen::-webkit-scrollbar { display:none; }
+        .rh-header { background:var(--night2); padding:16px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .rh-title { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:1px; }
+        .rh-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+
+        /* Soldes cards */
+        .soldes-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px; }
+        .solde-card { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:16px; }
+        .sc-icon { font-size:24px; margin-bottom:10px; }
+        .sc-val { font-family:'Bebas Neue',cursive; font-size:32px; letter-spacing:1px; line-height:1; }
+        .sc-val em { font-style:normal; font-size:14px; color:var(--muted); font-family:'Outfit',sans-serif; }
+        .sc-lbl { font-size:11px; color:var(--muted); margin-top:4px; }
+
+        /* Historique pointages */
+        .rh-section { padding:0 14px 14px; }
+        .rh-section-title { font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:1px; color:var(--muted2); margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
+        .rh-btn-new { font-size:11px; font-weight:600; padding:5px 12px; background:rgba(232,49,26,0.15); color:var(--red); border:1px solid rgba(232,49,26,0.3); border-radius:8px; cursor:pointer; font-family:'Outfit',sans-serif; }
+
+        .pointage-item { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:12px 14px; margin-bottom:6px; display:flex; align-items:center; gap:12px; }
+        .pi-date { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; line-height:1; text-align:center; min-width:36px; }
+        .pi-date small { display:block; font-family:'Outfit',sans-serif; font-size:10px; color:var(--muted); letter-spacing:0; }
+        .pi-times { flex:1; }
+        .pi-row { font-size:12px; color:var(--muted2); display:flex; gap:10px; }
+        .pi-row span { color:var(--muted); }
+        .pi-hours { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; text-align:right; }
+        .pi-hours small { display:block; font-family:'Outfit',sans-serif; font-size:10px; color:var(--muted); letter-spacing:0; text-align:right; }
+        .pi-supp { color:var(--orange); }
+
+        /* Congés */
+        .conge-item { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:12px 14px; margin-bottom:6px; }
+        .ci-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+        .ci-type { font-size:12px; font-weight:600; color:var(--muted2); }
+        .ci-status { font-size:10px; font-weight:700; padding:2px 8px; border-radius:100px; }
+        .ci-status.en_attente { background:rgba(245,158,11,0.15); color:var(--yellow); }
+        .ci-status.approuve   { background:rgba(34,197,94,0.15);  color:var(--green); }
+        .ci-status.refuse     { background:rgba(232,49,26,0.15);  color:var(--red); }
+        .ci-dates { font-size:12px; color:var(--muted); }
+
+        /* ── CONFIRM DELIVERY ── */
+        .confirm-screen { overflow-y:auto; padding:20px 18px calc(20px + var(--safe-b)); }
+        .confirm-screen::-webkit-scrollbar { display:none; }
+        .confirm-back { display:flex; align-items:center; gap:10px; margin-bottom:20px; cursor:pointer; }
+        .cb-btn { width:34px; height:34px; background:var(--night3); border:1px solid var(--border2); border-radius:9px; display:grid; place-items:center; font-size:14px; }
+        .cb-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
+        .confirm-order { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:14px; margin-bottom:18px; }
+        .co-num { font-family:'Bebas Neue',cursive; font-size:14px; color:var(--red); margin-bottom:6px; letter-spacing:1px; }
+        .co-addr { font-size:13px; color:var(--muted2); display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+        .sig-label { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+        .sig-canvas { width:100%; height:150px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; cursor:crosshair; touch-action:none; display:block; margin-bottom:6px; }
+        .sig-canvas.signed { border-color:var(--green); }
+        .sig-clear { font-size:12px; color:var(--muted); background:none; border:none; cursor:pointer; float:right; }
+        .photo-btn { width:100%; padding:14px; border-radius:12px; background:var(--night3); border:1.5px dashed var(--border2); color:var(--muted2); font-family:'Outfit',sans-serif; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; margin:14px 0; }
+        .photo-preview { width:100%; height:130px; object-fit:cover; border-radius:12px; display:none; margin:10px 0; }
+        .note-input { width:100%; padding:12px 14px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:14px; color:var(--white); resize:none; min-height:70px; margin-bottom:18px; }
+        .note-input:focus { outline:none; border-color:var(--green); }
+        .note-input::placeholder { color:rgba(255,255,255,0.2); }
+        .btn-confirm { width:100%; padding:16px; background:var(--green); color:var(--night); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; }
+
+        /* ── SUCCESS ── */
+        .success-screen { align-items:center; justify-content:center; padding:40px 24px; text-align:center; }
+        .success-ico { width:90px; height:90px; background:rgba(34,197,94,0.12); border:2px solid rgba(34,197,94,0.3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:44px; margin:0 auto 24px; animation:pop 0.5s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes pop { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+        .success-title { font-family:'Bebas Neue',cursive; font-size:36px; letter-spacing:2px; color:var(--green); margin-bottom:10px; }
+        .success-sub { font-size:14px; color:var(--muted); margin-bottom:32px; line-height:1.6; }
+        .btn-home { padding:14px 36px; background:var(--red); color:var(--white); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:15px; font-weight:700; cursor:pointer; }
+
+        /* ── MODALS ── */
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:500; align-items:flex-end; justify-content:center; padding-bottom:var(--safe-b); }
+        .modal.open { display:flex; }
+        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:20px 20px 0 0; padding:24px 20px; width:100%; box-shadow:0 -20px 60px rgba(0,0,0,0.5); animation:slideUp 0.3s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes slideUp { from{transform:translateY(100%)}to{transform:translateY(0)} }
+        .modal-handle { width:32px; height:3px; background:var(--border2); border-radius:100px; margin:0 auto 16px; }
+        .modal-title { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; margin-bottom:16px; }
+        .mfield { margin-bottom:12px; }
+        .mfield label { display:block; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+        .mfield input, .mfield select, .mfield textarea { width:100%; padding:12px 14px; background:var(--surface); border:1.5px solid var(--border2); border-radius:10px; font-family:'Outfit',sans-serif; font-size:14px; color:var(--white); }
+        .mfield input:focus, .mfield select:focus, .mfield textarea:focus { outline:none; border-color:var(--red); }
+        .mfield select option { background:var(--night3); }
+        .mfield-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .modal-actions { display:flex; gap:10px; margin-top:16px; }
+        .modal-actions button { flex:1; padding:13px; border-radius:10px; border:none; font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; cursor:pointer; }
+        .btn-save   { background:var(--red); color:var(--white); }
+        .btn-cancel { background:var(--surface); color:var(--muted2); border:1px solid var(--border2) !important; }
+
+        /* ── BOTTOM NAV ── */
+        .bottom-nav { background:var(--night2); border-top:1px solid var(--border); display:none; flex-shrink:0; padding-bottom:var(--safe-b); }
+        .bn-wrap { display:flex; }
+        .bn-item { flex:1; padding:11px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; color:var(--muted); transition:color 0.2s; position:relative; }
+        .bn-item.active { color:var(--red); }
+        .bn-item i { font-size:18px; }
+        .bn-item span { font-size:9px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; }
+        .bn-badge { position:absolute; top:8px; right:calc(50% - 18px); width:16px; height:16px; background:var(--red); border-radius:50%; display:none; place-items:center; font-size:9px; font-weight:700; color:var(--white); }
+        .bn-badge.show { display:grid; }
+
+        /* ── TOAST ── */
+        .toast { position:fixed; top:14px; left:50%; transform:translateX(-50%) translateY(-70px); padding:10px 18px; border-radius:100px; font-size:13px; font-weight:600; z-index:9999; transition:transform 0.35s cubic-bezier(0.4,0,0.2,1); white-space:nowrap; max-width:calc(100% - 32px); }
+        .toast.show { transform:translateX(-50%) translateY(0); }
+        .toast.success { background:rgba(34,197,94,0.2); border:1px solid rgba(34,197,94,0.4); color:var(--green); }
+        .toast.error   { background:rgba(232,49,26,0.2);  border:1px solid rgba(232,49,26,0.4);  color:var(--red); }
+        .toast.info    { background:rgba(59,130,246,0.2);  border:1px solid rgba(59,130,246,0.4);  color:var(--blue); }
+
+        /* Loader */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); place-items:center; z-index:2000; }
+        .loader.on { display:grid; }
+        .spin { width:40px; height:40px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+
+        /* Leaflet dark */
+        .leaflet-tile { filter:brightness(0.85) saturate(0.6) invert(1) hue-rotate(180deg); }
+        .leaflet-container { background:#0a0a0f; }
+        .leaflet-control-zoom { display:none; }
+
+        .empty-state { padding:40px 20px; text-align:center; }
+        .empty-ico { font-size:40px; opacity:0.15; margin-bottom:12px; }
+        .empty-txt { font-size:13px; color:var(--muted); line-height:1.6; }
+    </style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+<div class="loader" id="loader"><div class="spin"></div></div>
+
+<!-- ═══ STATUS BAR ═══ -->
+<div class="status-bar" id="statusBar">
+    <div class="sb-logo"><div class="sb-mark">🚚</div> Léman<em>-Driver</em></div>
+    <div class="sb-right">
+        <div class="gps-dot" id="gpsDot"></div>
+        <button id="btnNotifBell" onclick="toggleNotifs()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:4px;position:relative;">
+            <i class="fas fa-bell"></i>
+            <span id="notifBadge" style="display:none;position:absolute;top:-2px;right:-2px;width:14px;height:14px;background:var(--red);border-radius:50%;font-size:9px;font-weight:700;color:white;place-items:center;">0</span>
+        </button>
+        <button onclick="logout()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;"><i class="fas fa-sign-out-alt"></i></button>
+    </div>
+</div>
+
+<!-- Notification dropdown -->
+<div id="notifDropdown" style="display:none;position:fixed;top:56px;right:8px;width:300px;background:var(--night3);border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.5);z-index:300;max-height:400px;overflow-y:auto;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-family:'Bebas Neue',cursive;font-size:15px;letter-spacing:1px;">NOTIFICATIONS</div>
+        <button onclick="markAllRead()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--muted);font-family:'Outfit',sans-serif;">Tout lire</button>
+    </div>
+    <div id="notifList" style="padding:8px;"></div>
+</div>
+
+<!-- ═══ LOGIN ═══ -->
+<div class="screen login-screen active" id="screenLogin">
+    <div class="login-wrap">
+        <div class="login-icon">🚚</div>
+        <div class="login-title">LÉMAN DRIVER</div>
+        <div class="login-sub">Application chauffeur</div>
+        <div class="login-form">
+            <div class="lf"><label>Email</label><input type="email" id="lEmail" placeholder="chauffeur@leman.ch" inputmode="email" autocomplete="email"></div>
+            <div class="lf"><label>Mot de passe</label><input type="password" id="lPwd" placeholder="••••••••" autocomplete="current-password"></div>
+            <button class="btn-login" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> Se connecter</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ HOME ═══ -->
+<div class="screen" id="screenHome">
+    <div class="home-header">
+        <div class="home-greeting">Bonjour,</div>
+        <div class="home-name" id="homeName">Chauffeur</div>
+        <div class="home-date" id="homeDate"></div>
+    </div>
+
+    <!-- Pointage -->
+    <div class="pointage-card">
+        <div class="pc-title">
+            POINTAGE DU JOUR
+            <span class="pc-status off" id="pcStatus">Non pointé</span>
+        </div>
+        <div class="pc-times">
+            <div class="pc-time">
+                <div class="pc-time-val" id="ptDebut">--:--</div>
+                <div class="pc-time-lbl">Début</div>
+            </div>
+            <div class="pc-time">
+                <div class="pc-time-val" id="ptPauseD">--:--</div>
+                <div class="pc-time-lbl">↓ Pause</div>
+            </div>
+            <div class="pc-time">
+                <div class="pc-time-val" id="ptPauseF">--:--</div>
+                <div class="pc-time-lbl">↑ Reprise</div>
+            </div>
+            <div class="pc-time">
+                <div class="pc-time-val" id="ptFin">--:--</div>
+                <div class="pc-time-lbl">Fin</div>
+            </div>
+        </div>
+        <div class="pc-actions">
+            <button class="pc-btn start"  id="btnStart"  onclick="pointageAction('start')"><i class="fas fa-play"></i> Démarrer</button>
+            <button class="pc-btn pause"  id="btnPause"  onclick="pointageAction('pause')"  disabled><i class="fas fa-pause"></i> Pause</button>
+            <button class="pc-btn resume" id="btnResume" onclick="pointageAction('resume')" disabled style="display:none"><i class="fas fa-play"></i> Reprendre</button>
+            <button class="pc-btn stop"   id="btnStop"   onclick="pointageAction('stop')"   disabled><i class="fas fa-stop"></i> Fin</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="sr-item">
+            <div class="sr-val" id="srMissions" style="color:var(--yellow)">0</div>
+            <div class="sr-lbl">Missions</div>
+        </div>
+        <div class="sr-item">
+            <div class="sr-val" id="srDone" style="color:var(--green)">0</div>
+            <div class="sr-lbl">Livrés</div>
+        </div>
+        <div class="sr-item">
+            <div class="sr-val" id="srHours" style="color:var(--blue)">0h</div>
+            <div class="sr-lbl">Travaillé</div>
+        </div>
+    </div>
+
+    <!-- Missions -->
+    <!-- KM JOURNALIERS -->
+    <div class="km-card" id="kmCard" style="display:none;">
+        <div class="km-title">
+            KM DU JOUR
+            <span id="kmStatus" class="pc-status off">Non saisi</span>
+        </div>
+        <div class="km-inputs">
+            <div class="km-field">
+                <label>🔢 Km début</label>
+                <input type="number" id="kmDebut" placeholder="Ex: 45230" inputmode="numeric">
+            </div>
+            <div class="km-field">
+                <label>🏁 Km fin</label>
+                <input type="number" id="kmFin" placeholder="Ex: 45580" inputmode="numeric">
+            </div>
+        </div>
+        <div class="km-total">
+            <div class="km-total-lbl">Km parcourus aujourd'hui</div>
+            <div class="km-total-val" id="kmTotal">— km</div>
+        </div>
+        <button class="km-save" onclick="saveKm()">
+            <i class="fas fa-save"></i> Enregistrer les km
+        </button>
+    </div>
+
+    <div class="section-header">
+        <div class="section-title">MES MISSIONS</div>
+        <button onclick="loadMissions()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;"><i class="fas fa-sync-alt"></i></button>
+    </div>
+    <div class="scroll-list" id="missionsList"></div>
+</div>
+
+<!-- ═══ MAP ═══ -->
+<div class="screen map-screen" id="screenMap">
+    <div id="driverMap"></div>
+    <div class="map-back" onclick="showScreen('home')"><i class="fas fa-arrow-left"></i></div>
+    <div class="map-panel">
+        <div class="mp-handle"></div>
+        <div class="mp-title" id="mpTitle">TRANSPORT</div>
+        <div id="mpRoute"></div>
+        <div class="mp-actions">
+            <button class="mp-btn nav" onclick="openGPS()"><i class="fas fa-directions"></i> GPS</button>
+            <button class="mp-btn deliver" id="mpDeliverBtn"><i class="fas fa-check"></i> Livré</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ RH ═══ -->
+<div class="screen" id="screenRh">
+    <div class="rh-header">
+        <div class="rh-title">MON ESPACE RH</div>
+        <div class="rh-sub">Soldes, pointages et congés</div>
+    </div>
+    <div class="rh-screen">
+        <!-- Soldes -->
+        <div class="soldes-grid">
+            <div class="solde-card">
+                <div class="sc-icon">🏖️</div>
+                <div class="sc-val" id="soldeVac">20<em> j</em></div>
+                <div class="sc-lbl">Solde vacances</div>
+            </div>
+            <div class="solde-card">
+                <div class="sc-icon">⚖️</div>
+                <div class="sc-val" id="soldeComp">0<em> j</em></div>
+                <div class="sc-lbl">Jours compensation</div>
+            </div>
+            <div class="solde-card">
+                <div class="sc-icon">⏱️</div>
+                <div class="sc-val" id="soldeHSupp">0<em> h</em></div>
+                <div class="sc-lbl">Heures suppl.</div>
+            </div>
+            <div class="solde-card" style="cursor:pointer;" onclick="openModalConge()">
+                <div class="sc-icon">📅</div>
+                <div class="sc-val" style="font-size:22px;color:var(--red)">+</div>
+                <div class="sc-lbl">Demander congé</div>
+            </div>
+        </div>
+
+        <!-- Pointages récents -->
+        <div class="rh-section">
+            <div class="rh-section-title">
+                POINTAGES RÉCENTS
+            </div>
+            <div id="pointagesList"></div>
+        </div>
+
+        <!-- Congés -->
+        <div class="rh-section">
+            <div class="rh-section-title">
+                MES CONGÉS
+                <button class="rh-btn-new" onclick="openModalConge()"><i class="fas fa-plus"></i> Demander</button>
+            </div>
+            <div id="congesList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ CONFIRM DELIVERY ═══ -->
+<div class="screen" id="screenConfirm">
+    <div class="confirm-screen">
+        <div class="confirm-back" onclick="showScreen('home')">
+            <div class="cb-btn"><i class="fas fa-arrow-left"></i></div>
+            <div class="cb-title">CONFIRMER LIVRAISON</div>
+        </div>
+        <div class="confirm-order" id="confirmInfo"></div>
+        <div class="sig-label"><i class="fas fa-pen-nib"></i> Signature destinataire</div>
+        <canvas class="sig-canvas" id="sigCanvas"></canvas>
+        <button class="sig-clear" onclick="clearSig()"><i class="fas fa-eraser"></i> Effacer</button>
+        <div style="clear:both;margin-bottom:14px;"></div>
+        <img id="photoPreview" class="photo-preview" alt="">
+        <button class="photo-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()">
+            <i class="fas fa-camera"></i> Photo de confirmation
+        </button>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhoto(this)">
+        <div class="sig-label" style="margin-top:4px;"><i class="fas fa-weight-hanging" style="color:var(--yellow)"></i> Poids réel pesé (kg)</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <input type="number" id="poidsReel" step="0.1" min="0" placeholder="Ex: 12.5"
+                style="flex:1;padding:12px 14px;background:var(--night3);border:1.5px solid var(--border2);border-radius:12px;font-family:'Outfit',sans-serif;font-size:16px;color:var(--white);-moz-appearance:textfield;"
+                inputmode="decimal">
+            <span style="font-size:14px;color:var(--muted2);font-weight:600;">kg</span>
+        </div>
+        <div class="sig-label" style="margin-top:4px;"><i class="fas fa-sticky-note"></i> Note (optionnel)</div>
+        <textarea class="note-input" id="deliveryNote" placeholder="Laissé en réception, remis à…"></textarea>
+        <button class="btn-confirm" onclick="confirmDelivery()">
+            <i class="fas fa-check-circle"></i> Confirmer la livraison
+        </button>
+    </div>
+</div>
+
+<!-- ═══ SUCCESS ═══ -->
+<div class="screen success-screen" id="screenSuccess">
+    <div class="success-ico">✅</div>
+    <div class="success-title">LIVRÉ !</div>
+    <div class="success-sub" id="successMsg">Transport confirmé.</div>
+    <button class="btn-home" onclick="showScreen('home')"><i class="fas fa-home"></i> Mes missions</button>
+</div>
+
+<!-- ═══ BOTTOM NAV ═══ -->
+<!-- ═══ SCREEN QR SCANNER ═══ -->
+<div class="screen" id="screenQR">
+    <div class="home-header">
+        <div>
+            <div class="home-title">SCANNER QR</div>
+            <div class="home-sub">Prise en charge d'un transport</div>
+        </div>
+        <button onclick="showScreen('home')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;padding:8px;"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:24px 20px;gap:16px;overflow-y:auto;">
+
+        <!-- Bouton principal — ouvre l'appareil photo natif -->
+        <div style="width:100%;max-width:340px;">
+            <label id="scanPhotoLabel" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--night3);border:2px dashed var(--red);border-radius:18px;padding:36px 20px;cursor:pointer;transition:all 0.2s;">
+                <div style="width:70px;height:70px;background:rgba(232,49,26,0.12);border-radius:50%;display:grid;place-items:center;font-size:32px;">📷</div>
+                <div style="text-align:center;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;color:var(--white);">PHOTOGRAPHIER LE QR</div>
+                    <div style="font-size:13px;color:var(--muted);margin-top:4px;">Ouvre l'appareil photo Android</div>
+                </div>
+                <input type="file" id="scanPhotoInput" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)">
+            </label>
+        </div>
+
+        <!-- Status -->
+        <div id="scanStatus" style="font-size:13px;color:var(--muted2);text-align:center;min-height:20px;"></div>
+
+        <!-- Résultat -->
+        <div id="scanResult" style="display:none;width:100%;max-width:340px;"></div>
+
+        <!-- Séparateur -->
+        <div style="width:100%;max-width:340px;display:flex;align-items:center;gap:10px;">
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+            <span style="font-size:11px;color:var(--muted);">OU SAISIR MANUELLEMENT</span>
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+        </div>
+
+        <!-- Saisie manuelle -->
+        <div style="width:100%;max-width:340px;display:flex;gap:8px;">
+            <input type="text" id="qrManual" placeholder="N° commande : LC-2026-xxxxx"
+                style="flex:1;padding:12px 14px;background:var(--night3);border:1.5px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);"
+                onkeydown="if(event.key==='Enter')searchManual()">
+            <button onclick="searchManual()" style="background:var(--red);border:none;border-radius:11px;padding:12px 16px;cursor:pointer;color:white;font-size:15px;"><i class="fas fa-search"></i></button>
+        </div>
+
+    </div>
+</div>
+
+<div class="bottom-nav" id="bottomNav">
+    <!-- Canvas caché pour décodage QR -->
+    <canvas id="qrCanvas" style="display:none;"></canvas>
+    <div class="bn-wrap">
+        <div class="bn-item active" id="bnHome" onclick="showScreen('home')">
+            <i class="fas fa-home"></i><span>Missions</span>
+            <div class="bn-badge" id="bnBadge">0</div>
+        </div>
+        <div class="bn-item" id="bnMap" onclick="showScreen('map')">
+            <i class="fas fa-map"></i><span>Carte</span>
+        </div>
+        <div class="bn-item" id="bnQR" onclick="openScanner()">
+            <i class="fas fa-qrcode"></i><span>Scanner</span>
+        </div>
+        <div class="bn-item" id="bnRh" onclick="showScreen('rh')">
+            <i class="fas fa-user-clock"></i><span>Mon RH</span>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL CONGÉ ═══ -->
+<div class="modal" id="modalConge">
+    <div class="modal-box">
+        <div class="modal-handle"></div>
+        <div class="modal-title">DEMANDE DE CONGÉ</div>
+        <form id="formConge">
+            <div class="mfield">
+                <label>Type</label>
+                <select id="congeType">
+                    <option value="vacances">🏖️ Vacances</option>
+                    <option value="maladie">🤒 Maladie</option>
+                    <option value="compensation">⚖️ Compensation</option>
+                    <option value="autre">📌 Autre</option>
+                </select>
+            </div>
+            <div class="mfield-row">
+                <div class="mfield"><label>Date début</label><input type="date" id="congeDebut" required></div>
+                <div class="mfield"><label>Date fin</label><input type="date" id="congeFin" required></div>
+            </div>
+            <div class="mfield">
+                <label>Note</label>
+                <textarea id="congeNote" style="resize:none;min-height:60px;" placeholder="Motif, informations…"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn-save">Envoyer la demande</button>
+                <button type="button" class="btn-cancel" onclick="closeModal('modalConge')">Annuler</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    if (!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;font-family:sans-serif;">❌ config.js manquant</div>';
         return;
     }
+    const db = window.SUPABASE_CLIENT;
 
-    // Tout le reste = réseau d'abord
-    e.respondWith(
-        fetch(req).catch(() => caches.match(req))
-    );
-});
+    /* ── State ── */
+    let driver     = null;
+    let missions   = [];
+    let curMission = null;
+    let pointage   = null; // today's pointage record
+    let gpsWatch   = null;
+    let myLat = null, myLng = null;
+    let dMap = null, dMarker = null, rLine = null;
+    let sigCtx = null, drawing = false, hasSig = false;
+    let workTimer = null, workSeconds = 0;
 
-// Push notifications
-self.addEventListener('push', e => {
-    let data = { title: 'Léman Courses', body: 'Nouvelle notification' };
-    try { if(e.data) data = { ...data, ...JSON.parse(e.data.text()) }; } catch(err) {}
-    e.waitUntil(
-        self.registration.showNotification(data.title, {
-            body: data.body,
-            icon: '/icon-192.png',
-            badge: '/icon-72.png',
-            tag: 'leman-notif',
-            vibrate: [200, 100, 200],
-            data: data.data || {}
-        })
-    );
-});
+    /* ── Helpers ── */
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function toast(type, msg) {
+        clearTimeout(toastTimer);
+        toastEl.className = 'toast ' + type + ' show';
+        toastEl.textContent = (type==='success'?'✓ ':type==='error'?'✕ ':'ℹ ') + msg;
+        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
+    }
+    const loaderEl = document.getElementById('loader');
+    const showLoad = () => loaderEl.classList.add('on');
+    const hideLoad = () => loaderEl.classList.remove('on');
+    const fmt = ts => ts ? new Date(ts).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit'}) : '--:--';
+    const today = () => new Date().toISOString().slice(0,10);
 
-// Clic notification
-self.addEventListener('notificationclick', e => {
-    e.notification.close();
-    if(e.action === 'dismiss') return;
-    const url = e.notification.data?.url || '/admin/driver-app.html';
-    e.waitUntil(
-        clients.matchAll({ type:'window', includeUncontrolled:true }).then(list => {
-            for(const c of list) {
-                if(c.url.includes('driver-app') && 'focus' in c) return c.focus();
+    /* ── Modals ── */
+    function openModal(id)  { const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
+    function closeModal(id) { const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} }
+    window.closeModal = closeModal;
+    document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
+
+    /* ── Screen nav ── */
+    const NAV_SCREENS = ['home','map','rh'];
+    window.showScreen = function(name) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        const el = document.getElementById('screen' + name.charAt(0).toUpperCase() + name.slice(1));
+        if(el) el.classList.add('active');
+        document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
+        const bn = document.getElementById('bn' + name.charAt(0).toUpperCase() + name.slice(1));
+        if(bn) bn.classList.add('active');
+        const showNav = NAV_SCREENS.includes(name);
+        document.getElementById('bottomNav').style.display  = showNav ? 'block' : 'none';
+        document.getElementById('statusBar').style.display  = name!=='login' ? 'flex' : 'none';
+        if(name==='map' && !dMap) initMap();
+        if(name==='map' && dMap)  setTimeout(()=>dMap.invalidateSize(),100);
+        if(name==='rh') loadRH();
+    };
+
+    /* ── LOGIN ── */
+    window.doLogin = async function() {
+        const email = document.getElementById('lEmail').value.trim();
+        const pwd   = document.getElementById('lPwd').value;
+        if(!email||!pwd) { toast('error','Email et mot de passe requis'); return; }
+        showLoad();
+        try {
+            const { data, error } = await db.auth.signInWithPassword({ email, password:pwd });
+            if(error) throw error;
+            const { data:user } = await db.from('utilisateurs').select('*').eq('id',data.user.id).single();
+            if(!user||!['chauffeur','admin','super_admin'].includes(user.role)) {
+                await db.auth.signOut(); throw new Error('Accès réservé aux chauffeurs');
             }
-            if(clients.openWindow) return clients.openWindow(url);
-        })
-    );
-});
+            driver = user;
+            afterLogin();
+        } catch(e) { toast('error',e.message); }
+        finally { hideLoad(); }
+    };
 
-self.addEventListener('message', e => {
-    if(e.data?.type === 'SKIP_WAITING') self.skipWaiting();
-});
+    async function checkSession() {
+        await new Promise(r=>setTimeout(r,400));
+        const { data:{session} } = await db.auth.getSession();
+        if(!session) return;
+        const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
+        if(user && ['chauffeur','admin','super_admin'].includes(user.role)) { driver=user; afterLogin(); }
+    }
+
+    function afterLogin() {
+        const name = [driver.prenom,driver.nom].filter(Boolean).join(' ')||'Chauffeur';
+        document.getElementById('homeName').textContent = name;
+        document.getElementById('homeDate').textContent = new Date().toLocaleDateString('fr-CH',{weekday:'long',day:'2-digit',month:'long'});
+        showScreen('home');
+        loadMissions();
+        loadTodayPointage();
+        loadVehicule();
+        startGPS();
+        initNotifications(driver.id);
+
+        // ── Vérifier si ouvert depuis un scan QR ──
+        const params = new URLSearchParams(window.location.search);
+        const orderId    = params.get('id');
+        const orderNum   = params.get('order');
+        const colisNum   = params.get('colis');
+        const colisTotal = params.get('total');
+
+        if(orderId || orderNum) {
+            // Afficher notification de scan
+            setTimeout(async () => {
+                toast('info', `📦 QR scanné — chargement du transport…`);
+                // Chercher le transport
+                let query = db.from('transport_orders_simple').select('*');
+                if(orderId)   query = query.eq('id', orderId);
+                else          query = query.eq('order_number', orderNum);
+                const { data:order } = await query.maybeSingle();
+                if(order) {
+                    // Afficher un modal de confirmation de prise en charge
+                    showQRPickup(order, colisNum, colisTotal);
+                } else {
+                    toast('error', `Transport introuvable : ${orderNum||orderId}`);
+                }
+                // Nettoyer l'URL sans recharger la page
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }, 800);
+        }
+    }
+
+    function showQRPickup(o, colisNum, colisTotal) {
+        // Créer un modal de prise en charge
+        const existing = document.getElementById('modalQRPickup');
+        if(existing) existing.remove();
+
+        const stColor = o.status==='in_transit'?'var(--purple)':o.status==='delivered'?'var(--green)':'var(--yellow)';
+        const overlay = document.createElement('div');
+        overlay.id = 'modalQRPickup';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--night3);border:1.5px solid var(--border2);border-radius:22px;padding:28px;width:100%;max-width:360px;box-shadow:0 40px 100px rgba(0,0,0,0.6);">
+                <div style="text-align:center;margin-bottom:18px;">
+                    <div style="font-size:36px;margin-bottom:8px;">📦</div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;color:var(--white);">QR CODE SCANNÉ</div>
+                    ${colisNum?`<div style="font-size:12px;color:var(--yellow);margin-top:4px;">Colis ${colisNum}/${colisTotal||'?'}</div>`:''}
+                </div>
+                <div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;display:flex;flex-direction:column;gap:7px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:var(--muted2)">Commande</span>
+                        <strong>${o.order_number||'—'}</strong>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:var(--muted2)">Statut</span>
+                        <span style="color:${stColor};font-weight:600">${o.status}</span>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:4px;">
+                        <div style="width:8px;height:8px;background:var(--blue);border-radius:50%;margin-top:3px;flex-shrink:0;"></div>
+                        <div style="font-size:12px;color:var(--muted2);line-height:1.4;">${shortAddr(o.pickup_address)}</div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <div style="width:8px;height:8px;background:var(--red);border-radius:2px;transform:rotate(45deg);margin-top:3px;flex-shrink:0;"></div>
+                        <div style="font-size:12px;line-height:1.5;">
+                            <div style="font-weight:600;color:var(--white);">${o.destinataire_nom||'—'}</div>
+                            <div style="color:var(--muted2);">${shortAddr(o.delivery_address)}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+                        <span style="background:var(--night);padding:3px 8px;border-radius:6px;font-size:11px;">📦 ${o.quantity||1}× ${o.weight||0}kg</span>
+                        <span style="background:var(--night);padding:3px 8px;border-radius:6px;font-size:11px;">⚡ ${o.service_type||'normal'}</span>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${o.status!=='delivered'?`
+                    <button onclick="confirmPickup('${o.id}');document.getElementById('modalQRPickup').remove();"
+                        style="width:100%;padding:14px;background:var(--green);color:var(--night);border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;cursor:pointer;">
+                        <i class="fas fa-box"></i> Confirmer la prise en charge
+                    </button>`:'<div style="text-align:center;color:var(--green);font-weight:600;padding:8px;">✅ Déjà livré</div>'}
+                    <button onclick="document.getElementById('modalQRPickup').remove();"
+                        style="width:100%;padding:12px;background:transparent;color:var(--muted2);border:1px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;cursor:pointer;font-size:14px;">
+                        Fermer
+                    </button>
+                </div>
+            </div>`;
+
+        overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+
+    /* ── QR SCANNER ── */
+    let scanStream = null;
+    let scanInterval = null;
+    let scanning = false;
+
+    window.openScanner = function() {
+        showScreen('qr');
+        document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
+        document.getElementById('bnQR')?.classList.add('active');
+        document.getElementById('scanResult').style.display = 'none';
+        document.getElementById('scanStatus').textContent = '';
+        // Reset input so same file can be re-selected
+        const inp = document.getElementById('scanPhotoInput');
+        if(inp) inp.value = '';
+    };
+
+    window.stopScan = function() {
+        if(scanInterval) { clearInterval(scanInterval); scanInterval=null; }
+        if(scanStream)   { scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+        scanning = false;
+        showScreen('home');
+    };
+
+    function decodeFrame() {
+        if(scanning) return;
+        const video  = document.getElementById('qrVideo');
+        const canvas = document.getElementById('qrCanvas');
+        if(!video || !video.videoWidth || video.paused) return;
+
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        if('BarcodeDetector' in window) {
+            scanning = true;
+            const bd = new BarcodeDetector({formats:['qr_code']});
+            bd.detect(canvas).then(codes => {
+                if(codes.length > 0) {
+                    clearInterval(scanInterval); scanInterval=null;
+                    handleQRResult(codes[0].rawValue);
+                } else { scanning = false; }
+            }).catch(()=>{ scanning=false; });
+        } else if(window.jsQR) {
+            const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+            const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'dontInvert'});
+            if(code?.data) {
+                clearInterval(scanInterval); scanInterval=null;
+                handleQRResult(code.data);
+            }
+        }
+    }
+
+    async function handleQRResult(raw) {
+        if(!raw) return;
+        // Stop scanning
+        clearInterval(scanInterval); scanInterval = null;
+        document.getElementById('scanStatus').textContent = '✅ QR Code détecté !';
+
+        try {
+            const data = JSON.parse(raw);
+            const orderId = data.id;
+            if(!orderId) throw new Error('QR invalide');
+
+            // Charger le transport
+            const { data:order } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
+            if(!order) throw new Error('Transport introuvable');
+
+            showScanResult(order, data);
+        } catch(e) {
+            // Essayer comme numéro de commande
+            await searchByNum(raw.trim());
+        }
+    }
+
+    window.searchManual = async function() {
+        const val = document.getElementById('qrManual').value.trim();
+        if(!val) return;
+        await searchByNum(val);
+    };
+
+    // Lire un QR depuis une photo prise avec l'appareil photo
+    window.scanFromPhoto = function(input) {
+        if(!input.files?.[0]) return;
+        const el = document.getElementById('scanStatus');
+        el.textContent = '🔍 Analyse en cours…';
+        el.style.color = 'var(--yellow)';
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                // Agrandir pour meilleure détection
+                const MAX = 1200;
+                let w = img.width, h = img.height;
+                if(w < MAX && h < MAX) { w = Math.round(w*1.5); h = Math.round(h*1.5); }
+                const cv = document.getElementById('qrCanvas');
+                cv.width = w; cv.height = h;
+                cv.getContext('2d').drawImage(img, 0, 0, w, h);
+
+                if('BarcodeDetector' in window) {
+                    new BarcodeDetector({formats:['qr_code']}).detect(cv).then(codes => {
+                        if(codes.length > 0) {
+                            el.style.color = 'var(--green)';
+                            el.textContent = '✅ QR détecté !';
+                            handleQRResult(codes[0].rawValue);
+                        } else {
+                            tryJsQR(cv, el);
+                        }
+                    }).catch(() => tryJsQR(cv, el));
+                } else if(window.jsQR) {
+                    tryJsQR(cv, el);
+                } else {
+                    el.textContent = '❌ jsQR non chargé — saisie manuelle';
+                    el.style.color = 'var(--red)';
+                }
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+        input.value = ''; // reset pour permettre re-scan
+    };
+
+        function tryJsQR(canvas, el) {
+        if(!window.jsQR) { el.textContent = '❌ Bibliothèque QR non disponible'; return; }
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'attemptBoth'});
+        if(code?.data) {
+            el.style.color = 'var(--green)';
+            el.textContent = '✅ QR détecté !';
+            handleQRResult(code.data);
+        } else {
+            el.style.color = 'var(--red)';
+            el.textContent = '❌ QR non reconnu — rapprochez-vous ou réessayez';
+            el.style.color = 'var(--red)';
+            document.getElementById('scanPhotoInput').value = '';
+        }
+    }
+
+    async function searchByNum(num) {
+        document.getElementById('scanStatus').textContent = 'Recherche…';
+        const { data } = await db.from('transport_orders_simple').select('*')
+            .or(`order_number.eq.${num},id.eq.${num}`).maybeSingle();
+        if(!data) {
+            document.getElementById('scanStatus').textContent = '❌ Transport introuvable : ' + num;
+            // Restart scan
+            if(scanStream) scanInterval = setInterval(()=>decodeFrame(), 500);
+            return;
+        }
+        showScanResult(data, {});
+    }
+
+    function showScanResult(o, qrData) {
+        const stColor = {pending:'var(--yellow)',planned:'var(--blue)',in_transit:'var(--purple)',delivered:'var(--green)'}[o.status]||'var(--yellow)';
+        const el = document.getElementById('scanResult');
+        el.style.display = 'block';
+        el.innerHTML = `
+            <div style="background:var(--night3);border:1.5px solid var(--border2);border-radius:14px;overflow:hidden;">
+                <div style="background:rgba(34,197,94,0.1);border-bottom:1px solid rgba(34,197,94,0.2);padding:12px 16px;display:flex;align-items:center;gap:10px;">
+                    <i class="fas fa-check-circle" style="color:var(--green);font-size:18px;"></i>
+                    <div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;">${o.order_number||'—'}</div>
+                        <div style="font-size:11px;color:var(--muted2);">Transport trouvé</div>
+                    </div>
+                    <span style="margin-left:auto;background:${stColor};color:var(--night);padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;">${o.status}</span>
+                </div>
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
+                    <div style="font-size:12px;color:var(--muted2);">
+                        <div style="display:flex;gap:8px;margin-bottom:6px;">
+                            <div style="width:8px;height:8px;background:var(--blue);border-radius:50%;margin-top:4px;flex-shrink:0;"></div>
+                            <div>${o.pickup_address||'—'}</div>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <div style="width:8px;height:8px;background:var(--red);border-radius:2px;transform:rotate(45deg);margin-top:4px;flex-shrink:0;"></div>
+                            <div><strong style="color:var(--white)">${o.destinataire_nom||'—'}</strong><br>${o.delivery_address||'—'}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <span style="background:var(--surface);padding:3px 9px;border-radius:6px;font-size:11px;">📦 ${o.quantity||1}× ${o.weight||0}kg</span>
+                        <span style="background:var(--surface);padding:3px 9px;border-radius:6px;font-size:11px;">⚡ ${o.service_type||'normal'}</span>
+                        ${qrData.c?`<span style="background:var(--surface);padding:3px 9px;border-radius:6px;font-size:11px;">🏷️ Colis ${qrData.c}/${qrData.t||'?'}</span>`:''}
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:6px;">
+                        ${o.status!=='delivered'?`<button onclick="confirmPickup('${o.id}')" style="flex:1;padding:11px;background:var(--green);color:var(--night);border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:pointer;"><i class="fas fa-box"></i> Prendre en charge</button>`:''}
+                        <button onclick="openOrder('${o.id}')" style="flex:1;padding:11px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;cursor:pointer;"><i class="fas fa-eye"></i> Détails</button>
+                    </div>
+                </div>
+            </div>`;
+        document.getElementById('scanStatus').textContent = '';
+    }
+
+    window.confirmPickup = async function(id) {
+        showLoad();
+        try {
+            await db.from('transport_orders_simple').update({
+                status:      'in_transit',
+                driver_id:   driver.id,
+                assigned_at: new Date().toISOString(),
+                picked_up_at:new Date().toISOString()
+            }).eq('id', id);
+            toast('success', '✅ Prise en charge confirmée !');
+            stopScan();
+            await loadMissions();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.openOrder = function(id) {
+        stopScan();
+        // Trouver et ouvrir la mission
+        const mission = missions?.find(m=>m.id===id);
+        if(mission) openMission(mission);
+        else toast('info', 'Allez dans Missions pour voir ce transport');
+    };
+
+    /* ── KM JOURNALIERS ── */
+    let vehiculeId = null;
+
+    async function loadVehicule() {
+        if(!driver) return;
+        // Chercher le véhicule assigné au chauffeur
+        const { data } = await db.from('vehicules')
+            .select('*').eq('chauffeur_id', driver.id).eq('actif', true).maybeSingle();
+        if(data) {
+            vehiculeId = data.id;
+            document.getElementById('kmCard').style.display = 'block';
+            // Charger km du jour si déjà saisi
+            const { data:km } = await db.from('vehicule_km')
+                .select('*').eq('vehicule_id', data.id)
+                .eq('date', new Date().toISOString().slice(0,10)).maybeSingle();
+            if(km) {
+                document.getElementById('kmDebut').value = km.km_debut||'';
+                document.getElementById('kmFin').value   = km.km_fin||'';
+                updateKmTotal();
+                const status = document.getElementById('kmStatus');
+                status.className = 'pc-status work';
+                status.textContent = `${km.km_parcourus||0} km`;
+            }
+        }
+    }
+
+    // Mise à jour temps réel
+    document.getElementById('kmDebut').addEventListener('input', updateKmTotal);
+    document.getElementById('kmFin').addEventListener('input', updateKmTotal);
+
+    function updateKmTotal() {
+        const debut = parseFloat(document.getElementById('kmDebut').value)||0;
+        const fin   = parseFloat(document.getElementById('kmFin').value)||0;
+        const total = fin > debut ? fin - debut : 0;
+        document.getElementById('kmTotal').textContent = total > 0 ? `${total} km` : '— km';
+    }
+
+    window.saveKm = async function() {
+        if(!vehiculeId) { toast('error','Aucun véhicule assigné'); return; }
+        const debut = parseFloat(document.getElementById('kmDebut').value)||0;
+        const fin   = parseFloat(document.getElementById('kmFin').value)||0;
+        if(!debut) { toast('error','Entrez le km de début'); return; }
+        if(fin && fin < debut) { toast('error','Km fin doit être > km début'); return; }
+
+        showLoad();
+        try {
+            const today = new Date().toISOString().slice(0,10);
+            const { error } = await db.from('vehicule_km').upsert([{
+                vehicule_id:  vehiculeId,
+                chauffeur_id: driver.id,
+                date:         today,
+                km_debut:     debut,
+                km_fin:       fin||debut
+            }], { onConflict: 'vehicule_id,date' });
+            if(error) throw error;
+
+            const total = fin > debut ? fin - debut : 0;
+            const status = document.getElementById('kmStatus');
+            status.className = 'pc-status work';
+            status.textContent = `${total} km`;
+            toast('success', `${total} km enregistrés ✓`);
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.logout = async function() {
+        stopGPS(); clearInterval(workTimer);
+        await db.auth.signOut();
+        driver=null; missions=[];
+        showScreen('login');
+    };
+
+    /* ── MISSIONS ── */
+    window.loadMissions = async function() {
+        if(!driver) return;
+        const { data } = await db.from('transport_orders_simple')
+            .select('*').eq('driver_id',driver.id).neq('status','delivered')
+            .order('created_at',{ascending:true});
+        missions = data||[];
+
+        const { data:done } = await db.from('transport_orders_simple')
+            .select('id').eq('driver_id',driver.id).eq('status','delivered')
+            .gte('delivered_at', today()+'T00:00:00');
+
+        document.getElementById('srMissions').textContent = missions.length;
+        document.getElementById('srDone').textContent     = done?.length||0;
+        const badge = document.getElementById('bnBadge');
+        if(missions.length>0) { badge.textContent=missions.length; badge.classList.add('show'); }
+        else badge.classList.remove('show');
+        renderMissions();
+    };
+
+    function renderMissions() {
+        const el = document.getElementById('missionsList');
+        if(!missions.length) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-ico">🎉</div><div class="empty-txt">Toutes vos missions sont terminées !<br>Excellent travail.</div></div>`;
+            return;
+        }
+        const sorted = [...missions].sort((a,b)=>{
+            if(a.priority==='urgent'&&b.priority!=='urgent') return -1;
+            if(b.priority==='urgent'&&a.priority!=='urgent') return 1;
+            return new Date(a.created_at)-new Date(b.created_at);
+        });
+        el.innerHTML = sorted.map(m => {
+            const st = m.priority==='urgent'?'urgent':(m.status||'pending');
+            const stl = {pending:'En attente',planned:'Planifié',urgent:'🔥 URGENT',in_transit:'En route'}[st]||st;
+            const isTransit = m.status==='in_transit';
+            return `<div class="mission-card ${st}">
+                <div class="mc-top">
+                    <span class="mc-num">${m.order_number||m.id.slice(0,8)}</span>
+                    <span class="mc-badge ${st}">${stl}</span>
+                </div>
+                <div class="mc-stop"><div class="mc-dot p"></div><div class="mc-addr">${shortAddrLine1(m.pickup_address)}</div></div>
+                <div class="mc-stop"><div class="mc-dot d"></div><div class="mc-addr">${shortAddr(m.delivery_address)}</div></div>
+                <div class="mc-footer">
+                    <button class="mc-btn nav" onclick="navMission('${m.id}')"><i class="fas fa-map"></i> Carte</button>
+                    ${!isTransit
+                        ? `<button class="mc-btn start" onclick="startMission('${m.id}')"><i class="fas fa-play"></i> Démarrer</button>`
+                        : `<button class="mc-btn deliver" onclick="openConfirm('${m.id}')"><i class="fas fa-check"></i> Livrer</button>`
+                    }
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function shortAddr(a) {
+        if(!a) return '—';
+        // Nettoyer les pipes (séparateurs internes) et afficher complet
+        return a.replace(/\|/g, ' · ').replace(/\s{2,}/g, ' ').trim();
+    }
+    function shortAddrLine1(a) {
+        if(!a) return '—';
+        // Première ligne seulement (avant la virgule) pour les listes
+        return a.replace(/\|/g,' ').split(',')[0].trim();
+    }
+
+    window.startMission = async function(id) {
+        showLoad();
+        try {
+            const { error } = await db.from('transport_orders_simple')
+                .update({status:'in_transit', picked_up_at:new Date().toISOString()}).eq('id',id);
+            if(error) throw error;
+            toast('success','Mission démarrée !');
+            await loadMissions();
+        } catch(e) { toast('error',e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.navMission = function(id) {
+        curMission = missions.find(m=>m.id===id);
+        if(!curMission) return;
+        document.getElementById('mpTitle').textContent = curMission.order_number||'Transport';
+        document.getElementById('mpRoute').innerHTML = `
+            <div class="mp-stop">
+                <div class="mp-dot p"></div>
+                <div style="flex:1;">
+                    <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;">Enlèvement</div>
+                    <div class="mp-addr">${shortAddr(curMission.pickup_address)}</div>
+                </div>
+            </div>
+            <div class="mp-stop">
+                <div class="mp-dot d"></div>
+                <div style="flex:1;">
+                    <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;">Livraison</div>
+                    ${curMission.destinataire_nom?`<div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px;">${curMission.destinataire_nom}</div>`:''}
+                    <div class="mp-addr">${shortAddr(curMission.delivery_address)}</div>
+                    ${curMission.destinataire_tel?`<div style="margin-top:4px;"><a href="tel:${curMission.destinataire_tel}" style="color:var(--blue);font-size:12px;text-decoration:none;">📞 ${curMission.destinataire_tel}</a></div>`:''}
+                </div>
+            </div>`;
+        document.getElementById('mpDeliverBtn').onclick = () => openConfirm(curMission.id);
+        showScreen('map');
+        setTimeout(() => { if(!dMap) initMap(); drawMission(curMission); }, 200);
+    };
+
+    /* ── MAP ── */
+    function initMap() {
+        dMap = L.map('driverMap',{zoomControl:false,attributionControl:false}).setView([46.5197,6.6323],12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(dMap);
+    }
+    function drawMission(m) {
+        if(!dMap) return;
+        if(rLine) dMap.removeLayer(rLine);
+        const pts=[];
+        if(m.pickup_lat)   { L.marker([m.pickup_lat,m.pickup_lng],{icon:L.divIcon({html:`<div style="width:12px;height:12px;background:#3b82f6;border:2px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,className:'',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(dMap); pts.push([m.pickup_lat,m.pickup_lng]); }
+        if(m.delivery_lat) { L.marker([m.delivery_lat,m.delivery_lng],{icon:L.divIcon({html:`<div style="width:12px;height:12px;background:#e8311a;border:2px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,className:'',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(dMap); pts.push([m.delivery_lat,m.delivery_lng]); }
+        if(pts.length>1) { rLine=L.polyline(pts,{color:'#22c55e',weight:3,dashArray:'8 4'}).addTo(dMap); dMap.fitBounds(pts,{padding:[60,60]}); }
+        if(myLat) {
+            if(dMarker) dMap.removeLayer(dMarker);
+            dMarker = L.marker([myLat,myLng],{icon:L.divIcon({html:`<div style="width:14px;height:14px;background:#f59e0b;border:3px solid white;border-radius:50%;box-shadow:0 0 10px rgba(245,158,11,0.6)"></div>`,className:'',iconSize:[14,14],iconAnchor:[7,7]})}).addTo(dMap);
+        }
+    }
+    window.openGPS = function() {
+        if(!curMission) return;
+        const addr = curMission.status==='in_transit' ? curMission.delivery_address : curMission.pickup_address;
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr||'')}&travelmode=driving`,'_blank');
+    };
+
+    /* ── POINTAGE ── */
+    async function loadTodayPointage() {
+        if(!driver) return;
+        const { data } = await db.from('pointages').select('*')
+            .eq('driver_id', driver.id).eq('date', today()).maybeSingle();
+        pointage = data;
+        renderPointage();
+    }
+
+    function renderPointage() {
+        const p = pointage;
+        document.getElementById('ptDebut').textContent  = fmt(p?.debut_travail);
+        document.getElementById('ptPauseD').textContent = fmt(p?.debut_pause);
+        document.getElementById('ptPauseF').textContent = fmt(p?.fin_pause);
+        document.getElementById('ptFin').textContent    = fmt(p?.fin_travail);
+
+        const btnStart  = document.getElementById('btnStart');
+        const btnPause  = document.getElementById('btnPause');
+        const btnResume = document.getElementById('btnResume');
+        const btnStop   = document.getElementById('btnStop');
+        const pcStatus  = document.getElementById('pcStatus');
+
+        // Reset
+        btnStart.disabled=false; btnPause.disabled=true;
+        btnResume.style.display='none'; btnPause.style.display='flex';
+        btnStop.disabled=true;
+        pcStatus.className='pc-status off'; pcStatus.textContent='Non pointé';
+
+        if(!p) { updateWorkTimer(0); return; }
+
+        if(p.debut_travail && !p.fin_travail) {
+            btnStart.disabled=true; btnStop.disabled=false;
+            if(p.debut_pause && !p.fin_pause) {
+                // En pause
+                btnPause.style.display='none'; btnResume.style.display='flex';
+                btnResume.disabled=false;
+                btnStop.disabled=true;
+                pcStatus.className='pc-status pause'; pcStatus.textContent='En pause';
+            } else {
+                // En travail
+                btnPause.disabled=false;
+                btnPause.style.display='flex';
+                btnResume.style.display='none';
+                btnStop.disabled=false;
+                pcStatus.className='pc-status work'; pcStatus.textContent='En service';
+                // Start timer
+                startWorkTimer(p.debut_travail, p.debut_pause, p.fin_pause);
+            }
+        } else if(p.fin_travail) {
+            btnStart.disabled=true; btnStop.disabled=true; btnPause.disabled=true;
+            pcStatus.className='pc-status off'; pcStatus.textContent='Journée terminée';
+            // Calculate hours
+            const ms = new Date(p.fin_travail) - new Date(p.debut_travail);
+            updateWorkTimer(Math.floor(ms/1000));
+        }
+    }
+
+    function startWorkTimer(debut, pauseDebut, pauseFin) {
+        clearInterval(workTimer);
+        workTimer = setInterval(() => {
+            const now = new Date();
+            let ms = now - new Date(debut);
+            // Subtract pause time
+            if(pauseDebut) {
+                const pauseEnd = pauseFin ? new Date(pauseFin) : now;
+                ms -= (pauseEnd - new Date(pauseDebut));
+            }
+            updateWorkTimer(Math.floor(ms/1000));
+        }, 1000);
+    }
+
+    function updateWorkTimer(secs) {
+        const h = Math.floor(secs/3600);
+        const m = Math.floor((secs%3600)/60);
+        document.getElementById('srHours').textContent = `${h}h${m.toString().padStart(2,'0')}`;
+    }
+
+    window.pointageAction = async function(action) {
+        if(!driver) return;
+        console.log('pointageAction:', action, 'pointage:', JSON.stringify(pointage));
+        showLoad();
+        try {
+            const now = new Date().toISOString();
+            if(action==='start') {
+                if(pointage) { toast('info','Journée déjà démarrée'); hideLoad(); return; }
+                // Insert pointage
+                const { error: insErr } = await db.from('pointages').insert([{
+                    driver_id: driver.id,
+                    date: today(),
+                    debut_travail: now,
+                    statut: 'en_cours'
+                }]);
+                if(insErr) throw insErr;
+                // Recharger depuis DB
+                const { data: fresh } = await db.from('pointages').select('*')
+                    .eq('driver_id', driver.id).eq('date', today()).single();
+                pointage = fresh;
+
+                // ── Passer les transports assignés en "in_transit" ──
+                const { data: assigned } = await db.from('transport_orders_simple')
+                    .select('id, order_number')
+                    .eq('driver_id', driver.id)
+                    .in('status', ['pending', 'planned'])
+                    .neq('admin_status', 'refused');
+
+                if(assigned?.length) {
+                    await db.from('transport_orders_simple')
+                        .update({ status: 'in_transit', picked_up_at: now })
+                        .in('id', assigned.map(o=>o.id));
+                    toast('success', `Bonne journée ! ☀️ — ${assigned.length} transport(s) en route`);
+                } else {
+                    toast('success','Bonne journée ! ☀️');
+                }
+                await loadMissions();
+            }
+            else if(action==='pause') {
+                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
+                const { error: upErr } = await db.from('pointages')
+                    .update({ debut_pause:now, statut:'pause' })
+                    .eq('id', pointage.id);
+                if(upErr) throw upErr;
+                // Recharger
+                const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
+                pointage = fresh;
+                toast('info','Bonne pause ! ☕');
+            }
+            else if(action==='resume') {
+                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
+                const pid = pointage.id;
+                const { error: upErr } = await db.from('pointages')
+                    .update({ fin_pause:now, statut:'en_cours' })
+                    .eq('id', pid);
+                if(upErr) throw upErr;
+                // Recharger
+                const { data: fresh } = await db.from('pointages').select('*').eq('id', pid).single();
+                pointage = fresh;
+                console.log('After resume reload:', JSON.stringify(pointage));
+                toast('success','Reprise du travail 💪');
+            }
+            else if(action==='stop') {
+                if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
+                // Calculate hours
+                const ms = new Date() - new Date(pointage.debut_travail);
+                let pauseMs = 0;
+                if(pointage.debut_pause && pointage.fin_pause)
+                    pauseMs = new Date(pointage.fin_pause) - new Date(pointage.debut_pause);
+                const heures = (ms - pauseMs) / 3600000;
+                const heuresSupp = Math.max(0, heures - 8.5);
+                const { error: upErr } = await db.from('pointages')
+                    .update({ fin_travail:now, statut:'termine',
+                        heures_travaillees: parseFloat(heures.toFixed(2)),
+                        heures_supp: parseFloat(heuresSupp.toFixed(2)) })
+                    .eq('id', pointage.id);
+                if(upErr) throw upErr;
+                // Recharger
+                const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
+                pointage = fresh;
+                clearInterval(workTimer);
+                toast('success',`Journée terminée — ${heures.toFixed(1)}h travaillées ✓`);
+            }
+            renderPointage();
+        } catch(e) { toast('error',e.message); }
+        finally { hideLoad(); }
+    };
+
+    /* ── RH ── */
+    async function loadRH() {
+        if(!driver) return;
+        // Soldes
+        const { data:solde } = await db.from('soldes_rh').select('*').eq('driver_id',driver.id).maybeSingle();
+        if(solde) {
+            document.getElementById('soldeVac').innerHTML  = `${solde.solde_vacances||20}<em> j</em>`;
+            document.getElementById('soldeComp').innerHTML = `${solde.jours_comp||0}<em> j</em>`;
+            document.getElementById('soldeHSupp').innerHTML= `${solde.heures_supp_total||0}<em> h</em>`;
+        }
+
+        // Pointages récents
+        const { data:pts } = await db.from('pointages').select('*')
+            .eq('chauffeur_id',driver.id).order('date',{ascending:false}).limit(7);
+        const ptEl = document.getElementById('pointagesList');
+        ptEl.innerHTML = pts?.length ? pts.map(p => {
+            const h  = p.heures_travaillees||0;
+            const hs = p.heures_supp||0;
+            const d  = new Date(p.date);
+            const dayName = d.toLocaleDateString('fr-CH',{weekday:'short'}).toUpperCase();
+            const dayNum  = d.getDate();
+            return `<div class="pointage-item">
+                <div class="pi-date">${dayNum}<small>${dayName}</small></div>
+                <div class="pi-times">
+                    <div class="pi-row"><span>↗</span>${fmt(p.debut_travail)} <span>↙</span>${fmt(p.fin_travail)}</div>
+                    ${p.debut_pause?`<div class="pi-row" style="margin-top:2px;"><span>☕</span>${fmt(p.debut_pause)} → ${fmt(p.fin_pause||null)}</div>`:''}
+                </div>
+                <div class="pi-hours">${h.toFixed(1)}<small>h travaillé</small>${hs>0?`<div style="font-size:12px;" class="pi-supp">+${hs.toFixed(1)}h supp</div>`:''}</div>
+            </div>`;
+        }).join('')
+        : '<div class="empty-state"><div class="empty-ico">📋</div><div class="empty-txt">Aucun pointage</div></div>';
+
+        // Congés
+        const { data:cgs } = await db.from('conges').select('*')
+            .eq('driver_id',driver.id).order('created_at',{ascending:false}).limit(10);
+        const cgEl = document.getElementById('congesList');
+        const typeLabel = { vacances:'🏖️ Vacances', maladie:'🤒 Maladie', compensation:'⚖️ Compensation', autre:'📌 Autre' };
+        const statLabel = { en_attente:'En attente', approuve:'Approuvé', refuse:'Refusé' };
+        cgEl.innerHTML = cgs?.length ? cgs.map(c => `
+            <div class="conge-item">
+                <div class="ci-top">
+                    <span class="ci-type">${typeLabel[c.type]||c.type}</span>
+                    <span class="ci-status ${c.statut}">${statLabel[c.statut]||c.statut}</span>
+                </div>
+                <div class="ci-dates">${new Date(c.date_debut).toLocaleDateString('fr-CH')} → ${new Date(c.date_fin).toLocaleDateString('fr-CH')} · ${c.nb_jours||'?'} jour(s)</div>
+            </div>`).join('')
+        : '<div class="empty-state"><div class="empty-ico">📅</div><div class="empty-txt">Aucune demande de congé</div></div>';
+    }
+
+    /* ── MODAL CONGÉ ── */
+    window.openModalConge = function() {
+        // Set default dates
+        const t = today();
+        document.getElementById('congeDebut').value = t;
+        document.getElementById('congeFin').value   = t;
+        openModal('modalConge');
+    };
+
+    document.getElementById('formConge').addEventListener('submit', async e => {
+        e.preventDefault();
+        if(!driver) return;
+        const type   = document.getElementById('congeType').value;
+        const debut  = document.getElementById('congeDebut').value;
+        const fin    = document.getElementById('congeFin').value;
+        const note   = document.getElementById('congeNote').value.trim();
+        if(!debut||!fin||new Date(debut)>new Date(fin)) { toast('error','Dates invalides'); return; }
+        const nbJours = Math.round((new Date(fin)-new Date(debut))/(1000*60*60*24))+1;
+        showLoad();
+        try {
+            const { error } = await db.from('conges').insert([{
+                driver_id: driver.id, type, date_debut:debut, date_fin:fin,
+                nb_jours:nbJours, note:note||null, statut:'en_attente'
+            }]);
+            if(error) throw error;
+            toast('success','Demande envoyée ✓');
+            closeModal('modalConge');
+            loadRH();
+        } catch(err) { toast('error',err.message); }
+        finally { hideLoad(); }
+    });
+
+    /* ── CONFIRM DELIVERY ── */
+    window.openConfirm = function(id) {
+        curMission = missions.find(m=>m.id===id)||curMission;
+        if(!curMission) return;
+        document.getElementById('confirmInfo').innerHTML = `
+            <div class="co-num">${curMission.order_number||'Transport'}</div>
+            <div class="co-addr">
+                <div style="width:7px;height:7px;border-radius:2px;background:var(--red);transform:rotate(45deg);flex-shrink:0;margin-top:3px;"></div>
+                <div>
+                    <div style="font-weight:600;color:var(--white);">${curMission.destinataire_nom||''}</div>
+                    <div style="font-size:12px;color:var(--muted2);">${shortAddr(curMission.delivery_address)}</div>
+                </div>
+            </div>
+            ${curMission.destinataire_nom?`<div class="co-addr" style="margin-top:4px;"><i class="fas fa-user" style="color:var(--muted);width:7px;"></i> ${curMission.destinataire_nom}</div>`:''}`;
+        clearSig();
+        document.getElementById('photoPreview').style.display='none';
+        document.getElementById('photoBtn').style.display='flex';
+        document.getElementById('deliveryNote').value='';
+        document.getElementById('poidsReel').value='';
+        hasSig=false;
+        showScreen('confirm');
+        setTimeout(initSig, 150);
+    };
+
+    /* ── SIGNATURE ── */
+    function initSig() {
+        const canvas = document.getElementById('sigCanvas');
+        if(!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        // Taille physique = taille CSS (pas de devicePixelRatio — plus simple et fiable)
+        canvas.width  = rect.width  || 300;
+        canvas.height = rect.height || 150;
+        sigCtx = canvas.getContext('2d');
+        sigCtx.strokeStyle = '#ffffff';
+        sigCtx.lineWidth   = 2.5;
+        sigCtx.lineCap     = 'round';
+        sigCtx.lineJoin    = 'round';
+        sigCtx.fillStyle   = '#18181f'; // fond sombre
+        sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        function getPos(e) {
+            const r = canvas.getBoundingClientRect();
+            const src = e.touches ? e.touches[0] : e;
+            return { x: src.clientX - r.left, y: src.clientY - r.top };
+        }
+
+        canvas.onmousedown = e => {
+            drawing = true;
+            const p = getPos(e);
+            sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
+        };
+        canvas.onmousemove = e => {
+            if(!drawing) return;
+            const p = getPos(e);
+            sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
+            hasSig = true;
+            canvas.classList.add('signed');
+        };
+        canvas.onmouseup = () => { drawing = false; };
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault(); drawing = true;
+            const p = getPos(e);
+            sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
+        }, {passive: false});
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if(!drawing) return;
+            const p = getPos(e);
+            sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
+            hasSig = true;
+            canvas.classList.add('signed');
+        }, {passive: false});
+        canvas.addEventListener('touchend', () => { drawing = false; }, {passive: false});
+    }
+
+    window.clearSig = function() {
+        const c = document.getElementById('sigCanvas');
+        if(!c || !sigCtx) return;
+        sigCtx.fillStyle = '#18181f';
+        sigCtx.fillRect(0, 0, c.width, c.height);
+        c.classList.remove('signed');
+        hasSig = false;
+    };
+
+    window.handlePhoto = function(input) {
+        const f = input.files[0];
+        if(!f) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const raw = e.target.result;
+            // Compresser via canvas
+            const img = new Image();
+            img.onload = function() {
+                try {
+                    const MAX = 600;
+                    let w = img.width, h = img.height;
+                    if(w > MAX) { h = Math.round(h*MAX/w); w = MAX; }
+                    if(h > MAX) { w = Math.round(w*MAX/h); h = MAX; }
+                    const cv = document.createElement('canvas');
+                    cv.width = w; cv.height = h;
+                    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+                    const b64 = cv.toDataURL('image/jpeg', 0.65);
+                    window._photoB64 = b64;
+                    const preview = document.getElementById('photoPreview');
+                    preview.src = b64;
+                    preview.style.display = 'block';
+                    document.getElementById('photoBtn').style.display = 'none';
+                    toast('success', '📷 Photo OK ' + Math.round(b64.length/1024) + 'kb');
+                } catch(err) {
+                    // Fallback sans compression
+                    window._photoB64 = raw;
+                    const preview = document.getElementById('photoPreview');
+                    preview.src = raw;
+                    preview.style.display = 'block';
+                    document.getElementById('photoBtn').style.display = 'none';
+                    toast('success', '📷 Photo ajoutée');
+                }
+            };
+            img.onerror = function() {
+                window._photoB64 = raw;
+                toast('info', '📷 Photo chargée');
+            };
+            img.src = raw;
+        };
+        reader.readAsDataURL(f);
+    };
+
+        window.confirmDelivery = async function() {
+        if(!curMission) return;
+        showLoad();
+        try {
+            const now = new Date().toISOString();
+            const note      = document.getElementById('deliveryNote').value.trim();
+            const poidsReel = parseFloat(document.getElementById('poidsReel').value)||null;
+
+            // Récupérer signature
+            // Signature — lire directement le canvas
+            let signatureData = null;
+            if(hasSig) {
+                const sigC = document.getElementById('sigCanvas');
+                if(sigC) signatureData = sigC.toDataURL('image/jpeg', 0.8);
+            }
+
+            // Photo — stockée dans window._photoB64 par handlePhoto
+            const photoData = window._photoB64 || null;
+
+            // 1. Mettre à jour le statut du transport
+            const { error } = await db.from('transport_orders_simple').update({
+                status:        'delivered',
+                delivered_at:   now,
+                instructions:   note || curMission.instructions || null,
+                poids_reel:     poidsReel
+            }).eq('id', curMission.id);
+            if(error) throw error;
+
+            // 2. Enregistrement livraison avec photo + signature
+            const deliveryRecord = {
+                order_id:        curMission.id,
+                order_number:    curMission.order_number,
+                driver_id:       driver.id,
+                delivered_at:    now,
+                delivery_address:curMission.delivery_address,
+                destinataire_nom:curMission.destinataire_nom || null,
+                note_livraison:  note || null,
+                poids_reel:      poidsReel,
+                has_signature:   hasSig,
+                signature_data:  signatureData,
+                photo_data:      photoData,
+                gps_lat:         myLat,
+                gps_lng:         myLng,
+                created_at:      now
+            };
+
+            try {
+                // Upsert pour éviter les doublons (trigger auto peut déjà avoir créé la ligne)
+                const { error: e2 } = await db.from('deliveries')
+                    .upsert([deliveryRecord], { onConflict: 'order_id' });
+                if(e2) {
+                    // Si upsert échoue essayer insert simple
+                    const { error: e3 } = await db.from('deliveries').insert([deliveryRecord]);
+                    if(e3) toast('error', 'Photo non sauvegardée: ' + e3.message);
+                }
+            } catch(e2) {
+                toast('error', 'Erreur livraison: ' + e2.message);
+            }
+
+            hideLoad();
+            window._photoB64 = null; // reset photo
+            window._sigB64   = null; // reset signature
+            document.getElementById('successMsg').textContent = `Transport ${curMission.order_number||''} livré avec succès !`;
+            showScreen('success');
+            await loadMissions();
+
+        } catch(e) { hideLoad(); toast('error',e.message); }
+    };
+
+    /* ── GPS ── */
+    function startGPS() {
+        if(!navigator.geolocation) return;
+        gpsWatch = navigator.geolocation.watchPosition(pos => {
+            myLat=pos.coords.latitude; myLng=pos.coords.longitude;
+            document.getElementById('gpsDot').classList.add('on');
+            if(dMap&&myLat) {
+                if(dMarker) dMap.removeLayer(dMarker);
+                dMarker=L.marker([myLat,myLng],{icon:L.divIcon({html:`<div style="width:14px;height:14px;background:#f59e0b;border:3px solid white;border-radius:50%;"></div>`,className:'',iconSize:[14,14],iconAnchor:[7,7]})}).addTo(dMap);
+            }
+        }, ()=>document.getElementById('gpsDot').classList.remove('on'), {enableHighAccuracy:true,timeout:10000,maximumAge:5000});
+    }
+    function stopGPS() { if(gpsWatch) navigator.geolocation.clearWatch(gpsWatch); }
+
+    /* ── NOTIFICATIONS ── */
+    let notifications = [];
+
+    async function initNotifications(userId) {
+        // Demander permission push
+        if ('Notification' in window && Notification.permission === 'default') {
+            setTimeout(async () => {
+                await window.LémanPush?.subscribePush(userId);
+            }, 3000);
+        } else if (Notification.permission === 'granted') {
+            await window.LémanPush?.subscribePush(userId);
+        }
+
+        // Charger notifications existantes
+        await loadNotifications(userId);
+
+        // Écouter nouvelles notifications en temps réel
+        window.SUPABASE_CLIENT.channel('notif_' + userId)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${userId}`
+            }, async (payload) => {
+                const notif = payload.new;
+                console.log('[Notif] Nouvelle:', notif.title);
+
+                // Afficher notification push locale
+                await window.LémanPush?.showLocalNotification(
+                    notif.title,
+                    notif.body || '',
+                    { tag: notif.id, requireInteraction: true }
+                );
+
+                // Vibrer
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+                // Recharger liste
+                await loadNotifications(userId);
+                await loadMissions();
+
+                // Toast in-app
+                toast('info', `🔔 ${notif.title}`);
+            })
+            .subscribe();
+    }
+
+    async function loadNotifications(userId) {
+        const { data } = await window.SUPABASE_CLIENT
+            .from('notifications')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        notifications = data || [];
+        const unread = notifications.filter(n => !n.read).length;
+
+        // Badge
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            badge.textContent = unread;
+            badge.style.display = unread > 0 ? 'grid' : 'none';
+        }
+
+        renderNotifications();
+    }
+
+    function renderNotifications() {
+        const el = document.getElementById('notifList');
+        if (!el) return;
+        if (!notifications.length) {
+            el.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted);">Aucune notification</div>';
+            return;
+        }
+        el.innerHTML = notifications.map(n => {
+            const data = (() => { try { return JSON.parse(n.data||'{}'); } catch(e){ return {}; } })();
+            const orderId = data.order_id || data.orderId || null;
+            const time = new Date(n.created_at).toLocaleTimeString('fr-CH',{
+                timeZone:'Europe/Zurich', hour:'2-digit', minute:'2-digit'
+            });
+            return `<div style="padding:10px 12px;border-radius:10px;margin-bottom:4px;background:${n.read?'transparent':'rgba(232,49,26,0.06)'};border:1px solid ${n.read?'transparent':'rgba(232,49,26,0.15)'};cursor:pointer;"
+                onclick="handleNotifClick('${n.id}','${orderId||''}')">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                    <div style="flex:1;">
+                        <div style="font-size:13px;font-weight:600;color:${n.read?'var(--muted2)':'var(--white)'};margin-bottom:2px;">${n.title}</div>
+                        <div style="font-size:12px;color:var(--muted);line-height:1.4;">${n.body||''}</div>
+                        <div style="font-size:10px;color:var(--muted);margin-top:4px;">🕐 ${time}</div>
+                    </div>
+                    ${!n.read?'<div style="width:8px;height:8px;background:var(--red);border-radius:50%;flex-shrink:0;margin-top:4px;"></div>':''}
+                </div>
+                ${orderId?`<div style="margin-top:6px;">
+                    <button onclick="event.stopPropagation();openMissionById('${orderId}')" 
+                        style="background:var(--red);color:white;border:none;border-radius:7px;padding:5px 12px;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-truck"></i> Voir la mission
+                    </button>
+                </div>`:''}
+            </div>`;
+        }).join('');
+    }
+
+    window.toggleNotifs = function() {
+        const dd = document.getElementById('notifDropdown');
+        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+    };
+
+    window.handleNotifClick = async function(notifId, orderId) {
+        await window.SUPABASE_CLIENT.from('notifications').update({read:true}).eq('id',notifId);
+        if(driver) await loadNotifications(driver.id);
+        // Fermer dropdown
+        const dd = document.getElementById('notifDropdown');
+        if(dd) dd.style.display = 'none';
+    };
+
+    window.openMissionById = async function(orderId) {
+        // Fermer dropdown
+        const dd = document.getElementById('notifDropdown');
+        if(dd) dd.style.display = 'none';
+
+        // Chercher la mission dans la liste
+        let mission = missions?.find(m => m.id === orderId);
+        if(!mission) {
+            // Charger depuis DB si pas en mémoire
+            const { data } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
+            mission = data;
+        }
+        if(mission) {
+            showScreen('home');
+            setTimeout(() => openMission(mission), 200);
+        } else {
+            toast('error', 'Mission introuvable');
+        }
+    };
+
+    window.markRead = async function(id) {
+        await window.SUPABASE_CLIENT.from('notifications').update({ read: true }).eq('id', id);
+        if (driver) await loadNotifications(driver.id);
+    };
+
+    window.markAllRead = async function() {
+        if (!driver) return;
+        await window.SUPABASE_CLIENT.from('notifications').update({ read: true }).eq('user_id', driver.id);
+        await loadNotifications(driver.id);
+    };
+
+    // Fermer dropdown en cliquant ailleurs
+    document.addEventListener('click', e => {
+        const dd = document.getElementById('notifDropdown');
+        const bell = document.getElementById('btnNotifBell');
+        if (dd && bell && !dd.contains(e.target) && !bell.contains(e.target)) {
+            dd.style.display = 'none';
+        }
+    });
+
+    /* ── AUTO-REFRESH ── */
+    // Actualiser les missions toutes les 30 secondes
+    setInterval(async () => {
+        if(driver) {
+            await loadMissions();
+            await loadNotifications(driver.id);
+        }
+    }, 30000);
+
+    /* ── INIT ── */
+    checkSession();
+})();
+</script>
+</body>
+</html>
