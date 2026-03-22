@@ -1,83 +1,81 @@
 // ============================================================
-//  sw.js — Service Worker Léman Driver
-//  À placer à la RACINE du site (même niveau que index.html)
+//  sw.js — Service Worker Léman Driver v3
 // ============================================================
+const CACHE_NAME = 'leman-driver-v3';
 
-const CACHE_NAME = 'leman-driver-v1';
-const VAPID_PUBLIC_KEY = 'BOKiPuVJhpBqbIOH-5zjqUEFtx5VJ0HBHTtXrm5dIb-b7qDeJLXuEZph6wYgx1BCQ6qe-dGDyrRATUar4QS-lgg';
-
-// ── Installation ──
+// Installation
 self.addEventListener('install', e => {
-    console.log('[SW] Installé');
+    console.log('[SW] Installé v3');
     self.skipWaiting();
 });
 
-// ── Activation ──
+// Activation — vider TOUS les anciens caches
 self.addEventListener('activate', e => {
-    console.log('[SW] Activé');
-    e.waitUntil(clients.claim());
-});
-
-// ── Push Notification reçue ──
-self.addEventListener('push', e => {
-    console.log('[SW] Push reçu:', e.data?.text());
-
-    let data = { title: 'Léman Driver', body: 'Nouvelle notification', icon: '/icon-192.png', badge: '/icon-72.png', tag: 'leman-notif', data: {} };
-
-    try {
-        if (e.data) data = { ...data, ...JSON.parse(e.data.text()) };
-    } catch(err) {
-        if (e.data) data.body = e.data.text();
-    }
-
-    const options = {
-        body:    data.body,
-        icon:    data.icon   || '/icon-192.png',
-        badge:   data.badge  || '/icon-72.png',
-        tag:     data.tag    || 'leman-notif',
-        vibrate: [200, 100, 200],
-        requireInteraction: data.requireInteraction || false,
-        data:    data.data   || {},
-        actions: data.actions || [
-            { action: 'open',    title: '📱 Ouvrir l\'app' },
-            { action: 'dismiss', title: 'Ignorer' }
-        ]
-    };
-
+    console.log('[SW] Activé v3 — nettoyage caches');
     e.waitUntil(
-        self.registration.showNotification(data.title, options)
+        caches.keys()
+            .then(keys => Promise.all(keys.map(k => {
+                console.log('[SW] Suppression cache:', k);
+                return caches.delete(k);
+            })))
+            .then(() => clients.claim())
     );
 });
 
-// ── Clic sur notification ──
-self.addEventListener('notificationclick', e => {
-    console.log('[SW] Notification cliquée:', e.action);
-    e.notification.close();
+// Fetch — JAMAIS cacher les HTML, toujours réseau
+self.addEventListener('fetch', e => {
+    const req = e.request;
+    const url = new URL(req.url);
 
-    if (e.action === 'dismiss') return;
+    // Pages HTML = toujours réseau
+    if (req.mode === 'navigate' ||
+        req.destination === 'document' ||
+        url.pathname.endsWith('.html') ||
+        url.pathname === '/') {
+        e.respondWith(
+            fetch(req, { cache: 'no-store' })
+                .catch(() => new Response('Hors ligne', { status: 503 }))
+        );
+        return;
+    }
 
-    const urlToOpen = e.notification.data?.url || '/admin/driver-app.html';
+    // Tout le reste = réseau d'abord
+    e.respondWith(
+        fetch(req).catch(() => caches.match(req))
+    );
+});
 
+// Push notifications
+self.addEventListener('push', e => {
+    let data = { title: 'Léman Courses', body: 'Nouvelle notification' };
+    try { if(e.data) data = { ...data, ...JSON.parse(e.data.text()) }; } catch(err) {}
     e.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-            // Si l'app est déjà ouverte, la focus
-            for (const client of clientList) {
-                if (client.url.includes('driver-app') && 'focus' in client) {
-                    return client.focus();
-                }
-            }
-            // Sinon ouvrir une nouvelle fenêtre
-            if (clients.openWindow) {
-                return clients.openWindow(urlToOpen);
-            }
+        self.registration.showNotification(data.title, {
+            body: data.body,
+            icon: '/icon-192.png',
+            badge: '/icon-72.png',
+            tag: 'leman-notif',
+            vibrate: [200, 100, 200],
+            data: data.data || {}
         })
     );
 });
 
-// ── Message depuis l'app ──
+// Clic notification
+self.addEventListener('notificationclick', e => {
+    e.notification.close();
+    if(e.action === 'dismiss') return;
+    const url = e.notification.data?.url || '/admin/driver-app.html';
+    e.waitUntil(
+        clients.matchAll({ type:'window', includeUncontrolled:true }).then(list => {
+            for(const c of list) {
+                if(c.url.includes('driver-app') && 'focus' in c) return c.focus();
+            }
+            if(clients.openWindow) return clients.openWindow(url);
+        })
+    );
+});
+
 self.addEventListener('message', e => {
-    if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
-    if (e.data?.type === 'PING') {
-        e.source?.postMessage({ type: 'PONG', timestamp: Date.now() });
-    }
+    if(e.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
