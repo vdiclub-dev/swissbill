@@ -856,6 +856,23 @@
         }
     });
 
+    /* ── Redirection selon rôle ── */
+    function redirectByRole(role) {
+        if (role === 'client')         window.location.replace('/admin/client/');
+        else if (role === 'chauffeur') window.location.replace('/admin/driver-app.html');
+        else                           window.location.replace('/admin/dashboard.html');
+    }
+
+    /* ── Vérifier session existante au chargement ── */
+    (async () => {
+        try {
+            const { data: { session } } = await db.auth.getSession();
+            if (!session) return;
+            const { data: user } = await db.from('utilisateurs').select('role').eq('id', session.user.id).single();
+            if (user?.role) redirectByRole(user.role);
+        } catch (e) { /* pas de session valide */ }
+    })();
+
     /* ── Connexion ── */
     async function doLogin(email, password) {
         showLoad();
@@ -865,21 +882,16 @@
             const { data: user } = await db.from('utilisateurs').select('role').eq('id', data.user.id).single();
             const role = user?.role || 'client';
             toast('success', 'Connexion réussie…');
-            setTimeout(() => {
-                if (role === 'client')         { window.open('/admin/client/','_blank'); return; }
-                else if (role === 'chauffeur') { window.open('/admin/driver-app.html','_blank'); return; }
-                else                           { window.open('/admin/dashboard.html','_blank'); return; }
-            }, 600);
+            setTimeout(() => redirectByRole(role), 800);
         } catch (err) {
             toast('error', err.message || 'Email ou mot de passe incorrect');
-        } finally {
             hideLoad();
         }
     }
 
-    document.getElementById('formLogin').addEventListener('submit', async e => {
+    document.getElementById('formLogin').addEventListener('submit', e => {
         e.preventDefault();
-        await doLogin(
+        doLogin(
             document.getElementById('loginEmail').value.trim(),
             document.getElementById('loginPassword').value
         );
@@ -894,15 +906,14 @@
             const { data, error } = await db.auth.signInWithPassword({ email, password });
             if (error) throw error;
             const { data: user } = await db.from('utilisateurs').select('role').eq('id', data.user.id).single();
-            if (!user || user.role !== 'chauffeur') {
+            if (!user || !['chauffeur','admin','super_admin'].includes(user.role)) {
                 await db.auth.signOut();
                 throw new Error('Accès réservé aux chauffeurs');
             }
             toast('success', 'Bienvenue ! Chargement de vos missions…');
-            setTimeout(() => { window.open('/admin/driver-app.html','_blank'); }, 600);
+            setTimeout(() => { window.location.replace('/admin/driver-app.html'); }, 800);
         } catch (err) {
             toast('error', err.message || 'Email ou mot de passe incorrect');
-        } finally {
             hideLoad();
         }
     });

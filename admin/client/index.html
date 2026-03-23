@@ -661,18 +661,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Vérifier session existante
+    // Vérifier session existante — redirection selon rôle
     if(window.SUPABASE_CLIENT) {
         window.SUPABASE_CLIENT.auth.getSession().then(function(res) {
             var session = res.data && res.data.session;
             if(!session) return;
             window.SUPABASE_CLIENT.from('utilisateurs').select('role').eq('id', session.user.id).single().then(function(r) {
                 var role = r.data && r.data.role || 'client';
-                if(role === 'client') window.location.replace('portal.html');
+                redirectByRole(role);
             });
         });
     }
 });
+
+function redirectByRole(role) {
+    if(role === 'client')        window.location.replace('portal.html');
+    else if(role === 'chauffeur') window.location.replace('/admin/driver-app.html');
+    else                          window.location.replace('/admin/dashboard.html');
+}
 
 async function doLogin(e) {
     e.preventDefault();
@@ -689,9 +695,7 @@ async function doLogin(e) {
         if(res.error) throw res.error;
         var r2   = await window.SUPABASE_CLIENT.from('utilisateurs').select('role').eq('id', res.data.user.id).single();
         var role = r2.data && r2.data.role || 'client';
-        if(role === 'client')        window.location.replace('portal.html');
-        else if(role === 'chauffeur'){ window.open('../../admin/driver-app.html','_blank'); closeModal(); btn.textContent='Se connecter'; btn.disabled=false; }
-        else                         { window.open('../../admin/dashboard.html','_blank'); closeModal(); btn.textContent='Se connecter'; btn.disabled=false; }
+        redirectByRole(role);
     } catch(err) {
         errEl.textContent = '❌ ' + (err.message || 'Email ou mot de passe incorrect');
         btn.textContent = 'Se connecter';
