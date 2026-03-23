@@ -626,69 +626,77 @@
     </div>
 </div>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../config.js"></script>
 <script>
-(function(){
-    // Modal
-    const openModal  = () => { document.getElementById('modalLogin').classList.add('open'); setTimeout(()=>document.getElementById('loginEmail').focus(),100); };
-    const closeModal = () => { document.getElementById('modalLogin').classList.remove('open'); };
-    window.openModal  = openModal;
-    window.closeModal = closeModal;
+function openModal() {
+    document.getElementById('modalLogin').style.display = 'flex';
+    setTimeout(function(){ document.getElementById('loginEmail').focus(); }, 100);
+}
+function closeModal() {
+    document.getElementById('modalLogin').style.display = 'none';
+}
 
-    // Attacher tous les boutons "Mon espace"
-    document.querySelectorAll('.open-modal-btn').forEach(btn => {
+document.addEventListener('DOMContentLoaded', function() {
+    // Boutons login
+    document.querySelectorAll('.open-modal-btn').forEach(function(btn) {
         btn.addEventListener('click', openModal);
     });
-    document.getElementById('modalLogin').addEventListener('click', e => { if(e.target===document.getElementById('modalLogin')) closeModal(); });
-    document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
 
-    // Login
-    window.doLogin = async function(e) {
-        e.preventDefault();
-        const email = document.getElementById('loginEmail').value.trim();
-        const pwd   = document.getElementById('loginPwd').value;
-        const errEl = document.getElementById('msgError');
-        const btn   = document.getElementById('btnSubmit');
-        errEl.textContent = '';
-        btn.textContent = 'Connexion…';
-        btn.disabled = true;
+    // Fermer modal en cliquant fond
+    document.getElementById('modalLogin').addEventListener('click', function(e) {
+        if(e.target === document.getElementById('modalLogin')) closeModal();
+    });
 
-        try {
-            if(!window.SUPABASE_CLIENT) {
-                document.getElementById('msgError').textContent = '❌ Erreur de configuration — rechargez la page';
-                btn.textContent = 'Se connecter'; btn.disabled = false;
-                return;
-            }
-            const db = window.SUPABASE_CLIENT;
-            const { data, error } = await db.auth.signInWithPassword({ email, password: pwd });
-            if(error) throw error;
-
-            const { data: user } = await db.from('utilisateurs').select('role').eq('id', data.user.id).single();
-            const role = user?.role || 'client';
-
-            if(role === 'client')         { window.location.replace('portal.html'); return; }
-            else if(role === 'chauffeur') { window.open('../../admin/driver-app.html','_blank'); closeModal(); return; }
-            else                          { window.open('../../admin/dashboard.html','_blank'); closeModal(); return; }
-        } catch(err) {
-            errEl.textContent = '❌ ' + (err.message || 'Email ou mot de passe incorrect');
-            btn.textContent = 'Se connecter';
-            btn.disabled = false;
-        }
-    };
-
-    // Vérifier session existante
-    (async function checkSession() {
-        if(!window.SUPABASE_CLIENT) return;
-        const { data:{ session } } = await window.SUPABASE_CLIENT.auth.getSession();
-        if(session) {
-            const { data:user } = await window.SUPABASE_CLIENT.from('utilisateurs').select('role').eq('id',session.user.id).single();
-            const role = user?.role || 'client';
-            if(role === 'client')         { window.location.replace('portal.html'); return; }
-            else if(role === 'chauffeur') { window.open('../../admin/driver-app.html','_blank'); closeModal(); return; }
-            else                          { window.open('../../admin/dashboard.html','_blank'); closeModal(); return; }
-        }
-    })();
+    // Fermer avec Echap
+    document.addEventListener('keydown', function(e) {
+        if(e.key === 'Escape') closeModal();
+    });
 
     // Smooth scroll
-    document.querySelectorAll('a
+    document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+        a.addEventListener('click', function(e) {
+            var target = document.querySelector(a.getAttribute('href'));
+            if(target) { e.preventDefault(); target.scrollIntoView({behavior:'smooth'}); }
+        });
+    });
+
+    // Vérifier session existante
+    if(window.SUPABASE_CLIENT) {
+        window.SUPABASE_CLIENT.auth.getSession().then(function(res) {
+            var session = res.data && res.data.session;
+            if(!session) return;
+            window.SUPABASE_CLIENT.from('utilisateurs').select('role').eq('id', session.user.id).single().then(function(r) {
+                var role = r.data && r.data.role || 'client';
+                if(role === 'client') window.location.replace('portal.html');
+            });
+        });
+    }
+});
+
+async function doLogin(e) {
+    e.preventDefault();
+    var email  = document.getElementById('loginEmail').value.trim();
+    var pwd    = document.getElementById('loginPwd').value;
+    var errEl  = document.getElementById('msgError');
+    var btn    = document.getElementById('btnSubmit');
+    errEl.textContent = '';
+    btn.textContent = 'Connexion…';
+    btn.disabled = true;
+    try {
+        if(!window.SUPABASE_CLIENT) throw new Error('Configuration manquante — rechargez la page');
+        var res = await window.SUPABASE_CLIENT.auth.signInWithPassword({ email: email, password: pwd });
+        if(res.error) throw res.error;
+        var r2   = await window.SUPABASE_CLIENT.from('utilisateurs').select('role').eq('id', res.data.user.id).single();
+        var role = r2.data && r2.data.role || 'client';
+        if(role === 'client')        window.location.replace('portal.html');
+        else if(role === 'chauffeur'){ window.open('../../admin/driver-app.html','_blank'); closeModal(); btn.textContent='Se connecter'; btn.disabled=false; }
+        else                         { window.open('../../admin/dashboard.html','_blank'); closeModal(); btn.textContent='Se connecter'; btn.disabled=false; }
+    } catch(err) {
+        errEl.textContent = '❌ ' + (err.message || 'Email ou mot de passe incorrect');
+        btn.textContent = 'Se connecter';
+        btn.disabled = false;
+    }
+}
+</script></body>
+</html>
