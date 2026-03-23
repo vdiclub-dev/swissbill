@@ -539,6 +539,46 @@
 </div>
 
 <!-- ═══ BOTTOM NAV ═══ -->
+<!-- ═══ MODAL REFUS MISSION ═══ -->
+<div id="modalRefuse" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:3000;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--night3);border:1.5px solid rgba(232,49,26,0.3);border-radius:22px;padding:28px;width:100%;max-width:340px;">
+        <div style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;color:var(--red);margin-bottom:16px;">
+            <i class="fas fa-times-circle"></i> REFUSER CE TRANSPORT
+        </div>
+        <input type="hidden" id="refuseOrderId">
+        <div style="font-size:12px;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Motif du refus *</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-radius:10px;cursor:pointer;border:1px solid var(--border2);">
+                <input type="radio" name="refuseMotif" value="Adresse inaccessible" style="accent-color:var(--red)"> Adresse inaccessible
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-radius:10px;cursor:pointer;border:1px solid var(--border2);">
+                <input type="radio" name="refuseMotif" value="Client absent" style="accent-color:var(--red)"> Client absent
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-radius:10px;cursor:pointer;border:1px solid var(--border2);">
+                <input type="radio" name="refuseMotif" value="Colis endommagé" style="accent-color:var(--red)"> Colis endommagé
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-radius:10px;cursor:pointer;border:1px solid var(--border2);">
+                <input type="radio" name="refuseMotif" value="Véhicule en panne" style="accent-color:var(--red)"> Véhicule en panne
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-radius:10px;cursor:pointer;border:1px solid var(--border2);">
+                <input type="radio" name="refuseMotif" value="Autre" style="accent-color:var(--red)"> Autre
+            </label>
+        </div>
+        <input type="text" id="refuseNote" placeholder="Précisez si nécessaire…"
+            style="width:100%;padding:10px 14px;background:var(--surface);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);margin-bottom:14px;">
+        <div style="display:flex;gap:8px;">
+            <button onclick="document.getElementById('modalRefuse').style.display='none'"
+                style="flex:1;padding:12px;background:transparent;color:var(--muted);border:1px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;cursor:pointer;">
+                Annuler
+            </button>
+            <button onclick="confirmRefuse()"
+                style="flex:1;padding:12px;background:var(--red);color:white;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;cursor:pointer;">
+                <i class="fas fa-times"></i> Confirmer refus
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- ═══ SCREEN QR SCANNER ═══ -->
 <div class="screen" id="screenQR">
     <div class="home-header">
@@ -1183,7 +1223,7 @@
             const destNom = destParts[destParts.length-1]||m.destinataire_nom||'';
             const destEnt = destParts.length>1 ? destParts[0] : '';
 
-            return `<div class="mission-card ${st}" onclick="navMission('${m.id}')">
+            return `<div class="mission-card ${st}" style="position:relative;" onclick="navMission('${m.id}')">
                 <div class="mc-top">
                     <span class="mc-num">${m.order_number||m.id.slice(0,8)}</span>
                     <span class="mc-badge ${st}">${stl}</span>
@@ -1210,6 +1250,18 @@
                         ? `<button class="mc-btn start" onclick="startMission('${m.id}')"><i class="fas fa-play"></i> Démarrer</button>`
                         : `<button class="mc-btn deliver" onclick="openConfirm('${m.id}')"><i class="fas fa-check"></i> Livrer</button>`
                     }
+                    <button class="mc-btn" onclick="event.stopPropagation();openRefuse('${m.id}')"
+                        style="background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.2);padding:8px 10px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <!-- Drag handle pour réorganiser -->
+                <div class="mc-drag-handle" draggable="true"
+                    ondragstart="missionDragStart(event,'${m.id}')"
+                    ondragover="missionDragOver(event)"
+                    ondrop="missionDrop(event,'${m.id}')"
+                    style="position:absolute;top:8px;right:8px;cursor:grab;color:var(--muted);font-size:12px;padding:4px;">
+                    <i class="fas fa-grip-vertical"></i>
                 </div>
             </div>`;
         }).join('');
@@ -1898,7 +1950,96 @@
         }
     });
 
-    /* ── AUTO-REFRESH ── */
+    /* ── REFUS MISSION ── */
+    window.openRefuse = function(id) {
+        document.getElementById('refuseOrderId').value = id;
+        document.getElementById('refuseNote').value = '';
+        document.querySelectorAll('input[name="refuseMotif"]').forEach(r => r.checked = false);
+        document.getElementById('modalRefuse').style.display = 'flex';
+    };
+
+    window.confirmRefuse = async function() {
+        const id     = document.getElementById('refuseOrderId').value;
+        const motif  = document.querySelector('input[name="refuseMotif"]:checked')?.value;
+        const note   = document.getElementById('refuseNote').value.trim();
+        if(!motif) { toast('error', 'Choisissez un motif'); return; }
+        showLoad();
+        try {
+            const raison = motif + (note ? ' — ' + note : '');
+            await db.from('transport_orders_simple').update({
+                status:       'pending',     // Remet en attente pour le dispatch
+                driver_id:    null,
+                assigned_at:  null,
+                tour_id:      null,
+                tour_position:null,
+                admin_note:   `Refusé par chauffeur : ${raison}`
+            }).eq('id', id);
+
+            // Notifier les admins
+            const { data:admins } = await db.from('utilisateurs')
+                .select('id').in('role',['admin','super_admin']).eq('actif',true);
+            const driverName = [driver.prenom,driver.nom].filter(Boolean).join(' ')||'Chauffeur';
+            for(const a of admins||[]) {
+                await db.from('notifications').insert([{
+                    user_id:    a.id,
+                    title:      `⚠️ Mission refusée`,
+                    body:       `${driverName} a refusé : ${raison}`,
+                    data:       JSON.stringify({order_id:id, type:'refused'}),
+                    read:       false,
+                    created_at: new Date().toISOString()
+                }]);
+            }
+
+            document.getElementById('modalRefuse').style.display = 'none';
+            toast('info', 'Mission renvoyée au dispatch');
+            await loadMissions();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    /* ── RÉORGANISATION MISSIONS (drag & drop) ── */
+    let dragMissionId = null;
+
+    window.missionDragStart = function(e, id) {
+        dragMissionId = id;
+        e.dataTransfer.effectAllowed = 'move';
+        e.stopPropagation();
+    };
+
+    window.missionDragOver = function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    window.missionDrop = async function(e, targetId) {
+        e.preventDefault();
+        e.stopPropagation();
+        if(!dragMissionId || dragMissionId === targetId) return;
+
+        const fromIdx = missions.findIndex(m => m.id === dragMissionId);
+        const toIdx   = missions.findIndex(m => m.id === targetId);
+        if(fromIdx === -1 || toIdx === -1) return;
+
+        // Réorganiser localement
+        const newOrder = [...missions];
+        const [moved]  = newOrder.splice(fromIdx, 1);
+        newOrder.splice(toIdx, 0, moved);
+        missions = newOrder;
+        renderMissions();
+
+        // Sauvegarder les nouvelles positions
+        try {
+            for(let i = 0; i < missions.length; i++) {
+                await db.from('transport_orders_simple')
+                    .update({ tour_position: i + 1 })
+                    .eq('id', missions[i].id);
+            }
+            toast('success', 'Ordre mis à jour ✓');
+        } catch(e) {
+            toast('error', 'Erreur sauvegarde ordre');
+        }
+        dragMissionId = null;
+    };
     // Actualiser les missions toutes les 30 secondes
     setInterval(async () => {
         if(driver) {
