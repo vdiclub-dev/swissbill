@@ -334,7 +334,7 @@
 <aside class="sidebar">
     <a href="#" class="sidebar-logo">
         <div class="logo-mark">🚚</div>
-        <div class="logo-text">Col<em>ixo</em></div>
+        <div class="logo-text">Colixo</div>
     </a>
 
     <div class="sidebar-section">Principal</div>
@@ -872,7 +872,7 @@
             </div>
             <div class="field">
                 <label>Email de connexion *</label>
-                <input type="email" id="cEmail" placeholder="prenom.nom@Colixo" required autocomplete="off">
+                <input type="email" id="cEmail" placeholder="prenom.nom@colixo.ch" required autocomplete="off">
             </div>
             <div class="field" id="cPwdField">
                 <label>Mot de passe *</label>
@@ -1321,16 +1321,29 @@
     });
 
     window.askDeleteUser = function(id, email) {
-        document.getElementById('confirmText').textContent = `Supprimer "${email}" ?`;
+        document.getElementById('confirmText').innerHTML = `
+            <div>Supprimer <strong>"${email}"</strong> ?</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px;">
+                Cette action est irréversible — l'utilisateur ne pourra plus se connecter.
+            </div>`;
         document.getElementById('confirmYes').onclick = async () => {
             showLoad();
             try {
-                const { error } = await db.from('utilisateurs').delete().eq('id',id);
-                if(error) throw error;
-                toast('success','Utilisateur supprimé');
+                // Utiliser la fonction SQL sécurisée
+                const { error } = await db.rpc('delete_user', { user_id: id });
+                if(error) {
+                    // Fallback : désactiver uniquement dans utilisateurs
+                    const { error: e2 } = await db.from('utilisateurs')
+                        .update({ actif: false })
+                        .eq('id', id);
+                    if(e2) throw e2;
+                    toast('info', 'Compte désactivé (suppression auth impossible sans droits admin)');
+                } else {
+                    toast('success', 'Utilisateur supprimé ✓');
+                }
                 closeModal('modalConfirm');
                 await loadAll();
-            } catch(err) { toast('error',err.message); }
+            } catch(err) { toast('error', err.message); }
             finally { hideLoad(); }
         };
         openModal('modalConfirm');
