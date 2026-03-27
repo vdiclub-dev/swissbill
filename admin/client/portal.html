@@ -488,15 +488,25 @@
 
 <!-- ── MODAL PDF / QR ── -->
 <div id="modalPDF" class="modal">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width:540px;">
         <div class="modal-head">
-            <div class="modal-title">BON D'EXPÉDITION</div>
+            <div class="modal-title" id="modalPDFTitle">BON D'EXPÉDITION</div>
             <button class="modal-close" onclick="closeModal('modalPDF')">✕</button>
         </div>
-        <div class="qr-wrap"><div id="qrCode"></div></div>
+        <!-- QR code (caché si livré) -->
+        <div class="qr-wrap" id="qrWrap"><div id="qrCode"></div></div>
+        <!-- Preuve de livraison (photo + signature) -->
+        <div id="proofSection" style="display:none;margin-bottom:14px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                <i class="fas fa-check-circle"></i> PREUVE DE LIVRAISON
+            </div>
+            <div id="proofGrid" style="display:grid;gap:12px;"></div>
+            <div id="proofNote" style="font-size:12px;color:var(--muted2);margin-top:8px;"></div>
+        </div>
         <div class="pdf-info" id="pdfInfo"></div>
-        <div class="modal-actions">
-            <button class="btn btn-green" onclick="printPDF()"><i class="fas fa-print"></i> Imprimer / PDF</button>
+        <div class="modal-actions" id="modalPDFActions">
+            <button class="btn btn-green" id="btnPrintEtiquette" onclick="printPDF()"><i class="fas fa-print"></i> Imprimer étiquettes</button>
+            <button class="btn" id="btnPrintBon" style="display:none;background:var(--green);color:var(--night);font-weight:700;" onclick="printBonLivraison()"><i class="fas fa-file-pdf"></i> Bon de livraison PDF</button>
             <button class="btn btn-ghost" onclick="closeModal('modalPDF')">Fermer</button>
         </div>
     </div>
@@ -1052,10 +1062,16 @@
     window.showPDF = async function(orderId) {
         const id = orderId||currentOrderId; if(!id) return;
         showLoad();
-        const{data:o}=await db.from('transport_orders_simple').select('*').eq('id',id).single();
+        const [{data:o}, {data:dlv}] = await Promise.all([
+            db.from('transport_orders_simple').select('*').eq('id',id).single(),
+            db.from('deliveries').select('*').eq('order_id',id)
+                .order('created_at',{ascending:false}).limit(1).maybeSingle()
+        ]);
         hideLoad();
         if(!o) return;
         currentOrderData = o;
+
+        const isLivré = (o.status === 'delivered' || o.admin_status === 'delivered');
 
         // Extraire les colis depuis instructions
         let colis = [];
@@ -1065,73 +1081,95 @@
             if(colisMatch) colis = JSON.parse(colisMatch[1]);
         } catch(e) {}
         if(!colis.length) colis = [{poids:o.weight||0, qty:o.quantity||1, type:o.package_type||'colis', description:''}];
-
-        // Afficher aperçu du premier colis
-        document.getElementById('qrCode').innerHTML='';
-        const qrUrl = window.location.origin + '/admin/driver-app.html?order=' + encodeURIComponent(o.order_number) + '&id=' + o.id;
-        new QRCode(document.getElementById('qrCode'),{
-            text: qrUrl,
-            width:140, height:140,
-            colorDark:'#000000', colorLight:'#ffffff',
-            correctLevel:QRCode.CorrectLevel.M
-        });
-
         const nbLabels = colis.reduce((s,c)=>s+parseInt(c.qty||1),0);
 
-        // Charger la preuve de livraison
-        let delivery = null;
-        if(o.status === 'delivered') {
-            const { data:dlv } = await db.from('deliveries')
-                .select('*').eq('order_id', o.id)
-                .order('created_at', {ascending:false})
-                .limit(1)
-                .maybeSingle();
-            delivery = dlv;
+        // ── Titre modal ──
+        document.getElementById('modalPDFTitle').textContent = isLivré ? 'PREUVE DE LIVRAISON' : 'BON D\'EXPÉDITION';
+
+        // ── QR code : visible uniquement si PAS livré ──
+        const qrWrap = document.getElementById('qrWrap');
+        if(!isLivré) {
+            qrWrap.style.display = 'flex';
+            document.getElementById('qrCode').innerHTML='';
+            const qrUrl = window.location.origin + '/admin/driver-app.html?order=' + encodeURIComponent(o.order_number) + '&id=' + o.id;
+            new QRCode(document.getElementById('qrCode'),{
+                text: qrUrl, width:140, height:140,
+                colorDark:'#000000', colorLight:'#ffffff',
+                correctLevel:QRCode.CorrectLevel.M
+            });
+        } else {
+            qrWrap.style.display = 'none';
         }
 
-        // Date livraison — depuis deliveries OU depuis le transport
-        const deliveredAt = delivery?.delivered_at || o.delivered_at;
-        const deliveredStr = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH',{timeZone:'Europe/Zurich'}) : null;
+        // ── Section preuve de livraison ──
+        const proofSection = document.getElementById('proofSection');
+        const proofGrid    = document.getElementById('proofGrid');
+        const proofNote    = document.getElementById('proofNote');
 
-        const deliveryProof = o.status === 'delivered' ? `
-            <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px;">
-                    <i class="fas fa-check-circle"></i> PREUVE DE LIVRAISON
-                </div>
-                <div style="font-size:12px;color:var(--muted2);margin-bottom:10px;">
-                    ${deliveredStr ? `✅ Livré le <strong style="color:var(--white)">${deliveredStr}</strong>` : '✅ Livré'}
-                    ${delivery?.note_livraison ? `<br><i class="fas fa-comment" style="color:var(--blue)"></i> ${delivery.note_livraison}` : ''}
-                </div>
-                ${delivery?.signature_data || delivery?.photo_data ? `
-                <div style="display:grid;grid-template-columns:${delivery.signature_data && delivery.photo_data ? '1fr 1fr' : '1fr'};gap:10px;">
-                    ${delivery.signature_data ? `
-                    <div>
-                        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700;letter-spacing:1px;">SIGNATURE</div>
-                        <img src="${delivery.signature_data}" style="width:100%;border:1px solid var(--border2);border-radius:8px;background:white;max-height:90px;object-fit:contain;">
-                    </div>` : ''}
-                    ${delivery.photo_data ? `
-                    <div>
-                        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700;letter-spacing:1px;">PHOTO</div>
-                        <img src="${delivery.photo_data}" style="width:100%;border-radius:8px;object-fit:cover;max-height:90px;">
-                    </div>` : ''}
-                </div>` : `<div style="font-size:12px;color:var(--muted);font-style:italic;">Aucune preuve photographique disponible</div>`}
-            </div>` : '';
+        if(isLivré) {
+            proofSection.style.display = 'block';
+            const deliveredAt  = dlv?.delivered_at || o.delivered_at;
+            const deliveredStr = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH',{timeZone:'Europe/Zurich'}) : null;
 
+            // Note de livraison
+            proofNote.innerHTML = deliveredStr
+                ? `✅ Livré le <strong style="color:var(--white)">${deliveredStr}</strong>${dlv?.note_livraison ? `<br><i class="fas fa-comment" style="color:var(--blue)"></i> ${dlv.note_livraison}` : ''}`
+                : '✅ Livraison confirmée';
+
+            // Photo + Signature en grand
+            const hasPhoto = dlv?.photo_data;
+            const hasSig   = dlv?.signature_data;
+
+            if(hasPhoto || hasSig) {
+                const cols = hasPhoto && hasSig ? '1fr 1fr' : '1fr';
+                proofGrid.style.gridTemplateColumns = cols;
+                proofGrid.innerHTML = `
+                    ${hasSig ? `
+                    <div>
+                        <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">✍️ Signature</div>
+                        <div style="background:white;border-radius:10px;padding:8px;border:2px solid rgba(34,197,94,0.4);">
+                            <img src="${dlv.signature_data}" style="width:100%;max-height:140px;object-fit:contain;display:block;">
+                        </div>
+                    </div>` : ''}
+                    ${hasPhoto ? `
+                    <div>
+                        <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">📸 Photo de livraison</div>
+                        <div style="border-radius:10px;overflow:hidden;border:2px solid rgba(34,197,94,0.4);">
+                            <img src="${dlv.photo_data}" style="width:100%;max-height:160px;object-fit:cover;display:block;">
+                        </div>
+                    </div>` : ''}
+                `;
+            } else {
+                proofGrid.innerHTML = `<div style="text-align:center;padding:20px;font-size:13px;color:var(--muted);font-style:italic;">
+                    <i class="fas fa-image" style="font-size:24px;opacity:0.3;display:block;margin-bottom:8px;"></i>
+                    Aucune photo ni signature disponible
+                </div>`;
+            }
+        } else {
+            proofSection.style.display = 'none';
+        }
+
+        // ── Infos commande ──
         document.getElementById('pdfInfo').innerHTML=`
             <div style="font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;margin-bottom:10px;color:var(--white);">ENVOI ${o.order_number}</div>
             <div style="display:grid;gap:6px;font-size:13px;">
-                <div><b>📍 Départ :</b> ${(o.pickup_address||'—').replace(/\n/g,' ')}</div>
+                <div><b>📍 Départ :</b> ${(o.pickup_address||'—').replace(/\n/g,' ').replace(/\|/g,' ')}</div>
                 <div><b>🏁 Livraison :</b> ${o.delivery_address||'—'}</div>
                 <div><b>👤 Destinataire :</b> ${o.destinataire_nom||'—'}${o.destinataire_tel?' · '+o.destinataire_tel:''}</div>
-                <div><b>📦 Colis :</b> ${colis.length} type(s) · ${nbLabels} étiquette(s)</div>
+                ${o.package_type==='personne'
+                    ? `<div><b>🚐 Transport :</b> ${o.quantity||1} personne(s)</div>`
+                    : `<div><b>📦 Colis :</b> ${colis.length} type(s) · ${nbLabels} étiquette(s)</div>`}
                 ${o.poids_reel?`<div><b>⚖️ Poids réel :</b> <span style='color:var(--green);font-weight:700'>${o.poids_reel} kg</span></div>`:''}
                 <div><b>⚡ Service :</b> ${o.service_type||'normal'} ${o.night_delivery?'🌙 Nuit':''}</div>
                 <div><b>📅 Créé :</b> ${new Date(o.created_at).toLocaleString('fr-CH',{timeZone:'Europe/Zurich'})}</div>
             </div>
-            ${deliveryProof}
-            ${o.status !== 'delivered' ? `<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12px;color:var(--green);">
+            ${!isLivré && o.package_type!=='personne' ? `<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12px;color:var(--green);">
                 <i class="fas fa-print"></i> ${nbLabels} étiquette(s) — 1 par colis
             </div>` : ''}`;
+
+        // ── Boutons selon statut ──
+        document.getElementById('btnPrintEtiquette').style.display = (!isLivré && o.package_type!=='personne') ? '' : 'none';
+        document.getElementById('btnPrintBon').style.display = isLivré ? '' : 'none';
 
         openModal('modalPDF');
     };
@@ -1421,8 +1459,11 @@ body{font-family:Arial,sans-serif;}
             ${tracking}
             ${o.admin_status==='refused'&&o.admin_note?`<div style="background:rgba(232,49,26,0.08);border:1px solid rgba(232,49,26,0.2);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--muted2);margin-bottom:10px;"><i class="fas fa-info-circle" style="color:var(--red)"></i> ${o.admin_note}</div>`:''}
             <div class="oc-actions">
-                <button class="btn btn-ghost" onclick="showPDF('${o.id}')"><i class="fas fa-qrcode"></i> QR / PDF</button>
-                ${o.status==='delivered'?`<button class="btn btn-green" onclick="printBonLivraison('${o.id}')"><i class="fas fa-file-pdf"></i> Bon de livraison</button>`:''}
+                ${o.status==='delivered'
+                    ? `<button class="btn btn-green" onclick="showPDF('${o.id}')"><i class="fas fa-file-pdf"></i> Preuve de livraison</button>
+                       <button class="btn btn-ghost" onclick="printBonLivraison('${o.id}')"><i class="fas fa-print"></i> Imprimer PDF</button>`
+                    : `<button class="btn btn-ghost" onclick="showPDF('${o.id}')"><i class="fas fa-qrcode"></i> QR / Étiquettes</button>`
+                }
             </div>
         </div>`;
     }
