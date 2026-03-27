@@ -390,7 +390,6 @@
         </div>
         <div id="preuveContent" style="margin-top:12px;"></div>
         <div class="modal-actions">
-            <button class="btn" id="btnPreuvePDF" style="display:none;background:var(--green);color:var(--night);font-weight:700;" onclick="printPreuvePDF()"><i class="fas fa-file-pdf"></i> Télécharger PDF</button>
             <button class="btn btn-ghost" onclick="closeModal('modalPreuve')">Fermer</button>
         </div>
     </div>
@@ -981,17 +980,17 @@
         const stLabel = stMap[o.admin_status || o.status] || o.status;
         const stClass = 'st-' + (o.admin_status || o.status).replace(/_/g,'');
         const isDelivered = (o.admin_status || o.status) === 'delivered';
+        const preuveBtn = isDelivered
+            ? `<button class="btn btn-ghost" style="color:var(--green)" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> Preuve</button>`
+            : '';
         return `<div class="order-card" style="${isDelivered ? 'border-color:rgba(34,197,94,0.3);' : ''}">
             <div class="oc-head"><div><div class="oc-num">${o.order_number || o.id.slice(0,8)}</div><div class="oc-date">${new Date(o.created_at).toLocaleDateString('fr-CH')}</div></div><span class="oc-status ${stClass}">${stLabel}</span></div>
             <div class="oc-route"><div class="oc-dot" style="background:var(--blue);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Enlèvement</div>${o.pickup_address || '—'}</div></div>
             <div class="oc-route"><div class="oc-dot" style="background:var(--red);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Livraison</div>${o.delivery_address || '—'}</div></div>
             <div class="oc-meta"><span class="oc-tag">📦 ${o.quantity || 1} colis</span><span class="oc-tag">⚖️ ${o.weight || 0} kg</span><span class="oc-tag">⚡ ${o.service_type || 'normal'}</span>${o.night_delivery ? '<span class="oc-tag">🌙 Nuit</span>' : ''}${isDelivered && o.delivered_at ? `<span class="oc-tag" style="color:var(--green)">✓ ${new Date(o.delivered_at).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>` : ''}</div>
-            <div class="oc-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
-                ${isDelivered
-                    ? `<button class="btn" style="background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.3);" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> Photo &amp; Signature</button>
-                       <button class="btn btn-ghost" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> Bon de livraison PDF</button>`
-                    : `<button class="btn btn-ghost" onclick="showPDF('${o.id}')"><i class="fas fa-tag"></i> Étiquette QR</button>`
-                }
+            <div class="oc-actions" style="display:flex;gap:8px;">
+                <button class="btn btn-ghost" onclick="showPDF('${o.id}')"><i class="fas fa-tag"></i> Étiquette</button>
+                ${preuveBtn}
             </div>
         </div>`;
     }
@@ -1083,152 +1082,37 @@
         win.document.close();
     };
 
-    let _preuveCurrentOrder = null;
-    let _preuveCurrentDlv   = null;
-
     window.showPreuve = async function(orderId) {
         showLoad();
-        const [{ data: o }, { data: dlv }] = await Promise.all([
-            db.from('transport_orders_simple').select('*').eq('id', orderId).single(),
-            db.from('deliveries').select('*').eq('order_id', orderId)
-                .order('created_at', { ascending: false }).limit(1).maybeSingle()
-        ]);
+        const { data: o } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
         hideLoad();
         if(!o) return;
 
-        _preuveCurrentOrder = o;
-        _preuveCurrentDlv   = dlv;
+        const content = document.getElementById('preuveContent');
+        const photoUrl = o.delivery_photo_url || o.proof_photo || o.photo_livraison || null;
+        const deliveredAt = o.delivered_at ? new Date(o.delivered_at).toLocaleString('fr-CH') : null;
 
-        const content    = document.getElementById('preuveContent');
-        const btnPDF     = document.getElementById('btnPreuvePDF');
-        const deliveredAt = dlv?.delivered_at || o.delivered_at;
-        const deliveredStr = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH', { timeZone:'Europe/Zurich' }) : null;
-
-        // Photo et signature depuis la table deliveries
-        const hasPhoto = !!(dlv?.photo_data);
-        const hasSig   = !!(dlv?.signature_data);
-
-        let html = `
-        <div style="background:var(--surface);border-radius:10px;padding:14px;margin-bottom:16px;">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Commande</div>
-            <div style="font-weight:700;font-size:16px;">${o.order_number}</div>
-            <div style="font-size:13px;color:var(--muted2);margin-top:4px;">${o.delivery_address || '—'}</div>
-            ${deliveredStr ? `<div style="margin-top:8px;color:var(--green);font-size:13px;font-weight:600;">✅ Livré le ${deliveredStr}</div>` : ''}
-            ${dlv?.note_livraison ? `<div style="margin-top:6px;font-size:12px;color:var(--muted2);"><i class="fas fa-comment" style="color:var(--blue)"></i> ${dlv.note_livraison}</div>` : ''}
+        let html = `<div style="background:var(--surface);border-radius:10px;padding:14px;margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--muted);">Commande</div>
+            <div style="font-weight:700;">${o.order_number}</div>
+            <div style="font-size:13px;margin-top:4px;">${o.delivery_address || '—'}</div>
+            ${deliveredAt ? `<div style="margin-top:8px;color:var(--green);font-size:12px;">✅ Livré le ${deliveredAt}</div>` : ''}
         </div>`;
 
-        if(hasPhoto || hasSig) {
-            btnPDF.style.display = '';
-            if(hasPhoto && hasSig) {
-                html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">`;
-            } else {
-                html += `<div style="margin-bottom:12px;">`;
-            }
-            if(hasSig) {
-                html += `<div>
-                    <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">✍️ Signature</div>
-                    <div style="background:white;border-radius:10px;padding:8px;border:2px solid rgba(34,197,94,0.4);">
-                        <img src="${dlv.signature_data}" style="width:100%;max-height:150px;object-fit:contain;display:block;">
-                    </div>
-                </div>`;
-            }
-            if(hasPhoto) {
-                html += `<div>
-                    <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">📸 Photo de livraison</div>
-                    <div style="border-radius:10px;overflow:hidden;border:2px solid rgba(34,197,94,0.4);">
-                        <img src="${dlv.photo_data}" style="width:100%;max-height:200px;object-fit:cover;display:block;">
-                    </div>
-                </div>`;
-            }
-            html += `</div>`;
+        if(photoUrl) {
+            html += `<div style="border-radius:12px;overflow:hidden;margin-bottom:12px;">
+                <img src="${photoUrl}" style="width:100%;border-radius:12px;display:block;" alt="Preuve de livraison">
+            </div>
+            <div style="text-align:center;font-size:11px;color:var(--muted);">Photo prise par le livreur</div>`;
         } else {
-            btnPDF.style.display = 'none';
             html += `<div style="text-align:center;padding:40px 20px;color:var(--muted);">
-                <div style="font-size:40px;margin-bottom:12px;opacity:0.3;">📷</div>
-                <div style="font-size:14px;">Aucune photo ni signature disponible</div>
-                <div style="font-size:11px;margin-top:6px;">La preuve sera disponible après livraison</div>
+                <div style="font-size:40px;margin-bottom:12px;">📷</div>
+                <div>Aucune photo de livraison disponible</div>
+                <div style="font-size:11px;margin-top:6px;">Le livreur n'a pas encore uploadé la preuve</div>
             </div>`;
         }
-
         content.innerHTML = html;
         openModal('modalPreuve');
-    };
-
-    window.printPreuvePDF = function() {
-        const o   = _preuveCurrentOrder; if(!o) return;
-        const dlv = _preuveCurrentDlv;
-        const deliveredAt  = dlv?.delivered_at || o.delivered_at;
-        const deliveredStr = deliveredAt ? new Date(deliveredAt).toLocaleString('fr-CH',{timeZone:'Europe/Zurich'}) : '—';
-        const note = dlv?.note_livraison || '';
-
-        const sigHtml  = dlv?.signature_data
-            ? `<div class="proof-block"><div class="proof-lbl">✍️ Signature</div><div class="sig-wrap"><img src="${dlv.signature_data}" class="sig-img"></div></div>`
-            : `<div class="proof-block no-proof">Aucune signature</div>`;
-        const photoHtml = dlv?.photo_data
-            ? `<div class="proof-block"><div class="proof-lbl">📸 Photo de livraison</div><img src="${dlv.photo_data}" class="photo-img"></div>`
-            : `<div class="proof-block no-proof">Aucune photo</div>`;
-
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-        <title>Preuve de livraison — ${o.order_number}</title>
-        <style>
-            *{margin:0;padding:0;box-sizing:border-box;}
-            body{font-family:Arial,sans-serif;background:#f8f8f8;padding:24px;color:#111;}
-            .doc{background:#fff;border-radius:10px;padding:28px;max-width:640px;margin:0 auto;box-shadow:0 2px 16px rgba(0,0,0,0.08);}
-            .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e8311a;padding-bottom:14px;margin-bottom:18px;}
-            .logo{font-size:28px;font-weight:900;color:#e8311a;letter-spacing:2px;}
-            .sub{font-size:10px;color:#888;margin-top:2px;}
-            .num{font-size:20px;font-weight:700;text-align:right;}
-            .badge-green{display:inline-block;background:#dcfce7;color:#15803d;padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700;margin-bottom:14px;}
-            .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
-            .box{border:1.5px solid #eee;border-radius:8px;padding:12px;}
-            .box.dest{border-color:#e8311a;background:#fff8f8;}
-            .box-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#aaa;margin-bottom:6px;}
-            .box-val{font-size:12px;line-height:1.5;}
-            .info-row{display:flex;gap:10px;margin-bottom:18px;}
-            .info-b{flex:1;background:#f8f8f8;border-radius:8px;padding:10px;text-align:center;}
-            .info-lbl{font-size:9px;color:#aaa;text-transform:uppercase;margin-bottom:4px;}
-            .info-val{font-size:16px;font-weight:700;}
-            .proof-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;}
-            .proof-block{border:1.5px solid #eee;border-radius:8px;padding:10px;}
-            .proof-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#aaa;margin-bottom:8px;}
-            .sig-wrap{background:#fff;padding:6px;border:1px solid #ddd;border-radius:6px;}
-            .sig-img{width:100%;max-height:120px;object-fit:contain;display:block;}
-            .photo-img{width:100%;max-height:150px;object-fit:cover;display:block;border-radius:6px;}
-            .no-proof{display:flex;align-items:center;justify-content:center;height:80px;font-size:12px;color:#aaa;font-style:italic;}
-            .note{margin:12px 0;padding:10px;background:#f0fdf4;border-left:3px solid #22c55e;font-size:12px;}
-            .ft{margin-top:20px;padding-top:12px;border-top:1px dashed #ddd;font-size:10px;color:#aaa;text-align:center;}
-            @media print{body{padding:0;background:#fff;}.doc{box-shadow:none;}}
-        </style></head><body>
-        <div class="doc">
-            <div class="hd">
-                <div><div class="logo">COLIXO</div><div class="sub">Bon de livraison officiel</div></div>
-                <div><div class="num">${o.order_number}</div><div style="font-size:11px;color:#888;text-align:right;">${new Date(o.created_at).toLocaleDateString('fr-CH')}</div></div>
-            </div>
-            <div class="badge-green">✅ Livré le ${deliveredStr}</div>
-            <div class="grid2">
-                <div class="box"><div class="box-lbl">📤 Expéditeur</div><div class="box-val">${(o.pickup_address||'—').replace(/\|/g,' ').replace(/  +/g,' ')}</div></div>
-                <div class="box dest"><div class="box-lbl">📦 Destinataire</div><div class="box-val"><strong>${o.destinataire_nom||'—'}</strong><br>${o.delivery_address||'—'}${o.destinataire_tel?'<br>📞 '+o.destinataire_tel:''}</div></div>
-            </div>
-            <div class="info-row">
-                <div class="info-b"><div class="info-lbl">Colis</div><div class="info-val">${o.quantity||1}</div></div>
-                <div class="info-b"><div class="info-lbl">Poids</div><div class="info-val">${o.weight||0} kg</div></div>
-                <div class="info-b"><div class="info-lbl">Service</div><div class="info-val">${(o.service_type||'normal').toUpperCase()}</div></div>
-            </div>
-            ${note ? `<div class="note"><strong>Note du chauffeur :</strong> ${note}</div>` : ''}
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#aaa;margin-bottom:8px;">Preuve de livraison</div>
-            <div class="proof-grid">${sigHtml}${photoHtml}</div>
-            <div class="ft">Colixo &middot; Généré le ${new Date().toLocaleString('fr-CH')} &middot; Ce document fait foi de livraison</div>
-        </div>
-        <div style="text-align:center;margin-top:16px;">
-            <button onclick="window.print()" style="padding:10px 28px;background:#e8311a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Imprimer / Sauvegarder PDF</button>
-        </div>
-        </body></html>`;
-
-        const blob = new Blob([html], {type:'text/html;charset=utf-8'});
-        const url  = URL.createObjectURL(blob);
-        const w    = window.open(url, '_blank');
-        if(w) setTimeout(()=>{w.print();URL.revokeObjectURL(url);},600);
-        else toast('Popup bloqué — autorisez les popups');
     };
 
     // Auto-refresh toutes les 5 secondes sur l'onglet suivi et commandes
