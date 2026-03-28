@@ -105,6 +105,20 @@
         .pad{padding:14px;}
         .prog-bar{height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:10px;}
         .prog-fill{height:100%;background:var(--green);border-radius:3px;transition:width 0.5s;}
+
+        /* RH BUTTONS */
+        .rh-btn{border:none;border-radius:12px;padding:14px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;transition:opacity 0.2s;}
+        .rh-btn:active{opacity:0.75;}
+        .rh-btn i{font-size:22px;}
+        .rh-btn-time{font-size:11px;font-weight:400;opacity:0.7;margin-top:2px;}
+        .rh-btn.done{opacity:0.5;}
+        .rh-btn:disabled{opacity:0.3;cursor:not-allowed;}
+
+        /* DRAG AND DROP */
+        .stop.dragging{opacity:0.4;border-style:dashed;}
+        .stop.drag-over{border-color:var(--blue);background:rgba(59,130,246,0.06);}
+        .drag-handle{color:var(--muted);font-size:16px;cursor:grab;padding:4px 8px;touch-action:none;}
+        .drag-handle:active{cursor:grabbing;}
     </style>
 </head>
 <body>
@@ -149,10 +163,38 @@
             <div class="rh-time" id="clockDisplay">--:--</div>
             <div class="rh-date" id="dateDisplay">—</div>
             <div class="rh-status off" id="rhStatus">Non commencé</div>
+            <div id="rhDuration" style="font-size:12px;color:var(--muted);margin-top:6px;display:none;"></div>
         </div>
-        <div id="rhActions"><button class="btn green" onclick="pointerDepart()"><i class="fas fa-play"></i> Pointer le départ</button></div>
-        <div class="st" style="margin-top:16px;">📋 HISTORIQUE</div>
+
+        <!-- GRILLE 4 BOUTONS -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;" id="rhBtns">
+            <button class="rh-btn" id="btnDepart" onclick="pointerRH('depart')" style="background:rgba(34,197,94,0.12);border:1.5px solid rgba(34,197,94,0.3);color:var(--green);">
+                <i class="fas fa-play-circle"></i>
+                <span>Départ journée</span>
+                <div class="rh-btn-time" id="tDepart">—</div>
+            </button>
+            <button class="rh-btn" id="btnPauseStart" onclick="pointerRH('pause_debut')" style="background:rgba(245,158,11,0.12);border:1.5px solid rgba(245,158,11,0.3);color:var(--yellow);">
+                <i class="fas fa-coffee"></i>
+                <span>Début pause</span>
+                <div class="rh-btn-time" id="tPauseStart">—</div>
+            </button>
+            <button class="rh-btn" id="btnPauseEnd" onclick="pointerRH('pause_fin')" style="background:rgba(59,130,246,0.12);border:1.5px solid rgba(59,130,246,0.3);color:var(--blue);">
+                <i class="fas fa-mug-hot"></i>
+                <span>Fin pause</span>
+                <div class="rh-btn-time" id="tPauseEnd">—</div>
+            </button>
+            <button class="rh-btn" id="btnArrivee" onclick="pointerRH('arrivee')" style="background:rgba(232,49,26,0.12);border:1.5px solid rgba(232,49,26,0.3);color:var(--red);">
+                <i class="fas fa-stop-circle"></i>
+                <span>Fin journée</span>
+                <div class="rh-btn-time" id="tArrivee">—</div>
+            </button>
+        </div>
+
+        <div class="st" style="margin-top:4px;">📋 HISTORIQUE DU JOUR</div>
         <div id="rhHistory"><div class="empty">Aucun pointage aujourd'hui</div></div>
+
+        <div class="st" style="margin-top:4px;">📊 RÉCAP</div>
+        <div id="rhRecap" style="background:var(--night3);border-radius:12px;padding:14px;font-size:13px;"></div>
     </div>
 
     <!-- TAB DÉPÔT -->
@@ -363,8 +405,13 @@ function renderTournee(ordersMap){
         const tc=a.type_arret==='enlevement'?'rgba(245,158,11,0.12)':'rgba(232,49,26,0.12)';
         const tcc=a.type_arret==='enlevement'?'var(--yellow)':'var(--red)';
 
-        html+=`<div class="stop ${isDone?'done':isCur?'cur':''}" onclick="ouvrirArret('${a.id}')">
+        html+=`<div class="stop ${isDone?'done':isCur?'cur':''}" 
+            draggable="${!isDone}" 
+            data-id="${a.id}" data-idx="${i}"
+            ondragstart="dragStart(event,${i})" ondragover="dragOver(event)" ondrop="dropStop(event,${i})" ondragend="dragEnd(event)"
+            onclick="ouvrirArret('${a.id}')">
             <div class="stop-row">
+                <div class="drag-handle" onclick="event.stopPropagation()">⠿</div>
                 <div class="stop-num" style="background:${isDone?'rgba(34,197,94,0.15)':isCur?'rgba(59,130,246,0.15)':'var(--surface)'};color:${isDone?'var(--green)':isCur?'var(--blue)':'var(--muted)'};">${isDone?'✓':i+1}</div>
                 <div style="flex:1;">
                     <div style="display:flex;gap:5px;align-items:center;margin-bottom:3px;">
@@ -379,7 +426,10 @@ function renderTournee(ordersMap){
             ${isCur?`<div class="stop-btns">
                 <button class="sbtn b" onclick="event.stopPropagation();navArret('${a.id}')"><i class="fas fa-map-marked-alt"></i> GPS</button>
                 <button class="sbtn g" onclick="event.stopPropagation();ouvrirArret('${a.id}')"><i class="fas fa-check"></i> Traiter</button>
-            </div>`:''}
+                <button class="sbtn" style="color:var(--red);border-color:rgba(232,49,26,0.3);margin-left:auto;" onclick="event.stopPropagation();supprimerArret('${a.id}')"><i class="fas fa-trash"></i></button>
+            </div>`:`<div class="stop-btns">
+                ${!isDone?`<button class="sbtn" style="color:var(--red);border-color:rgba(232,49,26,0.3);margin-left:auto;" onclick="event.stopPropagation();supprimerArret('${a.id}')"><i class="fas fa-trash"></i> Retirer</button>`:''}
+            </div>`}
         </div>`;
     });
 
@@ -507,8 +557,54 @@ window.showFinaliser=function(){
     document.getElementById('mFinaliser').scrollIntoView({behavior:'smooth'});
 };
 
-// ── NAVIGATION ──
-window.navArret=function(arretId){
+// ── DRAG & DROP ARRÊTS ──
+let dragSrcIdx=null;
+window.dragStart=function(e,idx){dragSrcIdx=idx;e.currentTarget.classList.add('dragging');e.dataTransfer.effectAllowed='move';};
+window.dragOver=function(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over');};
+window.dragEnd=function(e){e.currentTarget.classList.remove('dragging');document.querySelectorAll('.stop').forEach(s=>s.classList.remove('drag-over'));};
+window.dropStop=async function(e,targetIdx){
+    e.preventDefault();
+    document.querySelectorAll('.stop').forEach(s=>s.classList.remove('drag-over'));
+    if(dragSrcIdx===null||dragSrcIdx===targetIdx)return;
+
+    // Réordonner localement
+    const moved=currentArrets.splice(dragSrcIdx,1)[0];
+    currentArrets.splice(targetIdx,0,moved);
+    dragSrcIdx=null;
+
+    // Renuméroter les ordres
+    const updates=currentArrets.map((a,i)=>({id:a.id,ordre:i+1}));
+
+    // Mettre à jour en BDD
+    showLoad();
+    try{
+        for(const u of updates){
+            await db.from('tournee_arrets').update({ordre:u.ordre}).eq('id',u.id);
+            currentArrets.find(a=>a.id===u.id).ordre=u.ordre;
+        }
+        toast('✅ Ordre mis à jour');
+    }catch(err){toast('❌ Erreur: '+err.message);}
+    finally{hideLoad();}
+
+    // Re-render sans recharger depuis BDD
+    const ids=currentArrets.map(a=>a.transport_id).filter(Boolean);
+    let ordersMap={};
+    if(ids.length){const {data:ords}=await db.from('transport_orders_simple').select('*').in('id',ids);(ords||[]).forEach(o=>ordersMap[o.id]=o);}
+    renderTournee(ordersMap);
+};
+
+// ── SUPPRIMER ARRÊT ──
+window.supprimerArret=async function(arretId){
+    if(!confirm('Retirer cet arrêt de la tournée ?'))return;
+    showLoad();
+    try{
+        await db.from('tournee_arrets').delete().eq('id',arretId);
+        currentArrets=currentArrets.filter(a=>a.id!==arretId);
+        toast('✅ Arrêt retiré');
+        await loadArrets();
+    }catch(e){toast('❌ '+e.message);}
+    finally{hideLoad();}
+};
     const a=currentArrets.find(x=>x.id===arretId)||currentArret;
     if(!a)return;
     const addr=a.adresse||currentOrder?.delivery_address||'';
@@ -618,52 +714,164 @@ window.voirBL=async function(){
 };
 
 // ══════════════════════════════════
-//  POINTAGE RH
+//  POINTAGE RH — 4 BOUTONS
 // ══════════════════════════════════
+const RH_TYPES={
+    depart:      {label:'Départ journée',   icon:'🟢', btnId:'btnDepart',     timeId:'tDepart'},
+    pause_debut: {label:'Début pause',      icon:'🟡', btnId:'btnPauseStart', timeId:'tPauseStart'},
+    pause_fin:   {label:'Fin pause',        icon:'🔵', btnId:'btnPauseEnd',   timeId:'tPauseEnd'},
+    arrivee:     {label:'Fin journée',      icon:'🔴', btnId:'btnArrivee',    timeId:'tArrivee'}
+};
+
+let rhEvents=[];
+
 async function loadRH(){
     const today=new Date().toISOString().split('T')[0];
-    const {data:evs}=await db.from('driver_events').select('*').eq('driver_id',driver.id).gte('event_time',today+'T00:00:00').order('event_time',{ascending:true});
-    const dep=evs?.find(e=>e.event_type==='depart'||e.event_type==='start');
-    const arr=evs?.find(e=>e.event_type==='arrivee'||e.event_type==='end');
-    const sEl=document.getElementById('rhStatus'),aEl=document.getElementById('rhActions');
-    if(dep&&!arr){
-        rhStartTime=new Date(dep.event_time);
-        sEl.className='rh-status on'; sEl.textContent=`⏱️ En service depuis ${fmtH(dep.event_time)}`;
-        aEl.innerHTML=`<button class="btn" style="background:var(--orange);" onclick="pointerArrivee()"><i class="fas fa-stop"></i> Pointer l'arrivée / Fin de service</button>`;
-    } else if(dep&&arr){
-        const dur=Math.round((new Date(arr.event_time)-new Date(dep.event_time))/60000);
-        sEl.className='rh-status off'; sEl.textContent=`✅ Journée terminée · ${Math.floor(dur/60)}h${String(dur%60).padStart(2,'0')}`;
-        aEl.innerHTML='';
-    } else {
-        sEl.className='rh-status off'; sEl.textContent='Non commencé';
-        aEl.innerHTML=`<button class="btn green" onclick="pointerDepart()"><i class="fas fa-play"></i> Pointer le départ</button>`;
-    }
-    const hEl=document.getElementById('rhHistory');
-    hEl.innerHTML=evs&&evs.length?evs.map(e=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${e.event_type==='depart'||e.event_type==='start'?'🟢 Départ':'🔴 Arrivée'}</span><span style="color:var(--muted2);">${fmt(e.event_time)}</span></div>`).join(''):'<div class="empty">Aucun pointage aujourd\'hui</div>';
+    const {data:evs}=await db.from('driver_events').select('*')
+        .eq('driver_id',driver.id)
+        .gte('event_time',today+'T00:00:00')
+        .order('event_time',{ascending:true});
+    rhEvents=evs||[];
+    renderRH();
 }
 
-window.pointerDepart=async function(silent=false){
+function renderRH(){
+    // Reset boutons
+    Object.values(RH_TYPES).forEach(t=>{
+        const btn=document.getElementById(t.btnId);
+        const timeEl=document.getElementById(t.timeId);
+        if(btn){btn.disabled=false;btn.classList.remove('done');}
+        if(timeEl)timeEl.textContent='—';
+    });
+
+    // Remplir les heures pointées
+    rhEvents.forEach(e=>{
+        const cfg=RH_TYPES[e.event_type];
+        if(!cfg)return;
+        const timeEl=document.getElementById(cfg.timeId);
+        const btn=document.getElementById(cfg.btnId);
+        if(timeEl)timeEl.textContent=fmtH(e.event_time);
+        if(btn)btn.classList.add('done');
+    });
+
+    // Statut global
+    const dep=rhEvents.find(e=>e.event_type==='depart');
+    const arr=rhEvents.find(e=>e.event_type==='arrivee');
+    const pauseD=rhEvents.find(e=>e.event_type==='pause_debut');
+    const pauseF=rhEvents.find(e=>e.event_type==='pause_fin');
+    const sEl=document.getElementById('rhStatus');
+    const durEl=document.getElementById('rhDuration');
+
+    if(arr){
+        sEl.className='rh-status off';sEl.textContent='✅ Journée terminée';
+        // Calcul durée nette
+        if(dep){
+            const total=(new Date(arr.event_time)-new Date(dep.event_time))/60000;
+            const pauseMin=pauseD&&pauseF?(new Date(pauseF.event_time)-new Date(pauseD.event_time))/60000:0;
+            const net=Math.round(total-pauseMin);
+            durEl.style.display='block';
+            durEl.textContent=`Durée nette: ${Math.floor(net/60)}h${String(net%60).padStart(2,'0')} (pause: ${Math.round(pauseMin)}min)`;
+            rhStartTime=null;
+        }
+    } else if(pauseD&&!pauseF){
+        sEl.className='rh-status off';sEl.textContent='☕ En pause depuis '+fmtH(pauseD.event_time);
+        durEl.style.display='none';
+    } else if(dep){
+        sEl.className='rh-status on';sEl.textContent='⏱️ En service depuis '+fmtH(dep.event_time);
+        rhStartTime=new Date(dep.event_time);
+        durEl.style.display='none';
+    } else {
+        sEl.className='rh-status off';sEl.textContent='Non commencé';
+        durEl.style.display='none';
+    }
+
+    // Logique d'activation des boutons
+    const hasDepart=!!dep,hasPauseD=!!pauseD,hasPauseF=!!pauseF,hasArrivee=!!arr;
+    document.getElementById('btnDepart').disabled=hasDepart;
+    document.getElementById('btnPauseStart').disabled=!hasDepart||hasPauseD||hasArrivee;
+    document.getElementById('btnPauseEnd').disabled=!hasPauseD||hasPauseF||hasArrivee;
+    document.getElementById('btnArrivee').disabled=!hasDepart||hasArrivee;
+
+    // Historique
+    const hEl=document.getElementById('rhHistory');
+    hEl.innerHTML=rhEvents.length?rhEvents.map(e=>{
+        const cfg=RH_TYPES[e.event_type]||{label:e.event_type,icon:'⚪'};
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span>${cfg.icon}</span>
+                <span>${cfg.label}</span>
+                ${e.night_work?'<span style="font-size:10px;background:rgba(59,130,246,0.12);color:var(--blue);padding:1px 6px;border-radius:4px;">🌙 Nuit</span>':''}
+                ${e.weekend_work?'<span style="font-size:10px;background:rgba(168,85,247,0.12);color:#a855f7;padding:1px 6px;border-radius:4px;">📅 WE</span>':''}
+            </div>
+            <span style="color:var(--muted2);font-weight:600;">${fmtH(e.event_time)}</span>
+        </div>`;
+    }).join(''):'<div class="empty">Aucun pointage aujourd\'hui</div>';
+
+    // Récap
+    const rEl=document.getElementById('rhRecap');
+    if(dep&&arr){
+        const total=Math.round((new Date(arr.event_time)-new Date(dep.event_time))/60000);
+        const pauseMin=pauseD&&pauseF?Math.round((new Date(pauseF.event_time)-new Date(pauseD.event_time))/60000):0;
+        const net=total-pauseMin;
+        rEl.innerHTML=`
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div style="text-align:center;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">DURÉE BRUTE</div><div style="font-family:'Bebas Neue',cursive;font-size:22px;">${Math.floor(total/60)}h${String(total%60).padStart(2,'0')}</div></div>
+                <div style="text-align:center;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">PAUSE</div><div style="font-family:'Bebas Neue',cursive;font-size:22px;">${pauseMin}min</div></div>
+                <div style="text-align:center;grid-column:1/-1;border-top:1px solid var(--border);padding-top:10px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">DURÉE NETTE</div><div style="font-family:'Bebas Neue',cursive;font-size:28px;color:var(--green);">${Math.floor(net/60)}h${String(net%60).padStart(2,'0')}</div></div>
+            </div>`;
+    } else {
+        rEl.innerHTML='<div style="color:var(--muted);font-size:13px;text-align:center;">Journée non terminée</div>';
+    }
+}
+
+window.pointerRH=async function(eventType){
+    const cfg=RH_TYPES[eventType];
+    if(!cfg)return;
+    const btn=document.getElementById(cfg.btnId);
+    if(btn&&btn.disabled)return;
     showLoad();
     try{
-        let loc='';
-        try{const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));loc=`${pos.coords.latitude.toFixed(5)},${pos.coords.longitude.toFixed(5)}`;}catch(e){}
         const now=new Date();
-        await db.from('driver_events').insert([{driver_id:driver.id,event_type:'depart',event_time:now.toISOString(),night_work:now.getHours()<6||now.getHours()>=22,weekend_work:[0,6].includes(now.getDay()),hours:0,bonus_percent:0,bonus_amount:0}]);
-        rhStartTime=now;
-        if(!silent){toast('🟢 Départ pointé !');await loadRH();}
-    }catch(e){if(!silent)toast('❌ '+e.message);}
+        let hours=0;
+        if(eventType==='arrivee'&&rhStartTime){
+            const pauseD=rhEvents.find(e=>e.event_type==='pause_debut');
+            const pauseF=rhEvents.find(e=>e.event_type==='pause_fin');
+            const totalMin=(now-rhStartTime)/60000;
+            const pauseMin=pauseD&&pauseF?(new Date(pauseF.event_time)-new Date(pauseD.event_time))/60000:0;
+            hours=Math.round((totalMin-pauseMin)/60*100)/100;
+        }
+        await db.from('driver_events').insert([{
+            driver_id:driver.id,
+            event_type:eventType,
+            event_time:now.toISOString(),
+            night_work:now.getHours()<6||now.getHours()>=22,
+            weekend_work:[0,6].includes(now.getDay()),
+            hours,
+            bonus_percent:0,
+            bonus_amount:0
+        }]);
+        toast(`${cfg.icon} ${cfg.label} pointé — ${fmtH(now.toISOString())}`);
+        await loadRH();
+    }catch(e){toast('❌ '+e.message);}
     finally{hideLoad();}
 };
 
+// Garder compatibilité avec pointerDepart/Arrivee appelés ailleurs
+window.pointerDepart=async function(silent=false){
+    if(!silent)await pointerRH('depart');
+    else{
+        const now=new Date();
+        await db.from('driver_events').insert([{driver_id:driver.id,event_type:'depart',event_time:now.toISOString(),night_work:now.getHours()<6||now.getHours()>=22,weekend_work:[0,6].includes(now.getDay()),hours:0,bonus_percent:0,bonus_amount:0}]);
+        rhStartTime=now;
+    }
+};
 window.pointerArrivee=async function(silent=false){
-    showLoad();
-    try{
+    if(!silent)await pointerRH('arrivee');
+    else{
         const now=new Date();
         const hours=rhStartTime?Math.round((now-rhStartTime)/36000)/100:0;
         await db.from('driver_events').insert([{driver_id:driver.id,event_type:'arrivee',event_time:now.toISOString(),night_work:now.getHours()<6||now.getHours()>=22,weekend_work:[0,6].includes(now.getDay()),hours,bonus_percent:0,bonus_amount:0}]);
-        if(!silent){toast(`🔴 Arrivée pointée · ${hours}h`);await loadRH();}
-    }catch(e){if(!silent)toast('❌ '+e.message);}
-    finally{hideLoad();}
+    }
 };
 
 // ══════════════════════════════════
