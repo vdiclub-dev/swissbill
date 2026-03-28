@@ -442,7 +442,23 @@
     }
 
     function updateTarifDisplay(){
-        if(clientTarif){
+        if(!clientTarif) return;
+
+        if(clientTarif.tarif_type === 'forfait') {
+            document.getElementById('tarif2kg').textContent = fmt(clientTarif.montant_forfait)+' CHF (forfait)';
+            document.getElementById('tarif10kg').textContent = fmt(clientTarif.montant_forfait)+' CHF (forfait)';
+            document.getElementById('tarif30kg').textContent = fmt(clientTarif.montant_forfait)+' CHF (forfait)';
+        } else if(clientTarif.tarif_type === 'vignologue') {
+            // Afficher la grille vignologue dans les 3 cases (adapter les labels)
+            document.getElementById('tarif2kg').textContent = fmt(clientTarif.prix_inf_2kg)+' CHF';
+            document.getElementById('tarif10kg').textContent = fmt(clientTarif.prix_inf_10kg)+' CHF';
+            document.getElementById('tarif30kg').textContent = fmt(clientTarif.prix_inf_30kg)+' CHF';
+            // Changer les labels visuellement
+            const labels = document.querySelectorAll('.tarif-label');
+            if(labels[0]) labels[0].textContent = '0 — 5 kg';
+            if(labels[1]) labels[1].textContent = '5 — 10 kg';
+            if(labels[2]) labels[2].textContent = '10 — 30 kg';
+        } else {
             document.getElementById('tarif2kg').textContent = fmt(clientTarif.prix_inf_2kg)+' CHF';
             document.getElementById('tarif10kg').textContent = fmt(clientTarif.prix_inf_10kg)+' CHF';
             document.getElementById('tarif30kg').textContent = fmt(clientTarif.prix_inf_30kg)+' CHF';
@@ -450,21 +466,52 @@
     }
 
     function updateServicePrices(){
-        if(clientTarif){
-            document.getElementById('priceEco').innerHTML = fmt(clientTarif.prix_eco || clientTarif.prix_inf_2kg * 0.9) + ' CHF';
-            document.getElementById('priceNormal').innerHTML = fmt(clientTarif.prix_inf_2kg) + ' CHF (base)';
-            document.getElementById('priceExpress').innerHTML = '+' + fmt(clientTarif.suppl_express) + ' CHF';
-            document.getElementById('priceUrgent').innerHTML = '+' + fmt(clientTarif.suppl_urgent) + ' CHF';
+        if(!clientTarif) return;
+
+        if(clientTarif.tarif_type === 'forfait') {
+            document.getElementById('priceEco').innerHTML = fmt(clientTarif.montant_forfait)+' CHF';
+            document.getElementById('priceNormal').innerHTML = fmt(clientTarif.montant_forfait)+' CHF (forfait)';
+        } else if(clientTarif.tarif_type === 'vignologue') {
+            document.getElementById('priceEco').innerHTML = '🍷 Vignologue';
+            document.getElementById('priceNormal').innerHTML = '🍷 Vignologue';
+        } else if(clientTarif.tarif_type === 'negocie') {
+            document.getElementById('priceEco').innerHTML = 'Négocié';
+            document.getElementById('priceNormal').innerHTML = 'Négocié';
+        } else {
+            document.getElementById('priceEco').innerHTML = fmt(clientTarif.prix_eco || clientTarif.prix_inf_2kg * 0.9)+' CHF';
+            document.getElementById('priceNormal').innerHTML = fmt(clientTarif.prix_inf_2kg)+' CHF (base)';
         }
+        document.getElementById('priceExpress').innerHTML = '+'+fmt(clientTarif.suppl_express||5)+' CHF';
+        document.getElementById('priceUrgent').innerHTML = '+'+fmt(clientTarif.suppl_urgent||10)+' CHF';
     }
 
     function getPrixParColis(poids, service){
         if(!clientTarif) return 0;
+
+        // ── FORFAIT : prix fixe peu importe le poids ──
+        if(clientTarif.tarif_type === 'forfait') {
+            return parseFloat(clientTarif.montant_forfait) || 0;
+        }
+
+        // ── VIGNOLOGUE : grille 5/10/20/30 kg ──
+        // On stocke : prix_inf_2kg=<5kg, prix_inf_10kg=<10kg, prix_eco=<20kg, prix_inf_30kg=<30kg
+        if(clientTarif.tarif_type === 'vignologue') {
+            if(poids < 5)  return parseFloat(clientTarif.prix_inf_2kg)  || 7;
+            if(poids < 10) return parseFloat(clientTarif.prix_inf_10kg) || 7.5;
+            if(poids < 20) return parseFloat(clientTarif.prix_eco)      || 12;
+            return parseFloat(clientTarif.prix_inf_30kg) || 18;
+        }
+
+        // ── STANDARD / NÉGOCIÉ : grille normale ──
         let base = 0;
-        if(poids < 2) base = clientTarif.prix_inf_2kg;
-        else if(poids < 10) base = clientTarif.prix_inf_10kg;
-        else base = clientTarif.prix_inf_30kg;
-        if(service === 'eco' && clientTarif.prix_eco) base = clientTarif.prix_eco;
+        if(poids < 2)       base = parseFloat(clientTarif.prix_inf_2kg)  || 8.5;
+        else if(poids < 10) base = parseFloat(clientTarif.prix_inf_10kg) || 11.5;
+        else                base = parseFloat(clientTarif.prix_inf_30kg) || 20.5;
+
+        // ECO override
+        if(service === 'eco' && clientTarif.prix_eco) {
+            base = parseFloat(clientTarif.prix_eco);
+        }
         return base;
     }
 
