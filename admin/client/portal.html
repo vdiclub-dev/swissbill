@@ -1036,82 +1036,173 @@
         hideLoad();
         if(!o) return;
 
+        const qty = parseInt(o.quantity) || 1;
+        const poidsUnitaire = qty > 0 ? ((parseFloat(o.weight)||0) / qty).toFixed(2) : o.weight||0;
         const svcColors = { eco:'#6b7280', normal:'#3b82f6', express:'#f97316', urgent:'#e8311a' };
-        document.getElementById('etiq-num').textContent = o.order_number || o.id.slice(0,8);
-        document.getElementById('etiq-date').textContent = new Date(o.created_at).toLocaleDateString('fr-CH');
-
-        const svcEl = document.getElementById('etiq-service');
-        svcEl.textContent = (o.service_type||'normal').toUpperCase();
-        svcEl.style.background = svcColors[o.service_type] || '#3b82f6';
-
-        const nuitEl = document.getElementById('etiq-nuit');
-        nuitEl.style.display = o.night_delivery ? 'inline-block' : 'none';
-
-        document.getElementById('etiq-exp').innerHTML = (o.pickup_address || '—').replace(/·/g,'<br>').replace(/ - /g,'<br>');
-        document.getElementById('etiq-dest').innerHTML =
-            `<div style="font-size:15px;">${o.destinataire_nom || ''}</div>` +
-            `<div style="font-weight:400;font-size:12px;margin-top:4px;">${o.delivery_address || ''}</div>` +
-            (o.destinataire_tel ? `<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${o.destinataire_tel}</div>` : '');
-
-        document.getElementById('etiq-qty').textContent = (o.quantity||1) + ' colis';
-        document.getElementById('etiq-poids').textContent = (o.weight||0) + ' kg';
-
-        const instrEl = document.getElementById('etiq-instructions');
-        if(o.instructions) {
-            instrEl.style.display = 'block';
-            instrEl.innerHTML = '⚠️ <strong>Instructions :</strong> ' + o.instructions;
-        } else { instrEl.style.display = 'none'; }
-
-        // QR code généré en canvas puis converti en <img> base64 pour l'impression
         const qrUrl = window.location.origin + '/admin/driver-app.html?order=' + encodeURIComponent(o.order_number||'') + '&id=' + o.id;
-        document.getElementById('etiq-qrtext').textContent = o.order_number || o.id.slice(0,8);
-        document.getElementById('qrCodeImg').innerHTML = '';
 
+        // Si 1 seul colis → afficher dans le modal comme avant
+        // Si plusieurs → ouvrir directement la fenêtre d'impression avec toutes les étiquettes
+        if(qty === 1) {
+            // Remplir le modal (comportement existant)
+            document.getElementById('etiq-num').textContent = o.order_number || o.id.slice(0,8);
+            document.getElementById('etiq-date').textContent = new Date(o.created_at).toLocaleDateString('fr-CH');
+            const svcEl = document.getElementById('etiq-service');
+            svcEl.textContent = (o.service_type||'normal').toUpperCase();
+            svcEl.style.background = svcColors[o.service_type] || '#3b82f6';
+            const nuitEl = document.getElementById('etiq-nuit');
+            nuitEl.style.display = o.night_delivery ? 'inline-block' : 'none';
+            document.getElementById('etiq-exp').innerHTML = (o.pickup_address||'—').replace(/·/g,'<br>').replace(/ - /g,'<br>');
+            document.getElementById('etiq-dest').innerHTML =
+                `<div style="font-size:15px;">${o.destinataire_nom||''}</div>` +
+                `<div style="font-weight:400;font-size:12px;margin-top:4px;">${o.delivery_address||''}</div>` +
+                (o.destinataire_tel ? `<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${o.destinataire_tel}</div>` : '');
+            document.getElementById('etiq-qty').textContent = '1 colis';
+            document.getElementById('etiq-poids').textContent = (o.weight||0) + ' kg';
+            const instrEl = document.getElementById('etiq-instructions');
+            if(o.instructions){ instrEl.style.display='block'; instrEl.innerHTML='⚠️ <strong>Instructions :</strong> '+o.instructions; }
+            else instrEl.style.display='none';
+            document.getElementById('etiq-qrtext').textContent = o.order_number || o.id.slice(0,8);
+            document.getElementById('qrCodeImg').innerHTML = '';
+            const tempDiv = document.createElement('div');
+            tempDiv.style.cssText = 'position:absolute;left:-9999px;';
+            document.body.appendChild(tempDiv);
+            new QRCode(tempDiv, { text: qrUrl, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.H });
+            setTimeout(() => {
+                const canvas = tempDiv.querySelector('canvas');
+                if(canvas){
+                    const img = document.createElement('img');
+                    img.src = canvas.toDataURL('image/png');
+                    img.style.cssText = 'width:120px;height:120px;display:block;border:1px solid #ddd;border-radius:6px;';
+                    document.getElementById('qrCodeImg').appendChild(img);
+                }
+                document.body.removeChild(tempDiv);
+                openModal('modalPDF');
+            }, 300);
+        } else {
+            // Plusieurs colis → générer toutes les étiquettes dans une fenêtre d'impression
+            printToutesEtiquettes(o, qty, poidsUnitaire, qrUrl, svcColors);
+        }
+    };
+
+    // Génère toutes les étiquettes dans une nouvelle fenêtre et lance l'impression
+    function printToutesEtiquettes(o, qty, poidsUnitaire, qrUrl, svcColors) {
+        const svcColor = svcColors[o.service_type] || '#3b82f6';
+        const nuitBadge = o.night_delivery ? `<span style="padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;background:#1e293b;color:#fff;">🌙 NUIT</span>` : '';
+        const instrHtml = o.instructions ? `<div style="background:#fff8e1;border:1.5px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#7c5a00;">⚠️ <strong>Instructions :</strong> ${o.instructions}</div>` : '';
+        const expHtml = (o.pickup_address||'—').replace(/·/g,'<br>').replace(/ - /g,'<br>');
+        const destHtml = `<div style="font-size:14px;font-weight:700;">${o.destinataire_nom||''}</div><div style="font-size:12px;margin-top:4px;">${o.delivery_address||''}</div>${o.destinataire_tel?`<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${o.destinataire_tel}</div>`:''}`;
+        const dateStr = new Date(o.created_at).toLocaleDateString('fr-CH');
+
+        // Générer les QR en base64 de façon asynchrone
+        showLoad();
         const tempDiv = document.createElement('div');
-        tempDiv.style.position = 'absolute';
-        tempDiv.style.left = '-9999px';
+        tempDiv.style.cssText = 'position:absolute;left:-9999px;';
         document.body.appendChild(tempDiv);
-
-        new QRCode(tempDiv, { text: qrUrl, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.H });
+        new QRCode(tempDiv, { text: qrUrl, width: 100, height: 100, correctLevel: QRCode.CorrectLevel.H });
 
         setTimeout(() => {
             const canvas = tempDiv.querySelector('canvas');
-            if(canvas) {
-                const img = document.createElement('img');
-                img.src = canvas.toDataURL('image/png');
-                img.style.cssText = 'width:120px;height:120px;display:block;border:1px solid #ddd;border-radius:6px;';
-                img.alt = 'QR Code';
-                document.getElementById('qrCodeImg').appendChild(img);
-            }
+            const qrBase64 = canvas ? canvas.toDataURL('image/png') : '';
             document.body.removeChild(tempDiv);
-            openModal('modalPDF');
-        }, 300);
-    };
+            hideLoad();
+
+            // Construire une étiquette HTML pour chaque colis
+            const etiquetteHTML = (colisNum) => `
+            <div style="background:#fff;border:2px solid #ddd;border-radius:12px;padding:20px;width:100%;page-break-after:always;font-family:'Outfit',sans-serif;color:#111;box-sizing:border-box;">
+                <!-- EN-TÊTE -->
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;border-bottom:3px solid #e8311a;padding-bottom:12px;">
+                    <div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:28px;color:#e8311a;letter-spacing:2px;line-height:1;">COLIXO</div>
+                        <div style="font-size:10px;color:#888;margin-top:2px;">BON DE TRANSPORT</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-family:'Bebas Neue',cursive;font-size:20px;color:#111;">${o.order_number||o.id.slice(0,8)}</div>
+                        <div style="font-size:10px;color:#888;margin-top:2px;">${dateStr}</div>
+                        <div style="margin-top:6px;display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;">
+                            <span style="padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${svcColor};color:#fff;">${(o.service_type||'normal').toUpperCase()}</span>
+                            ${nuitBadge}
+                            <span style="padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;background:#111;color:#fff;">COLIS ${colisNum} / ${qty}</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- EXPÉDITEUR / DESTINATAIRE -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+                    <div style="border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;">
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#aaa;margin-bottom:6px;letter-spacing:1px;">📤 EXPÉDITEUR</div>
+                        <div style="font-size:12px;line-height:1.5;color:#333;">${expHtml}</div>
+                    </div>
+                    <div style="border:2.5px solid #e8311a;border-radius:8px;padding:12px;background:#fff8f8;">
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#e8311a;margin-bottom:6px;letter-spacing:1px;">📦 DESTINATAIRE</div>
+                        <div style="font-size:13px;line-height:1.5;">${destHtml}</div>
+                    </div>
+                </div>
+                <!-- INFOS COLIS -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+                    <div style="background:#f5f5f5;border-radius:8px;padding:10px;text-align:center;">
+                        <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">Colis</div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#111;">${colisNum} / ${qty}</div>
+                    </div>
+                    <div style="background:#f5f5f5;border-radius:8px;padding:10px;text-align:center;">
+                        <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">Poids unitaire</div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#111;">~${poidsUnitaire} kg</div>
+                    </div>
+                    <div style="background:#f5f5f5;border-radius:8px;padding:10px;text-align:center;">
+                        <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">Poids total</div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#111;">${o.weight||0} kg</div>
+                    </div>
+                </div>
+                ${instrHtml}
+                <!-- QR CODE -->
+                <div style="border-top:1px dashed #ddd;padding-top:14px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                    <div>
+                        <div style="font-size:10px;color:#888;margin-bottom:4px;">Scanner pour accéder à la commande :</div>
+                        <div style="font-family:monospace;font-size:13px;font-weight:700;color:#333;">${o.order_number||o.id.slice(0,8)}</div>
+                    </div>
+                    ${qrBase64 ? `<img src="${qrBase64}" style="width:100px;height:100px;border:1px solid #ddd;border-radius:6px;">` : ''}
+                </div>
+            </div>`;
+
+            // Construire la page complète
+            let allEtiquettes = '';
+            for(let i = 1; i <= qty; i++) {
+                allEtiquettes += etiquetteHTML(i);
+            }
+
+            const win = window.open('', '_blank', 'width=720,height=600');
+            win.document.write(`<!DOCTYPE html><html><head>
+                <meta charset="UTF-8">
+                <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+                <style>
+                    *{margin:0;padding:0;box-sizing:border-box;}
+                    body{font-family:'Outfit',sans-serif;background:#f0f0f0;padding:16px;}
+                    @page{size:A5 landscape;margin:8mm;}
+                    @media print{body{background:#fff;padding:0;}}
+                </style>
+            </head><body>
+                <div style="text-align:center;margin-bottom:16px;font-family:sans-serif;font-size:13px;color:#666;">
+                    📦 ${qty} étiquette${qty>1?'s':''} pour la commande <strong>${o.order_number||o.id.slice(0,8)}</strong>
+                    &nbsp;·&nbsp;
+                    <button onclick="window.print()" style="padding:8px 18px;background:#e8311a;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimer les ${qty} étiquettes</button>
+                </div>
+                ${allEtiquettes}
+            </body></html>`);
+            win.document.close();
+        }, 400);
+    }
 
     window.printEtiquette = function() {
-        // Cloner l'étiquette avec les images déjà rendues (base64)
+        // Pour 1 seul colis depuis le modal
         const wrap = document.getElementById('etiquetteWrap');
         const clone = wrap.cloneNode(true);
-        const content = clone.outerHTML;
-
         const win = window.open('', '_blank', 'width=680,height=600');
         win.document.write(`<!DOCTYPE html><html><head>
             <meta charset="UTF-8">
             <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-            <style>
-                *{margin:0;padding:0;box-sizing:border-box;}
-                body{font-family:'Outfit',sans-serif;background:#fff;padding:20px;}
-                @page{size:A5 landscape;margin:10mm;}
-                @media print{body{padding:0;}}
-                img{max-width:100%;}
-            </style>
+            <style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Outfit',sans-serif;background:#fff;padding:20px;}@page{size:A5 landscape;margin:10mm;}@media print{body{padding:0;}}img{max-width:100%;}</style>
         </head><body>
-            ${content}
-            <script>
-                window.onload = function() {
-                    setTimeout(function(){ window.print(); }, 500);
-                };
-            <\/script>
+            ${clone.outerHTML}
+            <script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script>
         </body></html>`);
         win.document.close();
     };
