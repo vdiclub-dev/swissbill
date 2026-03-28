@@ -980,20 +980,54 @@
         const stLabel = stMap[o.admin_status || o.status] || o.status;
         const stClass = 'st-' + (o.admin_status || o.status).replace(/_/g,'');
         const isDelivered = (o.admin_status || o.status) === 'delivered';
+        const canDelete = ['pending_validation','pending'].includes(o.admin_status || o.status);
         const preuveBtn = isDelivered
             ? `<button class="btn btn-ghost" style="color:var(--green)" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> Preuve</button>`
+            : '';
+        const deleteBtn = canDelete
+            ? `<button class="btn btn-ghost" style="color:var(--red);border-color:rgba(232,49,26,0.2);" onclick="deleteOrder('${o.id}','${o.order_number||''}')"><i class="fas fa-trash"></i> Annuler</button>`
             : '';
         return `<div class="order-card" style="${isDelivered ? 'border-color:rgba(34,197,94,0.3);' : ''}">
             <div class="oc-head"><div><div class="oc-num">${o.order_number || o.id.slice(0,8)}</div><div class="oc-date">${new Date(o.created_at).toLocaleDateString('fr-CH')}</div></div><span class="oc-status ${stClass}">${stLabel}</span></div>
             <div class="oc-route"><div class="oc-dot" style="background:var(--blue);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Enlèvement</div>${o.pickup_address || '—'}</div></div>
             <div class="oc-route"><div class="oc-dot" style="background:var(--red);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Livraison</div>${o.delivery_address || '—'}</div></div>
             <div class="oc-meta"><span class="oc-tag">📦 ${o.quantity || 1} colis</span><span class="oc-tag">⚖️ ${o.weight || 0} kg</span><span class="oc-tag">⚡ ${o.service_type || 'normal'}</span>${o.night_delivery ? '<span class="oc-tag">🌙 Nuit</span>' : ''}${isDelivered && o.delivered_at ? `<span class="oc-tag" style="color:var(--green)">✓ ${new Date(o.delivered_at).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>` : ''}</div>
-            <div class="oc-actions" style="display:flex;gap:8px;">
+            <div class="oc-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-ghost" onclick="showPDF('${o.id}')"><i class="fas fa-tag"></i> Étiquette</button>
                 ${preuveBtn}
+                ${deleteBtn}
             </div>
         </div>`;
     }
+
+    window.deleteOrder = async function(orderId, orderNum) {
+        const label = orderNum || orderId.slice(0,8);
+        if(!confirm(`Annuler la commande ${label} ?\n\nCette action supprimera aussi les lignes de facturation liées.`)) return;
+        showLoad();
+        try {
+            // 1. Supprimer les lignes de facturation liées
+            await db.from('facture_lignes').delete().eq('order_id', orderId);
+
+            // 2. Supprimer les tracking events
+            await db.from('tracking_events').delete().eq('order_id', orderId);
+
+            // 3. Supprimer les preuves
+            await db.from('preuves_livraison').delete().eq('stop_id', orderId);
+
+            // 4. Retirer des tournée_arrets
+            await db.from('tournee_arrets').delete().eq('transport_id', orderId);
+
+            // 5. Supprimer la commande
+            const { error } = await db.from('transport_orders_simple').delete().eq('id', orderId);
+            if(error) throw error;
+
+            toast('✅ Commande annulée et supprimée');
+            await loadOrders();
+        } catch(e) {
+            console.error(e);
+            toast('❌ Erreur: ' + e.message);
+        } finally { hideLoad(); }
+    };
 
     window.showPDF = async function(orderId) {
         const id = orderId || currentOrderId; if(!id) return;
