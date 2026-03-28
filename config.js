@@ -15,7 +15,7 @@ window.SUPABASE_CLIENT = window.supabase.createClient(
     {
         auth: {
             persistSession: true,
-            storageKey: 'leman-courses-auth',
+            storageKey: 'Colixo-auth',
             storage: window.localStorage,
             autoRefreshToken: true,
             detectSessionInUrl: true

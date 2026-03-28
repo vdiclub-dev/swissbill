@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dispatch | Léman Dispatch</title>
+    <title>Dispatch | Colixo Dispatch</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -318,7 +318,7 @@
 
 <!-- ═══ TOPBAR ═══ -->
 <header class="topbar">
-    <a href="dashboard.html" class="logo"><div class="logo-mark">🚚</div>Léman<em>-Dispatch</em></a>
+    <a href="dashboard.html" class="logo"><div class="logo-mark">🚚</div>Colixo <em>Dispatch</em></a>
     <div class="sep"></div>
     <div class="tb-title">DISPATCH</div>
     <div class="tb-right">
@@ -451,6 +451,17 @@
 
     if (!window.SUPABASE_CONFIG) { document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>'; return; }
     const db = window.SUPABASE_CLIENT;
+
+    /* ── Protection session ── */
+    (async () => {
+        const { data: { session } } = await db.auth.getSession();
+        if (!session) { window.location.replace('../index.html'); return; }
+        const { data: user } = await db.from('utilisateurs').select('role').eq('id', session.user.id).single();
+        if (!user || !['admin','super_admin'].includes(user.role)) {
+            await db.auth.signOut();
+            window.location.replace('../index.html');
+        }
+    })();
     const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
 
     /* ── State ── */
@@ -521,10 +532,19 @@
     /* ── LOAD DATA ── */
     async function loadAll() {
         const [{data:orders},{data:chauf}] = await Promise.all([
-            db.from('transport_orders_simple').select('*').order('created_at',{ascending:false}),
+            db.from('transport_orders_simple').select('*').neq('status','delivered').order('created_at',{ascending:false}),
             db.from('utilisateurs').select('id,nom,prenom,email,actif').eq('role','chauffeur')
         ]);
-        allOrders  = orders||[];
+        // Trier : les transports planifiés avec tour_position d'abord
+        const raw = orders||[];
+        allOrders = raw.sort((a,b) => {
+            // Si même tournée, trier par position
+            if(a.tour_id && a.tour_id===b.tour_id) {
+                return (a.tour_position||999) - (b.tour_position||999);
+            }
+            // Sinon tri par date décroissante
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
         chauffeurs = (chauf||[]).filter(c => c.actif !== false);
         window._chauffeurs = chauffeurs;
         console.log('[Dispatch] Chauffeurs chargés:', chauffeurs.length);
@@ -623,7 +643,7 @@
 
     /* ── MAP render ── */
     async function renderMap() {
-        Object.values(mapMarkers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);});
+        Object.values(mapMarkers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);if(m.label)map.removeLayer(m.label);});
         mapMarkers={};
         mapLines.forEach(l=>map.removeLayer(l)); mapLines=[];
 
@@ -638,14 +658,18 @@
         }
 
         const bounds=[[46.7785,6.6409]];
-        const ordersToRender = allOrders.filter(o=>o.status!=='delivered');
+        // Afficher tous sauf livrés — in_transit EN PREMIER pour visibilité
+        const ordersToRender = [
+            ...allOrders.filter(o=>o.status==='in_transit'),
+            ...allOrders.filter(o=>o.status!=='delivered'&&o.status!=='in_transit')
+        ];
 
         for(const o of ordersToRender) {
+            const isMoving = o.status==='in_transit';
             const color=STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')]||STATUS_COLORS.pending;
-            const pulse=o.status==='pending'||o.priority==='urgent';
+            const pulse=isMoving||o.priority==='urgent';
             const mg={};
 
-            // Utiliser coords existantes ou géocoder
             let pLat=o.pickup_lat,   pLng=o.pickup_lng;
             let dLat=o.delivery_lat, dLng=o.delivery_lng;
 
@@ -661,19 +685,47 @@
             }
 
             if(pLat) {
-                mg.p=L.marker([pLat,pLng],{icon:makeIcon(color,pulse,'circle')}).addTo(map)
+                mg.p=L.marker([pLat,pLng],{icon:makeIcon(color,pulse,'circle'), zIndexOffset: isMoving?1000:0})
+                    .addTo(map)
                     .on('click',()=>focusOrderMap(o.id))
-                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
+                    .bindTooltip(`<b>${o.order_number||'—'}</b>${isMoving?'<br>🚚 <b>EN ROUTE</b>':''}<br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
                 bounds.push([pLat,pLng]);
             }
             if(dLat) {
-                mg.d=L.marker([dLat,dLng],{icon:makeIcon(color,false,'square')}).addTo(map)
+                // Marqueur livraison plus grand si en transit
+                const iconSize = isMoving ? [16,16] : [12,12];
+                mg.d=L.marker([dLat,dLng],{
+                    icon:isMoving
+                        ? L.divIcon({
+                            html:`<div style="position:relative;">
+                                <div style="width:20px;height:20px;background:${color};border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 0 12px ${color};animation:pulse 1s infinite;"></div>
+                                <style>@keyframes pulse{0%,100%{box-shadow:0 0 8px ${color}}50%{box-shadow:0 0 20px ${color}}}</style>
+                            </div>`,
+                            className:'',iconSize:[20,20],iconAnchor:[10,10]
+                          })
+                        : makeIcon(color,false,'square'),
+                    zIndexOffset: isMoving?1000:0
+                }).addTo(map)
                     .on('click',()=>focusOrderMap(o.id))
-                    .bindTooltip(`<b>${o.order_number||'—'}</b><br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
+                    .bindTooltip(`<b>${o.order_number||'—'}</b>${isMoving?'<br>🎯 <b>DESTINATION</b>':''}<br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
                 bounds.push([dLat,dLng]);
+
+                // Label "EN ROUTE" flottant pour in_transit
+                if(isMoving && dLat) {
+                    mg.label = L.marker([dLat,dLng],{
+                        icon:L.divIcon({
+                            html:`<div style="background:${color};color:white;padding:2px 7px;border-radius:100px;font-size:10px;font-weight:700;white-space:nowrap;margin-top:-28px;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🚚 EN ROUTE</div>`,
+                            className:'',iconAnchor:[-4,28]
+                        }),
+                        interactive:false
+                    }).addTo(map);
+                }
             }
             if(pLat&&dLat) {
-                mg.l=L.polyline([[pLat,pLng],[dLat,dLng]],{color,weight:1.5,opacity:0.25,dashArray:'4 6'}).addTo(map);
+                const lineStyle = isMoving
+                    ? {color,weight:3,opacity:0.7,dashArray:'8 4'}
+                    : {color,weight:1.5,opacity:0.2,dashArray:'4 6'};
+                mg.l=L.polyline([[pLat,pLng],[dLat,dLng]],lineStyle).addTo(map);
                 mapLines.push(mg.l);
             }
             mapMarkers[o.id]=mg;
@@ -1447,17 +1499,21 @@
 
         showLoad('Sauvegarde…');
         try {
-            for(const orderId of tour.orderIds){
+            // Sauvegarder avec position dans la tournée
+            for(let i=0; i<tour.orderIds.length; i++){
                 await db.from('transport_orders_simple').update({
-                    status:'planned', driver_id:tour.driverId,
-                    assigned_at:new Date().toISOString()
-                }).eq('id',orderId);
+                    status:      'planned',
+                    driver_id:   tour.driverId,
+                    assigned_at: new Date().toISOString(),
+                    tour_id:     tour.id,
+                    tour_position: i+1  // Position dans la tournée
+                }).eq('id', tour.orderIds[i]);
             }
             const driver=chauffeurs.find(c=>c.id===tour.driverId);
             const dName=driver?`${driver.prenom||''} ${driver.nom||''}`.trim():'Chauffeur';
 
             // Notification push
-            await window.LémanPush?.notifyDriver(
+            await window.ColixoPush?.notifyDriver(
                 tour.driverId,
                 '🚚 Nouvelle tournée assignée !',
                 `Tournée "${tour.name}" — ${tour.orderIds.length} transport${tour.orderIds.length>1?'s':''} à effectuer`,
@@ -1487,7 +1543,7 @@
         try {
             await db.from('transport_orders_simple').update({status:'planned',driver_id:dId,assigned_at:new Date().toISOString()}).eq('id',id);
             const o=allOrders.find(x=>x.id===id);
-            await window.LémanPush?.notifyDriver(dId,'📦 Nouveau transport !',`${o?.order_number||''} — ${shortAddr(o?.pickup_address)} → ${shortAddr(o?.delivery_address)}`,{type:'order_assigned'});
+            await window.ColixoPush?.notifyDriver(dId,'📦 Nouveau transport !',`${o?.order_number||''} — ${shortAddr(o?.pickup_address)} → ${shortAddr(o?.delivery_address)}`,{type:'order_assigned'});
             toast('success','Chauffeur assigné ✓');
             window.closeModal('modalAssign');
             await loadAll();
@@ -1644,7 +1700,36 @@
             loadAll();
             toast('info',`📦 Nouveau transport : ${payload.new.order_number||'—'}`);
         })
-        .on('postgres_changes',{event:'UPDATE',schema:'public',table:'transport_orders_simple'},()=>loadAll())
+        .on('postgres_changes',{event:'UPDATE',schema:'public',table:'transport_orders_simple'},payload=>{
+            loadAll();
+            // Notification spéciale prise en charge
+            const o = payload.new;
+            if(o.status==='in_transit' && payload.old?.status!=='in_transit') {
+                toast('success', `🚚 ${o.order_number||'—'} — Pris en charge par le chauffeur`);
+                // Vibrer si supporté
+                if(navigator.vibrate) navigator.vibrate([200,100,200]);
+                // Son de notification
+                try {
+                    const ctx = new AudioContext();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.frequency.value = 880;
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.5);
+                    osc.start(); osc.stop(ctx.currentTime+0.5);
+                } catch(e){}
+            }
+            if(o.status==='delivered' && payload.old?.status!=='delivered') {
+                toast('success', `✅ ${o.order_number||'—'} — Livré !`);
+            }
+        })
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications'},payload=>{
+            // Notifications de prise en charge
+            if(payload.new?.title?.includes('Pris en charge')) {
+                toast('success', `🚚 ${payload.new.title}`);
+            }
+        })
         .subscribe();
 
     /* ── INIT ── */

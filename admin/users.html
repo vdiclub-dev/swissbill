@@ -324,9 +324,53 @@
     }
     const db = window.SUPABASE_CLIENT;
 
-    /* ── Helpers ── */
-    const toastEl = document.getElementById('toast');
-    let tt;
+    /* ── Protection session ── */
+    (async () => {
+        const { data: { session } } = await db.auth.getSession();
+        if (!session) { window.location.replace('../index.html'); return; }
+        const { data: user } = await db.from('utilisateurs').select('role').eq('id', session.user.id).single();
+        if (!user || !['admin','super_admin'].includes(user.role)) {
+            await db.auth.signOut();
+            window.location.replace('../index.html');
+        }
+    })();
+
+    /* ── Curseur personnalisé ── */
+    const cur     = document.getElementById('cur');
+    const curRing = document.getElementById('curRing');
+    let mx = 0, my = 0, rx = 0, ry = 0;
+    document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+    (function loop() {
+        rx += (mx - rx) * 0.13;
+        ry += (my - ry) * 0.13;
+        cur.style.left     = mx + 'px';
+        cur.style.top      = my + 'px';
+        curRing.style.left = rx + 'px';
+        curRing.style.top  = ry + 'px';
+        requestAnimationFrame(loop);
+    })();
+
+    /* ── Nav sticky ── */
+    window.addEventListener('scroll', () => {
+        document.getElementById('nav').classList.toggle('stuck', window.scrollY > 50);
+    }, { passive: true });
+
+    /* ── Scroll reveal ── */
+    const revObs = new IntersectionObserver(entries => {
+        entries.forEach((en, i) => {
+            if (en.isIntersecting) {
+                setTimeout(() => en.target.classList.add('vis'), i * 70);
+                revObs.unobserve(en.target);
+            }
+        });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('[data-r]').forEach(el => revObs.observe(el));
+
+    /* ── Toast ── */
+    const toastEl  = document.getElementById('toast');
+    const toastIco = document.getElementById('toastIco');
+    const toastTxt = document.getElementById('toastTxt');
+    let toastTimer;
     function toast(type, msg) {
         clearTimeout(tt);
         toastEl.className = 'toast ' + type + ' show';

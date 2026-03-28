@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Léman-Courses — Transport express Suisse romande</title>
+    <title>Colixo — Transport express Suisse romande</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -358,6 +358,30 @@
 <div class="cursor"     id="cur"></div>
 <div class="cursor-ring" id="curRing"></div>
 
+<!-- ═══ MODAL LOGIN CHAUFFEUR ═══ -->
+<div id="modalChauffeur" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title" style="color:#f59e0b;"><i class="fas fa-truck" style="margin-right:8px;"></i>APP CHAUFFEUR</div>
+            <button class="modal-close" data-close="modalChauffeur">✕</button>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Connectez-vous pour accéder à vos missions</p>
+        <form id="formChauffeur">
+            <div class="field">
+                <label>Email</label>
+                <input type="email" id="chauffeurEmail" placeholder="vous@exemple.ch" required autocomplete="email">
+            </div>
+            <div class="field">
+                <label>Mot de passe</label>
+                <input type="password" id="chauffeurPassword" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn modal-submit" style="background:#f59e0b;color:#0a0a0f;width:100%;padding:14px;border-radius:10px;font-weight:700;font-size:15px;border:none;cursor:pointer;font-family:'Outfit',sans-serif;">
+                <i class="fas fa-sign-in-alt"></i> Accéder à mes missions
+            </button>
+        </form>
+    </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast">
     <span class="t-ico" id="toastIco"></span>
@@ -371,10 +395,10 @@
 <nav id="nav">
     <a href="#" class="logo">
         <div class="logo-mark">🚚</div>
-        Léman<em>-Courses</em>
+        Colixo
     </a>
     <div class="nav-right">
-        <a href="/admin/client/portal.html" class="btn btn-outline" style="margin-right:4px;">
+        <a href="/admin/client/" target="_blank" class="btn btn-outline" style="margin-right:4px;">
             <i class="fas fa-user"></i> Espace client
         </a>
         <button class="btn btn-outline" id="btnLogin">
@@ -408,11 +432,14 @@
             <button class="btn btn-red btn-lg" id="heroSignup">
                 <i class="fas fa-rocket"></i> Commencer gratuitement
             </button>
-            <a href="/admin/client/portal.html" class="btn btn-outline btn-lg">
+            <a href="/admin/client/" target="_blank" class="btn btn-outline btn-lg">
                 <i class="fas fa-box"></i> Espace expéditeur
             </a>
             <button class="btn btn-outline btn-lg" id="heroLogin">
                 <i class="fas fa-sign-in-alt"></i> Se connecter
+            </button>
+            <button class="btn btn-outline btn-lg" id="heroChauffeur" style="border-color:rgba(245,158,11,0.4);color:#f59e0b;">
+                <i class="fas fa-truck"></i> App Chauffeur
             </button>
         </div>
     </div>
@@ -614,8 +641,8 @@
 
 <!-- ═══ FOOTER ═══ -->
 <footer>
-    <div class="foot-logo">LÉMAN<em>-COURSES</em></div>
-    <div class="foot-copy">© 2025 Léman-Courses — Suisse romande</div>
+    <div class="foot-logo">COLI<em>XO</em></div>
+    <div class="foot-copy">© 2026 Didier Gysling — Colixo · 1462 Yvonand</div>
     <div class="foot-links">
         <a href="#">CGU</a>
         <a href="#">Confidentialité</a>
@@ -796,6 +823,14 @@
         document.getElementById(id)?.addEventListener('click', () => open('modalSignup'));
     });
 
+    // Bouton App Chauffeur
+    document.getElementById('heroChauffeur')?.addEventListener('click', () => open('modalChauffeur'));
+
+    // Fonction de redirection qui garde l'historique
+    function redirect(url) {
+        window.location.replace(url); // replace évite d'empiler dans l'historique
+    }
+
     /* Fermer via data-close */
     document.querySelectorAll('[data-close]').forEach(btn => {
         btn.addEventListener('click', () => close(btn.dataset.close));
@@ -821,31 +856,61 @@
         }
     });
 
+    /* ── Redirection selon rôle ── */
+    function redirectByRole(role) {
+        if (role === 'client')         window.location.replace('/admin/client/');
+        else if (role === 'chauffeur') window.location.replace('/admin/driver-app.html');
+        else                           window.location.replace('/admin/dashboard.html');
+    }
+
     /* ── Connexion ── */
-    document.getElementById('formLogin').addEventListener('submit', async e => {
-        e.preventDefault();
-        const email    = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value;
+    async function doLogin(email, password) {
         showLoad();
         try {
             const { data, error } = await db.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            // Lire le rôle dans la table utilisateurs
             const { data: user } = await db.from('utilisateurs').select('role').eq('id', data.user.id).single();
             const role = user?.role || 'client';
-            toast('success', 'Connexion réussie — redirection…');
+            toast('success', 'Connexion réussie…');
             setTimeout(() => {
-                if (role === 'client') {
-                    window.location.href = '/admin/client/portal.html';
-                } else if (role === 'chauffeur') {
-                    window.location.href = '/admin/driver-app.html';
-                } else {
-                    window.location.href = '/admin/dashboard.html';
-                }
-            }, 1000);
+                if (role === 'client')         { window.open('/admin/client/','_blank'); return; }
+                else if (role === 'chauffeur') { window.open('/admin/driver-app.html','_blank'); return; }
+                else                           { window.open('/admin/dashboard.html','_blank'); return; }
+            }, 600);
         } catch (err) {
+            toast('error', err.message || 'Email ou mot de passe incorrect');
+        } finally {
             hideLoad();
-            toast('error', err.message);
+        }
+    }
+
+    document.getElementById('formLogin').addEventListener('submit', async e => {
+        e.preventDefault();
+        await doLogin(
+            document.getElementById('loginEmail').value.trim(),
+            document.getElementById('loginPassword').value
+        );
+    });
+
+    document.getElementById('formChauffeur').addEventListener('submit', async e => {
+        e.preventDefault();
+        const email    = document.getElementById('chauffeurEmail').value.trim();
+        const password = document.getElementById('chauffeurPassword').value;
+        showLoad();
+        try {
+            const { data, error } = await db.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            const { data: user } = await db.from('utilisateurs').select('role').eq('id', data.user.id).single();
+            if (!user || user.role !== 'chauffeur') {
+                await db.auth.signOut();
+                throw new Error('Accès réservé aux chauffeurs');
+            }
+            toast('success', 'Bienvenue ! Chargement de vos missions…');
+            setTimeout(() => { window.open('/admin/driver-app.html','_blank'); }, 600);
+        } catch (err) {
+            toast('error', err.message || 'Email ou mot de passe incorrect');
+        } finally {
+            hideLoad();
         }
     });
 

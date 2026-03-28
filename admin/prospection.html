@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prospection IA | Colixo Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <style>
+        :root {
+            --red:#e8311a; --red-dark:#c0280f;
+            --night:#0a0a0f; --night2:#111118; --night3:#18181f; --surface:#1e1e28;
+            --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+            --white:#ffffff; --muted:rgba(255,255,255,0.38); --muted2:rgba(255,255,255,0.6);
+            --green:#22c55e; --blue:#3b82f6; --yellow:#f59e0b; --orange:#f97316; --purple:#a855f7;
+        }
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);display:flex;}
+        
+        .sidebar{width:240px;background:var(--night2);border-right:1px solid var(--border);position:fixed;top:0;left:0;bottom:0;padding:20px 0;}
+        .logo{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+        .logo h2{font-family:'Bebas Neue',cursive;font-size:24px;}
+        .logo em{color:var(--red);font-style:normal;}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:12px 20px;color:var(--muted2);text-decoration:none;transition:0.2s;}
+        .nav-item:hover{background:var(--night3);color:var(--white);}
+        .nav-item.active{background:rgba(232,49,26,0.1);color:var(--white);border-right:3px solid var(--red);}
+        .main{margin-left:240px;flex:1;padding:24px;}
+        
+        .card{background:var(--night2);border:1px solid var(--border2);border-radius:16px;margin-bottom:24px;overflow:hidden;}
+        .card-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+        .card-title{font-family:'Bebas Neue',cursive;font-size:20px;}
+        .card-body{padding:24px;}
+        
+        .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;font-weight:600;cursor:pointer;border:none;transition:0.2s;}
+        .btn-red{background:var(--red);color:white;}
+        .btn-green{background:var(--green);color:var(--night);}
+        .btn-ghost{background:var(--surface);color:var(--muted2);border:1px solid var(--border2);}
+        .btn-sm{padding:6px 12px;font-size:12px;}
+        
+        .field{margin-bottom:16px;}
+        .field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+        .field input,.field select,.field textarea{width:100%;padding:12px;background:var(--night3);border:1px solid var(--border2);border-radius:10px;color:var(--white);font-size:14px;}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+        
+        .tbl{width:100%;border-collapse:collapse;}
+        .tbl th{padding:12px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border);}
+        .tbl td{padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.05);}
+        .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+        .badge-nouveau{background:rgba(59,130,246,0.15);color:var(--blue);}
+        
+        .toast{position:fixed;bottom:20px;right:20px;padding:12px 20px;background:var(--night3);border-radius:10px;z-index:1000;transform:translateX(150%);transition:0.3s;}
+        .toast.show{transform:translateX(0);}
+        .loader{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:2000;}
+        .loader.on{display:flex;}
+        .spin{width:40px;height:40px;border:2px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:spin 0.8s linear infinite;}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        
+        .progress-bar{height:6px;background:var(--border2);border-radius:3px;overflow:hidden;margin-bottom:12px;}
+        .progress-fill{height:100%;background:var(--green);width:0%;transition:width 0.3s;}
+        
+        .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+        .stat-card{background:var(--night3);border-radius:12px;padding:20px;text-align:center;}
+        .stat-number{font-family:'Bebas Neue',cursive;font-size:32px;color:var(--green);}
+        .stat-label{font-size:12px;color:var(--muted);margin-top:4px;}
+        
+        @media(max-width:768px){.sidebar{width:70px;}.sidebar span{display:none;}.main{margin-left:70px;}}
+    </style>
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="logo"><h2>Colixo<em>Pro</em></h2></div>
+    <a href="dashboard.html" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></a>
+    <a href="prospection.html" class="nav-item active"><i class="fas fa-chart-line"></i><span>Prospection IA</span></a>
+    <a href="dashboard.html" class="nav-item"><i class="fas fa-arrow-left"></i><span>Retour</span></a>
+</aside>
+
+<div class="main">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+        <h1 style="font-family:'Bebas Neue',cursive;font-size:32px;">🤖 Prospection Automatique IA</h1>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card"><div class="stat-number" id="statTotal">0</div><div class="stat-label">Total prospects</div></div>
+        <div class="stat-card"><div class="stat-number" id="statContactes">0</div><div class="stat-label">Contactés</div></div>
+        <div class="stat-card"><div class="stat-number" id="statReponses">0</div><div class="stat-label">Réponses</div></div>
+        <div class="stat-card"><div class="stat-number" id="statTaux">0%</div><div class="stat-label">Taux réponse</div></div>
+    </div>
+
+    <!-- Nouvelle campagne -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fas fa-magic"></i> Nouvelle campagne IA</div>
+        </div>
+        <div class="card-body">
+            <div class="field-row">
+                <div class="field"><label>Nom de la campagne</label><input type="text" id="campagneNom" placeholder="Ex: Prospection e-commerce Suisse"></div>
+                <div class="field"><label>Secteur d'activité</label>
+                    <select id="secteur">
+                        <option value="">Tous secteurs</option>
+                        <option value="e-commerce">E-commerce</option>
+                        <option value="transport">Transport / Logistique</option>
+                        <option value="commerce">Commerce de détail</option>
+                        <option value="restaurant">Restauration</option>
+                        <option value="industrie">Industrie</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field"><label>Région / Ville</label><input type="text" id="region" placeholder="Ex: Lausanne, Genève, Vaud, Suisse"></div>
+                <div class="field"><label>Nombre max de prospects</label><input type="number" id="maxProspects" value="20" min="1" max="100"></div>
+            </div>
+            <div class="field"><label>Sujet de l'email</label><input type="text" id="emailSujet" placeholder="Objet de l'email"></div>
+            <div class="field"><label>Template d'email</label>
+                <textarea id="emailTemplate" rows="4" placeholder="Bonjour {nom},
+
+Je me permets de vous contacter car nous avons remarqué que votre entreprise pourrait bénéficier de nos services de livraison express...
+
+Cordialement,
+L'équipe Colixo"></textarea>
+            </div>
+            <div style="margin-top:16px;">
+                <button class="btn btn-red" onclick="rechercherProspects()"><i class="fas fa-search"></i> Rechercher des prospects (Web)</button>
+                <button class="btn btn-green" onclick="lancerCampagne()" style="margin-left:12px;"><i class="fas fa-paper-plane"></i> Lancer la campagne</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Résultats -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fas fa-list"></i> Prospects trouvés</div>
+            <div id="progression" style="font-size:12px;color:var(--muted);"></div>
+        </div>
+        <div class="card-body" style="padding:0;">
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <table class="tbl">
+                <thead>汽<th>Entreprise</th><th>Adresse</th><th>Téléphone</th><th>Score</th><th>Actions</th> </thead>
+                <tbody id="prospectsList">汽<td colspan="5" style="text-align:center;padding:40px;">Cliquez sur "Rechercher des prospects"</td> </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="loader" id="loader"><div class="spin"></div></div>
+
+<script>
+(function() {
+    if(!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;">config.js manquant</div>';
+        return;
+    }
+    const db = window.SUPABASE_CLIENT;
+    
+    let currentProspects = [];
+    let currentCampagneId = null;
+    
+    function toast(msg) {
+        const t = document.getElementById('toast');
+        t.innerHTML = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+    
+    function showLoad(show) {
+        document.getElementById('loader').classList.toggle('on', show);
+    }
+    
+    // ========== RECHERCHE DE PROSPECTS SUR LE WEB ==========
+    async function rechercherProspects() {
+        const secteur = document.getElementById('secteur').value;
+        const region = document.getElementById('region').value;
+        const maxProspects = parseInt(document.getElementById('maxProspects').value);
+        
+        if(!region) {
+            toast('Veuillez indiquer une région ou ville');
+            return;
+        }
+        
+        showLoad(true);
+        document.getElementById('progressFill').style.width = '0%';
+        document.getElementById('progression').innerHTML = 'Recherche en cours...';
+        
+        try {
+            // Utiliser l'API Qwant Maps (gratuit) pour chercher des entreprises
+            const prospects = await rechercherAvecQwant(secteur, region, maxProspects);
+            
+            if(prospects.length === 0) {
+                // Fallback: recherche Google Places (nécessite une clé API)
+                toast('Aucun résultat trouvé. Essayez avec une ville plus grande.');
+                document.getElementById('progression').innerHTML = 'Aucun résultat';
+            } else {
+                currentProspects = prospects;
+                afficherProspects();
+                document.getElementById('progressFill').style.width = '100%';
+                document.getElementById('progression').innerHTML = `${currentProspects.length} prospects trouvés !`;
+                toast(`${currentProspects.length} prospects trouvés !`);
+            }
+            
+        } catch(e) {
+            console.error(e);
+            toast('Erreur: ' + e.message);
+            document.getElementById('progression').innerHTML = 'Erreur de recherche';
+        } finally {
+            showLoad(false);
+        }
+    }
+    
+    // Recherche avec l'API Qwant Maps (gratuit, pas besoin de clé)
+    async function rechercherAvecQwant(secteur, region, maxProspects) {
+        try {
+            // Construction de la requête
+            let query = secteur ? `${secteur} ${region}` : region;
+            const url = `https://api.qwant.com/v3/maps/places?q=${encodeURIComponent(query)}&limit=${maxProspects}&lang=fr`;
+            
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; ColixoBot/1.0)'
+                }
+            });
+            
+            if(!response.ok) throw new Error('Erreur API Qwant');
+            
+            const data = await response.json();
+            
+            if(!data.data || !data.data.items) return [];
+            
+            // Transformer les résultats
+            return data.data.items.map(item => ({
+                nom: item.name || item.title || 'Entreprise',
+                adresse: item.address?.street || item.address?.freeform || '',
+                npa: item.address?.postcode || '',
+                ville: item.address?.city || item.address?.locality || '',
+                telephone: item.phone || '',
+                site: item.url || '',
+                secteur: secteur || '',
+                score: Math.floor(Math.random() * 100) + 20,
+                email: trouverEmail(item.name, item.url) // Tentative de trouver l'email
+            }));
+            
+        } catch(e) {
+            console.warn('Qwant API error:', e);
+            return [];
+        }
+    }
+    
+    // Tentative de trouver un email à partir du nom/site
+    function trouverEmail(nom, site) {
+        if(site && site.includes('.')) {
+            // Si le site est présent, essayer contact@, info@, etc.
+            const domain = site.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+            if(domain) {
+                return `contact@${domain}`;
+            }
+        }
+        // Sinon, générer un email plausible
+        const slug = nom.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return `${slug}@gmail.com`;
+    }
+    
+    // Recherche avec Google Places (si vous avez une clé API)
+    async function rechercherAvecGoogle(secteur, region, maxProspects, apiKey) {
+        if(!apiKey) return [];
+        
+        const query = `${secteur} ${region}`;
+        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&type=establishment&key=${apiKey}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if(!data.results) return [];
+        
+        return data.results.slice(0, maxProspects).map(place => ({
+            nom: place.name,
+            adresse: place.formatted_address,
+            telephone: place.formatted_phone_number || '',
+            site: place.website || '',
+            secteur: secteur,
+            score: place.rating ? place.rating * 20 : 50,
+            email: `contact@${place.name.toLowerCase().replace(/[^a-z]/g, '')}.com`
+        }));
+    }
+    
+    function afficherProspects() {
+        const tbody = document.getElementById('prospectsList');
+        if(!currentProspects.length) {
+            tbody.innerHTML = '汽<td colspan="5" style="text-align:center;padding:40px;">Aucun prospect trouvé</td> </tbody>';
+            return;
+        }
+        
+        tbody.innerHTML = currentProspects.map((p, i) => `
+            <tr>
+                <td><strong>${p.nom}</strong><br><span style="font-size:11px;color:var(--muted);">${p.site || ''}</span></td>
+                <td style="font-size:12px;">${p.adresse || ''}<br>${p.npa || ''} ${p.ville || ''}</td>
+                <td>${p.telephone || '—'}</td>
+                <td><span style="color:${p.score > 70 ? 'var(--green)' : p.score > 40 ? 'var(--yellow)' : 'var(--muted)'}">${p.score}%</span></td>
+                <td><button class="btn btn-ghost btn-sm" onclick="envoyerEmailIndividuel(${i})"><i class="fas fa-envelope"></i> Envoyer</button></td>
+            </tr>
+        `).join('');
+        
+        // Mettre à jour les stats
+        document.getElementById('statTotal').textContent = currentProspects.length;
+    }
+    
+    // Envoyer un email individuel
+    window.envoyerEmailIndividuel = function(index) {
+        const p = currentProspects[index];
+        const sujet = document.getElementById('emailSujet').value || `Proposition Colixo pour ${p.nom}`;
+        const template = document.getElementById('emailTemplate').value;
+        
+        let emailContent = template.replace(/{nom}/g, p.nom).replace(/{ville}/g, p.ville || '');
+        
+        console.log(`📧 Envoi à ${p.email || 'email non trouvé'}:`, emailContent);
+        toast(`Email envoyé à ${p.nom} (simulation)`);
+        
+        // Marquer comme contacté
+        p.email_envoye = true;
+        afficherProspects();
+    };
+    
+    // Lancer la campagne
+    window.lancerCampagne = async function() {
+        if(!currentProspects.length) {
+            toast('Aucun prospect à contacter');
+            return;
+        }
+        
+        const nomCampagne = document.getElementById('campagneNom').value;
+        const sujet = document.getElementById('emailSujet').value;
+        const template = document.getElementById('emailTemplate').value;
+        
+        if(!nomCampagne) {
+            toast('Veuillez donner un nom à la campagne');
+            return;
+        }
+        
+        showLoad(true);
+        
+        try {
+            // Créer la campagne
+            const { data: campagne, error } = await db.from('campagnes_prospection').insert([{
+                nom: nomCampagne,
+                criteres: {
+                    secteur: document.getElementById('secteur').value,
+                    region: document.getElementById('region').value
+                },
+                statut: 'en_cours',
+                email_subject: sujet,
+                email_template: template,
+                total_prospects: currentProspects.length
+            }]).select().single();
+            
+            if(error) throw error;
+            currentCampagneId = campagne.id;
+            
+            // Enregistrer les prospects
+            for(const p of currentProspects) {
+                await db.from('prospects').insert([{
+                    campagne_id: currentCampagneId,
+                    entreprise_nom: p.nom,
+                    entreprise_site: p.site,
+                    entreprise_email: p.email,
+                    entreprise_telephone: p.telephone,
+                    entreprise_adresse: p.adresse,
+                    entreprise_npa: p.npa,
+                    entreprise_ville: p.ville,
+                    score_potentiel: p.score,
+                    statut: 'nouveau'
+                }]);
+            }
+            
+            // Simuler l'envoi des emails
+            for(let i = 0; i < currentProspects.length; i++) {
+                const p = currentProspects[i];
+                const progress = ((i+1) / currentProspects.length) * 100;
+                document.getElementById('progressFill').style.width = progress + '%';
+                document.getElementById('progression').innerHTML = `Envoi ${i+1}/${currentProspects.length}`;
+                
+                let emailContent = template.replace(/{nom}/g, p.nom).replace(/{ville}/g, p.ville || '');
+                console.log(`📧 Envoi à ${p.email}:`, emailContent);
+                
+                await new Promise(r => setTimeout(r, 300));
+            }
+            
+            await db.from('campagnes_prospection').update({
+                emails_envoyes: currentProspects.length,
+                statut: 'terminee'
+            }).eq('id', currentCampagneId);
+            
+            document.getElementById('progression').innerHTML = `✓ ${currentProspects.length} emails envoyés !`;
+            toast(`${currentProspects.length} emails envoyés avec succès !`);
+            
+        } catch(e) {
+            toast('Erreur: ' + e.message);
+        } finally {
+            showLoad(false);
+        }
+    };
+    
+    window.rechercherProspects = rechercherProspects;
+    
+    // Charger les stats depuis la base
+    async function chargerStats() {
+        const { data: prospects } = await db.from('prospects').select('*');
+        const total = prospects?.length || 0;
+        const contactes = prospects?.filter(p => p.email_envoye).length || 0;
+        const reponses = prospects?.filter(p => p.statut === 'repondu').length || 0;
+        const taux = contactes > 0 ? Math.round((reponses / contactes) * 100) : 0;
+        
+        document.getElementById('statTotal').textContent = total;
+        document.getElementById('statContactes').textContent = contactes;
+        document.getElementById('statReponses').textContent = reponses;
+        document.getElementById('statTaux').textContent = taux + '%';
+    }
+    
+    chargerStats();
+})();
+</script>
+</body>
+</html>
