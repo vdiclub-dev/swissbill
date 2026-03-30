@@ -359,10 +359,16 @@
         if (error && (error.message?.toLowerCase().includes('already registered') ||
                       error.message?.toLowerCase().includes('already been registered') ||
                       error.status === 422)) {
+            // 1. Chercher dans utilisateurs
             const { data: existing } = await db.from('utilisateurs')
                 .select('id').eq('email', email).maybeSingle();
             if (existing?.id) return { userId: existing.id, isNew: false };
-            throw new Error(`L'email "${email}" existe déjà. Utilisez "Modifier" pour mettre à jour ce compte.`);
+            // 2. Compte orphelin → récupérer l'ID via RPC
+            try {
+                const { data: authUser } = await db.rpc('get_user_id_by_email', { user_email: email });
+                if (authUser) return { userId: authUser, isNew: false };
+            } catch(e){ console.warn('get_user_id_by_email:', e.message); }
+            throw new Error(`L'email "${email}" existe dans Supabase Auth mais sans profil.\nExécutez le SQL dans supabase_delete_user.sql puis réessayez.`);
         }
         throw error || new Error('Création du compte échouée');
     }

@@ -466,14 +466,21 @@ async function getOrCreateAuthUser(email, pwd) {
     if (error && (error.message?.toLowerCase().includes('already registered') ||
                   error.message?.toLowerCase().includes('already been registered') ||
                   error.status === 422)) {
-        // Chercher l'ID dans la table utilisateurs via l'email
+
+        // 1. Chercher dans la table utilisateurs
         const { data: existing } = await db.from('utilisateurs')
             .select('id').eq('email', email).maybeSingle();
-        if (existing?.id) {
-            return { userId: existing.id, isNew: false };
-        }
-        // Compte auth existe mais absent de utilisateurs — retourner erreur claire
-        throw new Error(`L'email "${email}" existe déjà. Utilisez "Modifier" pour mettre à jour ce compte.`);
+        if (existing?.id) return { userId: existing.id, isNew: false };
+
+        // 2. Compte auth.users orphelin (pas dans utilisateurs)
+        //    Récupérer l'ID via RPC
+        try {
+            const { data: authUser } = await db.rpc('get_user_id_by_email', { user_email: email });
+            if (authUser) return { userId: authUser, isNew: false };
+        } catch(e){ console.warn('get_user_id_by_email:', e.message); }
+
+        // 3. RPC non disponible — on crée un profil sans ID auth (fallback)
+        throw new Error(`L'email "${email}" existe déjà dans Supabase Auth mais sans profil.\nExécutez le SQL 'get_user_id_by_email' dans Supabase (fichier supabase_delete_user.sql) puis réessayez.`);
     }
 
     throw error || new Error('Création du compte échouée');
