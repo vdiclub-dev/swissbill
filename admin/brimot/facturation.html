@@ -883,22 +883,28 @@ function addLigne(data=null) {
 
 function renderLignes() {
     const c = $('lignesContainer');
-    c.innerHTML = lignes.map(l=>`
+    c.innerHTML = lignes.map(l=>{
+        // Échapper les guillemets dans la désignation pour l'attribut HTML value
+        const safeDesig = (l.designation||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        return `
         <div class="ligne-row" id="lr-${l.id}">
             <div style="position:relative;">
-                <input type="text" value="${l.designation}" placeholder="Désignation du service…"
+                <input type="text" value="${safeDesig}" placeholder="Désignation du service…"
+                    oninput="updateLigne('${l.id}','designation',this.value);showProduitSuggest('${l.id}',this.value)"
                     onchange="updateLigne('${l.id}','designation',this.value)"
-                    oninput="showProduitSuggest('${l.id}',this.value)"
                     id="ld-${l.id}">
                 <div id="sug-${l.id}" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--night3);border:1px solid var(--border2);border-radius:8px;z-index:50;max-height:160px;overflow-y:auto;"></div>
             </div>
             <input type="number" value="${l.qte}" min="0.01" step="0.01"
+                oninput="updateLigne('${l.id}','qte',this.value)"
                 onchange="updateLigne('${l.id}','qte',this.value)">
             <input type="number" value="${l.prix_ht}" min="0" step="0.01" placeholder="0.00"
+                oninput="updateLigne('${l.id}','prix_ht',this.value)"
                 onchange="updateLigne('${l.id}','prix_ht',this.value)">
             <div class="ligne-total" id="lt-${l.id}">${fmtMoney(l.qte*l.prix_ht)}</div>
             <button class="btn-del-ligne" onclick="deleteLigne('${l.id}')"><i class="fas fa-times"></i></button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
     calcTotaux();
 }
 
@@ -1049,10 +1055,29 @@ async function editFacture(id) {
 }
 window.editFacture = editFacture;
 
+/* Resync toutes les valeurs du DOM → tableau lignes avant save */
+function syncLignesFromDOM() {
+    lignes.forEach(l => {
+        const desEl = $('ld-'+l.id);
+        if(desEl) l.designation = desEl.value;
+        // qte et prix_ht
+        const row = $('lr-'+l.id);
+        if(row) {
+            const nums = row.querySelectorAll('input[type=number]');
+            if(nums[0]) l.qte      = parseFloat(nums[0].value)||0;
+            if(nums[1]) l.prix_ht  = parseFloat(nums[1].value)||0;
+        }
+    });
+}
+
 async function saveFacture(openPreview=false) {
+    // Lire les valeurs actuelles du DOM (au cas où onchange ne s'est pas déclenché)
+    syncLignesFromDOM();
     const clientId = $('fClient').value;
     if(!clientId){ toast('error','❌ Sélectionnez un client'); return; }
     if(!lignes.length){ toast('error','❌ Ajoutez au moins une ligne'); return; }
+    // Vérifier qu'au moins une ligne a une désignation
+    if(lignes.every(l=>!l.designation.trim())){ toast('error','❌ Au moins une ligne doit avoir une désignation'); return; }
     showLoad();
 
     const ht = lignes.reduce((s,l)=>s+l.qte*l.prix_ht,0);
