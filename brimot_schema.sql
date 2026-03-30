@@ -10,8 +10,9 @@ CREATE TABLE IF NOT EXISTS brimot_clients (
     contact     text,
     email       text,
     telephone   text,
-    adresse     text,
-    ville       text,
+    adresse     text,           -- Rue et numéro (ex: Route de Berne 14)
+    npa         text,           -- Code postal (ex: 1010) — OBLIGATOIRE pour QR
+    ville       text,           -- Ville (ex: Lausanne)   — OBLIGATOIRE pour QR
     pays        text DEFAULT 'CH',
     num_tva     text,
     iban        text,
@@ -19,6 +20,9 @@ CREATE TABLE IF NOT EXISTS brimot_clients (
     created_at  timestamptz DEFAULT now(),
     updated_at  timestamptz DEFAULT now()
 );
+-- Migration si la table existe déjà
+ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS npa  text;
+ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS pays text DEFAULT 'CH';
 
 -- ── Produits / Services ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS brimot_produits (

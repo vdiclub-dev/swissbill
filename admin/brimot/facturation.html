@@ -379,19 +379,25 @@
         </div>
         <input type="hidden" id="cId">
         <div class="row2">
-            <div class="field"><label>Nom entreprise / client *</label><input type="text" id="cNom" placeholder="Brimot SA, Jean Dupont…"></div>
+            <div class="field"><label>Nom entreprise / client *</label><input type="text" id="cNom" placeholder="Entreprise SA, Jean Dupont…"></div>
             <div class="field"><label>Contact (prénom nom)</label><input type="text" id="cContact" placeholder="Prénom Nom"></div>
         </div>
         <div class="row2">
             <div class="field"><label>Email *</label><input type="email" id="cEmail" placeholder="contact@client.ch"></div>
             <div class="field"><label>Téléphone</label><input type="tel" id="cTel" placeholder="+41 79 123 45 67"></div>
         </div>
-        <div class="field"><label>Adresse</label><input type="text" id="cAdresse" placeholder="Rue du Lac 12, 1800 Vevey"></div>
-        <div class="row2">
-            <div class="field"><label>NPA / Ville</label><input type="text" id="cVille" placeholder="1800 Vevey"></div>
-            <div class="field"><label>N° TVA</label><input type="text" id="cTVA" placeholder="CHE-123.456.789"></div>
+        <div class="field"><label>Rue et numéro <span style="color:var(--red)">*</span> <span style="font-size:10px;color:var(--brimot);">(requis pour QR)</span></label><input type="text" id="cAdresse" placeholder="Route de Berne 14"></div>
+        <div class="row3">
+            <div class="field"><label>NPA <span style="color:var(--red)">*</span></label><input type="text" id="cNpa" placeholder="1010" maxlength="10"></div>
+            <div class="field"><label>Ville <span style="color:var(--red)">*</span></label><input type="text" id="cVille" placeholder="Lausanne"></div>
+            <div class="field"><label>Pays</label>
+                <select id="cPays"><option value="CH" selected>CH — Suisse</option><option value="FR">FR — France</option><option value="DE">DE — Allemagne</option><option value="IT">IT — Italie</option><option value="AT">AT — Autriche</option><option value="LI">LI — Liechtenstein</option></select>
+            </div>
         </div>
-        <div class="field"><label>IBAN (pour QR-facture)</label><input type="text" id="cIBAN" placeholder="CH56 0483 5012 3456 7800 9"></div>
+        <div class="row2">
+            <div class="field"><label>N° TVA</label><input type="text" id="cTVA" placeholder="CHE-123.456.789"></div>
+            <div class="field"><label>IBAN (pour QR-facture)</label><input type="text" id="cIBAN" placeholder="CH56 0483 5012 3456 7800 9"></div>
+        </div>
         <div class="field"><label>Notes</label><textarea id="cNotes" rows="2" placeholder="Notes internes…"></textarea></div>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px;">
             <button class="btn btn-ghost" onclick="closeModal('modalClient')">Annuler</button>
@@ -569,14 +575,16 @@ function populateClientSelects() {
 }
 
 function openModalClient(id=null) {
-    ['cId','cNom','cContact','cEmail','cTel','cAdresse','cVille','cTVA','cIBAN','cNotes'].forEach(f=>$(f).value='');
+    ['cId','cNom','cContact','cEmail','cTel','cAdresse','cNpa','cVille','cTVA','cIBAN','cNotes'].forEach(f=>{ const el=$(f); if(el) el.value=''; });
+    $('cPays').value='CH';
     $('modalClientTitle').textContent = id ? 'Modifier client' : 'Nouveau client';
     if(id) {
         const c = clients.find(x=>x.id===id);
         if(c){
             $('cId').value=c.id; $('cNom').value=c.nom||''; $('cContact').value=c.contact||'';
             $('cEmail').value=c.email||''; $('cTel').value=c.telephone||'';
-            $('cAdresse').value=c.adresse||''; $('cVille').value=c.ville||'';
+            $('cAdresse').value=c.adresse||''; $('cNpa').value=c.npa||''; $('cVille').value=c.ville||'';
+            $('cPays').value=c.pays||'CH';
             $('cTVA').value=c.num_tva||''; $('cIBAN').value=c.iban||''; $('cNotes').value=c.notes||'';
         }
     }
@@ -589,10 +597,14 @@ async function saveClient() {
     const email = $('cEmail').value.trim();
     if(!nom){ toast('error','❌ Nom du client obligatoire'); return; }
     showLoad();
+    const npa = $('cNpa').value.trim();
+    const ville = $('cVille').value.trim();
+    if(!npa || !ville){ toast('error','❌ NPA et Ville obligatoires (requis pour le QR de paiement)'); hideLoad(); return; }
     const payload = {
         nom, contact:$('cContact').value.trim()||null, email:email||null,
         telephone:$('cTel').value.trim()||null, adresse:$('cAdresse').value.trim()||null,
-        ville:$('cVille').value.trim()||null, num_tva:$('cTVA').value.trim()||null,
+        npa, ville, pays:$('cPays').value||'CH',
+        num_tva:$('cTVA').value.trim()||null,
         iban:$('cIBAN').value.trim()||null, notes:$('cNotes').value.trim()||null
     };
     const id = $('cId').value;
@@ -1196,190 +1208,349 @@ async function buildAndOpenPDF(f, lignesData) {
     const title   = isDevis ? 'DEVIS' : 'FACTURE';
     const color   = isDevis ? '#f59e0b' : '#0ea5e9';
 
-    // ── QR Swiss Payment (ISO 20022) ──────────────────────
-    // IBAN Brimot Nettoyage (à personnaliser)
-    const IBAN_BRIMOT  = 'CH56 0483 5012 3456 7800 9'; // ← À remplacer par vrai IBAN
-    const NOM_BRIMOT   = 'Brimot Nettoyage Sàrl';
-    const ADRESSE_BR   = 'Route de Berne 14';
-    const NPA_VILLE_BR = '1010 Lausanne';
-    const PAYS_BR      = 'CH';
+    // ══ Coordonnées Brimot Nettoyage ═══════════════════════
+    // ← Remplacer par les vraies coordonnées
+    const IBAN_BRIMOT = 'CH56 0483 5012 3456 7800 9';
+    const NOM_BRIMOT  = 'Brimot Nettoyage Sàrl';
+    const RUE_BR      = 'Route de Berne 14';
+    const NPA_BR      = '1010';
+    const VILLE_BR    = 'Lausanne';
+    const PAYS_BR     = 'CH';
 
     const montantCHF = Number(f.montant_ttc||0).toFixed(2);
-    const ref = f.numero ? f.numero.replace(/[^A-Z0-9]/g,'').padStart(26,'0').slice(-26) : '';
+    const fmtD = d=>d?new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Europe/Zurich'}):'—';
 
-    // Contenu du QR selon standard Swiss QR (SIX Group)
-    const qrContent = [
-        'SPC',           // Swiss Payments Code
-        '0200',          // version
-        '1',             // coding
-        IBAN_BRIMOT.replace(/\s/g,''), // IBAN
-        'K',             // creditor type (K=combined)
-        NOM_BRIMOT, ADRESSE_BR, NPA_VILLE_BR, '', PAYS_BR,
-        '', '', '', '', '', '', '', // ultimate creditor (vide)
+    // ══ QR Swiss Payment — standard SIX Group ISO 20022 ═══
+    // Adresse créancier (type S = structured)
+    // Adresse débiteur (type S, champs séparés obligatoires)
+    const ibanClean = IBAN_BRIMOT.replace(/\s/g,'');
+
+    // Débiteur : utiliser les champs structurés
+    const debNom     = c.nom      || '';
+    const debRue     = c.adresse  || '';
+    const debNpa     = c.npa      || '';
+    const debVille   = c.ville    || '';
+    const debPays    = c.pays     || 'CH';
+    const hasDebAddr = debNpa && debVille;
+
+    // Message de référence — sans référence structurée on utilise NON + message libre
+    const msgLibre   = `Facture ${f.numero||''}`.trim().slice(0,140);
+
+    const qrLines = [
+        'SPC',          // Swiss Payments Code
+        '0200',         // version
+        '1',            // coding UTF-8
+        ibanClean,      // IBAN créancier
+        // Créancier — type S (structured)
+        'S',
+        NOM_BRIMOT,
+        RUE_BR,
+        NPA_BR,
+        VILLE_BR,
+        PAYS_BR,
+        // Créancier final (ultimate creditor) — vide obligatoire (6 champs)
+        '', '', '', '', '', '',
+        // Montant + devise
         montantCHF,
-        'CHF',           // currency
-        'K',             // debtor type
-        c.nom||'', c.adresse||'', c.ville||'', '', c.pays||'CH',
-        'NON',           // reference type (SCOR/QRR/NON)
-        '',              // reference
-        c.nom ? `Facture ${f.numero}` : '', // unstructured message
-        'EPD',           // end of payment data
-        ''               // alt scheme
-    ].join('\n');
+        'CHF',
+        // Débiteur — type S si adresse complète, sinon vide
+        hasDebAddr ? 'S' : '',
+        hasDebAddr ? debNom  : '',
+        hasDebAddr ? debRue  : '',
+        hasDebAddr ? debNpa  : '',
+        hasDebAddr ? debVille: '',
+        hasDebAddr ? debPays : '',
+        // Type de référence + référence
+        'NON',  // pas de QRR ni SCOR
+        '',     // référence vide
+        // Message libre
+        msgLibre,
+        // Fin de données + alternative scheme (vide)
+        'EPD',
+        ''
+    ];
+    const qrContent = qrLines.join('\n');
 
-    // Générer QR code image
+    // Générer le QR code (carré blanc, pas de marge interne car on dessine la croix nous-mêmes)
     let qrDataUrl = '';
     try {
         qrDataUrl = await QRCode.toDataURL(qrContent, {
-            errorCorrectionLevel:'M', width:160, margin:1,
-            color:{dark:'#000',light:'#fff'}
+            errorCorrectionLevel: 'M',
+            width: 166,
+            margin: 0,
+            color: { dark: '#000000', light: '#ffffff' }
         });
-    } catch(e) {
-        console.warn('QR gen error:', e);
-    }
+    } catch(e) { console.warn('QR gen error:', e); }
 
-    // ── Lignes HTML ───────────────────────────────────────
+    // ══ Lignes facture HTML ════════════════════════════════
     const lignesHtml = lignesData.map((l,i)=>`
         <tr style="background:${i%2===0?'#f9fafb':'#fff'}">
             <td style="padding:8px 12px;font-size:12px;">${l.designation||'—'}</td>
-            <td style="padding:8px 12px;text-align:right;font-size:12px;">${Number(l.qte||1).toFixed(2)}</td>
-            <td style="padding:8px 12px;text-align:right;font-size:12px;">${Number(l.prix_ht||0).toFixed(2)}</td>
-            <td style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">${Number(l.total_ht||l.qte*l.prix_ht||0).toFixed(2)}</td>
+            <td style="padding:8px 12px;text-align:right;font-size:12px;white-space:nowrap;">${Number(l.qte||1).toFixed(2)}</td>
+            <td style="padding:8px 12px;text-align:right;font-size:12px;white-space:nowrap;">${Number(l.prix_ht||0).toFixed(2)} CHF</td>
+            <td style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;white-space:nowrap;">${Number(l.total_ht||l.qte*l.prix_ht||0).toFixed(2)} CHF</td>
         </tr>`).join('');
 
-    const fmtD = d=>d?new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Europe/Zurich'}):'—';
+    // ══ Adresse client formatée pour fenêtre adresse ══════
+    const adresseClientHtml = [
+        c.nom      ? `<div style="font-weight:700;font-size:13px;">${c.nom}</div>` : '',
+        c.contact  ? `<div style="font-size:12px;color:#555;">${c.contact}</div>` : '',
+        c.adresse  ? `<div style="font-size:12px;">${c.adresse}</div>` : '',
+        (c.npa||c.ville) ? `<div style="font-size:12px;">${[c.npa,c.ville].filter(Boolean).join(' ')}</div>` : '',
+        (c.pays && c.pays!=='CH') ? `<div style="font-size:12px;">${c.pays}</div>` : ''
+    ].filter(Boolean).join('');
 
-    // ── HTML complet ──────────────────────────────────────
+    // ══ Section QR-Bill (2e page) — norme SIX ═════════════
+    // Dimensions normatives : largeur totale 210mm, hauteur 105mm
+    // Zone reçu : 62mm | séparateur : 5mm | zone paiement : 143mm
+    // QR code : 46mm × 46mm, croix suisse 7×7mm centrée
+    const bvHtml = !isDevis && qrDataUrl ? `
+    <!-- PAGE 2 : BULLETIN DE VERSEMENT QR — NORME SIX -->
+    <div class="bv-page" id="bvPage">
+        <!-- Ligne de découpe horizontale -->
+        <div class="bv-scissors">
+            <span class="bv-scissors-line"></span>
+            <span class="bv-scissors-icon">✂</span>
+            <span class="bv-scissors-line"></span>
+        </div>
+        <div class="bv-body">
+            <!-- ── Zone REÇU (gauche 62mm) ── -->
+            <div class="bv-receipt">
+                <div class="bv-section-title">Reçu</div>
+                <div class="bv-label">Compte / Payable à</div>
+                <div class="bv-value bv-value-sm">
+                    ${ibanClean}<br>
+                    ${NOM_BRIMOT}<br>
+                    ${RUE_BR}<br>
+                    ${NPA_BR} ${VILLE_BR}
+                </div>
+                <div class="bv-label">Référence</div>
+                <div class="bv-value bv-value-sm">${msgLibre}</div>
+                <div class="bv-label">Payé par</div>
+                <div class="bv-value bv-value-sm">
+                    ${debNom}<br>
+                    ${debRue ? debRue+'<br>' : ''}
+                    ${debNpa} ${debVille}
+                </div>
+                <div class="bv-receipt-bottom">
+                    <div>
+                        <div class="bv-label">Montant</div>
+                        <div class="bv-amount-sm">${montantCHF}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div class="bv-label">Monnaie</div>
+                        <div class="bv-value bv-value-sm">CHF</div>
+                    </div>
+                </div>
+                <div style="margin-top:auto;padding-top:6px;">
+                    <div class="bv-label" style="font-size:6pt;">Point de dépôt</div>
+                    <div class="bv-accept-box"></div>
+                </div>
+            </div>
+
+            <!-- ── Séparateur vertical avec ciseaux ── -->
+            <div class="bv-separator">
+                <div class="bv-sep-line"></div>
+                <div class="bv-sep-scissors">✂</div>
+                <div class="bv-sep-line"></div>
+            </div>
+
+            <!-- ── Zone PAIEMENT (droite 143mm) ── -->
+            <div class="bv-payment">
+                <div class="bv-section-title">Section de paiement</div>
+                <div class="bv-payment-top">
+                    <!-- QR code + infos gauche -->
+                    <div class="bv-qr-col">
+                        <div class="bv-qr-wrap">
+                            <img src="${qrDataUrl}" class="bv-qr-img" alt="QR Code Swiss Payment">
+                            <!-- Croix suisse centrée sur le QR -->
+                            <div class="bv-swiss-cross">
+                                <div class="cross-v"></div>
+                                <div class="cross-h"></div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:5px;align-items:flex-end;">
+                            <div>
+                                <div class="bv-label">Monnaie</div>
+                                <div class="bv-value-bold">CHF</div>
+                            </div>
+                            <div>
+                                <div class="bv-label">Montant</div>
+                                <div class="bv-value-bold">${montantCHF}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Infos créancier droite -->
+                    <div class="bv-info-col">
+                        <div class="bv-label">Compte / Payable à</div>
+                        <div class="bv-value">
+                            ${ibanClean}<br>
+                            ${NOM_BRIMOT}<br>
+                            ${RUE_BR}<br>
+                            ${NPA_BR} ${VILLE_BR}
+                        </div>
+                        <div class="bv-label" style="margin-top:6px;">Référence</div>
+                        <div class="bv-value">${msgLibre}</div>
+                        <div class="bv-label" style="margin-top:6px;">Informations supplémentaires</div>
+                        <div class="bv-value">${f.objet||''}</div>
+                        <div class="bv-label" style="margin-top:6px;">Payé par</div>
+                        <div class="bv-value">
+                            ${debNom}<br>
+                            ${debRue ? debRue+'<br>' : ''}
+                            ${debNpa} ${debVille}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>` : '';
+
+    // ══ HTML COMPLET ═══════════════════════════════════════
     const html = `<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8">
-    <title>${title} ${f.numero}</title>
+    <title>${title} ${f.numero||''}</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         *{margin:0;padding:0;box-sizing:border-box;}
         body{font-family:'Outfit',sans-serif;color:#111;background:#fff;font-size:13px;}
-        .page{padding:32px 40px;max-width:800px;margin:0 auto;}
-        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid ${color};}
-        .logo-block h1{font-size:26px;font-weight:700;color:${color};letter-spacing:-0.5px;}
-        .logo-block p{font-size:12px;color:#666;margin-top:2px;}
+
+        /* ── PAGE 1 : FACTURE ── */
+        .page{padding:28px 36px;max-width:794px;margin:0 auto;}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid ${color};}
+        .logo-block h1{font-size:24px;font-weight:700;color:${color};}
+        .logo-block p{font-size:11px;color:#666;margin-top:2px;}
         .doc-type{text-align:right;}
-        .doc-type .type-badge{font-size:28px;font-weight:700;color:${color};letter-spacing:2px;}
-        .doc-type .num{font-size:15px;color:#333;margin-top:4px;}
-        .doc-type .date{font-size:12px;color:#888;margin-top:2px;}
-        .addresses{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;}
-        .addr-box{background:#f8fafc;border-radius:8px;padding:14px 16px;}
-        .addr-label{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#888;margin-bottom:6px;}
-        .addr-name{font-size:14px;font-weight:700;color:#111;}
-        .addr-line{font-size:12px;color:#555;margin-top:2px;}
-        table.lines{width:100%;border-collapse:collapse;margin-bottom:16px;}
-        table.lines thead th{background:${color};color:white;padding:9px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
-        table.lines thead th:last-child,.lines td:last-child{text-align:right;}
-        .totals{display:flex;flex-direction:column;align-items:flex-end;margin-bottom:28px;}
-        .tot-row{display:flex;gap:32px;padding:4px 0;font-size:13px;}
-        .tot-row span:first-child{color:#666;min-width:100px;text-align:right;}
-        .tot-row.bold{font-weight:700;font-size:16px;border-top:2px solid #e5e7eb;margin-top:6px;padding-top:8px;}
-        .conditions{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 16px;font-size:12px;color:#0369a1;margin-bottom:20px;}
-        .notes{background:#fafafa;border-radius:8px;padding:12px 16px;font-size:12px;color:#555;margin-bottom:20px;}
-        /* ── QR Section Swiss ── */
-        .qr-section{border-top:1px dashed #ccc;padding-top:20px;margin-top:8px;}
-        .qr-title{font-size:12px;font-weight:700;color:#333;margin-bottom:12px;letter-spacing:1px;text-transform:uppercase;}
-        .qr-content{display:flex;gap:20px;align-items:flex-start;}
-        .qr-img{width:120px;height:120px;flex-shrink:0;}
-        .qr-details{flex:1;font-size:11px;color:#444;line-height:1.8;}
-        .qr-details strong{display:block;margin-bottom:4px;font-size:12px;color:#111;}
-        .qr-amount{font-size:20px;font-weight:700;color:${color};margin-top:6px;}
-        .footer{text-align:center;font-size:10px;color:#999;margin-top:24px;border-top:1px solid #eee;padding-top:12px;}
-        @media print{.no-print{display:none;}body{padding:0;}}
+        .type-badge{font-size:30px;font-weight:700;color:${color};letter-spacing:2px;}
+        .doc-num{font-size:14px;color:#333;margin-top:4px;}
+        .doc-date{font-size:11px;color:#888;margin-top:2px;}
+        /* Fenêtre adresse ISO 838 */
+        .addr-window{margin:18px 0 20px 0;display:flex;gap:28px;}
+        .addr-from{flex:1;padding:12px 14px;font-size:11px;color:#666;}
+        .addr-to{flex:1;min-height:40mm;padding:12px 14px;border:1px solid #e5e7eb;border-radius:4px;font-size:12px;}
+        .addr-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin-bottom:5px;}
+        .addr-from-name{font-size:11px;color:#888;margin-top:3px;}
+        table.lines{width:100%;border-collapse:collapse;margin-bottom:14px;}
+        table.lines thead th{background:${color};color:white;padding:8px 10px;text-align:left;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+        table.lines thead th:last-child{text-align:right;}
+        .totals{display:flex;flex-direction:column;align-items:flex-end;margin-bottom:22px;gap:3px;}
+        .tot-row{display:flex;gap:28px;font-size:12px;}
+        .tot-row span:first-child{color:#666;min-width:90px;text-align:right;}
+        .tot-row.bold{font-weight:700;font-size:15px;border-top:2px solid #e5e7eb;margin-top:5px;padding-top:7px;}
+        .conditions{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:10px 14px;font-size:11px;color:#0369a1;margin-bottom:14px;}
+        .notes{background:#fafafa;border-radius:6px;padding:10px 14px;font-size:11px;color:#555;margin-bottom:14px;}
+        .footer-p1{text-align:center;font-size:9px;color:#bbb;margin-top:20px;border-top:1px solid #f0f0f0;padding-top:10px;}
+
+        /* ── PAGE 2 : QR-BILL SUISSE (norme SIX 2.2) ── */
+        /* Dimensions : 210mm × 105mm — reçu 62mm | sépar 5mm | paiement 143mm */
+        .bv-page{page-break-before:always;width:210mm;height:105mm;display:flex;flex-direction:column;font-family:'Helvetica Neue',Arial,sans-serif;}
+        .bv-scissors{display:flex;align-items:center;height:6mm;padding:0 3mm;gap:3px;font-size:8pt;color:#aaa;}
+        .bv-scissors-line{flex:1;border-top:1px dashed #ccc;}
+        .bv-scissors-icon{font-size:10pt;transform:rotate(90deg);}
+        .bv-body{display:flex;flex:1;height:99mm;}
+        /* Reçu */
+        .bv-receipt{width:62mm;padding:3mm 3mm 3mm 5mm;display:flex;flex-direction:column;border-right:none;}
+        .bv-section-title{font-size:11pt;font-weight:700;margin-bottom:2mm;}
+        .bv-label{font-size:6pt;font-weight:700;color:#000;margin-top:2mm;margin-bottom:0.5mm;}
+        .bv-value{font-size:8pt;line-height:1.4;}
+        .bv-value-sm{font-size:7pt;line-height:1.35;}
+        .bv-value-bold{font-size:11pt;font-weight:700;}
+        .bv-receipt-bottom{display:flex;justify-content:space-between;margin-top:3mm;}
+        .bv-amount-sm{font-size:11pt;font-weight:700;}
+        .bv-accept-box{width:42mm;height:10mm;border:0.75pt solid #000;border-radius:1mm;}
+        /* Séparateur */
+        .bv-separator{width:5mm;display:flex;flex-direction:column;align-items:center;padding:2mm 0;}
+        .bv-sep-line{flex:1;border-left:1px dashed #ccc;margin:0 auto;}
+        .bv-sep-scissors{font-size:10pt;color:#aaa;transform:none;margin:2mm 0;}
+        /* Zone paiement */
+        .bv-payment{flex:1;padding:3mm 5mm 3mm 3mm;display:flex;flex-direction:column;}
+        .bv-payment-top{display:flex;gap:4mm;flex:1;}
+        .bv-qr-col{width:46mm;flex-shrink:0;display:flex;flex-direction:column;}
+        .bv-qr-wrap{position:relative;width:46mm;height:46mm;}
+        .bv-qr-img{width:46mm;height:46mm;display:block;}
+        /* Croix suisse blanche (7mm × 7mm) centrée sur le QR */
+        .bv-swiss-cross{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:7mm;height:7mm;background:#fff;display:flex;align-items:center;justify-content:center;}
+        .cross-v{position:absolute;width:2.2mm;height:5.2mm;background:#e00;}
+        .cross-h{position:absolute;width:5.2mm;height:2.2mm;background:#e00;}
+        .bv-info-col{flex:1;}
+
+        @media print{
+            .no-print{display:none !important;}
+            body{padding:0;margin:0;}
+            .page{padding:18px 28px;}
+            .bv-page{page-break-before:always;margin:0;}
+        }
     </style>
     </head><body>
+
+    <!-- ══ PAGE 1 : FACTURE / DEVIS ══ -->
     <div class="page">
-        <!-- HEADER -->
         <div class="header">
             <div class="logo-block">
                 <h1>🧹 Brimot Nettoyage</h1>
-                <p>${ADRESSE_BR} · ${NPA_VILLE_BR}</p>
+                <p>${RUE_BR} · ${NPA_BR} ${VILLE_BR} · ${PAYS_BR}</p>
                 <p>info@brimotnettoyage.ch · +41 21 000 00 00</p>
-                ${f.brimot_clients?.num_tva?`<p style="margin-top:4px;font-size:11px;color:#888;">TVA: ${f.brimot_clients.num_tva}</p>`:''}
             </div>
             <div class="doc-type">
                 <div class="type-badge">${title}</div>
-                <div class="num">N° ${f.numero||'—'}</div>
-                <div class="date">Date : ${fmtD(f.date_facture)}</div>
-                ${!isDevis&&f.echeance?`<div class="date">Échéance : <strong style="color:#e8311a">${fmtD(f.echeance)}</strong></div>`:''}
+                <div class="doc-num">N° ${f.numero||'—'}</div>
+                <div class="doc-date">Date : ${fmtD(f.date_facture)}</div>
+                ${!isDevis&&f.echeance?`<div class="doc-date">Échéance : <strong style="color:#e8311a">${fmtD(f.echeance)}</strong></div>`:''}
             </div>
         </div>
 
-        <!-- ADRESSES -->
-        <div class="addresses">
-            <div class="addr-box">
-                <div class="addr-label">De</div>
-                <div class="addr-name">${NOM_BRIMOT}</div>
-                <div class="addr-line">${ADRESSE_BR}</div>
-                <div class="addr-line">${NPA_VILLE_BR}</div>
+        <!-- Fenêtre adresse ISO 838 -->
+        <div class="addr-window">
+            <div class="addr-from">
+                <div class="addr-label">Expéditeur</div>
+                <div class="addr-from-name">${NOM_BRIMOT}<br>${RUE_BR}<br>${NPA_BR} ${VILLE_BR}</div>
             </div>
-            <div class="addr-box">
-                <div class="addr-label">Facturer à</div>
-                <div class="addr-name">${c.nom||'—'}</div>
-                ${c.contact?`<div class="addr-line">${c.contact}</div>`:''}
-                <div class="addr-line">${c.adresse||''}</div>
-                <div class="addr-line">${c.ville||''}</div>
-                ${c.num_tva?`<div class="addr-line" style="color:#888;font-size:11px;">TVA: ${c.num_tva}</div>`:''}
+            <div class="addr-to">
+                <div class="addr-label">Destinataire</div>
+                ${adresseClientHtml || '<span style="color:#bbb;font-size:11px;">— Aucun client —</span>'}
             </div>
         </div>
 
-        ${f.objet?`<div style="margin-bottom:20px;"><strong style="font-size:14px;">${f.objet}</strong></div>`:''}
+        ${f.objet?`<div style="margin-bottom:16px;"><strong style="font-size:14px;">${f.objet}</strong></div>`:''}
 
-        <!-- LIGNES -->
+        <!-- Lignes -->
         <table class="lines">
-            <thead><tr><th>Désignation</th><th style="text-align:right">Qté</th><th style="text-align:right">Prix unit. HT</th><th style="text-align:right">Total HT</th></tr></thead>
+            <thead><tr>
+                <th>Désignation</th>
+                <th style="text-align:right;width:60px;">Qté</th>
+                <th style="text-align:right;width:110px;">Prix unit. HT</th>
+                <th style="text-align:right;width:110px;">Total HT</th>
+            </tr></thead>
             <tbody>${lignesHtml}</tbody>
         </table>
 
-        <!-- TOTAUX -->
+        <!-- Totaux -->
         <div class="totals">
             <div class="tot-row"><span>Sous-total HT</span><span>${Number(f.montant_ht||0).toFixed(2)} CHF</span></div>
-            <div class="tot-row"><span>TVA ${f.tva_pct||8.1}%</span><span>${Number(f.montant_tva||0).toFixed(2)} CHF</span></div>
+            <div class="tot-row"><span>TVA ${f.tva_pct||0}%</span><span>${Number(f.montant_tva||0).toFixed(2)} CHF</span></div>
             <div class="tot-row bold"><span>TOTAL TTC</span><span>${Number(f.montant_ttc||0).toFixed(2)} CHF</span></div>
         </div>
 
-        <!-- CONDITIONS -->
-        ${f.conditions?`<div class="conditions">💳 Conditions de paiement : <strong>${f.conditions}</strong></div>`:''}
-
-        <!-- NOTES -->
+        ${f.conditions?`<div class="conditions">💳 Conditions : <strong>${f.conditions}</strong> — IBAN : ${ibanClean}</div>`:''}
         ${f.notes?`<div class="notes">📝 ${f.notes}</div>`:''}
 
-        <!-- QR CODE PAIEMENT SUISSE -->
-        ${!isDevis && qrDataUrl ? `
-        <div class="qr-section">
-            <div class="qr-title">🔲 Section de paiement (QR-facture Swiss standard)</div>
-            <div class="qr-content">
-                <img src="${qrDataUrl}" class="qr-img" alt="QR Code paiement">
-                <div class="qr-details">
-                    <strong>Compte / Payable à</strong>
-                    ${NOM_BRIMOT}<br>
-                    ${ADRESSE_BR}, ${NPA_VILLE_BR}<br>
-                    IBAN : <strong>${IBAN_BRIMOT}</strong>
-                    <div class="qr-amount">${montantCHF} CHF</div>
-                    <div style="margin-top:4px;color:#888;">Référence : Facture ${f.numero}</div>
-                    ${c.nom?`<div style="margin-top:4px;">Payeur : ${c.nom}</div>`:''}
-                </div>
-            </div>
-        </div>` : ''}
-
-        <!-- FOOTER -->
-        <div class="footer">
-            ${NOM_BRIMOT} — ${ADRESSE_BR}, ${NPA_VILLE_BR} — info@brimotnettoyage.ch<br>
-            Document généré le ${new Date().toLocaleString('fr-CH',{timeZone:'Europe/Zurich'})}
+        <div class="footer-p1">
+            ${NOM_BRIMOT} · ${RUE_BR}, ${NPA_BR} ${VILLE_BR} · info@brimotnettoyage.ch<br>
+            ${ibanClean}${c.num_tva?` · N° TVA : ${c.num_tva}`:''}
+            &nbsp;·&nbsp; Document généré le ${new Date().toLocaleString('fr-CH',{timeZone:'Europe/Zurich'})}
         </div>
     </div>
 
-    <!-- BOUTON IMPRIMER -->
-    <div class="no-print" style="position:fixed;bottom:20px;right:20px;display:flex;gap:10px;">
-        <button onclick="window.print()" style="padding:12px 22px;background:#0ea5e9;color:white;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Imprimer / Sauver PDF</button>
-        <button onclick="window.close()" style="padding:12px 22px;background:#eee;color:#333;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;cursor:pointer;">✕ Fermer</button>
+    ${bvHtml}
+
+    <!-- BOUTON IMPRIMER (masqué à l'impression) -->
+    <div class="no-print" style="position:fixed;bottom:20px;right:20px;display:flex;gap:10px;z-index:999;">
+        <button onclick="window.print()" style="padding:12px 22px;background:#0ea5e9;color:white;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.2);">🖨️ Imprimer / PDF</button>
+        <button onclick="window.close()" style="padding:12px 22px;background:#eee;color:#333;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;">✕ Fermer</button>
     </div>
     </body></html>`;
 
-    const win = window.open('', '_blank', 'width=860,height=1000');
+    const win = window.open('', '_blank', 'width=900,height=1100');
+    if(!win){ toast('error','❌ Popup bloqué — autorisez les popups pour ce site'); return; }
     win.document.write(html);
     win.document.close();
 }
