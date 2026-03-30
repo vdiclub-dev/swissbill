@@ -186,17 +186,11 @@
     <a class="nav-item" data-section="transports" href="#"><i class="fas fa-truck"></i><span>Transports</span></a>
     <a class="nav-item" href="new-transport.html"><i class="fas fa-plus-circle"></i><span>Nouveau transport</span></a>
     <a class="nav-item" href="dispatch.html"><i class="fas fa-map-marked-alt"></i><span>Carte Dispatch</span></a>
-    
-     <a class="nav-item" href="geocode-fix.html"><i class="fas fa-map-marked-alt"></i><span>Carte geocode</span></a>
-    
     <a class="nav-item" href="../commandes-client.html"><i class="fas fa-inbox"></i><span>Commandes clients</span><span class="nav-badge" id="badgeCommandes" style="display:none;">0</span></a>
     <div class="sidebar-section">Analytiques</div>
     <a class="nav-item" href="analytics.html"><i class="fas fa-chart-bar"></i><span>Analytics</span></a>
     <a class="nav-item" href="rh.html"><i class="fas fa-users-cog"></i><span>Gestion RH</span></a>
-    
     <a class="nav-item" href="tarification.html"><i class="fas fa-tags"></i><span>Tarification</span></a>
-        <a class="nav-item" href="tarification.html"><i class="fas fa-file-invoice-dollar"></i><span>Tarification</span></a>
-    
     <a class="nav-item" href="facturation.html"><i class="fas fa-file-invoice-dollar"></i><span>Facturation</span></a>
     <a class="nav-item" href="finances.html"><i class="fas fa-euro-sign"></i><span>Finances</span></a>
     <div class="sidebar-section">Application</div>
@@ -234,9 +228,6 @@
                 <div class="stat-card"><div class="stat-top"><div class="stat-icon green"><i class="fas fa-id-card"></i></div></div><div class="stat-num" id="s-chauffeurs">—</div><div class="stat-lbl">Chauffeurs</div></div>
                 <div class="stat-card"><div class="stat-top"><div class="stat-icon yellow"><i class="fas fa-box"></i></div></div><div class="stat-num" id="s-employees">—</div><div class="stat-lbl">Magasiniers</div></div>
                 <div class="stat-card"><div class="stat-top"><div class="stat-icon purple"><i class="fas fa-route"></i></div></div><div class="stat-num" id="s-transports">—</div><div class="stat-lbl">Transports</div></div>
-
-                 <div class="stat-card"><div class="stat-top"><div class="stat-icon purple"><i class="fas fa-route"></i></div></div><div class="stat-num" id="s-Tarification">—</div><div class="stat-lbl">Tarification</div></div>
-                
             </div>
             <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
                 <a href="new-transport.html" class="btn btn-red"><i class="fas fa-plus"></i> Nouveau transport</a>
@@ -870,14 +861,60 @@ window.askDelete = function(type, id, label, table){
     document.getElementById('confirmText').textContent=`Supprimer "${label}" ?`;
     document.getElementById('confirmYes').onclick=async()=>{
         showLoad();
-        const {error}=await db.from(table).delete().eq('id',id);
-        hideLoad();
-        if(error){toast('error','Erreur: '+error.message);return;}
-        toast('success','Supprimé ✓');
-        closeModal('modalConfirm');
-        if(table==='entreprises'){await loadEntreprises();renderEntreprises();renderDashboard();}
-        if(table==='utilisateurs'){await loadUtilisateurs();renderUtilisateurs();renderDashboard();}
-        if(table==='chauffeurs'){await loadChauffeurs();renderChauffeurs();}
+        try{
+            if(table === 'entreprises'){
+                // Cascade : supprimer dans l'ordre pour respecter les FK
+                // 1. Supprimer les lignes de facture liées aux commandes
+                const {data:orders}=await db.from('transport_orders_simple').select('id').eq('entreprise_id',id);
+                if(orders&&orders.length){
+                    const orderIds=orders.map(o=>o.id);
+                    await db.from('facture_lignes').delete().in('order_id',orderIds);
+                    await db.from('tracking_events').delete().in('order_id',orderIds);
+                    await db.from('preuves_livraison').delete().in('stop_id',orderIds);
+                    await db.from('tournee_arrets').delete().in('transport_id',orderIds);
+                    await db.from('transport_orders_simple').delete().eq('entreprise_id',id);
+                }
+                // 2. Supprimer tarifs
+                await db.from('tarifs_clients').delete().eq('entreprise_id',id);
+                await db.from('tarifs_speciaux').delete().eq('entreprise_id',id);
+                // 3. Supprimer adresses clients
+                await db.from('client_addresses').delete().eq('client_id',id);
+                // 4. Supprimer les utilisateurs liés
+                await db.from('utilisateurs').delete().eq('entreprise_id',id);
+                // 5. Supprimer l'entreprise
+                const {error}=await db.from('entreprises').delete().eq('id',id);
+                if(error) throw error;
+                await loadEntreprises();
+                await loadUtilisateurs();
+                renderEntreprises();
+                renderDashboard();
+
+            } else if(table === 'utilisateurs'){
+                // Supprimer l'utilisateur (pas de cascade nécessaire)
+                const {error}=await db.from('utilisateurs').delete().eq('id',id);
+                if(error) throw error;
+                await loadUtilisateurs();
+                renderUtilisateurs();
+                renderDashboard();
+
+            } else if(table === 'chauffeurs'){
+                const {error}=await db.from('chauffeurs').delete().eq('id',id);
+                if(error) throw error;
+                await loadChauffeurs();
+                renderChauffeurs();
+
+            } else {
+                const {error}=await db.from(table).delete().eq('id',id);
+                if(error) throw error;
+            }
+
+            toast('success','Supprimé ✓');
+            closeModal('modalConfirm');
+        } catch(e){
+            toast('error','Erreur: '+e.message);
+        } finally {
+            hideLoad();
+        }
     };
     openModal('modalConfirm');
 };
@@ -887,9 +924,7 @@ window.askDelete = function(type, id, label, table){
 // ══════════════════════════════════════
 async function init(){
     const {data:{session}}=await db.auth.getSession();
-    if(!session){window.location.href='../login/index.html';return;}
-    const {data:meRole}=await db.from('utilisateurs').select('role').eq('id',session.user.id).single();
-    if(!meRole||!['admin','super_admin'].includes(meRole.role)){await db.auth.signOut();window.location.href='../login/index.html';return;}
+    if(!session){window.location.href='../index.html';return;}
     showLoad();
     await loadEntreprises();
     await loadUtilisateurs();
@@ -913,7 +948,7 @@ async function init(){
     hideLoad();
 }
 
-document.getElementById('btnLogout')?.addEventListener('click',async()=>{await db.auth.signOut();window.location.href='../login/index.html';});
+document.getElementById('btnLogout')?.addEventListener('click',async()=>{await db.auth.signOut();window.location.href='../index.html';});
 init();
 })();
 </script>
