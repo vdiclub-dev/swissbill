@@ -348,6 +348,25 @@
         );
     }
 
+    // Crée un compte Auth ou récupère l'ID si l'email existe déjà
+    async function getOrCreateAuthUser(email, pwd) {
+        const tmpDb = makeTempClient();
+        const { data, error } = await tmpDb.auth.signUp({ email, password: pwd });
+
+        if (!error && data.user?.id) {
+            return { userId: data.user.id, isNew: true };
+        }
+        if (error && (error.message?.toLowerCase().includes('already registered') ||
+                      error.message?.toLowerCase().includes('already been registered') ||
+                      error.status === 422)) {
+            const { data: existing } = await db.from('utilisateurs')
+                .select('id').eq('email', email).maybeSingle();
+            if (existing?.id) return { userId: existing.id, isNew: false };
+            throw new Error(`L'email "${email}" existe déjà. Utilisez "Modifier" pour mettre à jour ce compte.`);
+        }
+        throw error || new Error('Création du compte échouée');
+    }
+
     /* ── Protection session ── */
     (async () => {
         const { data: { session } } = await db.auth.getSession();
@@ -559,18 +578,15 @@
         showLoad();
         try {
             if (!id) {
-                // Créer via client temporaire (sans écraser la session admin)
-                const tmpDb = makeTempClient();
-                const { data, error: authErr } = await tmpDb.auth.signUp({ email, password: pwd });
-                if (authErr) throw authErr;
-                if (!data.user?.id) throw new Error('Création du compte échouée — aucun ID retourné');
+                // Créer ou récupérer le compte Auth (gère "already registered")
+                const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
                 const { error: dbErr } = await db.from('utilisateurs').upsert([{
-                    id: data.user.id, email,
+                    id: userId, email,
                     nom: nom || null, prenom: prenom || null,
                     telephone: tel || null, role, actif: true
                 }]);
                 if (dbErr) throw dbErr;
-                toast('success', '✅ Utilisateur créé ! Un email de confirmation a été envoyé.');
+                toast('success', isNew ? '✅ Utilisateur créé !' : '✅ Profil mis à jour (compte existant).');
             } else {
                 // Update existing
                 const { error } = await db.from('utilisateurs').update({

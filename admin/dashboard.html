@@ -451,6 +451,34 @@ function makeTempClient() {
     );
 }
 
+// Crée un compte Auth ou récupère l'ID si l'email existe déjà
+// Retourne { userId, isNew }
+async function getOrCreateAuthUser(email, pwd) {
+    const tmpDb = makeTempClient();
+    const { data, error } = await tmpDb.auth.signUp({ email, password: pwd });
+
+    // Cas 1 : succès — nouveau compte créé
+    if (!error && data.user?.id) {
+        return { userId: data.user.id, isNew: true };
+    }
+
+    // Cas 2 : email déjà dans auth.users
+    if (error && (error.message?.toLowerCase().includes('already registered') ||
+                  error.message?.toLowerCase().includes('already been registered') ||
+                  error.status === 422)) {
+        // Chercher l'ID dans la table utilisateurs via l'email
+        const { data: existing } = await db.from('utilisateurs')
+            .select('id').eq('email', email).maybeSingle();
+        if (existing?.id) {
+            return { userId: existing.id, isNew: false };
+        }
+        // Compte auth existe mais absent de utilisateurs — retourner erreur claire
+        throw new Error(`L'email "${email}" existe déjà. Utilisez "Modifier" pour mettre à jour ce compte.`);
+    }
+
+    throw error || new Error('Création du compte échouée');
+}
+
 let entreprises=[], utilisateurs=[], chauffeurs=[], transports=[];
 
 // ── TOAST ──
@@ -746,16 +774,19 @@ window.saveUser = async function(){
             const {error}=await db.from('utilisateurs').update(profilePayload).eq('id',id);
             if(error) throw error;
         } else {
-            // Créer compte Auth via client temporaire (sans écraser la session admin)
-            const tmpDb = makeTempClient();
-            const {data:authData,error:authErr}=await tmpDb.auth.signUp({email,password:pwd});
-            if(authErr) throw authErr;
-            const userId=authData.user?.id;
-            if(!userId) throw new Error('Création du compte échouée — aucun ID retourné');
-            const {error:insErr}=await db.from('utilisateurs').insert([{id:userId,...profilePayload}]);
-            if(insErr) throw insErr;
+            // Créer ou récupérer le compte Auth
+            const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
+            if(isNew) {
+                // Nouveau compte → insérer le profil
+                const {error:insErr}=await db.from('utilisateurs').insert([{id:userId,...profilePayload}]);
+                if(insErr) throw insErr;
+            } else {
+                // Compte existant → mettre à jour le profil
+                const {error:updErr}=await db.from('utilisateurs').update(profilePayload).eq('id',userId);
+                if(updErr) throw updErr;
+            }
         }
-        toast('success',id?'Utilisateur modifié ✓':'Utilisateur créé ✓ — un email de confirmation a été envoyé');
+        toast('success',id?'Utilisateur modifié ✓':'Utilisateur créé ✓');
         closeModal('modalUser');
         await loadUtilisateurs();
         renderUtilisateurs();
@@ -823,13 +854,9 @@ window.saveChauffeur = async function(){
             if(error) throw error;
         } else {
             // Création compte Auth via client temporaire (sans écraser la session admin)
-            const tmpDb = makeTempClient();
-            const {data:authData,error:authErr}=await tmpDb.auth.signUp({email,password:pwd});
-            if(authErr) throw authErr;
-            const userId=authData.user?.id;
-            if(!userId) throw new Error('Création du compte échouée — aucun ID retourné');
+            const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
 
-            // Insérer dans utilisateurs
+            // Insérer ou mettre à jour dans utilisateurs
             if(userId){
                 const {error:uErr}=await db.from('utilisateurs').insert([{
                     id:userId, email, prenom, nom,
