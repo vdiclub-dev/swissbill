@@ -656,8 +656,23 @@
     const loaderEl = document.getElementById('loader');
     const showLoad = () => loaderEl.classList.add('on');
     const hideLoad = () => loaderEl.classList.remove('on');
-    const fmt = ts => ts ? new Date(ts).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit'}) : '--:--';
-    const today = () => new Date().toISOString().slice(0,10);
+    const fmt = ts => ts ? new Date(ts).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'}) : '--:--';
+
+    // Retourne la date locale suisse YYYY-MM-DD (évite le décalage UTC minuit)
+    const today = () => new Date().toLocaleDateString('fr-CA', {timeZone:'Europe/Zurich'}); // fr-CA donne YYYY-MM-DD
+
+    // Retourne un timestamp ISO avec offset suisse (+01:00 / +02:00) pour stockage correct en DB
+    function nowCH() {
+        const d = new Date();
+        // Construire un ISO string avec le vrai offset local
+        const off = -d.getTimezoneOffset(); // en minutes
+        const sign = off >= 0 ? '+' : '-';
+        const hh = String(Math.floor(Math.abs(off)/60)).padStart(2,'0');
+        const mm = String(Math.abs(off)%60).padStart(2,'0');
+        // toISOString() donne UTC, on recalcule en local
+        const local = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+        return local.toISOString().slice(0,-1) + sign + hh + ':' + mm;
+    }
 
     /* ── Modals ── */
     function openModal(id)  { const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
@@ -1041,8 +1056,8 @@
             await db.from('transport_orders_simple').update({
                 status:      'in_transit',
                 driver_id:   driver.id,
-                assigned_at: new Date().toISOString(),
-                picked_up_at:new Date().toISOString()
+                assigned_at: nowCH(),
+                picked_up_at:nowCH()
             }).eq('id', id);
             toast('success', '✅ Prise en charge confirmée !');
             stopScan();
@@ -1073,7 +1088,7 @@
             // Charger km du jour si déjà saisi
             const { data:km } = await db.from('vehicule_km')
                 .select('*').eq('vehicule_id', data.id)
-                .eq('date', new Date().toISOString().slice(0,10)).maybeSingle();
+                .eq('date', today()).maybeSingle();
             if(km) {
                 document.getElementById('kmDebut').value = km.km_debut||'';
                 document.getElementById('kmFin').value   = km.km_fin||'';
@@ -1105,11 +1120,11 @@
 
         showLoad();
         try {
-            const today = new Date().toISOString().slice(0,10);
+            const todayKm = today();
             const { error } = await db.from('vehicule_km').upsert([{
                 vehicule_id:  vehiculeId,
                 chauffeur_id: driver.id,
-                date:         today,
+                date:         todayKm,
                 km_debut:     debut,
                 km_fin:       fin||debut
             }], { onConflict: 'vehicule_id,date' });
@@ -1203,7 +1218,7 @@
                 return;
             }
             const { error } = await db.from('transport_orders_simple')
-                .update({status:'in_transit', picked_up_at:new Date().toISOString()}).eq('id',id);
+                .update({status:'in_transit', picked_up_at:nowCH()}).eq('id',id);
             if(error) throw error;
             toast('success','Mission démarrée !');
             await loadMissions();
@@ -1340,7 +1355,7 @@
         console.log('pointageAction:', action, 'pointage:', JSON.stringify(pointage));
         showLoad();
         try {
-            const now = new Date().toISOString();
+            const now = nowCH();
             if(action==='start') {
                 if(pointage) { toast('info','Journée déjà démarrée'); hideLoad(); return; }
                 // Insert pointage
@@ -1629,7 +1644,7 @@
         if(!curMission) return;
         showLoad();
         try {
-            const now = new Date().toISOString();
+            const now = nowCH();
             const note = document.getElementById('deliveryNote').value.trim();
 
             // Récupérer signature

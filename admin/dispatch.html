@@ -452,6 +452,17 @@
     if (!window.SUPABASE_CONFIG) { document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>'; return; }
     const db = window.SUPABASE_CLIENT;
 
+    // Timestamp heure locale suisse (évite décalage UTC)
+    function nowCH() {
+        const d = new Date();
+        const off = -d.getTimezoneOffset();
+        const sign = off >= 0 ? '+' : '-';
+        const hh = String(Math.floor(Math.abs(off)/60)).padStart(2,'0');
+        const mm = String(Math.abs(off)%60).padStart(2,'0');
+        const local = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+        return local.toISOString().slice(0,-1) + sign + hh + ':' + mm;
+    }
+
     /* ── Protection session ── */
     (async () => {
         const { data: { session } } = await db.auth.getSession();
@@ -968,7 +979,7 @@
     window.markDelivered = async function(id) {
         showLoad('Mise à jour…');
         try {
-            await db.from('transport_orders_simple').update({status:'delivered',delivered_at:new Date().toISOString()}).eq('id',id);
+            await db.from('transport_orders_simple').update({status:'delivered',delivered_at:nowCH()}).eq('id',id);
             toast('success','Marqué comme livré ✓');
             await loadAll();
         } catch(e) { toast('error',e.message); }
@@ -1504,7 +1515,7 @@
                 await db.from('transport_orders_simple').update({
                     status:      'planned',
                     driver_id:   tour.driverId,
-                    assigned_at: new Date().toISOString(),
+                    assigned_at: nowCH(),
                     tour_id:     tour.id,
                     tour_position: i+1  // Position dans la tournée
                 }).eq('id', tour.orderIds[i]);
@@ -1541,7 +1552,7 @@
         if(!dId){toast('error','Choisissez un chauffeur');return;}
         showLoad('Assignation…');
         try {
-            await db.from('transport_orders_simple').update({status:'planned',driver_id:dId,assigned_at:new Date().toISOString()}).eq('id',id);
+            await db.from('transport_orders_simple').update({status:'planned',driver_id:dId,assigned_at:nowCH()}).eq('id',id);
             const o=allOrders.find(x=>x.id===id);
             await window.ColixoPush?.notifyDriver(dId,'📦 Nouveau transport !',`${o?.order_number||''} — ${shortAddr(o?.pickup_address)} → ${shortAddr(o?.delivery_address)}`,{type:'order_assigned'});
             toast('success','Chauffeur assigné ✓');
