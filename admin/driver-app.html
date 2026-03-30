@@ -818,16 +818,22 @@
                     </div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${o.status==='delivered'
+                    ${o.status === 'delivered'
                         ? '<div style="text-align:center;color:var(--green);font-weight:600;padding:8px;">✅ Déjà livré</div>'
-                        : adminSt === 'accepted'
-                            ? `<button onclick="confirmPickup('${o.id}');document.getElementById('modalQRPickup').remove();"
+                        : o.status === 'in_transit'
+                            ? '<div style="text-align:center;color:var(--purple);font-weight:600;padding:8px;">🚚 Déjà en route</div>'
+                        : adminSt === 'pending_validation'
+                            ? '<div style="text-align:center;color:var(--yellow);font-weight:600;padding:8px;">⏳ En attente de validation admin</div>'
+                        : adminSt === 'refused'
+                            ? '<div style="text-align:center;color:var(--red);font-weight:600;padding:8px;">❌ Commande refusée — contactez l\'admin</div>'
+                        : !o.driver_id
+                            ? '<div style="text-align:center;color:var(--muted);font-weight:600;padding:8px;">⏳ En attente d\'assignation par le dispatch</div>'
+                        : o.driver_id !== driver.id
+                            ? '<div style="text-align:center;color:var(--orange);font-weight:600;padding:8px;">⚠️ Assigné à un autre chauffeur</div>'
+                        : `<button onclick="confirmPickup('${o.id}');document.getElementById('modalQRPickup').remove();"
                                 style="width:100%;padding:14px;background:var(--green);color:var(--night);border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;cursor:pointer;">
-                                <i class="fas fa-box"></i> Confirmer la prise en charge
+                                <i class="fas fa-box-open"></i> Confirmer l'enlèvement
                               </button>`
-                            : adminSt === 'refused'
-                                ? '<div style="text-align:center;color:var(--red);font-weight:600;padding:8px;">❌ Commande refusée — contact admin</div>'
-                                : '<div style="text-align:center;color:var(--yellow);font-weight:600;padding:8px;">⏳ En attente de validation admin</div>'
                     }
                     <button onclick="document.getElementById('modalQRPickup').remove();"
                         style="width:100%;padding:12px;background:transparent;color:var(--muted2);border:1px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;cursor:pointer;font-size:14px;">
@@ -1031,35 +1037,49 @@
         document.getElementById('scanStatus').textContent = '';
     }
 
+    // Confirme l'enlèvement d'un colis assigné à CE chauffeur par le dispatch
+    // NE modifie PAS driver_id ni assigned_at — seul le dispatch assigne
     window.confirmPickup = async function(id) {
         showLoad();
         try {
-            // Vérifier que la commande est validée par l'admin (admin_status='accepted')
             const { data: order } = await db.from('transport_orders_simple')
-                .select('admin_status, status').eq('id', id).single();
+                .select('admin_status, status, driver_id').eq('id', id).single();
             if(!order) throw new Error('Commande introuvable');
+
+            // Vérifications de blocage
             if(order.admin_status === 'pending_validation') {
-                toast('error', '⏳ Cette commande est en attente de validation par l\'administration.');
-                stopScan();
+                toast('error', '⏳ Commande en attente de validation admin.');
                 return;
             }
             if(order.admin_status === 'refused') {
-                toast('error', '❌ Cette commande a été refusée par l\'administration.');
-                stopScan();
+                toast('error', '❌ Commande refusée par l\'administration.');
                 return;
             }
             if(order.admin_status !== 'accepted') {
-                toast('error', '❌ Cette commande n\'est pas encore validée.');
-                stopScan();
+                toast('error', '❌ Commande non validée.');
                 return;
             }
-            await db.from('transport_orders_simple').update({
-                status:      'in_transit',
-                driver_id:   driver.id,
-                assigned_at: nowCH(),
-                picked_up_at:nowCH()
+            if(!order.driver_id) {
+                toast('error', '⚠️ Aucun chauffeur assigné — contactez le dispatch.');
+                return;
+            }
+            if(order.driver_id !== driver.id) {
+                toast('error', '⚠️ Ce colis est assigné à un autre chauffeur.');
+                return;
+            }
+            if(order.status === 'in_transit') {
+                toast('info', 'Ce transport est déjà en route.');
+                return;
+            }
+
+            // Seulement confirmer l'enlèvement physique (picked_up_at + status)
+            // driver_id et assigned_at restent inchangés (définis par le dispatch)
+            const { error } = await db.from('transport_orders_simple').update({
+                status:       'in_transit',
+                picked_up_at: nowCH()
             }).eq('id', id);
-            toast('success', '✅ Prise en charge confirmée !');
+            if(error) throw error;
+            toast('success', '✅ Enlèvement confirmé !');
             stopScan();
             await loadMissions();
         } catch(e) { toast('error', e.message); }
