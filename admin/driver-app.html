@@ -753,7 +753,22 @@
         const existing = document.getElementById('modalQRPickup');
         if(existing) existing.remove();
 
-        const stColor = o.status==='in_transit'?'var(--purple)':o.status==='delivered'?'var(--green)':'var(--yellow)';
+        // Couleur selon admin_status d'abord, puis status
+        const adminSt = o.admin_status;
+        let stColor, adminBanner = '';
+        if(adminSt === 'pending_validation') {
+            stColor = 'var(--yellow)';
+            adminBanner = `<div style="background:rgba(255,200,0,0.15);border:1px solid var(--yellow);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--yellow);text-align:center;">
+                ⏳ En attente de validation par l'administration
+            </div>`;
+        } else if(adminSt === 'refused') {
+            stColor = 'var(--red)';
+            adminBanner = `<div style="background:rgba(255,80,80,0.15);border:1px solid var(--red);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--red);text-align:center;">
+                ❌ Commande refusée par l'administration
+            </div>`;
+        } else {
+            stColor = o.status==='in_transit'?'var(--purple)':o.status==='delivered'?'var(--green)':'var(--blue)';
+        }
         const overlay = document.createElement('div');
         overlay.id = 'modalQRPickup';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -764,6 +779,7 @@
                     <div style="font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;color:var(--white);">QR CODE SCANNÉ</div>
                     ${colisNum?`<div style="font-size:12px;color:var(--yellow);margin-top:4px;">Colis ${colisNum}/${colisTotal||'?'}</div>`:''}
                 </div>
+                ${adminBanner}
                 <div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;display:flex;flex-direction:column;gap:7px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <span style="color:var(--muted2)">Commande</span>
@@ -787,11 +803,17 @@
                     </div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${o.status!=='delivered'?`
-                    <button onclick="confirmPickup('${o.id}');document.getElementById('modalQRPickup').remove();"
-                        style="width:100%;padding:14px;background:var(--green);color:var(--night);border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;cursor:pointer;">
-                        <i class="fas fa-box"></i> Confirmer la prise en charge
-                    </button>`:'<div style="text-align:center;color:var(--green);font-weight:600;padding:8px;">✅ Déjà livré</div>'}
+                    ${o.status==='delivered'
+                        ? '<div style="text-align:center;color:var(--green);font-weight:600;padding:8px;">✅ Déjà livré</div>'
+                        : adminSt === 'accepted'
+                            ? `<button onclick="confirmPickup('${o.id}');document.getElementById('modalQRPickup').remove();"
+                                style="width:100%;padding:14px;background:var(--green);color:var(--night);border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;cursor:pointer;">
+                                <i class="fas fa-box"></i> Confirmer la prise en charge
+                              </button>`
+                            : adminSt === 'refused'
+                                ? '<div style="text-align:center;color:var(--red);font-weight:600;padding:8px;">❌ Commande refusée — contact admin</div>'
+                                : '<div style="text-align:center;color:var(--yellow);font-weight:600;padding:8px;">⏳ En attente de validation admin</div>'
+                    }
                     <button onclick="document.getElementById('modalQRPickup').remove();"
                         style="width:100%;padding:12px;background:transparent;color:var(--muted2);border:1px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;cursor:pointer;font-size:14px;">
                         Fermer
@@ -997,6 +1019,25 @@
     window.confirmPickup = async function(id) {
         showLoad();
         try {
+            // Vérifier que la commande est validée par l'admin (admin_status='accepted')
+            const { data: order } = await db.from('transport_orders_simple')
+                .select('admin_status, status').eq('id', id).single();
+            if(!order) throw new Error('Commande introuvable');
+            if(order.admin_status === 'pending_validation') {
+                toast('error', '⏳ Cette commande est en attente de validation par l\'administration.');
+                stopScan();
+                return;
+            }
+            if(order.admin_status === 'refused') {
+                toast('error', '❌ Cette commande a été refusée par l\'administration.');
+                stopScan();
+                return;
+            }
+            if(order.admin_status !== 'accepted') {
+                toast('error', '❌ Cette commande n\'est pas encore validée.');
+                stopScan();
+                return;
+            }
             await db.from('transport_orders_simple').update({
                 status:      'in_transit',
                 driver_id:   driver.id,
@@ -1093,8 +1134,10 @@
     /* ── MISSIONS ── */
     window.loadMissions = async function() {
         if(!driver) return;
+        // Seules les commandes validées par l'admin (admin_status='accepted') sont visibles
         const { data } = await db.from('transport_orders_simple')
             .select('*').eq('driver_id',driver.id).neq('status','delivered')
+            .eq('admin_status','accepted')
             .order('created_at',{ascending:true});
         missions = data||[];
 
@@ -1151,6 +1194,14 @@
     window.startMission = async function(id) {
         showLoad();
         try {
+            // Vérifier que la commande est validée par l'admin avant de démarrer
+            const { data: order } = await db.from('transport_orders_simple')
+                .select('admin_status, status').eq('id', id).single();
+            if(!order) throw new Error('Commande introuvable');
+            if(order.admin_status !== 'accepted') {
+                toast('error', '❌ Cette commande n\'a pas encore été validée par l\'administration.');
+                return;
+            }
             const { error } = await db.from('transport_orders_simple')
                 .update({status:'in_transit', picked_up_at:new Date().toISOString()}).eq('id',id);
             if(error) throw error;
@@ -1305,12 +1356,12 @@
                     .eq('driver_id', driver.id).eq('date', today()).single();
                 pointage = fresh;
 
-                // ── Passer les transports assignés en "in_transit" ──
+                // ── Passer les transports assignés en "in_transit" (seulement ceux validés par l'admin) ──
                 const { data: assigned } = await db.from('transport_orders_simple')
                     .select('id, order_number')
                     .eq('driver_id', driver.id)
                     .in('status', ['pending', 'planned'])
-                    .neq('admin_status', 'refused');
+                    .eq('admin_status', 'accepted');
 
                 if(assigned?.length) {
                     await db.from('transport_orders_simple')
