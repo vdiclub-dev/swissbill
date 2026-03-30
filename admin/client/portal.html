@@ -110,10 +110,13 @@
         .oc-head{display:flex;justify-content:space-between;margin-bottom:14px;}
         .oc-num{font-family:'Bebas Neue',cursive;font-size:18px;}
         .oc-status{font-size:11px;padding:4px 12px;border-radius:100px;}
+        .st-pendingvalidation{background:rgba(245,158,11,0.12);color:var(--yellow);}
         .st-pending_validation{background:rgba(245,158,11,0.12);color:var(--yellow);}
         .st-accepted{background:rgba(59,130,246,0.12);color:var(--blue);}
+        .st-planned{background:rgba(59,130,246,0.18);color:var(--blue);}
+        .st-refused{background:rgba(232,49,26,0.12);color:var(--red);}
         .st-pickedup{background:rgba(249,115,22,0.12);color:var(--orange);}
-        .st-intransit{background:rgba(59,130,246,0.15);color:var(--blue);}
+        .st-intransit{background:rgba(139,92,246,0.15);color:var(--purple);}
         .st-delivered{background:rgba(34,197,94,0.12);color:var(--green);}
         .oc-route{display:flex;gap:10px;margin-bottom:12px;}
         .oc-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;}
@@ -1425,44 +1428,116 @@
             .eq('entreprise_id', client.entreprise_id)
             .order('created_at', { ascending: false })
             .limit(50);
-        const orders = (data || []).filter(o => (o.admin_status || o.status) !== 'delivered' || 
-            (new Date() - new Date(o.delivered_at || o.created_at)) < 86400000);
+        // Commandes actives = non livrées + livrées dans les dernières 24h
+        const orders = (data || []).filter(o =>
+            o.status !== 'delivered' ||
+            (new Date() - new Date(o.delivered_at || o.created_at)) < 86400000
+        );
         document.getElementById('badgeOrders').textContent = orders.length;
         const el = document.getElementById('ordersList');
         if(!orders.length) { el.innerHTML = '<div class="empty">📦 Aucune expédition en cours</div>'; return; }
-        el.innerHTML = orders.map(o => renderOrderCard(o)).join('');
+
+        // Charger les preuves pour les récemment livrées
+        const deliveredIds = orders.filter(o => o.status === 'delivered').map(o => o.id);
+        let deliveriesByOrder = {};
+        if(deliveredIds.length) {
+            const { data: delivs } = await db.from('deliveries')
+                .select('order_id, photo_data, signature_data, note_livraison, delivered_at')
+                .in('order_id', deliveredIds);
+            (delivs || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
+        }
+
+        el.innerHTML = orders.map(o => renderOrderCard(o, deliveriesByOrder[o.id] || null)).join('');
     }
 
     async function loadHistory() {
         if(!client) return;
-        const { data } = await db.from('transport_orders_simple').select('*').eq('entreprise_id', client.entreprise_id).order('created_at', { ascending: false });
         const el = document.getElementById('historyList');
-        const orders = data || [];
-        if(!orders.length) { el.innerHTML = '<div class="empty">📋 Aucune expédition</div>'; return; }
-        el.innerHTML = orders.map(o => renderOrderCard(o)).join('');
+        el.innerHTML = '<div class="empty">⏳ Chargement...</div>';
+
+        // Charger toutes les commandes
+        const { data: orders } = await db.from('transport_orders_simple')
+            .select('*').eq('entreprise_id', client.entreprise_id)
+            .order('created_at', { ascending: false });
+        if(!orders?.length) { el.innerHTML = '<div class="empty">📋 Aucune expédition</div>'; return; }
+
+        // Charger les preuves livraison pour toutes les commandes livrées
+        const deliveredIds = orders.filter(o => o.status === 'delivered').map(o => o.id);
+        let deliveriesByOrder = {};
+        if(deliveredIds.length) {
+            const { data: delivs } = await db.from('deliveries')
+                .select('order_id, photo_data, signature_data, note_livraison, delivered_at')
+                .in('order_id', deliveredIds);
+            (delivs || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
+        }
+
+        el.innerHTML = orders.map(o => renderOrderCard(o, deliveriesByOrder[o.id] || null)).join('');
     }
 
-    function renderOrderCard(o) {
-        const stMap = { pending_validation:'En attente', accepted:'Accepté', picked_up:'Enlevé', in_transit:'En route', delivered:'Livré ✓' };
-        const stLabel = stMap[o.admin_status || o.status] || o.status;
-        const stClass = 'st-' + (o.admin_status || o.status).replace(/_/g,'');
-        const isDelivered = (o.admin_status || o.status) === 'delivered';
-        const canDelete = ['pending_validation','pending'].includes(o.admin_status || o.status);
+    function renderOrderCard(o, delivery) {
+        // status = état opérationnel (planned, in_transit, delivered)
+        // admin_status = état administratif (pending_validation, accepted, refused)
+        // Pour l'affichage : status='delivered' prime toujours
+        const st  = o.status  || 'pending';
+        const adm = o.admin_status || 'pending_validation';
+
+        const effectiveStatus = st === 'delivered' ? 'delivered'
+            : adm === 'refused'            ? 'refused'
+            : adm === 'pending_validation' ? 'pending_validation'
+            : st === 'in_transit'          ? 'in_transit'
+            : st === 'planned'             ? 'planned'
+            : adm === 'accepted'           ? 'accepted'
+            : st;
+
+        const stMap = {
+            pending_validation: 'En attente',
+            refused:            'Refusée',
+            accepted:           'Acceptée',
+            planned:            'Planifiée',
+            in_transit:         'En route',
+            delivered:          'Livré ✓'
+        };
+        const stLabel = stMap[effectiveStatus] || effectiveStatus;
+        const stClass = 'st-' + effectiveStatus.replace(/_/g,'');
+        const isDelivered = st === 'delivered';
+        const canDelete = ['pending_validation','pending'].includes(adm) && !isDelivered;
+
+        // Preuve : on a déjà chargé les données en amont dans loadHistory
+        const hasProof = isDelivered && delivery && (delivery.photo_data || delivery.signature_data);
         const preuveBtn = isDelivered
-            ? `<button class="btn btn-ghost" style="color:var(--green)" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> Preuve</button>`
+            ? `<button class="btn btn-ghost" style="color:${hasProof?'var(--green)':'var(--muted)'}" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> ${hasProof?'Preuve':'Pas de preuve'}</button>`
+            : '';
+        const blBtn = hasProof
+            ? `<button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>`
             : '';
         const deleteBtn = canDelete
             ? `<button class="btn btn-ghost" style="color:var(--red);border-color:rgba(232,49,26,0.2);" onclick="deleteOrder('${o.id}','${o.order_number||''}')"><i class="fas fa-trash"></i> Annuler</button>`
             : '';
-        return `<div class="order-card" style="${isDelivered ? 'border-color:rgba(34,197,94,0.3);' : ''}">
-            <div class="oc-head"><div><div class="oc-num">${o.order_number || o.id.slice(0,8)}</div><div class="oc-date">${new Date(o.created_at).toLocaleDateString('fr-CH')}</div></div><span class="oc-status ${stClass}">${stLabel}</span></div>
-            <div class="oc-route"><div class="oc-dot" style="background:var(--blue);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Enlèvement</div>${o.pickup_address || '—'}</div></div>
-            <div class="oc-route"><div class="oc-dot" style="background:var(--red);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Livraison</div>${o.delivery_address || '—'}</div></div>
-            <div class="oc-meta"><span class="oc-tag">📦 ${o.quantity || 1} colis</span><span class="oc-tag">⚖️ ${o.weight || 0} kg</span><span class="oc-tag">⚡ ${o.service_type || 'normal'}</span>${o.night_delivery ? '<span class="oc-tag">🌙 Nuit</span>' : ''}${isDelivered && o.delivered_at ? `<span class="oc-tag" style="color:var(--green)">✓ ${new Date(o.delivered_at).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>` : ''}</div>
+
+        const deliveredFmt = isDelivered && o.delivered_at
+            ? new Date(o.delivered_at).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'})
+            : null;
+
+        return `<div class="order-card" style="${isDelivered?'border-color:rgba(34,197,94,0.3);':adm==='refused'?'border-color:rgba(232,49,26,0.3);':''}">
+            <div class="oc-head">
+                <div>
+                    <div class="oc-num">${o.order_number || o.id.slice(0,8)}</div>
+                    <div class="oc-date">${new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'})}</div>
+                </div>
+                <span class="oc-status ${stClass}">${stLabel}</span>
+            </div>
+            <div class="oc-route"><div class="oc-dot" style="background:var(--blue);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Enlèvement</div>${o.pickup_address||'—'}</div></div>
+            <div class="oc-route"><div class="oc-dot" style="background:var(--red);"></div><div class="oc-addr"><div style="font-size:10px;color:var(--muted);">Livraison</div>${o.delivery_address||'—'}</div></div>
+            <div class="oc-meta">
+                <span class="oc-tag">📦 ${o.quantity||1} colis</span>
+                <span class="oc-tag">⚖️ ${o.weight||0} kg</span>
+                <span class="oc-tag">⚡ ${o.service_type||'normal'}</span>
+                ${o.night_delivery?'<span class="oc-tag">🌙 Nuit</span>':''}
+                ${deliveredFmt?`<span class="oc-tag" style="color:var(--green)">✓ ${deliveredFmt}</span>`:''}
+            </div>
             <div class="oc-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-ghost" onclick="showPDF('${o.id}')"><i class="fas fa-tag"></i> Étiquette</button>
-                ${preuveBtn}
-                ${deleteBtn}
+                ${preuveBtn}${blBtn}${deleteBtn}
             </div>
         </div>`;
     }
