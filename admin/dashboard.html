@@ -857,65 +857,82 @@ window.saveChauffeur = async function(){
 // ══════════════════════════════════════
 //  DELETE ✅
 // ══════════════════════════════════════
+
+// Supprime toutes les données liées à un utilisateur
+async function deleteUserData(uid){
+    await db.from('notifications').delete().eq('user_id',uid);
+    await db.from('push_subscriptions').delete().eq('user_id',uid);
+    await db.from('client_addresses').delete().eq('client_id',uid);
+    await db.from('client_destinataires').delete().eq('client_id',uid);
+    await db.from('conges').delete().eq('driver_id',uid);
+    await db.from('pointages').delete().eq('driver_id',uid);
+    await db.from('soldes_rh').delete().eq('driver_id',uid);
+    await db.from('deliveries').delete().eq('driver_id',uid);
+    await db.from('vehicule_km').delete().eq('chauffeur_id',uid);
+    await db.from('campagnes_prospection').delete().eq('created_by',uid);
+    // Supprimer le profil (et auth.users via RPC si disponible)
+    try{ await db.rpc('delete_user_cascade',{user_id:uid}); }
+    catch(e){ await db.from('utilisateurs').delete().eq('id',uid); }
+}
+
 window.askDelete = function(type, id, label, table){
     document.getElementById('confirmText').textContent=`Supprimer "${label}" ?`;
     document.getElementById('confirmYes').onclick=async()=>{
         showLoad();
         try{
             if(table === 'entreprises'){
-                // Cascade : supprimer dans l'ordre pour respecter les FK
-                // 1. Supprimer les lignes de facture liées aux commandes
+                // 1. Commandes et données liées
                 const {data:orders}=await db.from('transport_orders_simple').select('id').eq('entreprise_id',id);
                 if(orders&&orders.length){
-                    const orderIds=orders.map(o=>o.id);
-                    await db.from('facture_lignes').delete().in('order_id',orderIds);
-                    await db.from('tracking_events').delete().in('order_id',orderIds);
-                    await db.from('preuves_livraison').delete().in('stop_id',orderIds);
-                    await db.from('tournee_arrets').delete().in('transport_id',orderIds);
-                    await db.from('transport_orders_simple').delete().eq('entreprise_id',id);
+                    const oIds=orders.map(o=>o.id);
+                    await db.from('facture_lignes').delete().in('order_id',oIds);
+                    await db.from('tracking_events').delete().in('order_id',oIds);
+                    await db.from('preuves_livraison').delete().in('stop_id',oIds);
+                    await db.from('tournee_arrets').delete().in('transport_id',oIds);
                 }
-                // 2. Supprimer tarifs
+                await db.from('transport_orders_simple').delete().eq('entreprise_id',id);
+
+                // 2. Factures
+                await db.from('factures').delete().eq('entreprise_id',id);
+
+                // 3. Tarifs
                 await db.from('tarifs_clients').delete().eq('entreprise_id',id);
                 await db.from('tarifs_speciaux').delete().eq('entreprise_id',id);
-                // 3. Supprimer adresses clients
-                await db.from('client_addresses').delete().eq('client_id',id);
-                // 4. Supprimer les notifications des utilisateurs liés
-                const {data:usersToDelete}=await db.from('utilisateurs').select('id').eq('entreprise_id',id);
-                if(usersToDelete&&usersToDelete.length){
-                    const uIds=usersToDelete.map(u=>u.id);
-                    await db.from('notifications').delete().in('user_id',uIds);
+
+                // 4. Chauffeurs liés
+                const {data:chaufs}=await db.from('chauffeurs').select('id').eq('entreprise_id',id);
+                if(chaufs&&chaufs.length){
+                    const cIds=chaufs.map(c=>c.id);
+                    await db.from('vehicule_km').delete().in('chauffeur_id',cIds);
                 }
-                // 5. Supprimer les utilisateurs liés (avec cascade auth)
-                if(usersToDelete&&usersToDelete.length){
-                    for(const u of usersToDelete){
-                        await db.rpc('delete_user_cascade', {user_id: u.id}).catch(async()=>{
-                            await db.from('notifications').delete().eq('user_id',u.id);
-                            await db.from('utilisateurs').delete().eq('id',u.id);
-                        });
-                    }
+                await db.from('chauffeurs').delete().eq('entreprise_id',id);
+
+                // 5. Employés
+                await db.from('employees').delete().eq('entreprise_id',id);
+
+                // 6. Utilisateurs liés (toutes leurs données)
+                const {data:users}=await db.from('utilisateurs').select('id').eq('entreprise_id',id);
+                if(users&&users.length){
+                    for(const u of users){ await deleteUserData(u.id); }
                 }
-                // 6. Supprimer l'entreprise
+
+                // 7. Supprimer l'entreprise
                 const {error}=await db.from('entreprises').delete().eq('id',id);
                 if(error) throw error;
+
                 await loadEntreprises();
                 await loadUtilisateurs();
                 renderEntreprises();
                 renderDashboard();
 
             } else if(table === 'utilisateurs'){
-                // Utiliser la fonction cascade qui supprime aussi auth.users
-                const {error}=await db.rpc('delete_user_cascade', {user_id: id});
-                if(error){
-                    // Fallback : supprimer seulement le profil si la fonction n'existe pas
-                    await db.from('notifications').delete().eq('user_id',id);
-                    const {error:e2}=await db.from('utilisateurs').delete().eq('id',id);
-                    if(e2) throw e2;
-                }
+                await deleteUserData(id);
                 await loadUtilisateurs();
                 renderUtilisateurs();
                 renderDashboard();
 
             } else if(table === 'chauffeurs'){
+                await db.from('vehicule_km').delete().eq('chauffeur_id',id);
                 const {error}=await db.from('chauffeurs').delete().eq('id',id);
                 if(error) throw error;
                 await loadChauffeurs();
@@ -929,6 +946,7 @@ window.askDelete = function(type, id, label, table){
             toast('success','Supprimé ✓');
             closeModal('modalConfirm');
         } catch(e){
+            console.error('Erreur suppression:',e);
             toast('error','Erreur: '+e.message);
         } finally {
             hideLoad();
