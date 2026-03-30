@@ -879,9 +879,15 @@ window.askDelete = function(type, id, label, table){
                 await db.from('tarifs_speciaux').delete().eq('entreprise_id',id);
                 // 3. Supprimer adresses clients
                 await db.from('client_addresses').delete().eq('client_id',id);
-                // 4. Supprimer les utilisateurs liés
+                // 4. Supprimer les notifications des utilisateurs liés
+                const {data:usersToDelete}=await db.from('utilisateurs').select('id').eq('entreprise_id',id);
+                if(usersToDelete&&usersToDelete.length){
+                    const uIds=usersToDelete.map(u=>u.id);
+                    await db.from('notifications').delete().in('user_id',uIds);
+                }
+                // 5. Supprimer les utilisateurs liés
                 await db.from('utilisateurs').delete().eq('entreprise_id',id);
-                // 5. Supprimer l'entreprise
+                // 6. Supprimer l'entreprise
                 const {error}=await db.from('entreprises').delete().eq('id',id);
                 if(error) throw error;
                 await loadEntreprises();
@@ -890,7 +896,9 @@ window.askDelete = function(type, id, label, table){
                 renderDashboard();
 
             } else if(table === 'utilisateurs'){
-                // Supprimer l'utilisateur (pas de cascade nécessaire)
+                // Supprimer les notifications liées
+                await db.from('notifications').delete().eq('user_id',id);
+                // Supprimer l'utilisateur
                 const {error}=await db.from('utilisateurs').delete().eq('id',id);
                 if(error) throw error;
                 await loadUtilisateurs();
