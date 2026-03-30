@@ -897,21 +897,38 @@ window.saveChauffeur = async function(){
 //  DELETE ✅
 // ══════════════════════════════════════
 
-// Supprime toutes les données liées à un utilisateur
+// Supprime toutes les données liées à un utilisateur + son compte auth
 async function deleteUserData(uid){
-    await db.from('notifications').delete().eq('user_id',uid);
-    await db.from('push_subscriptions').delete().eq('user_id',uid);
-    await db.from('client_addresses').delete().eq('client_id',uid);
-    await db.from('client_destinataires').delete().eq('client_id',uid);
-    await db.from('conges').delete().eq('driver_id',uid);
-    await db.from('pointages').delete().eq('driver_id',uid);
-    await db.from('soldes_rh').delete().eq('driver_id',uid);
-    await db.from('deliveries').delete().eq('driver_id',uid);
-    await db.from('vehicule_km').delete().eq('chauffeur_id',uid);
-    await db.from('campagnes_prospection').delete().eq('created_by',uid);
-    // Supprimer le profil (et auth.users via RPC si disponible)
-    try{ await db.rpc('delete_user_cascade',{user_id:uid}); }
-    catch(e){ await db.from('utilisateurs').delete().eq('id',uid); }
+    // 1. Supprimer toutes les données liées
+    const tables = [
+        ['notifications',          'user_id'],
+        ['push_subscriptions',     'user_id'],
+        ['client_addresses',       'client_id'],
+        ['client_destinataires',   'client_id'],
+        ['conges',                 'driver_id'],
+        ['pointages',              'driver_id'],
+        ['soldes_rh',              'driver_id'],
+        ['deliveries',             'driver_id'],
+        ['vehicule_km',            'chauffeur_id'],
+        ['campagnes_prospection',  'created_by'],
+    ];
+    for(const [table, col] of tables){
+        try{ await db.from(table).delete().eq(col, uid); } catch(e){ console.warn(`delete ${table}:`, e.message); }
+    }
+
+    // 2. Supprimer le profil utilisateurs
+    try{ await db.from('utilisateurs').delete().eq('id', uid); } catch(e){ console.warn('delete utilisateurs:', e.message); }
+
+    // 3. Supprimer le compte auth.users via RPC SECURITY DEFINER
+    //    (la fonction SQL doit exister dans Supabase — voir instructions)
+    try{
+        await db.rpc('admin_delete_user', { target_user_id: uid });
+    } catch(e){
+        // RPC non disponible : le compte auth reste, on désactive comme fallback
+        console.warn('admin_delete_user RPC non disponible:', e.message);
+        // Désactiver le compte en mettant actif=false — l'user ne peut plus se connecter
+        try{ await db.from('utilisateurs').update({ actif: false }).eq('id', uid); } catch(_){}
+    }
 }
 
 window.askDelete = function(type, id, label, table){

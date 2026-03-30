@@ -628,23 +628,42 @@
         const id = document.getElementById('deleteUserId').value;
         if (!id) return;
         showLoad();
-        // Tentative de suppression dans la table utilisateurs
-        const { error } = await db.from('utilisateurs').delete().eq('id', id);
-        hideLoad();
-        if (error) {
-            // Si RLS bloque la suppression directe, on désactive à la place
-            if (error.code === '42501' || error.message.includes('permission') || error.message.includes('policy')) {
-                toast('info', '⚠️ Suppression restreinte par Supabase — compte désactivé à la place');
-                const { error: e2 } = await db.from('utilisateurs').update({ actif: false }).eq('id', id);
-                if (!e2) { window.closeModal('modalConfirmDelete'); await loadUsers(); }
-            } else {
-                toast('error', '❌ ' + error.message);
+        try {
+            // 1. Supprimer les données liées
+            const linked = [
+                ['notifications',        'user_id'],
+                ['push_subscriptions',   'user_id'],
+                ['client_addresses',     'client_id'],
+                ['client_destinataires', 'client_id'],
+                ['conges',               'driver_id'],
+                ['pointages',            'driver_id'],
+                ['soldes_rh',            'driver_id'],
+                ['deliveries',           'driver_id'],
+                ['vehicule_km',          'chauffeur_id'],
+            ];
+            for(const [table, col] of linked){
+                try{ await db.from(table).delete().eq(col, id); } catch(e){ console.warn(table, e.message); }
             }
-            return;
+
+            // 2. Supprimer le profil
+            await db.from('utilisateurs').delete().eq('id', id);
+
+            // 3. Supprimer le compte auth via RPC
+            try{
+                await db.rpc('admin_delete_user', { target_user_id: id });
+                toast('success', '🗑️ Compte supprimé complètement (données + auth)');
+            } catch(e){
+                console.warn('RPC admin_delete_user:', e.message);
+                toast('success', '🗑️ Profil supprimé — voir instructions pour supprimer le compte auth Supabase');
+            }
+
+            window.closeModal('modalConfirmDelete');
+            await loadUsers();
+        } catch(err) {
+            toast('error', '❌ ' + err.message);
+        } finally {
+            hideLoad();
         }
-        toast('success', '🗑️ Utilisateur supprimé définitivement');
-        window.closeModal('modalConfirmDelete');
-        await loadUsers();
     };
 
     window.activateUser = async function(id) {
