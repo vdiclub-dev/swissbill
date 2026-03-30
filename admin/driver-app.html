@@ -97,8 +97,8 @@
         .pc-time { background:var(--surface); border-radius:10px; padding:10px 6px; text-align:center; }
         .pc-time-val { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; }
         .pc-time-lbl { font-size:9px; color:var(--muted); margin-top:2px; text-transform:uppercase; letter-spacing:0.5px; }
-        .pc-actions { display:flex; gap:8px; }
-        .pc-btn { flex:1; padding:12px 8px; border-radius:10px; border:none; font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s; }
+        .pc-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .pc-btn { padding:13px 8px; border-radius:10px; border:none; font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s; width:100%; }
         .pc-btn:active { transform:scale(0.97); }
         .pc-btn.start  { background:var(--green); color:var(--night); }
         .pc-btn.pause  { background:var(--yellow); color:var(--night); }
@@ -371,9 +371,9 @@
         </div>
         <div class="pc-actions">
             <button class="pc-btn start"  id="btnStart"  onclick="pointageAction('start')"><i class="fas fa-play"></i> Démarrer</button>
-            <button class="pc-btn pause"  id="btnPause"  onclick="pointageAction('pause')"  disabled><i class="fas fa-pause"></i> Pause</button>
-            <button class="pc-btn resume" id="btnResume" onclick="pointageAction('resume')" disabled style="display:none"><i class="fas fa-play"></i> Reprendre</button>
-            <button class="pc-btn stop"   id="btnStop"   onclick="pointageAction('stop')"   disabled><i class="fas fa-stop"></i> Fin</button>
+            <button class="pc-btn stop"    id="btnStop"   onclick="pointageAction('stop')"   disabled><i class="fas fa-stop"></i> Fin de journée</button>
+            <button class="pc-btn pause"   id="btnPause"  onclick="pointageAction('pause')"  disabled><i class="fas fa-pause"></i> Pause</button>
+            <button class="pc-btn resume"  id="btnResume" onclick="pointageAction('resume')" disabled style="display:none"><i class="fas fa-play"></i> Reprendre</button>
         </div>
     </div>
 
@@ -1217,36 +1217,48 @@
         const btnStop   = document.getElementById('btnStop');
         const pcStatus  = document.getElementById('pcStatus');
 
-        // Reset
-        btnStart.disabled=false; btnPause.disabled=true;
-        btnResume.style.display='none'; btnPause.style.display='flex';
-        btnStop.disabled=true;
-        pcStatus.className='pc-status off'; pcStatus.textContent='Non pointé';
+        // Reset — état initial (non pointé)
+        btnStart.disabled  = false;
+        btnStop.disabled   = true;
+        btnPause.disabled  = true;
+        btnPause.style.display  = 'flex';
+        btnPause.style.gridColumn = '';
+        btnResume.style.display = 'none';
+        btnResume.style.gridColumn = '';
+        pcStatus.className = 'pc-status off';
+        pcStatus.textContent = 'Non pointé';
 
         if(!p) { updateWorkTimer(0); return; }
 
         if(p.debut_travail && !p.fin_travail) {
-            btnStart.disabled=true; btnStop.disabled=false;
+            btnStart.disabled = true;
             if(p.debut_pause && !p.fin_pause) {
-                // En pause
-                btnPause.style.display='none'; btnResume.style.display='flex';
-                btnResume.disabled=false;
-                btnStop.disabled=true;
-                pcStatus.className='pc-status pause'; pcStatus.textContent='En pause';
+                // ── En pause : Démarrer grisé | Fin grisé / Reprendre pleine largeur ──
+                btnStop.disabled   = true;
+                btnPause.style.display  = 'none';
+                btnResume.style.display = 'flex';
+                btnResume.style.gridColumn = '1 / -1'; // occupe les 2 colonnes
+                btnResume.disabled = false;
+                pcStatus.className   = 'pc-status pause';
+                pcStatus.textContent = 'En pause ☕';
             } else {
-                // En travail
-                btnPause.disabled=false;
-                btnPause.style.display='flex';
-                btnResume.style.display='none';
-                btnStop.disabled=false;
-                pcStatus.className='pc-status work'; pcStatus.textContent='En service';
-                // Start timer
+                // ── En service : Fin activé + Pause activée ──
+                btnStop.disabled   = false;
+                btnPause.disabled  = false;
+                btnPause.style.display  = 'flex';
+                btnPause.style.gridColumn = '';
+                btnResume.style.display = 'none';
+                pcStatus.className   = 'pc-status work';
+                pcStatus.textContent = 'En service';
                 startWorkTimer(p.debut_travail, p.debut_pause, p.fin_pause);
             }
         } else if(p.fin_travail) {
-            btnStart.disabled=true; btnStop.disabled=true; btnPause.disabled=true;
-            pcStatus.className='pc-status off'; pcStatus.textContent='Journée terminée';
-            // Calculate hours
+            // ── Journée terminée : tout grisé ──
+            btnStart.disabled = true;
+            btnStop.disabled  = true;
+            btnPause.disabled = true;
+            pcStatus.className   = 'pc-status off';
+            pcStatus.textContent = 'Journée terminée ✓';
             const ms = new Date(p.fin_travail) - new Date(p.debut_travail);
             updateWorkTimer(Math.floor(ms/1000));
         }
