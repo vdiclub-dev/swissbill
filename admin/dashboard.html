@@ -783,15 +783,10 @@ window.saveUser = async function(){
         } else {
             // Créer ou récupérer le compte Auth
             const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
-            if(isNew) {
-                // Nouveau compte → insérer le profil
-                const {error:insErr}=await db.from('utilisateurs').insert([{id:userId,...profilePayload}]);
-                if(insErr) throw insErr;
-            } else {
-                // Compte existant → mettre à jour le profil
-                const {error:updErr}=await db.from('utilisateurs').update(profilePayload).eq('id',userId);
-                if(updErr) throw updErr;
-            }
+            // UPSERT : insère si nouveau, met à jour si existant
+            const {error:upsErr}=await db.from('utilisateurs')
+                .upsert([{id:userId,...profilePayload}], {onConflict:'id'});
+            if(upsErr) throw upsErr;
         }
         toast('success',id?'Utilisateur modifié ✓':'Utilisateur créé ✓');
         closeModal('modalUser');
@@ -863,14 +858,14 @@ window.saveChauffeur = async function(){
             // Création compte Auth via client temporaire (sans écraser la session admin)
             const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
 
-            // Insérer ou mettre à jour dans utilisateurs
+            // UPSERT dans utilisateurs (insère si nouveau, met à jour si existant)
             if(userId){
-                const {error:uErr}=await db.from('utilisateurs').insert([{
+                const {error:uErr}=await db.from('utilisateurs').upsert([{
                     id:userId, email, prenom, nom,
                     role:'chauffeur',
                     entreprise_id: entId
-                }]);
-                if(uErr) console.warn('utilisateurs insert warning:', uErr.message);
+                }], {onConflict:'id'});
+                if(uErr) console.warn('utilisateurs upsert warning:', uErr.message);
             }
 
             // Insérer dans chauffeurs — user_id seulement si la colonne existe
