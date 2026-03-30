@@ -894,26 +894,44 @@ window.saveChauffeur = async function(){
 };
 
 // ══════════════════════════════════════
-//  DÉSACTIVATION UTILISATEUR
+//  SUPPRESSION COMPLÈTE UTILISATEUR
 // ══════════════════════════════════════
 
-// Désactive un utilisateur : actif=false dans utilisateurs
-// Le compte auth.users est conservé (historique préservé)
+// Supprime tout : données liées + profil + compte auth.users
 async function deleteUserData(uid){
-    const { error } = await db.from('utilisateurs').update({ actif: false }).eq('id', uid);
-    if(error) throw error;
+    // 1. Données liées
+    const tables = [
+        ['notifications',         'user_id'],
+        ['push_subscriptions',    'user_id'],
+        ['client_addresses',      'client_id'],
+        ['client_destinataires',  'client_id'],
+        ['conges',                'driver_id'],
+        ['pointages',             'driver_id'],
+        ['soldes_rh',             'driver_id'],
+        ['deliveries',            'driver_id'],
+        ['vehicule_km',           'chauffeur_id'],
+        ['campagnes_prospection', 'created_by'],
+    ];
+    for(const [table, col] of tables){
+        try{ await db.from(table).delete().eq(col, uid); } catch(e){ console.warn(`delete ${table}:`, e.message); }
+    }
+    // 2. Profil utilisateurs
+    try{ await db.from('utilisateurs').delete().eq('id', uid); } catch(e){ console.warn('delete utilisateurs:', e.message); }
+    // 3. Compte auth.users via RPC
+    try{ await db.rpc('admin_delete_user', { target_user_id: uid }); }
+    catch(e){ console.warn('admin_delete_user RPC:', e.message); }
 }
 
 window.askDelete = function(type, id, label, table){
     // Utilisateurs : désactivation (compte auth conservé)
     // Entreprises/chauffeurs : suppression réelle
     const isUser = (table === 'utilisateurs');
-    document.getElementById('confirmIco').textContent  = isUser ? '🚫' : '🗑️';
-    document.getElementById('confirmTitle').textContent = isUser ? 'DÉSACTIVER ?' : 'SUPPRIMER ?';
+    document.getElementById('confirmIco').textContent  = '🗑️';
+    document.getElementById('confirmTitle').textContent = 'SUPPRIMER DÉFINITIVEMENT ?';
     document.getElementById('confirmText').textContent  = isUser
-        ? `Désactiver "${label}" ?\nLe compte sera bloqué mais conservé dans Supabase.`
+        ? `Supprimer "${label}" ?\nToutes les données et le compte seront effacés. Irréversible.`
         : `Supprimer "${label}" ? Cette action est irréversible.`;
-    document.getElementById('confirmYes').textContent   = isUser ? 'Désactiver' : 'Supprimer';
+    document.getElementById('confirmYes').textContent   = 'Supprimer';
     document.getElementById('confirmYes').onclick=async()=>{
         showLoad();
         try{
@@ -981,8 +999,7 @@ window.askDelete = function(type, id, label, table){
                 if(error) throw error;
             }
 
-            const msg = table==='utilisateurs' ? 'Compte désactivé ✓ — conservé dans Supabase' : 'Supprimé ✓';
-            toast('success', msg);
+            toast('success', 'Supprimé ✓');
             closeModal('modalConfirm');
         } catch(e){
             console.error('Erreur suppression:',e);

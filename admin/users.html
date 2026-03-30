@@ -307,7 +307,7 @@
         </p>
         <input type="hidden" id="deleteUserId">
 
-        <!-- Option 1 : Désactiver -->
+        <!-- Option 1 : Désactiver (réversible) -->
         <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:10px;">
             <div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:4px;"><i class="fas fa-user-slash" style="color:var(--yellow);margin-right:6px;"></i>Désactiver le compte</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">L'utilisateur ne pourra plus se connecter. Ses données sont conservées. Réversible.</div>
@@ -316,12 +316,12 @@
             </button>
         </div>
 
-        <!-- Option 2 : Désactiver définitivement -->
+        <!-- Option 2 : Supprimer complètement -->
         <div style="background:var(--surface);border:1px solid rgba(232,49,26,0.2);border-radius:12px;padding:14px;margin-bottom:14px;">
-            <div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:4px;"><i class="fas fa-ban" style="color:var(--red);margin-right:6px;"></i>Désactiver définitivement</div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Bloque l'accès de façon permanente. Le compte reste dans Supabase (historique conservé). Non réversible depuis cette interface.</div>
+            <div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:4px;"><i class="fas fa-trash" style="color:var(--red);margin-right:6px;"></i>Supprimer définitivement</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Efface toutes les données ET le compte Supabase. Irréversible.</div>
             <button class="btn btn-red" style="width:100%;" onclick="confirmDelete()">
-                <i class="fas fa-ban"></i> Désactiver définitivement
+                <i class="fas fa-trash"></i> Supprimer définitivement
             </button>
         </div>
 
@@ -629,10 +629,28 @@
         if (!id) return;
         showLoad();
         try {
-            // Désactivation : actif=false — le compte auth.users est conservé
-            const { error } = await db.from('utilisateurs').update({ actif: false }).eq('id', id);
-            if (error) throw error;
-            toast('success', '🚫 Compte désactivé — conservé dans Supabase, accès bloqué');
+            // 1. Données liées
+            const linked = [
+                ['notifications',        'user_id'],
+                ['push_subscriptions',   'user_id'],
+                ['client_addresses',     'client_id'],
+                ['client_destinataires', 'client_id'],
+                ['conges',               'driver_id'],
+                ['pointages',            'driver_id'],
+                ['soldes_rh',            'driver_id'],
+                ['deliveries',           'driver_id'],
+                ['vehicule_km',          'chauffeur_id'],
+            ];
+            for(const [table, col] of linked){
+                try{ await db.from(table).delete().eq(col, id); } catch(e){ console.warn(table, e.message); }
+            }
+            // 2. Profil
+            await db.from('utilisateurs').delete().eq('id', id);
+            // 3. Compte auth.users via RPC
+            try{ await db.rpc('admin_delete_user', { target_user_id: id }); }
+            catch(e){ console.warn('RPC:', e.message); }
+
+            toast('success', '🗑️ Utilisateur supprimé complètement');
             window.closeModal('modalConfirmDelete');
             await loadUsers();
         } catch(err) {
