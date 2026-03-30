@@ -1261,88 +1261,110 @@
         const el = document.getElementById('trackingList');
         if(!silent) el.innerHTML = '<div class="empty">⏳ Chargement...</div>';
 
+        // Charger toutes les commandes non livrées de l'entreprise
         const { data: orders } = await db.from('transport_orders_simple')
             .select('*')
             .eq('entreprise_id', client.entreprise_id)
+            .neq('status', 'delivered')
             .order('created_at', { ascending: false })
             .limit(20);
 
         if(!orders || !orders.length) { el.innerHTML = '<div class="empty">📍 Aucune expédition en cours à suivre</div>'; return; }
 
-        const activeOrders = orders.filter(o => (o.admin_status || o.status) !== 'delivered');
-        if(!activeOrders.length) { el.innerHTML = '<div class="empty">📍 Toutes vos expéditions sont livrées</div>'; return; }
+        const orderIds = orders.map(o => o.id);
 
-        const orderIds = activeOrders.map(o => o.id);
+        // Charger preuves depuis la table deliveries (utilisée par l'app chauffeur)
+        const { data: allDeliveries } = await db.from('deliveries')
+            .select('order_id, photo_data, signature_data, note_livraison, created_at')
+            .in('order_id', orderIds);
+        const deliveriesByOrder = {};
+        (allDeliveries || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
 
-        // Charger tracking_events réels
-        const { data: allEvents } = await db.from('tracking_events')
-            .select('*').in('order_id', orderIds).order('created_at', { ascending: true });
-        const eventsByOrder = {};
-        (allEvents || []).forEach(e => {
-            if(!eventsByOrder[e.order_id]) eventsByOrder[e.order_id] = [];
-            eventsByOrder[e.order_id].push(e);
-        });
-
-        // Charger preuves_livraison
-        const { data: allPreuves } = await db.from('preuves_livraison')
-            .select('*').in('stop_id', orderIds);
-        const preuvesByOrder = {};
-        (allPreuves || []).forEach(p => { preuvesByOrder[p.stop_id] = p; });
-
-        el.innerHTML = activeOrders.map(o =>
-            renderTrackingCard(o, eventsByOrder[o.id] || [], preuvesByOrder[o.id] || null)
+        el.innerHTML = orders.map(o =>
+            renderTrackingCard(o, [], deliveriesByOrder[o.id] || null)
         ).join('');
     }
 
-    function getTimelineSteps(o, events) {
-        const fmt = d => d ? new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-        const findEv = types => events.find(e => types.includes(e.event_type));
+    // Formate un timestamp en heure locale suisse avec date + heure
+    function fmtTL(ts) {
+        if(!ts) return '';
+        return new Date(ts).toLocaleString('fr-CH', {
+            day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit',
+            timeZone:'Europe/Zurich'
+        });
+    }
 
-        const evCreated  = { time: fmt(o.created_at), location: null };
-        const evAccept   = findEv(['accepted','validated','planifie','accepte']);
-        const evPickup   = findEv(['picked_up','pickup','enlevement','collected','enleve']);
-        const evTransit  = findEv(['in_transit','transit','en_route','departed','depart']);
-        const evDelivery = findEv(['delivered','livraison','livre','complete','delivered']);
+    function getTimelineSteps(o) {
+        // Utilise directement les timestamps de la commande — pas besoin de tracking_events
+        // Étape 0 — Demande reçue : toujours o.created_at
+        // Étape 1 — Validée admin : o.validated_at (si admin_status='accepted')
+        // Étape 2 — Chauffeur assigné : o.assigned_at (si driver_id présent)
+        // Étape 3 — En route : o.picked_up_at (si status='in_transit')
+        // Étape 4 — Livré : o.delivered_at (si status='delivered')
 
-        const statusOrder = ['pending_validation','accepted','picked_up','in_transit','delivered'];
-        const currentIdx  = Math.max(0, statusOrder.indexOf(o.admin_status || o.status || 'pending_validation'));
+        const st = o.status || 'pending';
+        const adm = o.admin_status || 'pending_validation';
 
-        return [
-            { icon:'📋', label:'Demande reçue',       time: evCreated.time,              location: '',                     idx:0 },
-            { icon:'✅', label:'Acceptée & planifiée', time: evAccept  ? fmt(evAccept.created_at)  : '', location: evAccept?.location||'',  idx:1 },
-            { icon:'📦', label:'Colis enlevé',         time: evPickup  ? fmt(evPickup.created_at)  : '', location: evPickup?.location||'',  idx:2 },
-            { icon:'🚚', label:'En route',             time: evTransit ? fmt(evTransit.created_at) : '', location: evTransit?.location||'', idx:3 },
-            { icon:'🏁', label:'Livré',                time: evDelivery? fmt(evDelivery.created_at): '', location: evDelivery?.location||'',idx:4 }
-        ].map(s => ({
+        // Index courant dans le flux
+        let currentIdx = 0;
+        if(adm === 'pending_validation')                        currentIdx = 0;
+        else if(adm === 'accepted' && !o.driver_id)            currentIdx = 1;
+        else if(adm === 'accepted' && o.driver_id && st !== 'in_transit' && st !== 'delivered') currentIdx = 2;
+        else if(st === 'in_transit')                           currentIdx = 3;
+        else if(st === 'delivered')                            currentIdx = 4;
+
+        const steps = [
+            { icon:'📋', label:'Demande reçue',      time: fmtTL(o.created_at),   idx:0 },
+            { icon:'✅', label:'Validée',             time: fmtTL(o.validated_at), idx:1 },
+            { icon:'🚗', label:'Chauffeur assigné',   time: fmtTL(o.assigned_at),  idx:2 },
+            { icon:'🚚', label:'En route',            time: fmtTL(o.picked_up_at), idx:3 },
+            { icon:'🏁', label:'Livré',               time: fmtTL(o.delivered_at), idx:4 }
+        ];
+
+        return steps.map(s => ({
             ...s,
-            state: s.idx < currentIdx ? 'done' : s.idx === currentIdx ? 'active' : 'pending'
+            state: s.idx < currentIdx ? 'done'
+                 : s.idx === currentIdx ? 'active'
+                 : 'pending'
         }));
     }
 
     function renderTrackingCard(o, events, preuve) {
-        const steps = getTimelineSteps(o, events);
+        const steps = getTimelineSteps(o);
+        const st  = o.status || 'pending';
+        const adm = o.admin_status || 'pending_validation';
+
         const stLabel = {
-            pending_validation:'En attente de validation',
-            accepted:'Accepté & planifié',
-            picked_up:'Colis enlevé',
-            in_transit:'En route vers vous',
-            delivered:'Livré ✓'
-        }[o.admin_status || o.status] || o.status;
+            pending_validation: 'En attente de validation',
+            refused:            'Refusée',
+            accepted:           st === 'planned' ? 'Planifiée' : 'Acceptée',
+            pending:            'En attente',
+            planned:            'Planifiée',
+            in_transit:         'En route vers vous',
+            delivered:          'Livré ✓'
+        }[adm === 'accepted' ? st : adm] || st;
 
         const stColor = {
-            pending_validation:'var(--yellow)',
-            accepted:'var(--blue)',
-            picked_up:'var(--orange)',
-            in_transit:'var(--blue)',
-            delivered:'var(--green)'
-        }[o.admin_status || o.status] || 'var(--muted)';
+            pending_validation: 'var(--yellow)',
+            refused:            'var(--red)',
+            pending:            'var(--muted)',
+            planned:            'var(--blue)',
+            in_transit:         'var(--purple)',
+            delivered:          'var(--green)'
+        }[adm === 'accepted' ? st : adm] || 'var(--muted)';
 
+        // Chauffeur : n'afficher que si réellement assigné
         const driverHtml = o.driver_id
             ? `<div class="tracking-driver"><div class="tracking-driver-av">🧑</div><span>Livreur assigné</span></div>`
             : `<div class="tracking-driver" style="color:var(--muted)"><div class="tracking-driver-av" style="background:var(--surface)">?</div><span>En attente d'assignation</span></div>`;
 
-        const etaHtml = (o.admin_status === 'in_transit' || o.admin_status === 'accepted')
-            ? `<div class="tracking-eta"><i class="fas fa-clock"></i> Livraison estimée aujourd'hui</div>` : '';
+        // ETA : uniquement si en route (in_transit) et picked_up_at connu
+        let etaHtml = '';
+        if(st === 'in_transit' && o.picked_up_at) {
+            const pickupDate = new Date(o.picked_up_at);
+            const todayStr = pickupDate.toLocaleDateString('fr-CH', {timeZone:'Europe/Zurich'});
+            etaHtml = `<div class="tracking-eta"><i class="fas fa-clock"></i> En route depuis ${pickupDate.toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'})}</div>`;
+        }
 
         const timelineHtml = steps.map((s, i) => `
             <div class="tl-step">
@@ -1352,17 +1374,18 @@
                 </div>
                 <div class="tl-content">
                     <div class="tl-label ${s.state}">${s.label}</div>
-                    ${s.time ? `<div class="tl-time">🕐 ${s.time}${s.location ? ' · 📍 '+s.location : ''}</div>` : ''}
+                    ${s.time ? `<div class="tl-time">🕐 ${s.time}</div>` : ''}
                 </div>
             </div>`).join('');
 
-        // Preuve de livraison inline si disponible
-        const preuveHtml = preuve ? `
+        // Preuve de livraison inline (depuis table deliveries, champs photo_data / signature_data)
+        const hasProof = preuve && (preuve.photo_data || preuve.signature_data);
+        const preuveHtml = hasProof ? `
             <div style="margin-top:12px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px;">
                 <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px;">✅ PREUVE DE LIVRAISON</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    ${preuve.photo_url ? `<img src="${preuve.photo_url}" style="height:80px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuveModal('${o.id}')">` : ''}
-                    ${preuve.signature_url ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${preuve.signature_url}" style="height:80px;border-radius:6px;object-fit:contain;" title="Signature"></div>` : ''}
+                    ${preuve.photo_data ? `<img src="${preuve.photo_data}" style="height:80px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuveModal('${o.id}')">` : ''}
+                    ${preuve.signature_data ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${preuve.signature_data}" style="height:80px;border-radius:6px;object-fit:contain;" title="Signature"></div>` : ''}
                     <button class="btn btn-ghost" style="color:var(--green);align-self:flex-end" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> Voir BL</button>
                 </div>
             </div>` : '';
@@ -1391,7 +1414,7 @@
                 <span class="oc-tag">⚡ ${o.service_type||'normal'}</span>
                 ${o.night_delivery?'<span class="oc-tag">🌙 Nuit</span>':''}
                 <button class="btn btn-ghost" style="margin-left:auto" onclick="showPDF('${o.id}')"><i class="fas fa-tag"></i> Étiquette</button>
-                ${preuve ? `<button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>` : ''}
+                ${hasProof ? `<button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>` : ''}
             </div>
         </div>`;
     }
