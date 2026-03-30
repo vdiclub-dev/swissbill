@@ -442,6 +442,15 @@
 if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>';return;}
 const db = window.SUPABASE_CLIENT;
 
+// Client temporaire isolé pour créer des comptes sans écraser la session admin
+function makeTempClient() {
+    return window.supabase.createClient(
+        window.SUPABASE_CONFIG.url,
+        window.SUPABASE_CONFIG.key,
+        { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+    );
+}
+
 let entreprises=[], utilisateurs=[], chauffeurs=[], transports=[];
 
 // ── TOAST ──
@@ -737,15 +746,16 @@ window.saveUser = async function(){
             const {error}=await db.from('utilisateurs').update(profilePayload).eq('id',id);
             if(error) throw error;
         } else {
-            // Créer compte Auth + profil
-            const {data:authData,error:authErr}=await db.auth.signUp({email,password:pwd});
+            // Créer compte Auth via client temporaire (sans écraser la session admin)
+            const tmpDb = makeTempClient();
+            const {data:authData,error:authErr}=await tmpDb.auth.signUp({email,password:pwd});
             if(authErr) throw authErr;
             const userId=authData.user?.id;
-            if(userId){
-                await db.from('utilisateurs').insert([{id:userId,...profilePayload}]);
-            }
+            if(!userId) throw new Error('Création du compte échouée — aucun ID retourné');
+            const {error:insErr}=await db.from('utilisateurs').insert([{id:userId,...profilePayload}]);
+            if(insErr) throw insErr;
         }
-        toast('success',id?'Utilisateur modifié ✓':'Utilisateur créé ✓');
+        toast('success',id?'Utilisateur modifié ✓':'Utilisateur créé ✓ — un email de confirmation a été envoyé');
         closeModal('modalUser');
         await loadUtilisateurs();
         renderUtilisateurs();
@@ -812,10 +822,12 @@ window.saveChauffeur = async function(){
             const {error}=await db.from('chauffeurs').update(chauffeurPayload).eq('id',id);
             if(error) throw error;
         } else {
-            // Création compte Auth
-            const {data:authData,error:authErr}=await db.auth.signUp({email,password:pwd});
+            // Création compte Auth via client temporaire (sans écraser la session admin)
+            const tmpDb = makeTempClient();
+            const {data:authData,error:authErr}=await tmpDb.auth.signUp({email,password:pwd});
             if(authErr) throw authErr;
             const userId=authData.user?.id;
+            if(!userId) throw new Error('Création du compte échouée — aucun ID retourné');
 
             // Insérer dans utilisateurs
             if(userId){

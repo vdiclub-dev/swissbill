@@ -339,6 +339,15 @@
     }
     const db = window.SUPABASE_CLIENT;
 
+    // Client temporaire isolé pour créer des comptes sans écraser la session admin
+    function makeTempClient() {
+        return window.supabase.createClient(
+            window.SUPABASE_CONFIG.url,
+            window.SUPABASE_CONFIG.key,
+            { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+        );
+    }
+
     /* ── Protection session ── */
     (async () => {
         const { data: { session } } = await db.auth.getSession();
@@ -550,16 +559,18 @@
         showLoad();
         try {
             if (!id) {
-                // Create via auth
-                const { data, error: authErr } = await db.auth.signUp({ email, password: pwd });
+                // Créer via client temporaire (sans écraser la session admin)
+                const tmpDb = makeTempClient();
+                const { data, error: authErr } = await tmpDb.auth.signUp({ email, password: pwd });
                 if (authErr) throw authErr;
+                if (!data.user?.id) throw new Error('Création du compte échouée — aucun ID retourné');
                 const { error: dbErr } = await db.from('utilisateurs').upsert([{
                     id: data.user.id, email,
                     nom: nom || null, prenom: prenom || null,
                     telephone: tel || null, role, actif: true
                 }]);
                 if (dbErr) throw dbErr;
-                toast('success', '✅ Utilisateur créé !');
+                toast('success', '✅ Utilisateur créé ! Un email de confirmation a été envoyé.');
             } else {
                 // Update existing
                 const { error } = await db.from('utilisateurs').update({
