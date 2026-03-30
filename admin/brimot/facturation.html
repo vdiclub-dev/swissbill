@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brimot Nettoyage — Facturation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../config.js"></script>
+    <!-- QR Code Swiss Payment Standard -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        :root{
+            --red:#e8311a;--night:#0a0a0f;--night2:#111118;--night3:#18181f;--surface:#1e1e28;
+            --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+            --white:#fff;--muted:rgba(255,255,255,0.38);--muted2:rgba(255,255,255,0.6);
+            --green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b;--orange:#f97316;--purple:#a855f7;
+            --brimot:#0ea5e9;--brimot2:#0284c7;--sidebar:220px;
+        }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+        html,body{height:100%;}
+        body{font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);display:flex;}
+
+        /* ── Sidebar ── */
+        .sidebar{width:var(--sidebar);flex-shrink:0;background:var(--night2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;}
+        .sb-logo{padding:18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;}
+        .sb-mark{width:34px;height:34px;background:var(--brimot);border-radius:9px;display:grid;place-items:center;font-size:16px;}
+        .sb-text{font-family:'Bebas Neue',cursive;font-size:17px;letter-spacing:1px;color:var(--white);line-height:1.1;}
+        .sb-text em{color:var(--brimot);font-style:normal;font-size:11px;display:block;letter-spacing:2px;font-family:'Outfit',sans-serif;font-weight:700;}
+        .nav-sec{padding:14px 12px 5px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:10px;margin:2px 8px;font-size:13px;font-weight:500;color:var(--muted2);text-decoration:none;transition:all 0.2s;border:1px solid transparent;cursor:pointer;}
+        .nav-item i{width:16px;text-align:center;}
+        .nav-item:hover{background:var(--night3);color:var(--white);}
+        .nav-item.active{background:rgba(14,165,233,0.12);color:var(--white);border-color:rgba(14,165,233,0.25);}
+        .nav-item.active i{color:var(--brimot);}
+        .sb-footer{margin-top:auto;padding:12px;border-top:1px solid var(--border);}
+        .user-chip{display:flex;align-items:center;gap:8px;}
+        .user-av{width:30px;height:30px;background:var(--brimot);border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:700;flex-shrink:0;}
+        .user-name{font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;}
+
+        /* ── Main ── */
+        .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+        .topbar{height:56px;background:var(--night2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0;gap:12px;}
+        .page-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:2px;}
+        .content{flex:1;padding:24px;overflow-y:auto;}
+        .section{display:none;}.section.active{display:block;}
+
+        /* ── Buttons ── */
+        .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.2s;text-decoration:none;white-space:nowrap;}
+        .btn-blue{background:var(--brimot);color:white;}.btn-blue:hover{background:var(--brimot2);}
+        .btn-green{background:var(--green);color:#0a0a0f;}.btn-green:hover{filter:brightness(1.1);}
+        .btn-yellow{background:var(--yellow);color:#0a0a0f;}.btn-yellow:hover{filter:brightness(1.1);}
+        .btn-ghost{background:var(--surface);color:var(--muted2);border:1px solid var(--border2);}.btn-ghost:hover{color:var(--white);}
+        .btn-red{background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.2);}.btn-red:hover{background:rgba(232,49,26,0.2);}
+        .btn-sm{padding:6px 11px;font-size:12px;}
+
+        /* ── Stats ── */
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+        .stat-card{background:var(--night3);border:1px solid var(--border2);border-radius:12px;padding:16px 18px;}
+        .stat-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+        .stat-val{font-family:'Bebas Neue',cursive;font-size:30px;line-height:1;}
+
+        /* ── Cards / Tables ── */
+        .card{background:var(--night3);border:1px solid var(--border2);border-radius:14px;margin-bottom:18px;}
+        .card-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+        .card-title{font-family:'Bebas Neue',cursive;font-size:14px;letter-spacing:1px;color:var(--muted2);}
+        .card-body{padding:18px;}
+        .tbl{width:100%;border-collapse:collapse;font-size:13px;}
+        .tbl th{text-align:left;padding:9px 12px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);}
+        .tbl td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+        .tbl tr:last-child td{border-bottom:none;}
+        .tbl tr:hover td{background:rgba(255,255,255,0.02);}
+        .empty-row td{text-align:center;padding:30px;color:var(--muted);}
+
+        /* ── Badges statut ── */
+        .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700;}
+        .badge-devis{background:rgba(245,158,11,0.12);color:var(--yellow);}
+        .badge-facture{background:rgba(59,130,246,0.12);color:var(--blue);}
+        .badge-payee{background:rgba(34,197,94,0.12);color:var(--green);}
+        .badge-rappel{background:rgba(232,49,26,0.12);color:var(--red);}
+        .badge-annulee{background:rgba(255,255,255,0.06);color:var(--muted);}
+
+        /* ── Modal ── */
+        .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center;padding:16px;}
+        .modal.open{display:flex;}
+        .modal-box{background:var(--night3);border:1px solid var(--border2);border-radius:20px;padding:28px;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;}
+        .modal-box.wide{max-width:900px;}
+        .modal-title{font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;}
+        .modal-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;}
+
+        /* ── Form ── */
+        .field{margin-bottom:14px;}
+        .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+        .field input,.field select,.field textarea{width:100%;padding:10px 13px;background:var(--surface);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);outline:none;transition:border-color 0.2s;}
+        .field input:focus,.field select,.field textarea:focus{border-color:var(--brimot);}
+        .field select option{background:var(--night3);}
+        .field textarea{resize:vertical;min-height:60px;}
+        .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+        .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+
+        /* ── Lignes facture ── */
+        .ligne-row{display:grid;grid-template-columns:3fr 80px 100px 100px 30px;gap:8px;align-items:center;margin-bottom:8px;}
+        .ligne-row input,.ligne-row select{padding:8px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);}
+        .ligne-total{text-align:right;font-weight:700;font-size:12px;}
+        .btn-del-ligne{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:4px;}
+        .lignes-header{display:grid;grid-template-columns:3fr 80px 100px 100px 30px;gap:8px;margin-bottom:6px;}
+        .lignes-header span{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
+        .total-section{border-top:1px solid var(--border2);padding-top:12px;margin-top:12px;display:flex;flex-direction:column;align-items:flex-end;gap:5px;}
+        .total-row{display:flex;gap:20px;font-size:13px;}
+        .total-row span:first-child{color:var(--muted);min-width:100px;text-align:right;}
+        .total-row.bold{font-weight:700;font-size:15px;}
+
+        /* ── Search / filter ── */
+        .filter-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+        .search-input{padding:8px 12px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;width:220px;}
+        .search-input:focus{outline:none;border-color:var(--brimot);}
+
+        /* ── Toast ── */
+        .toast{position:fixed;top:16px;right:16px;padding:12px 18px;border-radius:10px;background:var(--night3);border:1px solid var(--border2);z-index:9999;transform:translateX(150%);transition:transform 0.3s;font-size:13px;font-weight:600;max-width:300px;}
+        .toast.show{transform:translateX(0);}
+
+        /* ── Loader ── */
+        .loader{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;align-items:center;justify-content:center;}
+        .loader.on{display:flex;}
+        .loader-spin{width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--brimot);border-radius:50%;animation:spin 0.8s linear infinite;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+
+        /* ── Responsive ── */
+        @media(max-width:900px){
+            .sidebar{display:none;}
+            .main{margin-left:0;}
+            .stats{grid-template-columns:1fr 1fr;}
+            .ligne-row{grid-template-columns:1fr 60px 80px 80px 30px;}
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══ SIDEBAR ══ -->
+<nav class="sidebar">
+    <a class="sb-logo" href="#">
+        <div class="sb-mark">🧹</div>
+        <div class="sb-text">BRIMOT<em>NETTOYAGE</em></div>
+    </a>
+    <div class="nav-sec">Facturation</div>
+    <a class="nav-item active" onclick="showSection('factures')"><i class="fas fa-file-invoice"></i><span>Factures & Devis</span></a>
+    <a class="nav-item" onclick="showSection('clients')"><i class="fas fa-users"></i><span>Clients</span></a>
+    <a class="nav-item" onclick="showSection('produits')"><i class="fas fa-boxes"></i><span>Produits / Services</span></a>
+    <div class="nav-sec">Navigation</div>
+    <a class="nav-item" href="../dashboard.html"><i class="fas fa-arrow-left"></i><span>Retour Colixo</span></a>
+    <div class="sb-footer">
+        <div class="user-chip">
+            <div class="user-av" id="userAv">?</div>
+            <span class="user-name" id="userName">—</span>
+            <button class="btn-logout" onclick="logout()" title="Déconnexion"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+    </div>
+</nav>
+
+<!-- ══ MAIN ══ -->
+<div class="main">
+    <div class="topbar">
+        <div class="page-title">Brimot Nettoyage — <span style="color:var(--brimot)">Facturation</span></div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="showSection('factures')"><i class="fas fa-file-invoice"></i> Factures</button>
+            <button class="btn btn-blue btn-sm" onclick="openModalFacture()"><i class="fas fa-plus"></i> Nouveau</button>
+        </div>
+    </div>
+
+    <div class="content">
+
+        <!-- ── SECTION FACTURES ── -->
+        <div class="section active" id="sec-factures">
+            <!-- Stats -->
+            <div class="stats">
+                <div class="stat-card"><div class="stat-label">Devis en cours</div><div class="stat-val" id="statDevis" style="color:var(--yellow)">0</div></div>
+                <div class="stat-card"><div class="stat-label">Factures ouvertes</div><div class="stat-val" id="statOuvertes" style="color:var(--blue)">0</div></div>
+                <div class="stat-card"><div class="stat-label">En retard</div><div class="stat-val" id="statRetard" style="color:var(--red)">0</div></div>
+                <div class="stat-card"><div class="stat-label">Encaissé (mois)</div><div class="stat-val" id="statMois" style="color:var(--green)">—</div></div>
+            </div>
+
+            <!-- Filtres -->
+            <div class="filter-row">
+                <input class="search-input" id="searchFacture" placeholder="🔍 Rechercher client, numéro…" oninput="filterFactures()">
+                <select class="search-input" id="filterStatut" onchange="filterFactures()" style="width:160px;">
+                    <option value="">Tous statuts</option>
+                    <option value="devis">Devis</option>
+                    <option value="facture">Facture</option>
+                    <option value="payee">Payée</option>
+                    <option value="rappel">Rappel</option>
+                    <option value="annulee">Annulée</option>
+                </select>
+                <select class="search-input" id="filterClient" onchange="filterFactures()" style="width:180px;">
+                    <option value="">Tous clients</option>
+                </select>
+                <button class="btn btn-ghost btn-sm" onclick="loadFactures()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">📄 Factures & Devis</span>
+                    <button class="btn btn-blue btn-sm" onclick="openModalFacture()"><i class="fas fa-plus"></i> Nouveau</button>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="tbl">
+                        <thead><tr>
+                            <th>N°</th><th>Type</th><th>Client</th><th>Date</th><th>Échéance</th>
+                            <th>Montant HT</th><th>TVA</th><th>TTC</th><th>Statut</th><th>Actions</th>
+                        </tr></thead>
+                        <tbody id="facturesTbody"><tr class="empty-row"><td colspan="10">⏳ Chargement…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── SECTION CLIENTS ── -->
+        <div class="section" id="sec-clients">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">👥 Base Clients Brimot</span>
+                    <button class="btn btn-blue btn-sm" onclick="openModalClient()"><i class="fas fa-plus"></i> Nouveau client</button>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="tbl">
+                        <thead><tr><th>Entreprise / Nom</th><th>Contact</th><th>Email</th><th>Téléphone</th><th>Adresse</th><th>Actions</th></tr></thead>
+                        <tbody id="clientsTbody"><tr class="empty-row"><td colspan="6">⏳ Chargement…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── SECTION PRODUITS ── -->
+        <div class="section" id="sec-produits">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">📦 Produits & Services</span>
+                    <button class="btn btn-blue btn-sm" onclick="openModalProduit()"><i class="fas fa-plus"></i> Nouveau produit</button>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="tbl">
+                        <thead><tr><th>Référence</th><th>Désignation</th><th>Prix unitaire HT</th><th>TVA %</th><th>Unité</th><th>Actions</th></tr></thead>
+                        <tbody id="produitsTbody"><tr class="empty-row"><td colspan="6">⏳ Chargement…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ══ MODAL FACTURE / DEVIS ══ -->
+<div class="modal" id="modalFacture">
+    <div class="modal-box wide">
+        <div class="modal-title">
+            <span id="modalFactureTitle">Nouvelle facture</span>
+            <button class="modal-close" onclick="closeModal('modalFacture')"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="fId">
+        <div class="row2">
+            <div class="field">
+                <label>Type</label>
+                <select id="fType" onchange="updateFactureTitle()">
+                    <option value="devis">Devis</option>
+                    <option value="facture">Facture</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Client *</label>
+                <select id="fClient"><option value="">— Sélectionner —</option></select>
+            </div>
+        </div>
+        <div class="row3">
+            <div class="field">
+                <label>Numéro</label>
+                <input type="text" id="fNumero" placeholder="Auto si vide">
+            </div>
+            <div class="field">
+                <label>Date</label>
+                <input type="date" id="fDate">
+            </div>
+            <div class="field">
+                <label>Échéance</label>
+                <input type="date" id="fEcheance">
+            </div>
+        </div>
+        <div class="field">
+            <label>Objet / titre</label>
+            <input type="text" id="fObjet" placeholder="Ex: Nettoyage locaux janvier 2026">
+        </div>
+
+        <!-- Lignes -->
+        <div style="margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Lignes</div>
+        <div class="lignes-header">
+            <span>Désignation</span><span>Qté</span><span>Prix unit. HT</span><span>Total HT</span><span></span>
+        </div>
+        <div id="lignesContainer"></div>
+        <button class="btn btn-ghost btn-sm" onclick="addLigne()" style="margin-bottom:14px;"><i class="fas fa-plus"></i> Ajouter une ligne</button>
+
+        <!-- Totaux -->
+        <div class="total-section">
+            <div class="total-row"><span>Sous-total HT</span><span id="totHT">0.00 CHF</span></div>
+            <div style="display:flex;align-items:center;gap:10px;margin:4px 0;">
+                <span style="font-size:11px;color:var(--muted);">TVA %</span>
+                <select id="fTVA" onchange="calcTotaux()" style="background:var(--surface);border:1px solid var(--border2);border-radius:7px;color:var(--white);padding:4px 8px;font-family:'Outfit',sans-serif;font-size:12px;">
+                    <option value="0">0% (exonéré)</option>
+                    <option value="2.6">2.6%</option>
+                    <option value="3.8">3.8%</option>
+                    <option value="8.1" selected>8.1%</option>
+                </select>
+            </div>
+            <div class="total-row"><span>TVA</span><span id="totTVA">0.00 CHF</span></div>
+            <div class="total-row bold"><span>TOTAL TTC</span><span id="totTTC">0.00 CHF</span></div>
+        </div>
+
+        <div class="row2" style="margin-top:14px;">
+            <div class="field">
+                <label>Conditions de paiement</label>
+                <select id="fConditions">
+                    <option value="30 jours net">30 jours net</option>
+                    <option value="15 jours net">15 jours net</option>
+                    <option value="10 jours net">10 jours net</option>
+                    <option value="Comptant">Comptant</option>
+                    <option value="À réception">À réception</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Statut</label>
+                <select id="fStatut">
+                    <option value="devis">Devis</option>
+                    <option value="facture">Facture ouverte</option>
+                    <option value="payee">Payée</option>
+                    <option value="rappel">Rappel</option>
+                    <option value="annulee">Annulée</option>
+                </select>
+            </div>
+        </div>
+        <div class="field">
+            <label>Notes / remarques</label>
+            <textarea id="fNotes" rows="2" placeholder="Notes internes ou message client…"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px;">
+            <button class="btn btn-ghost" onclick="closeModal('modalFacture')">Annuler</button>
+            <button class="btn btn-ghost" onclick="saveFacture(false)"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-blue" onclick="saveFacture(true)"><i class="fas fa-eye"></i> Enregistrer & Aperçu PDF</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL CLIENT ══ -->
+<div class="modal" id="modalClient">
+    <div class="modal-box">
+        <div class="modal-title">
+            <span id="modalClientTitle">Nouveau client</span>
+            <button class="modal-close" onclick="closeModal('modalClient')"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="cId">
+        <div class="row2">
+            <div class="field"><label>Nom entreprise / client *</label><input type="text" id="cNom" placeholder="Brimot SA, Jean Dupont…"></div>
+            <div class="field"><label>Contact (prénom nom)</label><input type="text" id="cContact" placeholder="Prénom Nom"></div>
+        </div>
+        <div class="row2">
+            <div class="field"><label>Email *</label><input type="email" id="cEmail" placeholder="contact@client.ch"></div>
+            <div class="field"><label>Téléphone</label><input type="tel" id="cTel" placeholder="+41 79 123 45 67"></div>
+        </div>
+        <div class="field"><label>Adresse</label><input type="text" id="cAdresse" placeholder="Rue du Lac 12, 1800 Vevey"></div>
+        <div class="row2">
+            <div class="field"><label>NPA / Ville</label><input type="text" id="cVille" placeholder="1800 Vevey"></div>
+            <div class="field"><label>N° TVA</label><input type="text" id="cTVA" placeholder="CHE-123.456.789"></div>
+        </div>
+        <div class="field"><label>IBAN (pour QR-facture)</label><input type="text" id="cIBAN" placeholder="CH56 0483 5012 3456 7800 9"></div>
+        <div class="field"><label>Notes</label><textarea id="cNotes" rows="2" placeholder="Notes internes…"></textarea></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px;">
+            <button class="btn btn-ghost" onclick="closeModal('modalClient')">Annuler</button>
+            <button class="btn btn-blue" onclick="saveClient()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL PRODUIT ══ -->
+<div class="modal" id="modalProduit">
+    <div class="modal-box">
+        <div class="modal-title">
+            <span id="modalProduitTitle">Nouveau produit / service</span>
+            <button class="modal-close" onclick="closeModal('modalProduit')"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="pId">
+        <div class="row2">
+            <div class="field"><label>Référence</label><input type="text" id="pRef" placeholder="NETT-01"></div>
+            <div class="field"><label>Unité</label>
+                <select id="pUnite"><option value="h">Heure (h)</option><option value="j">Jour (j)</option><option value="m²">m²</option><option value="forfait">Forfait</option><option value="pièce">Pièce</option></select>
+            </div>
+        </div>
+        <div class="field"><label>Désignation *</label><input type="text" id="pDesignation" placeholder="Nettoyage bureaux, Traitement sol…"></div>
+        <div class="row2">
+            <div class="field"><label>Prix unitaire HT (CHF)</label><input type="number" id="pPrix" step="0.01" min="0" placeholder="0.00"></div>
+            <div class="field"><label>TVA %</label>
+                <select id="pTVA"><option value="0">0%</option><option value="2.6">2.6%</option><option value="3.8">3.8%</option><option value="8.1" selected>8.1%</option></select>
+            </div>
+        </div>
+        <div class="field"><label>Description</label><textarea id="pDesc" rows="2" placeholder="Description optionnelle…"></textarea></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px;">
+            <button class="btn btn-ghost" onclick="closeModal('modalProduit')">Annuler</button>
+            <button class="btn btn-blue" onclick="saveProduit()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL ENVOI EMAIL ══ -->
+<div class="modal" id="modalEmail">
+    <div class="modal-box">
+        <div class="modal-title">
+            <span id="modalEmailTitle">Envoyer par email</span>
+            <button class="modal-close" onclick="closeModal('modalEmail')"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="emailFactureId">
+        <div class="field"><label>Destinataire *</label><input type="email" id="emailTo" placeholder="client@exemple.ch"></div>
+        <div class="field"><label>Objet</label><input type="text" id="emailSubject"></div>
+        <div class="field"><label>Message</label>
+            <textarea id="emailBody" rows="7"></textarea>
+        </div>
+        <div style="background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.2);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted2);">
+            <i class="fas fa-info-circle" style="color:var(--brimot)"></i>
+            Le PDF avec QR code de paiement sera joint automatiquement.
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button class="btn btn-ghost" onclick="closeModal('modalEmail')">Annuler</button>
+            <button class="btn btn-blue" onclick="sendEmail()"><i class="fas fa-paper-plane"></i> Envoyer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ TOAST & LOADER ══ -->
+<div class="toast" id="toast"></div>
+<div class="loader" id="loader"><div class="loader-spin"></div></div>
+
+<script>
+if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>';throw 0;}
+const db = window.SUPABASE_CLIENT;
+
+// ── Helpers ──────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const showLoad = () => $('loader').classList.add('on');
+const hideLoad = () => $('loader').classList.remove('on');
+let toastTimer;
+function toast(type, msg) {
+    const el = $('toast');
+    el.style.borderColor = type==='success'?'rgba(34,197,94,0.4)':type==='error'?'rgba(232,49,26,0.4)':'rgba(59,130,246,0.4)';
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>el.classList.remove('show'), 3800);
+}
+function openModal(id)  { const m=$(id); if(m){m.style.display='flex';m.classList.add('open');} }
+function closeModal(id) { const m=$(id); if(m){m.style.display='none';m.classList.remove('open');} }
+window.closeModal = closeModal;
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id);}));
+
+function nowCH() {
+    const d = new Date();
+    const off = -d.getTimezoneOffset();
+    const sign = off>=0?'+':'-';
+    const hh = String(Math.floor(Math.abs(off)/60)).padStart(2,'0');
+    const mm2 = String(Math.abs(off)%60).padStart(2,'0');
+    const local = new Date(d.getTime()-d.getTimezoneOffset()*60000);
+    return local.toISOString().slice(0,-1)+sign+hh+':'+mm2;
+}
+const todayCH = () => new Date().toLocaleDateString('fr-CA',{timeZone:'Europe/Zurich'});
+const fmtDate = d => d ? new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Europe/Zurich'}) : '—';
+const fmtMoney = n => Number(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,''') + ' CHF';
+
+// ── State ─────────────────────────────────────────────────
+let clients=[], produits=[], factures=[], currentUser=null;
+
+// ── Navigation ────────────────────────────────────────────
+function showSection(name) {
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    const sec = $('sec-'+name);
+    if(sec) sec.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n=>{
+        if(n.getAttribute('onclick')?.includes(name)) n.classList.add('active');
+    });
+    if(name==='factures') loadFactures();
+    if(name==='clients')  loadClients();
+    if(name==='produits') loadProduits();
+}
+
+// ── Init ──────────────────────────────────────────────────
+async function init() {
+    const { data: { session } } = await db.auth.getSession();
+    if(!session){ window.location.href='../../index.html'; return; }
+    const { data: u } = await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
+    currentUser = u || { prenom:'?', nom:'', role:'admin' };
+    $('userName').textContent = (currentUser.prenom||'')+' '+(currentUser.nom||'');
+    $('userAv').textContent = (currentUser.prenom||'?')[0].toUpperCase();
+    await Promise.all([loadClients(), loadProduits()]);
+    await loadFactures();
+}
+
+// ══════════════════════════════════════════════════════════
+//  CLIENTS
+// ══════════════════════════════════════════════════════════
+async function loadClients(silent=false) {
+    const { data } = await db.from('brimot_clients').select('*').order('nom');
+    clients = data||[];
+    if(!silent) renderClients();
+    populateClientSelects();
+}
+
+function renderClients() {
+    const tb = $('clientsTbody');
+    if(!clients.length){ tb.innerHTML='<tr class="empty-row"><td colspan="6">Aucun client — Ajoutez votre premier client</td></tr>'; return; }
+    tb.innerHTML = clients.map(c=>`
+        <tr>
+            <td><strong>${c.nom||'—'}</strong></td>
+            <td>${c.contact||'—'}</td>
+            <td><a href="mailto:${c.email}" style="color:var(--brimot)">${c.email||'—'}</a></td>
+            <td>${c.telephone||'—'}</td>
+            <td style="font-size:12px;color:var(--muted2)">${c.adresse||'—'}</td>
+            <td>
+                <button class="btn btn-ghost btn-sm" onclick="editClient('${c.id}')"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}','${(c.nom||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`).join('');
+}
+
+function populateClientSelects() {
+    [$('fClient'), $('filterClient')].forEach(sel=>{
+        if(!sel) return;
+        const val = sel.value;
+        sel.innerHTML = '<option value="">— Sélectionner —</option>' +
+            clients.map(c=>`<option value="${c.id}">${c.nom}</option>`).join('');
+        if(val) sel.value = val;
+    });
+}
+
+function openModalClient(id=null) {
+    ['cId','cNom','cContact','cEmail','cTel','cAdresse','cVille','cTVA','cIBAN','cNotes'].forEach(f=>$(f).value='');
+    $('modalClientTitle').textContent = id ? 'Modifier client' : 'Nouveau client';
+    if(id) {
+        const c = clients.find(x=>x.id===id);
+        if(c){
+            $('cId').value=c.id; $('cNom').value=c.nom||''; $('cContact').value=c.contact||'';
+            $('cEmail').value=c.email||''; $('cTel').value=c.telephone||'';
+            $('cAdresse').value=c.adresse||''; $('cVille').value=c.ville||'';
+            $('cTVA').value=c.num_tva||''; $('cIBAN').value=c.iban||''; $('cNotes').value=c.notes||'';
+        }
+    }
+    openModal('modalClient');
+}
+window.editClient = openModalClient;
+
+async function saveClient() {
+    const nom = $('cNom').value.trim();
+    const email = $('cEmail').value.trim();
+    if(!nom){ toast('error','❌ Nom du client obligatoire'); return; }
+    showLoad();
+    const payload = {
+        nom, contact:$('cContact').value.trim()||null, email:email||null,
+        telephone:$('cTel').value.trim()||null, adresse:$('cAdresse').value.trim()||null,
+        ville:$('cVille').value.trim()||null, num_tva:$('cTVA').value.trim()||null,
+        iban:$('cIBAN').value.trim()||null, notes:$('cNotes').value.trim()||null
+    };
+    const id = $('cId').value;
+    const { error } = id
+        ? await db.from('brimot_clients').update(payload).eq('id',id)
+        : await db.from('brimot_clients').insert([payload]);
+    hideLoad();
+    if(error){ toast('error','❌ '+error.message); return; }
+    toast('success', id ? '✅ Client modifié' : '✅ Client créé');
+    closeModal('modalClient');
+    await loadClients();
+}
+
+async function deleteClient(id, nom) {
+    if(!confirm(`Supprimer le client "${nom}" ?\nSes factures ne seront pas supprimées.`)) return;
+    showLoad();
+    await db.from('brimot_clients').delete().eq('id',id);
+    hideLoad();
+    toast('success','✅ Client supprimé');
+    await loadClients();
+}
+window.deleteClient = deleteClient;
+
+// ══════════════════════════════════════════════════════════
+//  PRODUITS
+// ══════════════════════════════════════════════════════════
+async function loadProduits(silent=false) {
+    const { data } = await db.from('brimot_produits').select('*').order('designation');
+    produits = data||[];
+    if(!silent) renderProduits();
+}
+
+function renderProduits() {
+    const tb = $('produitsTbody');
+    if(!produits.length){ tb.innerHTML='<tr class="empty-row"><td colspan="6">Aucun produit/service</td></tr>'; return; }
+    tb.innerHTML = produits.map(p=>`
+        <tr>
+            <td><code style="font-size:11px;color:var(--brimot)">${p.reference||'—'}</code></td>
+            <td>${p.designation}</td>
+            <td style="font-weight:700">${fmtMoney(p.prix_ht)}</td>
+            <td>${p.tva_pct||8.1}%</td>
+            <td style="color:var(--muted2)">${p.unite||'—'}</td>
+            <td>
+                <button class="btn btn-ghost btn-sm" onclick="editProduit('${p.id}')"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-red btn-sm" onclick="deleteProduit('${p.id}','${(p.designation||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`).join('');
+}
+
+function openModalProduit(id=null) {
+    ['pId','pRef','pDesignation','pPrix','pDesc'].forEach(f=>$(f).value='');
+    $('pUnite').value='h'; $('pTVA').value='8.1';
+    $('modalProduitTitle').textContent = id ? 'Modifier produit' : 'Nouveau produit / service';
+    if(id){
+        const p = produits.find(x=>x.id===id);
+        if(p){
+            $('pId').value=p.id; $('pRef').value=p.reference||''; $('pDesignation').value=p.designation||'';
+            $('pPrix').value=p.prix_ht||''; $('pTVA').value=p.tva_pct||'8.1';
+            $('pUnite').value=p.unite||'h'; $('pDesc').value=p.description||'';
+        }
+    }
+    openModal('modalProduit');
+}
+window.editProduit = openModalProduit;
+
+async function saveProduit() {
+    const des = $('pDesignation').value.trim();
+    if(!des){ toast('error','❌ Désignation obligatoire'); return; }
+    showLoad();
+    const payload = {
+        reference:$('pRef').value.trim()||null, designation:des,
+        prix_ht:parseFloat($('pPrix').value)||0, tva_pct:parseFloat($('pTVA').value)||8.1,
+        unite:$('pUnite').value, description:$('pDesc').value.trim()||null
+    };
+    const id = $('pId').value;
+    const { error } = id
+        ? await db.from('brimot_produits').update(payload).eq('id',id)
+        : await db.from('brimot_produits').insert([payload]);
+    hideLoad();
+    if(error){ toast('error','❌ '+error.message); return; }
+    toast('success', id ? '✅ Produit modifié' : '✅ Produit créé');
+    closeModal('modalProduit');
+    await loadProduits();
+}
+
+async function deleteProduit(id, nom) {
+    if(!confirm(`Supprimer "${nom}" ?`)) return;
+    showLoad();
+    await db.from('brimot_produits').delete().eq('id',id);
+    hideLoad();
+    toast('success','✅ Supprimé');
+    await loadProduits();
+}
+window.deleteProduit = deleteProduit;
+
+// ══════════════════════════════════════════════════════════
+//  FACTURES & DEVIS
+// ══════════════════════════════════════════════════════════
+async function loadFactures() {
+    showLoad();
+    const { data } = await db.from('brimot_factures')
+        .select('*, brimot_clients(nom,email)')
+        .order('created_at',{ascending:false});
+    factures = data||[];
+    hideLoad();
+    renderFactures(factures);
+    updateStats();
+}
+
+function filterFactures() {
+    const q = $('searchFacture').value.toLowerCase();
+    const st = $('filterStatut').value;
+    const cl = $('filterClient').value;
+    const filtered = factures.filter(f=>{
+        const nom = (f.brimot_clients?.nom||'').toLowerCase();
+        const num = (f.numero||'').toLowerCase();
+        const obj = (f.objet||'').toLowerCase();
+        const matchQ = !q || nom.includes(q) || num.includes(q) || obj.includes(q);
+        const matchSt = !st || f.statut===st;
+        const matchCl = !cl || f.client_id===cl;
+        return matchQ && matchSt && matchCl;
+    });
+    renderFactures(filtered);
+}
+
+function renderFactures(list) {
+    const tb = $('facturesTbody');
+    if(!list.length){ tb.innerHTML='<tr class="empty-row"><td colspan="10">Aucune facture trouvée</td></tr>'; return; }
+    const badgeMap = {
+        devis:`<span class="badge badge-devis">📋 Devis</span>`,
+        facture:`<span class="badge badge-facture">🧾 Facture</span>`,
+        payee:`<span class="badge badge-payee">✅ Payée</span>`,
+        rappel:`<span class="badge badge-rappel">🔔 Rappel</span>`,
+        annulee:`<span class="badge badge-annulee">❌ Annulée</span>`
+    };
+    const today = new Date();
+    tb.innerHTML = list.map(f=>{
+        const isLate = f.statut==='facture' && f.echeance && new Date(f.echeance)<today;
+        return `<tr style="${isLate?'background:rgba(232,49,26,0.04);':''}">
+            <td><strong>${f.numero||'—'}</strong></td>
+            <td>${f.type==='devis'?'📋 Devis':'🧾 Facture'}</td>
+            <td>${f.brimot_clients?.nom||'—'}</td>
+            <td>${fmtDate(f.date_facture)}</td>
+            <td style="color:${isLate?'var(--red)':'inherit'}">${fmtDate(f.echeance)}${isLate?' ⚠️':''}</td>
+            <td>${fmtMoney(f.montant_ht)}</td>
+            <td>${fmtMoney(f.montant_tva)}</td>
+            <td style="font-weight:700">${fmtMoney(f.montant_ttc)}</td>
+            <td>${badgeMap[f.statut]||f.statut}</td>
+            <td>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    <button class="btn btn-ghost btn-sm" title="Modifier" onclick="editFacture('${f.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-ghost btn-sm" title="PDF + QR" onclick="previewPDF('${f.id}')"><i class="fas fa-file-pdf"></i></button>
+                    <button class="btn btn-ghost btn-sm" title="Envoyer par email" onclick="openModalEmail('${f.id}')"><i class="fas fa-paper-plane"></i></button>
+                    ${f.statut==='devis'?`<button class="btn btn-yellow btn-sm" title="Convertir en facture" onclick="convertToFacture('${f.id}')"><i class="fas fa-file-invoice"></i> Facturer</button>`:''}
+                    ${f.statut==='facture'?`<button class="btn btn-green btn-sm" title="Marquer payée" onclick="markPaid('${f.id}')"><i class="fas fa-check"></i></button>`:''}
+                    ${f.statut==='facture'?`<button class="btn btn-red btn-sm" title="Envoyer rappel" onclick="sendRappel('${f.id}')"><i class="fas fa-bell"></i></button>`:''}
+                    <button class="btn btn-red btn-sm" title="Supprimer" onclick="deleteFacture('${f.id}','${f.numero||''}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function updateStats() {
+    const devis = factures.filter(f=>f.statut==='devis').length;
+    const ouvertes = factures.filter(f=>f.statut==='facture').length;
+    const today = new Date();
+    const retard = factures.filter(f=>f.statut==='facture'&&f.echeance&&new Date(f.echeance)<today).length;
+    const mois = new Date();
+    const m = mois.getMonth(), y = mois.getFullYear();
+    const encaisse = factures
+        .filter(f=>f.statut==='payee'&&f.updated_at&&new Date(f.updated_at).getMonth()===m&&new Date(f.updated_at).getFullYear()===y)
+        .reduce((s,f)=>s+Number(f.montant_ttc||0),0);
+    $('statDevis').textContent = devis;
+    $('statOuvertes').textContent = ouvertes;
+    $('statRetard').textContent = retard;
+    $('statMois').textContent = fmtMoney(encaisse);
+}
+
+// ── Lignes facture ─────────────────────────────────────────
+let lignes = [];
+
+function addLigne(data=null) {
+    const id = 'l'+Date.now()+Math.random().toString(36).slice(2,6);
+    lignes.push({ id, designation:data?.designation||'', qte:data?.qte||1, prix_ht:data?.prix_ht||0 });
+    renderLignes();
+}
+
+function renderLignes() {
+    const c = $('lignesContainer');
+    c.innerHTML = lignes.map(l=>`
+        <div class="ligne-row" id="lr-${l.id}">
+            <div style="position:relative;">
+                <input type="text" value="${l.designation}" placeholder="Désignation du service…"
+                    onchange="updateLigne('${l.id}','designation',this.value)"
+                    oninput="showProduitSuggest('${l.id}',this.value)"
+                    id="ld-${l.id}">
+                <div id="sug-${l.id}" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--night3);border:1px solid var(--border2);border-radius:8px;z-index:50;max-height:160px;overflow-y:auto;"></div>
+            </div>
+            <input type="number" value="${l.qte}" min="0.01" step="0.01"
+                onchange="updateLigne('${l.id}','qte',this.value)">
+            <input type="number" value="${l.prix_ht}" min="0" step="0.01" placeholder="0.00"
+                onchange="updateLigne('${l.id}','prix_ht',this.value)">
+            <div class="ligne-total" id="lt-${l.id}">${fmtMoney(l.qte*l.prix_ht)}</div>
+            <button class="btn-del-ligne" onclick="deleteLigne('${l.id}')"><i class="fas fa-times"></i></button>
+        </div>`).join('');
+    calcTotaux();
+}
+
+function showProduitSuggest(id, val) {
+    const sug = $('sug-'+id);
+    if(!val || val.length<2){ sug.style.display='none'; return; }
+    const matches = produits.filter(p=>p.designation.toLowerCase().includes(val.toLowerCase()));
+    if(!matches.length){ sug.style.display='none'; return; }
+    sug.style.display='block';
+    sug.innerHTML = matches.map(p=>`
+        <div onclick="selectProduit('${id}','${p.id}')" style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);">
+            <strong>${p.designation}</strong>
+            <span style="color:var(--muted);margin-left:8px;">${fmtMoney(p.prix_ht)} / ${p.unite||'u'}</span>
+        </div>`).join('');
+}
+
+function selectProduit(lid, pid) {
+    const p = produits.find(x=>x.id===pid);
+    if(!p) return;
+    const l = lignes.find(x=>x.id===lid);
+    if(!l) return;
+    l.designation = p.designation;
+    l.prix_ht = p.prix_ht;
+    const inp = $('ld-'+lid);
+    if(inp) inp.value = p.designation;
+    const sug = $('sug-'+lid);
+    if(sug) sug.style.display='none';
+    renderLignes();
+}
+
+function updateLigne(id, field, val) {
+    const l = lignes.find(x=>x.id===id);
+    if(!l) return;
+    l[field] = field==='designation' ? val : parseFloat(val)||0;
+    const tot = $('lt-'+id);
+    if(tot) tot.textContent = fmtMoney(l.qte*l.prix_ht);
+    calcTotaux();
+}
+
+function deleteLigne(id) {
+    lignes = lignes.filter(x=>x.id!==id);
+    renderLignes();
+}
+
+function calcTotaux() {
+    const ht = lignes.reduce((s,l)=>s+l.qte*l.prix_ht, 0);
+    const tvaPct = parseFloat($('fTVA').value)||0;
+    const tva = ht * tvaPct/100;
+    const ttc = ht + tva;
+    $('totHT').textContent  = fmtMoney(ht);
+    $('totTVA').textContent = fmtMoney(tva);
+    $('totTTC').textContent = fmtMoney(ttc);
+}
+
+// ── Ouvrir modal facture ───────────────────────────────────
+function openModalFacture(id=null) {
+    lignes = [];
+    ['fId','fNumero','fObjet','fNotes'].forEach(f=>$(f).value='');
+    $('fType').value='devis';
+    $('fStatut').value='devis';
+    $('fClient').value='';
+    $('fTVA').value='8.1';
+    $('fConditions').value='30 jours net';
+    const today = todayCH();
+    $('fDate').value = today;
+    // Échéance par défaut +30 jours
+    const d30 = new Date(); d30.setDate(d30.getDate()+30);
+    $('fEcheance').value = d30.toLocaleDateString('fr-CA',{timeZone:'Europe/Zurich'});
+    addLigne(); // une ligne vide par défaut
+    $('modalFactureTitle').textContent = 'Nouvelle facture / devis';
+    openModal('modalFacture');
+}
+
+function updateFactureTitle() {
+    const t = $('fType').value;
+    $('modalFactureTitle').textContent = t==='devis' ? 'Nouveau devis' : 'Nouvelle facture';
+    $('fStatut').value = t==='devis' ? 'devis' : 'facture';
+}
+
+async function editFacture(id) {
+    showLoad();
+    const [{ data: f }, { data: ls }] = await Promise.all([
+        db.from('brimot_factures').select('*').eq('id',id).single(),
+        db.from('brimot_lignes').select('*').eq('facture_id',id).order('position')
+    ]);
+    hideLoad();
+    if(!f) return;
+    $('fId').value=f.id; $('fNumero').value=f.numero||''; $('fType').value=f.type||'facture';
+    $('fClient').value=f.client_id||''; $('fObjet').value=f.objet||'';
+    $('fDate').value=f.date_facture||''; $('fEcheance').value=f.echeance||'';
+    $('fTVA').value=f.tva_pct||'8.1'; $('fConditions').value=f.conditions||'30 jours net';
+    $('fStatut').value=f.statut||'facture'; $('fNotes').value=f.notes||'';
+    lignes = (ls||[]).map(l=>({ id:'l'+l.id, _dbId:l.id, designation:l.designation||'', qte:l.qte||1, prix_ht:l.prix_ht||0 }));
+    if(!lignes.length) addLigne();
+    renderLignes();
+    $('modalFactureTitle').textContent = 'Modifier '+(f.type==='devis'?'devis':'facture')+' — '+f.numero;
+    openModal('modalFacture');
+}
+window.editFacture = editFacture;
+
+async function saveFacture(openPreview=false) {
+    const clientId = $('fClient').value;
+    if(!clientId){ toast('error','❌ Sélectionnez un client'); return; }
+    if(!lignes.length){ toast('error','❌ Ajoutez au moins une ligne'); return; }
+    showLoad();
+
+    const ht = lignes.reduce((s,l)=>s+l.qte*l.prix_ht,0);
+    const tvaPct = parseFloat($('fTVA').value)||0;
+    const tva = ht*tvaPct/100;
+    const ttc = ht+tva;
+    const id = $('fId').value;
+
+    // Générer numéro auto
+    let numero = $('fNumero').value.trim();
+    if(!numero) {
+        const type = $('fType').value;
+        const prefix = type==='devis'?'DEV':'FAC';
+        const year = new Date().getFullYear();
+        const { count } = await db.from('brimot_factures').select('id',{count:'exact',head:true});
+        numero = `${prefix}-${year}-${String((count||0)+1).padStart(4,'0')}`;
+    }
+
+    const payload = {
+        client_id: clientId, type:$('fType').value, numero,
+        objet:$('fObjet').value.trim()||null,
+        date_facture:$('fDate').value||todayCH(),
+        echeance:$('fEcheance').value||null,
+        tva_pct:tvaPct, montant_ht:ht, montant_tva:tva, montant_ttc:ttc,
+        conditions:$('fConditions').value, statut:$('fStatut').value,
+        notes:$('fNotes').value.trim()||null,
+        updated_at:nowCH()
+    };
+
+    let factureId = id;
+    if(id) {
+        const { error } = await db.from('brimot_factures').update(payload).eq('id',id);
+        if(error){ hideLoad(); toast('error','❌ '+error.message); return; }
+    } else {
+        payload.created_at = nowCH();
+        const { data, error } = await db.from('brimot_factures').insert([payload]).select().single();
+        if(error){ hideLoad(); toast('error','❌ '+error.message); return; }
+        factureId = data.id;
+    }
+
+    // Sauvegarder les lignes
+    if(id) await db.from('brimot_lignes').delete().eq('facture_id',id);
+    const lignesPayload = lignes.map((l,i)=>({
+        facture_id:factureId, position:i+1,
+        designation:l.designation, qte:l.qte, prix_ht:l.prix_ht,
+        total_ht:l.qte*l.prix_ht
+    }));
+    await db.from('brimot_lignes').insert(lignesPayload);
+
+    hideLoad();
+    toast('success', id ? '✅ Facture mise à jour' : '✅ Facture créée — N° '+numero);
+    closeModal('modalFacture');
+    await loadFactures();
+    if(openPreview) previewPDF(factureId);
+}
+
+// ── Convertir devis → facture ─────────────────────────────
+async function convertToFacture(id) {
+    const f = factures.find(x=>x.id===id);
+    if(!f) return;
+    if(!confirm(`Convertir le devis ${f.numero} en facture ?\nUn nouveau numéro FAC sera attribué.`)) return;
+    showLoad();
+    const year = new Date().getFullYear();
+    const { count } = await db.from('brimot_factures').select('id',{count:'exact',head:true}).eq('type','facture');
+    const newNum = `FAC-${year}-${String((count||0)+1).padStart(4,'0')}`;
+    await db.from('brimot_factures').update({
+        type:'facture', statut:'facture', numero:newNum, updated_at:nowCH()
+    }).eq('id',id);
+    hideLoad();
+    toast('success','✅ Converti en facture — '+newNum);
+    await loadFactures();
+}
+window.convertToFacture = convertToFacture;
+
+// ── Marquer payée ─────────────────────────────────────────
+async function markPaid(id) {
+    if(!confirm('Marquer cette facture comme payée ?')) return;
+    showLoad();
+    await db.from('brimot_factures').update({statut:'payee',updated_at:nowCH()}).eq('id',id);
+    hideLoad();
+    toast('success','✅ Facture marquée payée');
+    await loadFactures();
+}
+window.markPaid = markPaid;
+
+// ── Supprimer facture ─────────────────────────────────────
+async function deleteFacture(id, num) {
+    if(!confirm(`Supprimer la facture ${num} ?\nCette action est irréversible.`)) return;
+    showLoad();
+    await db.from('brimot_lignes').delete().eq('facture_id',id);
+    await db.from('brimot_factures').delete().eq('id',id);
+    hideLoad();
+    toast('success','✅ Supprimée');
+    await loadFactures();
+}
+window.deleteFacture = deleteFacture;
+
+// ══════════════════════════════════════════════════════════
+//  PDF + QR CODE SUISSE
+// ══════════════════════════════════════════════════════════
+async function previewPDF(id) {
+    showLoad();
+    const [{ data: f },{ data: ls }] = await Promise.all([
+        db.from('brimot_factures').select('*, brimot_clients(*)').eq('id',id).single(),
+        db.from('brimot_lignes').select('*').eq('facture_id',id).order('position')
+    ]);
+    hideLoad();
+    if(!f){ toast('error','Facture introuvable'); return; }
+    buildAndOpenPDF(f, ls||[]);
+}
+window.previewPDF = previewPDF;
+
+async function buildAndOpenPDF(f, lignesData) {
+    const c = f.brimot_clients || {};
+    const isDevis = f.type === 'devis';
+    const title   = isDevis ? 'DEVIS' : 'FACTURE';
+    const color   = isDevis ? '#f59e0b' : '#0ea5e9';
+
+    // ── QR Swiss Payment (ISO 20022) ──────────────────────
+    // IBAN Brimot Nettoyage (à personnaliser)
+    const IBAN_BRIMOT  = 'CH56 0483 5012 3456 7800 9'; // ← À remplacer par vrai IBAN
+    const NOM_BRIMOT   = 'Brimot Nettoyage Sàrl';
+    const ADRESSE_BR   = 'Route de Berne 14';
+    const NPA_VILLE_BR = '1010 Lausanne';
+    const PAYS_BR      = 'CH';
+
+    const montantCHF = Number(f.montant_ttc||0).toFixed(2);
+    const ref = f.numero ? f.numero.replace(/[^A-Z0-9]/g,'').padStart(26,'0').slice(-26) : '';
+
+    // Contenu du QR selon standard Swiss QR (SIX Group)
+    const qrContent = [
+        'SPC',           // Swiss Payments Code
+        '0200',          // version
+        '1',             // coding
+        IBAN_BRIMOT.replace(/\s/g,''), // IBAN
+        'K',             // creditor type (K=combined)
+        NOM_BRIMOT, ADRESSE_BR, NPA_VILLE_BR, '', PAYS_BR,
+        '', '', '', '', '', '', '', // ultimate creditor (vide)
+        montantCHF,
+        'CHF',           // currency
+        'K',             // debtor type
+        c.nom||'', c.adresse||'', c.ville||'', '', c.pays||'CH',
+        'NON',           // reference type (SCOR/QRR/NON)
+        '',              // reference
+        c.nom ? `Facture ${f.numero}` : '', // unstructured message
+        'EPD',           // end of payment data
+        ''               // alt scheme
+    ].join('\n');
+
+    // Générer QR code image
+    let qrDataUrl = '';
+    try {
+        qrDataUrl = await QRCode.toDataURL(qrContent, {
+            errorCorrectionLevel:'M', width:160, margin:1,
+            color:{dark:'#000',light:'#fff'}
+        });
+    } catch(e) {
+        console.warn('QR gen error:', e);
+    }
+
+    // ── Lignes HTML ───────────────────────────────────────
+    const lignesHtml = lignesData.map((l,i)=>`
+        <tr style="background:${i%2===0?'#f9fafb':'#fff'}">
+            <td style="padding:8px 12px;font-size:12px;">${l.designation||'—'}</td>
+            <td style="padding:8px 12px;text-align:right;font-size:12px;">${Number(l.qte||1).toFixed(2)}</td>
+            <td style="padding:8px 12px;text-align:right;font-size:12px;">${Number(l.prix_ht||0).toFixed(2)}</td>
+            <td style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">${Number(l.total_ht||l.qte*l.prix_ht||0).toFixed(2)}</td>
+        </tr>`).join('');
+
+    const fmtD = d=>d?new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Europe/Zurich'}):'—';
+
+    // ── HTML complet ──────────────────────────────────────
+    const html = `<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8">
+    <title>${title} ${f.numero}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Outfit',sans-serif;color:#111;background:#fff;font-size:13px;}
+        .page{padding:32px 40px;max-width:800px;margin:0 auto;}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid ${color};}
+        .logo-block h1{font-size:26px;font-weight:700;color:${color};letter-spacing:-0.5px;}
+        .logo-block p{font-size:12px;color:#666;margin-top:2px;}
+        .doc-type{text-align:right;}
+        .doc-type .type-badge{font-size:28px;font-weight:700;color:${color};letter-spacing:2px;}
+        .doc-type .num{font-size:15px;color:#333;margin-top:4px;}
+        .doc-type .date{font-size:12px;color:#888;margin-top:2px;}
+        .addresses{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;}
+        .addr-box{background:#f8fafc;border-radius:8px;padding:14px 16px;}
+        .addr-label{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#888;margin-bottom:6px;}
+        .addr-name{font-size:14px;font-weight:700;color:#111;}
+        .addr-line{font-size:12px;color:#555;margin-top:2px;}
+        table.lines{width:100%;border-collapse:collapse;margin-bottom:16px;}
+        table.lines thead th{background:${color};color:white;padding:9px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+        table.lines thead th:last-child,.lines td:last-child{text-align:right;}
+        .totals{display:flex;flex-direction:column;align-items:flex-end;margin-bottom:28px;}
+        .tot-row{display:flex;gap:32px;padding:4px 0;font-size:13px;}
+        .tot-row span:first-child{color:#666;min-width:100px;text-align:right;}
+        .tot-row.bold{font-weight:700;font-size:16px;border-top:2px solid #e5e7eb;margin-top:6px;padding-top:8px;}
+        .conditions{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 16px;font-size:12px;color:#0369a1;margin-bottom:20px;}
+        .notes{background:#fafafa;border-radius:8px;padding:12px 16px;font-size:12px;color:#555;margin-bottom:20px;}
+        /* ── QR Section Swiss ── */
+        .qr-section{border-top:1px dashed #ccc;padding-top:20px;margin-top:8px;}
+        .qr-title{font-size:12px;font-weight:700;color:#333;margin-bottom:12px;letter-spacing:1px;text-transform:uppercase;}
+        .qr-content{display:flex;gap:20px;align-items:flex-start;}
+        .qr-img{width:120px;height:120px;flex-shrink:0;}
+        .qr-details{flex:1;font-size:11px;color:#444;line-height:1.8;}
+        .qr-details strong{display:block;margin-bottom:4px;font-size:12px;color:#111;}
+        .qr-amount{font-size:20px;font-weight:700;color:${color};margin-top:6px;}
+        .footer{text-align:center;font-size:10px;color:#999;margin-top:24px;border-top:1px solid #eee;padding-top:12px;}
+        @media print{.no-print{display:none;}body{padding:0;}}
+    </style>
+    </head><body>
+    <div class="page">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="logo-block">
+                <h1>🧹 Brimot Nettoyage</h1>
+                <p>${ADRESSE_BR} · ${NPA_VILLE_BR}</p>
+                <p>info@brimotnettoyage.ch · +41 21 000 00 00</p>
+                ${f.brimot_clients?.num_tva?`<p style="margin-top:4px;font-size:11px;color:#888;">TVA: ${f.brimot_clients.num_tva}</p>`:''}
+            </div>
+            <div class="doc-type">
+                <div class="type-badge">${title}</div>
+                <div class="num">N° ${f.numero||'—'}</div>
+                <div class="date">Date : ${fmtD(f.date_facture)}</div>
+                ${!isDevis&&f.echeance?`<div class="date">Échéance : <strong style="color:#e8311a">${fmtD(f.echeance)}</strong></div>`:''}
+            </div>
+        </div>
+
+        <!-- ADRESSES -->
+        <div class="addresses">
+            <div class="addr-box">
+                <div class="addr-label">De</div>
+                <div class="addr-name">${NOM_BRIMOT}</div>
+                <div class="addr-line">${ADRESSE_BR}</div>
+                <div class="addr-line">${NPA_VILLE_BR}</div>
+            </div>
+            <div class="addr-box">
+                <div class="addr-label">Facturer à</div>
+                <div class="addr-name">${c.nom||'—'}</div>
+                ${c.contact?`<div class="addr-line">${c.contact}</div>`:''}
+                <div class="addr-line">${c.adresse||''}</div>
+                <div class="addr-line">${c.ville||''}</div>
+                ${c.num_tva?`<div class="addr-line" style="color:#888;font-size:11px;">TVA: ${c.num_tva}</div>`:''}
+            </div>
+        </div>
+
+        ${f.objet?`<div style="margin-bottom:20px;"><strong style="font-size:14px;">${f.objet}</strong></div>`:''}
+
+        <!-- LIGNES -->
+        <table class="lines">
+            <thead><tr><th>Désignation</th><th style="text-align:right">Qté</th><th style="text-align:right">Prix unit. HT</th><th style="text-align:right">Total HT</th></tr></thead>
+            <tbody>${lignesHtml}</tbody>
+        </table>
+
+        <!-- TOTAUX -->
+        <div class="totals">
+            <div class="tot-row"><span>Sous-total HT</span><span>${Number(f.montant_ht||0).toFixed(2)} CHF</span></div>
+            <div class="tot-row"><span>TVA ${f.tva_pct||8.1}%</span><span>${Number(f.montant_tva||0).toFixed(2)} CHF</span></div>
+            <div class="tot-row bold"><span>TOTAL TTC</span><span>${Number(f.montant_ttc||0).toFixed(2)} CHF</span></div>
+        </div>
+
+        <!-- CONDITIONS -->
+        ${f.conditions?`<div class="conditions">💳 Conditions de paiement : <strong>${f.conditions}</strong></div>`:''}
+
+        <!-- NOTES -->
+        ${f.notes?`<div class="notes">📝 ${f.notes}</div>`:''}
+
+        <!-- QR CODE PAIEMENT SUISSE -->
+        ${!isDevis && qrDataUrl ? `
+        <div class="qr-section">
+            <div class="qr-title">🔲 Section de paiement (QR-facture Swiss standard)</div>
+            <div class="qr-content">
+                <img src="${qrDataUrl}" class="qr-img" alt="QR Code paiement">
+                <div class="qr-details">
+                    <strong>Compte / Payable à</strong>
+                    ${NOM_BRIMOT}<br>
+                    ${ADRESSE_BR}, ${NPA_VILLE_BR}<br>
+                    IBAN : <strong>${IBAN_BRIMOT}</strong>
+                    <div class="qr-amount">${montantCHF} CHF</div>
+                    <div style="margin-top:4px;color:#888;">Référence : Facture ${f.numero}</div>
+                    ${c.nom?`<div style="margin-top:4px;">Payeur : ${c.nom}</div>`:''}
+                </div>
+            </div>
+        </div>` : ''}
+
+        <!-- FOOTER -->
+        <div class="footer">
+            ${NOM_BRIMOT} — ${ADRESSE_BR}, ${NPA_VILLE_BR} — info@brimotnettoyage.ch<br>
+            Document généré le ${new Date().toLocaleString('fr-CH',{timeZone:'Europe/Zurich'})}
+        </div>
+    </div>
+
+    <!-- BOUTON IMPRIMER -->
+    <div class="no-print" style="position:fixed;bottom:20px;right:20px;display:flex;gap:10px;">
+        <button onclick="window.print()" style="padding:12px 22px;background:#0ea5e9;color:white;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Imprimer / Sauver PDF</button>
+        <button onclick="window.close()" style="padding:12px 22px;background:#eee;color:#333;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;cursor:pointer;">✕ Fermer</button>
+    </div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=860,height=1000');
+    win.document.write(html);
+    win.document.close();
+}
+
+// ══════════════════════════════════════════════════════════
+//  EMAIL
+// ══════════════════════════════════════════════════════════
+function openModalEmail(id) {
+    const f = factures.find(x=>x.id===id);
+    if(!f) return;
+    const c = clients.find(x=>x.id===f.client_id);
+    $('emailFactureId').value = id;
+    $('emailTo').value = c?.email || '';
+    const isDevis = f.type==='devis';
+    $('modalEmailTitle').textContent = isDevis ? '📧 Envoyer le devis' : '📧 Envoyer la facture';
+    $('emailSubject').value = isDevis
+        ? `Devis ${f.numero} — Brimot Nettoyage`
+        : `Facture ${f.numero} — Brimot Nettoyage`;
+    $('emailBody').value = isDevis
+        ? `Bonjour${c?.contact?' '+c.contact:''},\n\nVeuillez trouver ci-joint notre devis ${f.numero}${f.objet?' concernant : '+f.objet:''}.\n\nMontant : ${fmtMoney(f.montant_ttc)} (TVA ${f.tva_pct}% incluse)\n\nN'hésitez pas à nous contacter pour toute question.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimotnettoyage.ch`
+        : `Bonjour${c?.contact?' '+c.contact:''},\n\nVeuillez trouver ci-joint notre facture ${f.numero}${f.objet?' concernant : '+f.objet:''}.\n\nMontant à payer : ${fmtMoney(f.montant_ttc)} (TVA ${f.tva_pct}% incluse)\nÉchéance : ${fmtDate(f.echeance)}\nConditions : ${f.conditions||'30 jours net'}\n\nPour tout paiement, merci d'utiliser le QR code joint au document.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimotnettoyage.ch`;
+    openModal('modalEmail');
+}
+window.openModalEmail = openModalEmail;
+
+async function sendEmail() {
+    const to = $('emailTo').value.trim();
+    if(!to || !to.includes('@')){ toast('error','❌ Email invalide'); return; }
+    const id = $('emailFactureId').value;
+    showLoad();
+    // Ouvrir le PDF pour impression / sauvegarde (le vrai envoi nécessite un backend)
+    await previewPDF(id);
+    // Simuler envoi via mailto (fallback si pas de backend SMTP)
+    const subj = encodeURIComponent($('emailSubject').value);
+    const body = encodeURIComponent($('emailBody').value + '\n\n[Le PDF est généré et ouvert pour impression]');
+    window.open(`mailto:${to}?subject=${subj}&body=${body}`);
+    hideLoad();
+    toast('success','✅ Client de messagerie ouvert — PDF généré pour envoi');
+    closeModal('modalEmail');
+}
+
+// ── Rappel ────────────────────────────────────────────────
+async function sendRappel(id) {
+    const f = factures.find(x=>x.id===id);
+    if(!f) return;
+    const c = clients.find(x=>x.id===f.client_id);
+    if(!confirm(`Envoyer un rappel pour la facture ${f.numero} à ${c?.nom||'ce client'} ?`)) return;
+    showLoad();
+    await db.from('brimot_factures').update({statut:'rappel', updated_at:nowCH()}).eq('id',id);
+    hideLoad();
+    openModalEmail(id);
+    // Personnaliser le message rappel
+    $('emailSubject').value = `RAPPEL — Facture ${f.numero} — Brimot Nettoyage`;
+    $('emailBody').value = `Bonjour${c?.contact?' '+c.contact:''},\n\nNous vous rappelons que notre facture ${f.numero} d'un montant de ${fmtMoney(f.montant_ttc)} arrive à échéance le ${fmtDate(f.echeance)}.\n\nSi vous avez déjà effectué le paiement, veuillez ignorer ce message.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimotnettoyage.ch`;
+    toast('info','📋 Statut → Rappel — Complétez l\'email ci-dessous');
+    await loadFactures();
+}
+window.sendRappel = sendRappel;
+
+// ── Logout ────────────────────────────────────────────────
+async function logout() {
+    await db.auth.signOut();
+    window.location.href = '../../index.html';
+}
+
+// ── Start ─────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
