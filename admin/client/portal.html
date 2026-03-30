@@ -490,13 +490,14 @@
 
 <!-- MODAL PREUVE DE LIVRAISON -->
 <div id="modalPreuve" class="modal">
-    <div class="modal-box" style="max-width:500px;">
+    <div class="modal-box" style="max-width:520px;">
         <div class="modal-head">
             <div class="modal-title">📸 PREUVE DE LIVRAISON</div>
             <button class="modal-close" onclick="closeModal('modalPreuve')">✕</button>
         </div>
         <div id="preuveContent" style="margin-top:12px;"></div>
-        <div class="modal-actions">
+        <div class="modal-actions" style="gap:8px;">
+            <button id="btnDlPreuve" class="btn btn-green" style="display:none" onclick="downloadPreuvePDF()"><i class="fas fa-file-pdf"></i> Télécharger PDF</button>
             <button class="btn btn-ghost" onclick="closeModal('modalPreuve')">Fermer</button>
         </div>
     </div>
@@ -1650,37 +1651,160 @@
         win.document.close();
     };
 
+    // Stockage temporaire pour le PDF
+    let _preuveData = null;
+
     window.showPreuve = async function(orderId) {
         showLoad();
-        const { data: o } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
+        // Lire la commande ET la livraison (photo + signature du chauffeur)
+        const [{ data: o }, { data: delivery }] = await Promise.all([
+            db.from('transport_orders_simple').select('*').eq('id', orderId).single(),
+            db.from('deliveries').select('*').eq('order_id', orderId).maybeSingle()
+        ]);
         hideLoad();
         if(!o) return;
 
-        const content = document.getElementById('preuveContent');
-        const photoUrl = o.delivery_photo_url || o.proof_photo || o.photo_livraison || null;
-        const deliveredAt = o.delivered_at ? new Date(o.delivered_at).toLocaleString('fr-CH') : null;
+        // Stocker pour le bouton PDF
+        _preuveData = { o, delivery };
 
-        let html = `<div style="background:var(--surface);border-radius:10px;padding:14px;margin-bottom:14px;">
-            <div style="font-size:12px;color:var(--muted);">Commande</div>
-            <div style="font-weight:700;">${o.order_number}</div>
-            <div style="font-size:13px;margin-top:4px;">${o.delivery_address || '—'}</div>
-            ${deliveredAt ? `<div style="margin-top:8px;color:var(--green);font-size:12px;">✅ Livré le ${deliveredAt}</div>` : ''}
+        const content = document.getElementById('preuveContent');
+        const btnDl   = document.getElementById('btnDlPreuve');
+        const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : null;
+        const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
+
+        const photoData = delivery?.photo_data || null;
+        const sigData   = delivery?.signature_data || null;
+        const noteChauf = delivery?.note_livraison || null;
+
+        const hasProof  = !!(photoData || sigData);
+        btnDl.style.display = hasProof ? 'flex' : 'none';
+
+        let html = `
+        <div style="background:var(--surface);border-radius:10px;padding:14px;margin-bottom:14px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Commande</div>
+            <div style="font-weight:700;font-size:15px;margin-top:2px;">${o.order_number || '—'}</div>
+            <div style="font-size:13px;color:var(--muted2);margin-top:4px;">${o.delivery_address || '—'}</div>
+            ${deliveredAt ? `<div style="margin-top:8px;background:rgba(34,197,94,0.12);color:var(--green);font-size:12px;font-weight:600;padding:6px 10px;border-radius:8px;display:inline-block;">✅ Livré le ${deliveredAt}</div>` : ''}
         </div>`;
 
-        if(photoUrl) {
-            html += `<div style="border-radius:12px;overflow:hidden;margin-bottom:12px;">
-                <img src="${photoUrl}" style="width:100%;border-radius:12px;display:block;" alt="Preuve de livraison">
-            </div>
-            <div style="text-align:center;font-size:11px;color:var(--muted);">Photo prise par le livreur</div>`;
-        } else {
-            html += `<div style="text-align:center;padding:40px 20px;color:var(--muted);">
-                <div style="font-size:40px;margin-bottom:12px;">📷</div>
-                <div>Aucune photo de livraison disponible</div>
-                <div style="font-size:11px;margin-top:6px;">Le livreur n'a pas encore uploadé la preuve</div>
+        if(photoData) {
+            html += `
+            <div style="margin-bottom:14px;">
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">📷 Photo de livraison</div>
+                <img src="${photoData}" style="width:100%;border-radius:12px;display:block;max-height:300px;object-fit:cover;" alt="Photo livraison">
             </div>`;
         }
+
+        if(sigData) {
+            html += `
+            <div style="margin-bottom:14px;">
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">✍️ Signature du destinataire</div>
+                <div style="background:#fff;border-radius:10px;padding:10px;border:1px solid var(--border2);">
+                    <img src="${sigData}" style="width:100%;max-height:150px;object-fit:contain;display:block;" alt="Signature">
+                </div>
+            </div>`;
+        }
+
+        if(noteChauf) {
+            html += `
+            <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:12px;margin-bottom:14px;">
+                <div style="font-size:11px;color:var(--yellow);font-weight:700;margin-bottom:4px;">📋 Note du livreur</div>
+                <div style="font-size:13px;">${noteChauf}</div>
+            </div>`;
+        }
+
+        if(!hasProof) {
+            html += `
+            <div style="text-align:center;padding:40px 20px;color:var(--muted);">
+                <div style="font-size:40px;margin-bottom:12px;">📷</div>
+                <div style="font-size:14px;">Aucune preuve disponible</div>
+                <div style="font-size:11px;margin-top:6px;">Le livreur n'a pas encore enregistré de photo ou signature</div>
+            </div>`;
+        }
+
         content.innerHTML = html;
         openModal('modalPreuve');
+    };
+
+    window.downloadPreuvePDF = function() {
+        if(!_preuveData) return;
+        const { o, delivery } = _preuveData;
+        const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+        const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
+        const photoData = delivery?.photo_data || null;
+        const sigData   = delivery?.signature_data || null;
+        const noteChauf = delivery?.note_livraison || null;
+
+        const win = window.open('', '_blank', 'width=750,height=900');
+        win.document.write(`<!DOCTYPE html><html><head>
+        <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box;}
+            body{font-family:'Outfit',sans-serif;background:#f8f8f8;color:#111;padding:30px;}
+            .bl{background:#fff;border-radius:12px;padding:32px;max-width:680px;margin:0 auto;box-shadow:0 2px 20px rgba(0,0,0,0.08);}
+            .bl-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e8311a;padding-bottom:16px;margin-bottom:20px;}
+            .bl-logo{font-family:'Bebas Neue',cursive;font-size:32px;color:#e8311a;letter-spacing:2px;}
+            .bl-title{font-size:11px;color:#888;margin-top:2px;}
+            .bl-num{font-family:'Bebas Neue',cursive;font-size:22px;text-align:right;}
+            .badge-ok{display:inline-block;background:#dcfce7;color:#166534;padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;margin-top:6px;}
+            .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#aaa;margin-bottom:8px;margin-top:20px;}
+            .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+            .addr-box{border:1.5px solid #eee;border-radius:8px;padding:12px;}
+            .addr-box.dest{border-color:#e8311a;background:#fff8f8;}
+            .addr-label{font-size:9px;font-weight:700;text-transform:uppercase;color:#aaa;margin-bottom:6px;}
+            .addr-val{font-size:13px;font-weight:600;line-height:1.5;}
+            .proof-block{margin-top:8px;}
+            .proof-block img{border-radius:8px;border:1px solid #eee;display:block;margin-top:6px;}
+            .sig-block{background:#fff;border:1px solid #ddd;border-radius:8px;padding:8px;margin-top:6px;}
+            .note-box{background:#fff8e1;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;}
+            .footer{margin-top:24px;padding-top:16px;border-top:1px dashed #ddd;font-size:10px;color:#aaa;text-align:center;}
+            @media print{body{padding:0;background:#fff;}.bl{box-shadow:none;}.no-print{display:none;}}
+        </style></head><body>
+        <div class="bl">
+            <div class="bl-header">
+                <div>
+                    <div class="bl-logo">COLIXO</div>
+                    <div class="bl-title">PREUVE DE LIVRAISON OFFICIELLE</div>
+                </div>
+                <div>
+                    <div class="bl-num">${o.order_number || o.id.slice(0,8)}</div>
+                    <div style="font-size:11px;color:#888;text-align:right;">Émis le ${fmtDate(new Date().toISOString())}</div>
+                    <div class="badge-ok">✅ Livré le ${deliveredAt}</div>
+                </div>
+            </div>
+
+            <div class="section-title">Adresses</div>
+            <div class="grid2">
+                <div class="addr-box"><div class="addr-label">📤 Expéditeur</div><div class="addr-val">${o.pickup_address || '—'}</div></div>
+                <div class="addr-box dest"><div class="addr-label">📦 Destinataire</div><div class="addr-val">${o.destinataire_nom || '—'}<br>${o.delivery_address || '—'}${o.destinataire_tel ? '<br>📞 ' + o.destinataire_tel : ''}</div></div>
+            </div>
+
+            ${photoData ? `
+            <div class="section-title">📷 Photo de livraison</div>
+            <div class="proof-block">
+                <img src="${photoData}" style="width:100%;max-height:280px;object-fit:cover;">
+            </div>` : ''}
+
+            ${sigData ? `
+            <div class="section-title">✍️ Signature du destinataire</div>
+            <div class="sig-block">
+                <img src="${sigData}" style="width:100%;max-height:140px;object-fit:contain;">
+            </div>` : ''}
+
+            ${noteChauf ? `
+            <div class="section-title">📋 Note du livreur</div>
+            <div class="note-box">${noteChauf}</div>` : ''}
+
+            ${!photoData && !sigData ? `<div style="padding:20px;text-align:center;color:#aaa;font-size:13px;">⏳ Aucune preuve enregistrée</div>` : ''}
+
+            <div class="footer">Colixo SA · info@colixo.ch · Document généré le ${fmtDate(new Date().toISOString())} · Preuve de livraison officielle</div>
+        </div>
+        <div class="no-print" style="text-align:center;margin-top:20px;">
+            <button onclick="window.print()" style="padding:10px 24px;background:#e8311a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Imprimer / Sauvegarder PDF</button>
+        </div>
+        </body></html>`);
+        win.document.close();
     };
 
     // Auto-refresh toutes les 5 secondes sur l'onglet suivi et commandes
@@ -1701,11 +1825,18 @@
 
     window.showBL = async function(orderId) {
         showLoad();
-        const { data: o } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
-        const { data: events } = await db.from('tracking_events').select('*').eq('order_id', orderId).order('created_at', { ascending: true });
-        const { data: preuve } = await db.from('preuves_livraison').select('*').eq('stop_id', orderId).single();
+        const [{ data: o }, { data: events }, { data: preuve }, { data: delivery }] = await Promise.all([
+            db.from('transport_orders_simple').select('*').eq('id', orderId).single(),
+            db.from('tracking_events').select('*').eq('order_id', orderId).order('created_at', { ascending: true }),
+            db.from('preuves_livraison').select('*').eq('stop_id', orderId).maybeSingle(),
+            db.from('deliveries').select('*').eq('order_id', orderId).maybeSingle()
+        ]);
         hideLoad();
         if(!o) return;
+        // Fusionner les sources de preuve : table deliveries (app chauffeur) prioritaire
+        const photoSrc = delivery?.photo_data || preuve?.photo_url || null;
+        const sigSrc   = delivery?.signature_data || preuve?.signature_url || null;
+        const noteChauf = delivery?.note_livraison || null;
 
         const fmt = d => d ? new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
         const findEv = types => events?.find(e => types.includes(e.event_type));
@@ -1771,14 +1902,16 @@
                 ${evDelivery ? `<li><div class="tl-icon tl-done">✅</div><div><strong>Livraison effectuée</strong><br><span style="color:#888">${fmt(evDelivery.created_at)}${evDelivery.location?' · 📍 '+evDelivery.location:''}</span></div></li>` : '<li><div class="tl-icon tl-pending">🚚</div><div><strong>Livraison en cours</strong><br><span style="color:#888">En attente</span></div></li>'}
             </ul>
 
-            ${preuve ? `
+            ${photoSrc || sigSrc ? `
             <div class="section-title">Preuves de livraison</div>
             <div class="proof-section">
-                ${preuve.photo_url ? `<div class="proof-img"><div style="font-size:9px;color:#aaa;padding:4px 8px;">📷 Photo</div><img src="${preuve.photo_url}" style="width:200px;height:150px;object-fit:cover;display:block;"></div>` : ''}
-                ${preuve.signature_url ? `<div class="sign-img"><div style="font-size:9px;color:#aaa;padding:4px 8px;">✍️ Signature</div><img src="${preuve.signature_url}" style="width:200px;height:100px;object-fit:contain;display:block;"></div>` : ''}
-            </div>` : '<div style="margin-top:12px;padding:12px;background:#fff8e1;border-radius:8px;font-size:12px;color:#7c5a00;">⏳ Preuves de livraison non encore disponibles</div>'}
+                ${photoSrc ? `<div class="proof-img"><div style="font-size:9px;color:#aaa;padding:4px 8px;">📷 Photo</div><img src="${photoSrc}" style="width:100%;max-width:300px;max-height:200px;object-fit:cover;display:block;"></div>` : ''}
+                ${sigSrc ? `<div class="sign-img"><div style="font-size:9px;color:#aaa;padding:4px 8px;">✍️ Signature</div><img src="${sigSrc}" style="width:100%;max-width:300px;max-height:120px;object-fit:contain;display:block;"></div>` : ''}
+            </div>
+            ${noteChauf ? `<div style="margin-top:10px;background:#fff8e1;border-radius:8px;padding:10px;font-size:12px;"><strong>Note livreur :</strong> ${noteChauf}</div>` : ''}
+            ` : '<div style="margin-top:12px;padding:12px;background:#fff8e1;border-radius:8px;font-size:12px;color:#7c5a00;">⏳ Preuves de livraison non encore disponibles</div>'}
 
-            <div class="footer">Colixo · Document généré le ${new Date().toLocaleString('fr-CH')} · Bon de livraison officiel</div>
+            <div class="footer">Colixo SA · info@colixo.ch · Document généré le ${new Date().toLocaleString('fr-CH')} · Bon de livraison officiel</div>
         </div>
         <div style="text-align:center;margin-top:20px;"><button onclick="window.print()" style="padding:10px 24px;background:#e8311a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Imprimer / PDF</button></div>
         </body></html>`);
