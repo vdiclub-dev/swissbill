@@ -426,11 +426,11 @@
 <!-- MODAL CONFIRM -->
 <div id="modalConfirm" class="modal">
     <div class="confirm-box">
-        <div class="confirm-ico">🗑️</div>
-        <div class="confirm-title">SUPPRIMER ?</div>
+        <div class="confirm-ico" id="confirmIco">🛡️</div>
+        <div class="confirm-title" id="confirmTitle">CONFIRMATION</div>
         <div class="confirm-text" id="confirmText"></div>
         <div class="confirm-actions">
-            <button class="btn btn-red" id="confirmYes">Supprimer</button>
+            <button class="btn btn-red" id="confirmYes">Confirmer</button>
             <button class="btn btn-ghost" onclick="closeModal('modalConfirm')">Annuler</button>
         </div>
     </div>
@@ -894,45 +894,26 @@ window.saveChauffeur = async function(){
 };
 
 // ══════════════════════════════════════
-//  DELETE ✅
+//  DÉSACTIVATION UTILISATEUR
 // ══════════════════════════════════════
 
-// Supprime toutes les données liées à un utilisateur + son compte auth
+// Désactive un utilisateur : actif=false dans utilisateurs
+// Le compte auth.users est conservé (historique préservé)
 async function deleteUserData(uid){
-    // 1. Supprimer toutes les données liées
-    const tables = [
-        ['notifications',          'user_id'],
-        ['push_subscriptions',     'user_id'],
-        ['client_addresses',       'client_id'],
-        ['client_destinataires',   'client_id'],
-        ['conges',                 'driver_id'],
-        ['pointages',              'driver_id'],
-        ['soldes_rh',              'driver_id'],
-        ['deliveries',             'driver_id'],
-        ['vehicule_km',            'chauffeur_id'],
-        ['campagnes_prospection',  'created_by'],
-    ];
-    for(const [table, col] of tables){
-        try{ await db.from(table).delete().eq(col, uid); } catch(e){ console.warn(`delete ${table}:`, e.message); }
-    }
-
-    // 2. Supprimer le profil utilisateurs
-    try{ await db.from('utilisateurs').delete().eq('id', uid); } catch(e){ console.warn('delete utilisateurs:', e.message); }
-
-    // 3. Supprimer le compte auth.users via RPC SECURITY DEFINER
-    //    (la fonction SQL doit exister dans Supabase — voir instructions)
-    try{
-        await db.rpc('admin_delete_user', { target_user_id: uid });
-    } catch(e){
-        // RPC non disponible : le compte auth reste, on désactive comme fallback
-        console.warn('admin_delete_user RPC non disponible:', e.message);
-        // Désactiver le compte en mettant actif=false — l'user ne peut plus se connecter
-        try{ await db.from('utilisateurs').update({ actif: false }).eq('id', uid); } catch(_){}
-    }
+    const { error } = await db.from('utilisateurs').update({ actif: false }).eq('id', uid);
+    if(error) throw error;
 }
 
 window.askDelete = function(type, id, label, table){
-    document.getElementById('confirmText').textContent=`Supprimer "${label}" ?`;
+    // Utilisateurs : désactivation (compte auth conservé)
+    // Entreprises/chauffeurs : suppression réelle
+    const isUser = (table === 'utilisateurs');
+    document.getElementById('confirmIco').textContent  = isUser ? '🚫' : '🗑️';
+    document.getElementById('confirmTitle').textContent = isUser ? 'DÉSACTIVER ?' : 'SUPPRIMER ?';
+    document.getElementById('confirmText').textContent  = isUser
+        ? `Désactiver "${label}" ?\nLe compte sera bloqué mais conservé dans Supabase.`
+        : `Supprimer "${label}" ? Cette action est irréversible.`;
+    document.getElementById('confirmYes').textContent   = isUser ? 'Désactiver' : 'Supprimer';
     document.getElementById('confirmYes').onclick=async()=>{
         showLoad();
         try{
@@ -982,6 +963,7 @@ window.askDelete = function(type, id, label, table){
                 renderDashboard();
 
             } else if(table === 'utilisateurs'){
+                // Désactivation — compte auth conservé
                 await deleteUserData(id);
                 await loadUtilisateurs();
                 renderUtilisateurs();
@@ -999,7 +981,8 @@ window.askDelete = function(type, id, label, table){
                 if(error) throw error;
             }
 
-            toast('success','Supprimé ✓');
+            const msg = table==='utilisateurs' ? 'Compte désactivé ✓ — conservé dans Supabase' : 'Supprimé ✓';
+            toast('success', msg);
             closeModal('modalConfirm');
         } catch(e){
             console.error('Erreur suppression:',e);
