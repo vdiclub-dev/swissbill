@@ -26,12 +26,17 @@ CREATE TABLE IF NOT EXISTS brimot_produits (
     reference   text,
     designation text NOT NULL,
     description text,
-    prix_ht     numeric(10,2) DEFAULT 0,
-    tva_pct     numeric(5,2)  DEFAULT 8.1,
+    categorie   text,                          -- ex: "Nettoyage récurrent", "Ponctuel"
+    prix_ht     numeric(10,2) DEFAULT 0,       -- prix de la 1ère variante (rétrocompat)
+    tva_pct     numeric(5,2)  DEFAULT 0,       -- taux de la 1ère variante (rétrocompat)
     unite       text DEFAULT 'h',
+    variantes   jsonb DEFAULT '[]'::jsonb,     -- [{ label, prix_ht, tva_pct }, …]
     actif       boolean DEFAULT true,
     created_at  timestamptz DEFAULT now()
 );
+-- Migration si la table existe déjà
+ALTER TABLE brimot_produits ADD COLUMN IF NOT EXISTS categorie text;
+ALTER TABLE brimot_produits ADD COLUMN IF NOT EXISTS variantes jsonb DEFAULT '[]'::jsonb;
 
 -- ── Factures & Devis ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS brimot_factures (
@@ -94,10 +99,20 @@ CREATE POLICY "brimot_admin_lignes"   ON brimot_lignes   FOR ALL TO authenticate
     WITH CHECK ((SELECT role FROM utilisateurs WHERE id = auth.uid()) IN ('admin','super_admin'));
 
 -- ── Données de démo (optionnel) ──────────────────────────
-INSERT INTO brimot_produits (reference, designation, prix_ht, tva_pct, unite, description) VALUES
-    ('NET-01', 'Nettoyage bureaux (heure)', 45.00, 8.1, 'h', 'Nettoyage standard des locaux de bureaux'),
-    ('NET-02', 'Nettoyage vitrerie (m²)',   8.50,  8.1, 'm²','Lavage de vitres intérieur/extérieur'),
-    ('NET-03', 'Traitement de sol',         3.20,  8.1, 'm²','Cristallisation, lustrage, protection'),
-    ('NET-04', 'Nettoyage fin de chantier', 65.00, 8.1, 'h', 'Nettoyage après travaux'),
-    ('NET-05', 'Forfait entretien mensuel', 380.00,8.1, 'forfait','Contrat entretien mensuel — 4 passages')
+INSERT INTO brimot_produits (reference, designation, categorie, prix_ht, tva_pct, unite, variantes, description) VALUES
+    ('NET-REC', 'Nettoyage récurrent', 'Nettoyage récurrent', 0, 0, 'h',
+     '[{"label":"30h","prix_ht":1350.00,"tva_pct":0},{"label":"38h","prix_ht":1710.00,"tva_pct":0},{"label":"38h avec TVA","prix_ht":1710.00,"tva_pct":8.1}]'::jsonb,
+     'Contrat de nettoyage récurrent — forfait mensuel'),
+    ('NET-01', 'Nettoyage bureaux',    'Nettoyage ponctuel',  45.00, 8.1, 'h',
+     '[{"label":"Tarif horaire","prix_ht":45.00,"tva_pct":8.1}]'::jsonb,
+     'Nettoyage standard des locaux de bureaux'),
+    ('NET-02', 'Nettoyage vitrerie',   'Nettoyage ponctuel',   8.50, 8.1, 'm²',
+     '[{"label":"Tarif m²","prix_ht":8.50,"tva_pct":8.1}]'::jsonb,
+     'Lavage de vitres intérieur/extérieur'),
+    ('NET-03', 'Traitement de sol',    'Prestations spéciales', 3.20, 8.1, 'm²',
+     '[{"label":"Tarif m²","prix_ht":3.20,"tva_pct":8.1}]'::jsonb,
+     'Cristallisation, lustrage, protection'),
+    ('NET-04', 'Nettoyage fin de chantier', 'Prestations spéciales', 65.00, 8.1, 'h',
+     '[{"label":"Tarif horaire","prix_ht":65.00,"tva_pct":8.1}]'::jsonb,
+     'Nettoyage après travaux')
 ON CONFLICT DO NOTHING;
