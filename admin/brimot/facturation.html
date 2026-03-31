@@ -9,7 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../config.js"></script>
     <!-- QR Code Swiss Payment Standard -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"
+            onerror="this.onerror=null;var s=document.createElement('script');s.src='https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';document.head.appendChild(s);"></script>
     <!-- jsPDF + html2canvas pour génération PDF client-side -->
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -876,7 +877,7 @@ window.deleteProduit = deleteProduit;
 async function loadFactures() {
     showLoad();
     const { data } = await db.from('brimot_factures')
-        .select('*, brimot_clients(nom,email)')
+        .select('*, brimot_clients(*)')
         .order('created_at',{ascending:false});
     factures = data||[];
     hideLoad();
@@ -1866,15 +1867,16 @@ window.selectFromCatalogue = selectFromCatalogue;
 function openModalEmail(id) {
     const f = factures.find(x => x.id === id);
     if (!f) return;
-    const c = clients.find(x => x.id === f.client_id);
+    // Utiliser brimot_clients embarque (chargé avec select *) sinon fallback sur clients[]
+    const c = f.brimot_clients || clients.find(x => x.id === f.client_id) || {};
     $('emailFactureId').value = id;
-    $('emailTo').value = c?.email || '';
+    $('emailTo').value = c.email || '';
     const isDevis = f.type === 'devis';
     $('modalEmailTitle').textContent = isDevis ? 'Envoyer le devis' : 'Envoyer la facture';
 
-    // Lien vers la page web publique de la facture
-    // On inclut les donnees dans le hash pour que le client puisse voir sans authentification
-    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ f: f, ls: [] }))));
+    // Construire facture avec client complet pour le hash
+    const fWithClient = Object.assign({}, f, { brimot_clients: c });
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ f: fWithClient, ls: [] }))));
     const viewUrl = window.location.origin +
         window.location.pathname.replace('facturation.html', '') +
         'facture-view.html#data=' + payload;
@@ -1884,19 +1886,19 @@ function openModalEmail(id) {
         : 'Facture ' + f.numero + ' — Brimot Nettoyage';
 
     $('emailBody').value = isDevis
-        ? 'Bonjour' + (c?.contact ? ' ' + c.contact : '') + ',\n\n' +
+        ? 'Bonjour' + (c.contact ? ' ' + c.contact : '') + ',\n\n' +
           'Veuillez trouver ci-joint notre devis ' + f.numero +
           (f.objet ? ' concernant : ' + f.objet : '') + '.\n\n' +
           'Montant : ' + fmtMoney(f.montant_ttc) + ' (TVA ' + f.tva_pct + '% incluse)\n\n' +
           'N\'hesitez pas a nous contacter pour toute question.\n\n' +
           'Cordialement,\nBrimot Nettoyage\ninfo@brimot.ch'
-        : 'Bonjour' + (c?.contact ? ' ' + c.contact : '') + ',\n\n' +
+        : 'Bonjour' + (c.contact ? ' ' + c.contact : '') + ',\n\n' +
           'Veuillez trouver ci-joint notre facture ' + f.numero +
           (f.objet ? ' concernant : ' + f.objet : '') + '.\n\n' +
           'Montant a payer : ' + fmtMoney(f.montant_ttc) + ' (TVA ' + f.tva_pct + '% incluse)\n' +
           'Echeance : ' + fmtDate(f.echeance) + '\n' +
           'Conditions : ' + (f.conditions || '30 jours net') + '\n\n' +
-          'Vous pouvez consulter votre facture en ligne avec le QR-Bill de paiement :\n' +
+          'Vous pouvez consulter votre facture en ligne :\n' +
           viewUrl + '\n\n' +
           'Le PDF est egalement joint a cet email.\n\n' +
           'Cordialement,\nBrimot Nettoyage\ninfo@brimot.ch';
