@@ -105,13 +105,13 @@
         .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
 
         /* ── Lignes facture ── */
-        .ligne-row{display:grid;grid-template-columns:26px 3fr 80px 100px 100px 30px;gap:8px;align-items:center;margin-bottom:8px;}
+        .ligne-row{display:grid;grid-template-columns:26px 2.4fr 145px 72px 100px 100px 30px;gap:8px;align-items:center;margin-bottom:8px;}
         .ligne-row input,.ligne-row select{padding:8px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);}
         .ligne-total{text-align:right;font-weight:700;font-size:12px;}
         .btn-del-ligne{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:4px;}
         .btn-cat-ligne{background:rgba(14,165,233,0.15);border:1px solid rgba(14,165,233,0.3);color:var(--brimot);border-radius:6px;cursor:pointer;font-size:12px;padding:4px 5px;line-height:1;transition:background 0.15s;}
         .btn-cat-ligne:hover{background:rgba(14,165,233,0.3);}
-        .lignes-header{display:grid;grid-template-columns:26px 3fr 80px 100px 100px 30px;gap:8px;margin-bottom:6px;}
+        .lignes-header{display:grid;grid-template-columns:26px 2.4fr 145px 72px 100px 100px 30px;gap:8px;margin-bottom:6px;}
         .lignes-header span{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
         /* ── Modal catalogue produits ── */
         .cat-modal-grid{display:grid;gap:8px;max-height:60vh;overflow-y:auto;}
@@ -334,7 +334,7 @@
         <!-- Lignes -->
         <div style="margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Lignes</div>
         <div class="lignes-header">
-            <span></span><span>Désignation</span><span>Qté</span><span>Prix unit. HT</span><span>Total HT</span><span></span>
+            <span></span><span>Désignation</span><span>Date intervention</span><span>Qté</span><span>Prix unit. HT</span><span>Total HT</span><span></span>
         </div>
         <div id="lignesContainer"></div>
         <div style="display:flex;gap:8px;margin-bottom:14px;">
@@ -566,6 +566,30 @@ function nowCH() {
 const todayCH = () => new Date().toLocaleDateString('fr-CA',{timeZone:'Europe/Zurich'});
 const fmtDate = d => d ? new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Europe/Zurich'}) : '—';
 const fmtMoney = n => Number(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,"'") + " CHF";
+const LINE_INTERVENTION_TAG_RE = /\s*\[DI:(\d{4}-\d{2}-\d{2})\]\s*$/;
+
+function normalizeInterventionDate(v) {
+    const s = String(v || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+}
+function splitDesignationAndIntervention(rawDesignation) {
+    const raw = String(rawDesignation || '').trim();
+    const m = raw.match(LINE_INTERVENTION_TAG_RE);
+    if (!m) return { designation: raw, date_intervention: '' };
+    return {
+        designation: raw.slice(0, m.index).replace(/\s+$/, ''),
+        date_intervention: m[1]
+    };
+}
+function mergeDesignationAndIntervention(designation, dateIntervention) {
+    const base = String(designation || '').trim();
+    const di = normalizeInterventionDate(dateIntervention);
+    return di ? `${base} [DI:${di}]` : base;
+}
+function fmtDateIntervention(d) {
+    const di = normalizeInterventionDate(d);
+    return di ? fmtDate(di) : '';
+}
 
 // ── State ─────────────────────────────────────────────────
 let clients=[], produits=[], factures=[], currentUser=null;
@@ -961,7 +985,14 @@ let lignes = [];
 
 function addLigne(data=null) {
     const id = 'l'+Date.now()+Math.random().toString(36).slice(2,6);
-    lignes.push({ id, designation:data?.designation||'', qte:data?.qte||1, prix_ht:data?.prix_ht||0 });
+    const parsed = splitDesignationAndIntervention(data?.designation || '');
+    lignes.push({
+        id,
+        designation: parsed.designation || '',
+        date_intervention: normalizeInterventionDate(data?.date_intervention || parsed.date_intervention),
+        qte: data?.qte || 1,
+        prix_ht: data?.prix_ht || 0
+    });
     renderLignes();
 }
 
@@ -970,6 +1001,7 @@ function renderLignes() {
     c.innerHTML = lignes.map(l=>{
         // Échapper les guillemets dans la désignation pour l'attribut HTML value
         const safeDesig = (l.designation||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        const safeDateIntervention = normalizeInterventionDate(l.date_intervention);
         return `
         <div class="ligne-row" id="lr-${l.id}">
             <button class="btn-cat-ligne" title="Choisir dans le catalogue" onclick="openModalCatalogueForLigne('${l.id}')"><i class="fas fa-boxes"></i></button>
@@ -980,6 +1012,10 @@ function renderLignes() {
                     id="ld-${l.id}">
                 <div id="sug-${l.id}" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--night3);border:1px solid var(--border2);border-radius:8px;z-index:50;max-height:160px;overflow-y:auto;"></div>
             </div>
+            <input type="date" value="${safeDateIntervention}"
+                oninput="updateLigne('${l.id}','date_intervention',this.value)"
+                onchange="updateLigne('${l.id}','date_intervention',this.value)"
+                id="ldi-${l.id}">
             <input type="number" value="${l.qte}" min="0.01" step="0.01"
                 oninput="updateLigne('${l.id}','qte',this.value)"
                 onchange="updateLigne('${l.id}','qte',this.value)">
@@ -1074,7 +1110,9 @@ function syncTVAFromLigne(tva_pct) {
 function updateLigne(id, field, val) {
     const l = lignes.find(x=>x.id===id);
     if(!l) return;
-    l[field] = field==='designation' ? val : parseFloat(val)||0;
+    if (field === 'designation') l[field] = val;
+    else if (field === 'date_intervention') l[field] = normalizeInterventionDate(val);
+    else l[field] = parseFloat(val)||0;
     const tot = $('lt-'+id);
     if(tot) tot.textContent = fmtMoney(l.qte*l.prix_ht);
     calcTotaux();
@@ -1097,22 +1135,31 @@ function calcTotaux() {
 
 // ── Ouvrir modal facture ───────────────────────────────────
 function openModalFacture(id=null) {
-    lignes = [];
-    ['fId','fNumero','fObjet','fNotes'].forEach(f=>$(f).value='');
-    $('fType').value='devis';
-    $('fStatut').value='devis';
-    $('fClient').value='';
-    $('fTVA').value='8.1';
-    $('fConditions').value='30 jours net';
-    const today = todayCH();
-    $('fDate').value = today;
-    // Échéance par défaut +30 jours
-    const d30 = new Date(); d30.setDate(d30.getDate()+30);
-    $('fEcheance').value = d30.toLocaleDateString('fr-CA',{timeZone:'Europe/Zurich'});
-    addLigne(); // une ligne vide par défaut
-    $('modalFactureTitle').textContent = 'Nouvelle facture / devis';
-    openModal('modalFacture');
+    try {
+        lignes = [];
+        ['fId','fNumero','fObjet','fNotes'].forEach(function(fid){
+            const el = $(fid);
+            if (el) el.value = '';
+        });
+        if ($('fType')) $('fType').value = 'devis';
+        if ($('fStatut')) $('fStatut').value = 'devis';
+        if ($('fClient')) $('fClient').value = '';
+        if ($('fTVA')) $('fTVA').value = '8.1';
+        if ($('fConditions')) $('fConditions').value = '30 jours net';
+        const today = todayCH();
+        if ($('fDate')) $('fDate').value = today;
+        // Échéance par défaut +30 jours
+        const d30 = new Date(); d30.setDate(d30.getDate()+30);
+        if ($('fEcheance')) $('fEcheance').value = d30.toLocaleDateString('fr-CA',{timeZone:'Europe/Zurich'});
+        addLigne(); // une ligne vide par défaut
+        if ($('modalFactureTitle')) $('modalFactureTitle').textContent = 'Nouvelle facture / devis';
+        openModal('modalFacture');
+    } catch (err) {
+        console.error('openModalFacture error:', err);
+        toast('error', 'Impossible d\'ouvrir le formulaire facture');
+    }
 }
+window.openModalFacture = openModalFacture;
 
 function updateFactureTitle() {
     const t = $('fType').value;
@@ -1133,7 +1180,17 @@ async function editFacture(id) {
     $('fDate').value=f.date_facture||''; $('fEcheance').value=f.echeance||'';
     $('fTVA').value=f.tva_pct||'8.1'; $('fConditions').value=f.conditions||'30 jours net';
     $('fStatut').value=f.statut||'facture'; $('fNotes').value=f.notes||'';
-    lignes = (ls||[]).map(l=>({ id:'l'+l.id, _dbId:l.id, designation:l.designation||'', qte:l.qte||1, prix_ht:l.prix_ht||0 }));
+    lignes = (ls||[]).map(l=>{
+        const parsed = splitDesignationAndIntervention(l.designation || '');
+        return {
+            id:'l'+l.id,
+            _dbId:l.id,
+            designation: parsed.designation || '',
+            date_intervention: normalizeInterventionDate(parsed.date_intervention),
+            qte:l.qte||1,
+            prix_ht:l.prix_ht||0
+        };
+    });
     if(!lignes.length) addLigne();
     renderLignes();
     $('modalFactureTitle').textContent = 'Modifier '+(f.type==='devis'?'devis':'facture')+' — '+f.numero;
@@ -1146,6 +1203,8 @@ function syncLignesFromDOM() {
     lignes.forEach(l => {
         const desEl = $('ld-'+l.id);
         if(desEl) l.designation = desEl.value;
+        const dateEl = $('ldi-'+l.id);
+        if(dateEl) l.date_intervention = normalizeInterventionDate(dateEl.value);
         // qte et prix_ht
         const row = $('lr-'+l.id);
         if(row) {
@@ -1208,7 +1267,8 @@ async function saveFacture(openPreview=false) {
     if(id) await db.from('brimot_lignes').delete().eq('facture_id',id);
     const lignesPayload = lignes.map((l,i)=>({
         facture_id:factureId, position:i+1,
-        designation:l.designation, qte:l.qte, prix_ht:l.prix_ht,
+        designation:mergeDesignationAndIntervention(l.designation, l.date_intervention),
+        qte:l.qte, prix_ht:l.prix_ht,
         total_ht:l.qte*l.prix_ht
     }));
     await db.from('brimot_lignes').insert(lignesPayload);
@@ -1273,7 +1333,7 @@ const NPA_BR      = '1462';
 const VILLE_BR    = 'Yvonand';
 const PAYS_BR     = 'CH';
 const QR_IBAN_PREFIX = '3000'; // PostFinance QR-IBAN — référence de type QRR
-const TEL_BR      = '+41 79 000 00 00';
+const TEL_BR      = '+41 79 646 74 42';
 const MAIL_BR     = 'info@brimot.ch';
 
 function splitStreetAndBuilding(address) {
@@ -1426,8 +1486,14 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
     if (lignesData && lignesData.length) {
         lignesData.forEach(function(l, i) {
             var tot = Number(l.total_ht != null ? l.total_ht : (l.qte || 1) * (l.prix_ht || 0));
+            var lineParts = splitDesignationAndIntervention(l.designation || '');
+            var dateInterventionLabel = fmtDateIntervention(lineParts.date_intervention);
+            var designationHtml = (lineParts.designation || '-');
+            if (dateInterventionLabel) {
+                designationHtml += '<br><span style="font-size:11px;color:#6b7280;">Intervention : ' + dateInterventionLabel + '</span>';
+            }
             lignesHtml += '<tr style="background:' + (i % 2 === 0 ? '#f9fafb' : '#fff') + '">' +
-                '<td style="padding:7px 10px;font-size:12px;">' + (l.designation || '-') + '</td>' +
+                '<td style="padding:7px 10px;font-size:12px;">' + designationHtml + '</td>' +
                 '<td style="padding:7px 10px;text-align:right;font-size:12px;white-space:nowrap;">' + Number(l.qte || 1).toFixed(2) + '</td>' +
                 '<td style="padding:7px 10px;text-align:right;font-size:12px;white-space:nowrap;">' + Number(l.prix_ht || 0).toFixed(2) + ' CHF</td>' +
                 '<td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;white-space:nowrap;">' + tot.toFixed(2) + ' CHF</td>' +
@@ -1510,12 +1576,6 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
             '</div>' +
           '</div></div>';
     }
-
-    /* Boutons impression — style Colixo */
-    var btns =
-        '<br>' +
-        '<button onclick="window.print()" style="background:#0ea5e9;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:8px;">Imprimer / Enregistrer PDF</button>' +
-        '<button onclick="window.close()" style="background:#f3f4f6;border:none;padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer;">Fermer</button>';
 
     var css = '' +
         '*{margin:0;padding:0;box-sizing:border-box;}' +
@@ -1619,13 +1679,13 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
           (f.conditions ? '<div class="cond">Conditions : <strong>' + f.conditions + '</strong> - IBAN : ' + ibanClean + '</div>' : '') +
           (f.notes ? '<div class="notes-box">' + f.notes + '</div>' : '') +
           '<div class="footer-doc">' +
-            NOM_BRIMOT + ' - ' + RUE_BR + ', ' + NPA_BR + ' ' + VILLE_BR + ' - ' + MAIL_BR + '<br>' +
+            NOM_BRIMOT + ' - ' + RUE_BR + ', ' + NPA_BR + ' ' + VILLE_BR + '<br>' +
             ibanClean + (c.num_tva ? ' - TVA : ' + c.num_tva : '') +
           '</div>' +
         '</div>' +
         (!isDevis ? '<div style="page-break-before:always;"></div>' : '') +
         bvHtml +
-        '<div class="no-print" style="margin:20px 0 40px;">' + btns + '</div>' +
+        '<div class="no-print" style="margin:0;"></div>' +
         '</body></html>';
 
     return html;
@@ -1724,7 +1784,11 @@ async function buildPDFBase64(f, ls) {
             var tot = Number(l.total_ht != null ? l.total_ht : (l.qte||1)*(l.prix_ht||0));
             if (i%2===0) { pdf.setFillColor(249,250,251); pdf.rect(ml, y, mr-ml, 7, 'F'); }
             pdf.setFontSize(9);
-            var desig = pdf.splitTextToSize(l.designation||'-', colW[0]-4);
+            var lineParts = splitDesignationAndIntervention(l.designation || '');
+            var dateInterventionLabel = fmtDateIntervention(lineParts.date_intervention);
+            var desigText = lineParts.designation || '-';
+            if (dateInterventionLabel) desigText += ' (Intervention: ' + dateInterventionLabel + ')';
+            var desig = pdf.splitTextToSize(desigText, colW[0]-4);
             var rowH = Math.max(7, desig.length * 4.5);
             if (y + rowH > 270) { pdf.addPage(); y = 20; }
             pdf.text(desig, cols[0]+2, y+4.5);
@@ -1759,7 +1823,7 @@ async function buildPDFBase64(f, ls) {
             pdf.text('Note : ' + f.notes, ml, y); y+=6;
         }
         pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.setTextColor(180,180,180);
-        pdf.text(NOM_BRIMOT+' - '+RUE_BR+', '+NPA_BR+' '+VILLE_BR+' - '+MAIL_BR, W/2, 287, {align:'center'});
+        pdf.text(NOM_BRIMOT+' - '+RUE_BR+', '+NPA_BR+' '+VILLE_BR, W/2, 287, {align:'center'});
         pdf.text(ibanClean, W/2, 291, {align:'center'});
 
         /* Page 2 : QR-Bill */
