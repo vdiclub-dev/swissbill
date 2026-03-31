@@ -235,6 +235,26 @@ function fmtDate(d) {
     });
 }
 function fmt2(v) { return Number(v || 0).toFixed(2); }
+var LINE_INTERVENTION_TAG_RE = /\s*\[DI:(\d{4}-\d{2}-\d{2})\]\s*$/;
+function splitDesignationAndIntervention(rawDesignation) {
+    var raw = String(rawDesignation || '');
+    var m = raw.match(LINE_INTERVENTION_TAG_RE);
+    if (!m) return { designation: raw, date_intervention: '' };
+    return {
+        designation: raw.slice(0, m.index).replace(/\s+$/, ''),
+        date_intervention: m[1]
+    };
+}
+function fmtDateIntervention(d) {
+    if (!d) return '';
+    var s = String(d);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return fmtDate(s);
+    }
+    var parsed = new Date(s);
+    if (isNaN(parsed.getTime())) return '';
+    return fmtDate(parsed.toISOString().slice(0, 10));
+}
 
 /* ─── Lire les donnees depuis le hash ─── */
 function getDataFromHash() {
@@ -264,8 +284,12 @@ function renderInvoice(f, lignes) {
     if (lignes && lignes.length) {
         lignes.forEach(function(l, i) {
             var tot = Number(l.total_ht != null ? l.total_ht : (l.qte || 1) * (l.prix_ht || 0));
+            var lineParts = splitDesignationAndIntervention(l.designation || '');
+            var dateLbl = fmtDateIntervention(l.date_intervention || lineParts.date_intervention);
+            var desig = esc(lineParts.designation || '—');
+            if (dateLbl) desig = desig + '<br><span style="font-size:11px;color:#6b7280;">Intervention: ' + esc(dateLbl) + '</span>';
             rows += '<tr style="background:' + (i % 2 === 0 ? '#f9fafb' : '#fff') + '">' +
-                '<td>' + esc(l.designation || '—') + '</td>' +
+                '<td>' + desig + '</td>' +
                 '<td>' + Number(l.qte || 1).toFixed(2) + '</td>' +
                 '<td>' + Number(l.prix_ht || 0).toFixed(2) + ' CHF</td>' +
                 '<td style="font-weight:600;">' + tot.toFixed(2) + ' CHF</td>' +
