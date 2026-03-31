@@ -6,10 +6,12 @@
 -- ── Clients Brimot ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS brimot_clients (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    civilite    text,           -- M. / Mme / Société / Association
     nom         text NOT NULL,
     contact     text,
     email       text,
     telephone   text,
+    website     text,
     adresse     text,           -- Rue et numéro (ex: Route de Berne 14)
     npa         text,           -- Code postal (ex: 1010) — OBLIGATOIRE pour QR
     ville       text,           -- Ville (ex: Lausanne)   — OBLIGATOIRE pour QR
@@ -21,8 +23,10 @@ CREATE TABLE IF NOT EXISTS brimot_clients (
     updated_at  timestamptz DEFAULT now()
 );
 -- Migration si la table existe déjà
-ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS npa  text;
-ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS pays text DEFAULT 'CH';
+ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS npa      text;
+ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS pays     text DEFAULT 'CH';
+ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS civilite text;   -- M. / Mme / Société
+ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS website  text;
 
 -- ── Produits / Services ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS brimot_produits (
