@@ -82,8 +82,7 @@ if ($viewUrl !== '') {
     $viewUrlText = "\n\nVoir la facture en ligne :\n" . $viewUrl . "\n";
     $viewUrlHtml = '<div style="margin:18px 0;text-align:center;">'
         . '<a href="' . $safeUrl . '" style="display:inline-block;background:#0ea5e9;color:#fff;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:700;">Voir la facture en ligne</a>'
-        . '</div>'
-        . '<p style="font-size:11px;color:#999;text-align:center;">Ou copiez ce lien : <a href="' . $safeUrl . '" style="color:#0ea5e9;word-break:break-all;">' . $safeUrl . '</a></p>';
+        . '</div>';
 }
 
 $htmlEmail = <<<HTML
