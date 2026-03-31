@@ -526,6 +526,18 @@
     </div>
 </div>
 
+<!-- ══ OVERLAY PDF PLEIN ECRAN ══ -->
+<div id="pdfOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#525659;flex-direction:column;">
+    <div style="height:52px;background:#323639;display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;gap:10px;">
+        <span style="color:#fff;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;">Apercu — Facture / Devis</span>
+        <div style="display:flex;gap:10px;">
+            <button onclick="printPDFOverlay()" style="padding:8px 20px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Imprimer / Enregistrer PDF</button>
+            <button onclick="closePDFOverlay()" style="padding:8px 16px;background:#555;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">Fermer</button>
+        </div>
+    </div>
+    <iframe id="pdfFrame" style="flex:1;border:none;background:#fff;width:100%;" srcdoc=""></iframe>
+</div>
+
 <!-- ══ TOAST & LOADER ══ -->
 <div class="toast" id="toast"></div>
 <div class="loader" id="loader"><div class="loader-spin"></div></div>
@@ -1341,6 +1353,7 @@ function printPDFOverlay() {
     }
 }
 window.printPDFOverlay = printPDFOverlay;
+window.sendEmail = sendEmail;
 
 function closePDFOverlay() {
     const overlay = document.getElementById('pdfOverlay');
@@ -1348,6 +1361,7 @@ function closePDFOverlay() {
     document.body.style.overflow = '';
 }
 window.closePDFOverlay = closePDFOverlay;
+window.sendEmailViaLWS = sendEmailViaLWS;
 
 /* ══════════════════════════════════════════════════════════
    CONSTRUCTION HTML FACTURE (apercu iframe)
@@ -1848,6 +1862,48 @@ function selectFromCatalogue(pid, varIdx) {
     _currentLigneId = null;
 }
 window.selectFromCatalogue = selectFromCatalogue;
+
+// ══════════════════════════════════════════════════════════
+//  MODAL EMAIL — ouverture + pré-remplissage
+// ══════════════════════════════════════════════════════════
+function openModalEmail(id) {
+    const f = factures.find(x => x.id === id);
+    if (!f) return;
+    const c = clients.find(x => x.id === f.client_id);
+    $('emailFactureId').value = id;
+    $('emailTo').value = c?.email || '';
+    const isDevis = f.type === 'devis';
+    $('modalEmailTitle').textContent = isDevis ? 'Envoyer le devis' : 'Envoyer la facture';
+    $('emailSubject').value = isDevis
+        ? `Devis ${f.numero} — Brimot Nettoyage`
+        : `Facture ${f.numero} — Brimot Nettoyage`;
+    $('emailBody').value = isDevis
+        ? `Bonjour${c?.contact ? ' ' + c.contact : ''},\n\nVeuillez trouver ci-joint notre devis ${f.numero}${f.objet ? ' concernant : ' + f.objet : ''}.\n\nMontant : ${fmtMoney(f.montant_ttc)} (TVA ${f.tva_pct}% incluse)\n\nN'hésitez pas à nous contacter pour toute question.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimot.ch`
+        : `Bonjour${c?.contact ? ' ' + c.contact : ''},\n\nVeuillez trouver ci-joint notre facture ${f.numero}${f.objet ? ' concernant : ' + f.objet : ''}.\n\nMontant à payer : ${fmtMoney(f.montant_ttc)} (TVA ${f.tva_pct}% incluse)\nEchéance : ${fmtDate(f.echeance)}\nConditions : ${f.conditions || '30 jours net'}\n\nPour tout paiement, merci d'utiliser le QR code joint au document.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimot.ch`;
+    const modeLabel = $('emailModeLabel');
+    if (modeLabel) {
+        modeLabel.textContent = 'Envoi via le serveur LWS — le PDF est joint automatiquement.';
+    }
+    openModal('modalEmail');
+}
+window.openModalEmail = openModalEmail;
+
+// ── Rappel ────────────────────────────────────────────────
+async function sendRappel(id) {
+    const f = factures.find(x => x.id === id);
+    if (!f) return;
+    const c = clients.find(x => x.id === f.client_id);
+    if (!confirm(`Envoyer un rappel pour la facture ${f.numero} à ${c?.nom || 'ce client'} ?`)) return;
+    showLoad();
+    await db.from('brimot_factures').update({ statut: 'rappel', updated_at: nowCH() }).eq('id', id);
+    hideLoad();
+    openModalEmail(id);
+    $('emailSubject').value = `RAPPEL — Facture ${f.numero} — Brimot Nettoyage`;
+    $('emailBody').value = `Bonjour${c?.contact ? ' ' + c.contact : ''},\n\nNous vous rappelons que notre facture ${f.numero} d'un montant de ${fmtMoney(f.montant_ttc)} arrive à échéance le ${fmtDate(f.echeance)}.\n\nSi vous avez déjà effectué le paiement, veuillez ignorer ce message.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimot.ch`;
+    toast('info', 'Statut -> Rappel — Complétez l\'email ci-dessous');
+    await loadFactures();
+}
+window.sendRappel = sendRappel;
 
 // ══════════════════════════════════════════════════════════
 //  EMAIL — envoi via serveur LWS (send_mail.php)
