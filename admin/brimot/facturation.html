@@ -2055,18 +2055,18 @@ async function sendEmail() {
     const isDevis = f.type === 'devis';
     const docName = (isDevis ? 'Devis' : 'Facture') + '_' + (f.numero || id);
 
-    // Generer le HTML de la facture (pièce jointe .html autonome — toujours possible)
-    const qrDataUrl = await genQRDataUrl(f);
-    const invoiceHtml = buildInvoiceHTML(f, ls, qrDataUrl);
-    const htmlB64 = btoa(unescape(encodeURIComponent(invoiceHtml)));
-
-    // Tenter de generer le PDF base64 via jsPDF (optionnel)
-    let pdfBase64  = null;
-    let pdfFilename = docName + '.pdf';
+    // Generer le PDF base64 (obligatoire pour piece jointe)
+    let pdfBase64 = null;
+    const pdfFilename = docName + '.pdf';
     try {
         pdfBase64 = await buildPDFBase64(f, ls);
     } catch (e) {
         console.warn('PDF base64 non disponible:', e);
+    }
+    if (!pdfBase64) {
+        hideLoad();
+        toast('error', 'Generation PDF impossible. Verifiez jsPDF puis reessayez l\'envoi.');
+        return;
     }
 
     // Construire le lien page web public (avec donnees encodees dans le hash)
@@ -2081,20 +2081,19 @@ async function sendEmail() {
         }
     }
 
-    // Envoyer via LWS
-    // Si PDF disponible : envoyer PDF. Sinon : envoyer HTML comme piece jointe
+    // Envoyer via LWS avec PDF obligatoire en piece jointe
     const result = await sendEmailViaLWS(
         to, subject, body,
-        pdfBase64 || htmlB64,
-        pdfBase64 ? pdfFilename : docName + '.html',
-        pdfBase64 ? 'application/pdf' : 'text/html',
+        pdfBase64,
+        pdfFilename,
+        'application/pdf',
         viewUrl
     );
     hideLoad();
 
     if (result.ok) {
         if (result.via === 'lws') {
-            toast('success', pdfBase64 ? 'Email envoye avec PDF en piece jointe' : 'Email envoye avec facture HTML en piece jointe');
+            toast('success', 'Email envoye avec PDF en piece jointe');
         } else {
             toast('success', 'Client de messagerie ouvert (mode hors ligne)');
         }
