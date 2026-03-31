@@ -1,10 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facture — Brimot Nettoyage</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- QR Code Swiss Payment Standard — fichier local (évite blocage CDN) -->
+    <script src="qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            font-family: 'Outfit', Arial, sans-serif;
+            background: #f4f4f8;
+            color: #111;
+            min-height: 100%;
+        }
+
+        /* ── Loader ── */
+        #loader {
+            position: fixed; inset: 0; background: #f4f4f8;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 9999; gap: 16px;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #ddd; border-top-color: #0ea5e9;
+            border-radius: 50%; animation: spin .8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Error ── */
+        #errorBox {
+            display: none; max-width: 500px; margin: 60px auto; padding: 36px;
+            background: #fff; border-radius: 12px; text-align: center;
+            box-shadow: 0 4px 24px rgba(0,0,0,.08);
+        }
+        #errorBox h2 { color: #e8311a; margin-bottom: 14px; font-size: 20px; }
+        #errorMsg { color: #666; font-size: 14px; line-height: 1.6; }
+
+        /* ── Page wrapper ── */
+        #pageWrap { display: none; max-width: 820px; margin: 0 auto; padding: 24px 16px 48px; }
+
+        /* ── Top bar ── */
+        .top-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            background: #fff; border-radius: 12px; padding: 14px 20px;
+            margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+            flex-wrap: wrap; gap: 12px;
+        }
+        .top-bar .brand { font-size: 16px; font-weight: 700; color: #0ea5e9; }
+        .btn-print {
+            background: #0ea5e9; color: #fff; border: none; border-radius: 8px;
+            padding: 9px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+            transition: background .2s;
+        }
+        .btn-print:hover { background: #0284c7; }
+
+        /* ── Facture page ── */
+        .invoice-page {
+            background: #fff; border-radius: 12px;
+            padding: 28px 32px; box-shadow: 0 2px 16px rgba(0,0,0,.07);
+            margin-bottom: 20px;
+        }
+
+        /* En-tete */
+        .inv-hdr {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            padding-bottom: 18px; margin-bottom: 18px;
+        }
+        .inv-logo h1 { font-size: 22px; font-weight: 700; }
+        .inv-logo p { font-size: 11px; color: #888; margin-top: 3px; line-height: 1.6; }
+        .inv-badge { text-align: right; }
+        .inv-badge .doctype { font-size: 32px; font-weight: 700; letter-spacing: 2px; }
+        .inv-badge .meta { font-size: 11px; color: #666; margin-top: 4px; line-height: 1.8; }
+
+        /* Adresses */
+        .addr-row { display: flex; gap: 24px; margin-bottom: 20px; flex-wrap: wrap; }
+        .addr-from { flex: 1; min-width: 160px; font-size: 11px; color: #888; line-height: 1.7; padding: 10px; }
+        .addr-to { flex: 1; min-width: 180px; border: 1px solid #ddd; border-radius: 6px; padding: 12px 16px; }
+        .addr-lbl { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #bbb; margin-bottom: 5px; }
+        .addr-to .cname { font-weight: 700; font-size: 14px; }
+        .addr-to .cline { font-size: 12px; color: #444; margin-top: 2px; }
+
+        /* Objet */
+        .inv-objet { font-size: 13px; color: #555; margin-bottom: 16px; padding: 10px 14px; background: #f9fafb; border-radius: 6px; border-left: 3px solid #ddd; }
+
+        /* Tableau */
+        table.lines { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+        table.lines th { padding: 9px 10px; font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: #fff; }
+        table.lines th:not(:first-child), table.lines td:not(:first-child) { text-align: right; }
+        table.lines td { padding: 9px 10px; font-size: 13px; border-bottom: 1px solid #f3f3f3; }
+
+        /* Totaux */
+        .totals { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; margin-bottom: 18px; }
+        .tot { display: flex; gap: 36px; font-size: 13px; }
+        .tot .lbl { color: #888; min-width: 100px; text-align: right; }
+        .tot .val { min-width: 100px; text-align: right; font-weight: 600; }
+        .tot.ttc-row { border-top: 2px solid #eee; padding-top: 7px; margin-top: 5px; }
+        .tot.ttc-row .lbl { font-size: 15px; font-weight: 700; color: #111; }
+        .tot.ttc-row .val { font-size: 15px; font-weight: 700; }
+
+        /* Conditions / notes */
+        .cond-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #0369a1; margin-bottom: 14px; }
+        .notes-box { background: #fafafa; border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #555; margin-bottom: 14px; }
+
+        /* Footer */
+        .inv-footer { text-align: center; font-size: 10px; color: #ccc; padding-top: 14px; border-top: 1px solid #f0f0f0; margin-top: 12px; }
+
+        /* ── Separateur ── */
+        .page-sep-bar {
+            display: flex; align-items: center; gap: 10px;
+            margin: 8px 0 20px; color: #aaa; font-size: 12px;
+        }
+        .page-sep-bar::before, .page-sep-bar::after {
+            content: ''; flex: 1; border-top: 2px dashed #ccc;
+        }
+
+        /* ── QR-Bill ── */
+        .bv-wrap {
+            background: #fff; border-radius: 12px;
+            box-shadow: 0 2px 16px rgba(0,0,0,.07);
+            padding: 20px;
+        }
+        .bv-title { font-size: 13px; font-weight: 700; color: #888; margin-bottom: 14px; }
+
+        .bv-page {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .bv-cut { display: flex; align-items: center; height: 24px; padding: 0 10px; gap: 6px; color: #bbb; font-size: 11px; border-bottom: 1px solid #eee; }
+        .bv-cut-line { flex: 1; border-top: 1px dashed #ccc; }
+        .bv-body { display: flex; }
+        .bv-receipt { width: 230px; flex-shrink: 0; padding: 12px 12px 12px 18px; border-right: 1px dashed #ccc; display: flex; flex-direction: column; }
+        .bv-payment { flex: 1; padding: 12px 18px 12px 12px; }
+        .bv-section-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+        .bv-lbl { font-size: 8px; font-weight: 700; color: #333; margin-top: 7px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: .4px; }
+        .bv-val { font-size: 11px; line-height: 1.4; }
+        .bv-val-sm { font-size: 10px; line-height: 1.4; }
+        .bv-val-bold { font-size: 13px; font-weight: 700; }
+        .bv-receipt-bot { display: flex; justify-content: space-between; margin-top: auto; padding-top: 10px; border-top: 1px solid #eee; }
+        .bv-accept-box { width: 130px; height: 34px; border: 1px solid #999; border-radius: 3px; margin-top: 4px; }
+        .bv-pay-top { display: flex; gap: 18px; margin-bottom: 10px; }
+        .bv-qr-col { flex-shrink: 0; }
+        .bv-qr-wrap { position: relative; display: inline-block; line-height: 0; }
+        .bv-qr-wrap img { width: 180px; height: 180px; display: block; }
+        .bv-cross {
+            position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             width: 28px; height: 28px; background: #fff;
             display: flex; align-items: center; justify-content: center;
         }
-        .bv-cross-inner { position: relative; width: 16px; height: 16px; }
-        .bv-cross-v { position: absolute; left: 6px; top: 0; width: 5px; height: 16px; background: #e8311a; border-radius: 1px; }
-        .bv-cross-h { position: absolute; top: 6px; left: 0; width: 16px; height: 5px; background: #e8311a; border-radius: 1px; }
         .bv-cross-inner { position: relative; width: 24px; height: 24px; background: #000; }
         .bv-cross-v { position: absolute; left: 9.66px; top: 4.22px; width: 4.68px; height: 15.56px; background: #fff; border-radius: 0; }
         .bv-cross-h { position: absolute; top: 9.66px; left: 4.22px; width: 15.56px; height: 4.68px; background: #fff; border-radius: 0; }
@@ -12,6 +159,52 @@
         .bv-info-col { flex: 1; }
 
         /* ── Print ── */
+        @media print {
+            body { background: #fff; }
+            .top-bar { display: none !important; }
+            .page-sep-bar { display: none !important; }
+            #pageWrap { padding: 0; max-width: 210mm; }
+            .invoice-page { box-shadow: none; border-radius: 0; padding: 14mm 14mm; margin: 0; }
+            .bv-wrap { box-shadow: none; border-radius: 0; page-break-before: always; break-before: page; padding: 8mm; }
+            .bv-title { display: none; }
+            .bv-page { border: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div class="spinner"></div>
+    <p style="color:#888;font-size:14px;">Chargement de la facture...</p>
+</div>
+
+<div id="errorBox">
+    <h2>Facture introuvable</h2>
+    <p id="errorMsg">Le lien est invalide ou a expire. Contactez Brimot Nettoyage pour obtenir un nouveau lien.</p>
+    <p style="margin-top:16px;font-size:12px;color:#aaa;">
+        <a href="mailto:info@brimot.ch" style="color:#0ea5e9;">info@brimot.ch</a> &bull; +41 79 000 00 00
+    </p>
+</div>
+
+<div id="pageWrap">
+    <div class="top-bar">
+        <div class="brand">Brimot Nettoyage</div>
+        <button class="btn-print" onclick="window.print()">Imprimer / Enregistrer PDF</button>
+    </div>
+    <div id="invoiceDiv" class="invoice-page"></div>
+    <div class="page-sep-bar" id="sepBar" style="display:none;">&#9986; Bulletin de versement QR</div>
+    <div class="bv-wrap" id="bvWrap" style="display:none;">
+        <div class="bv-title">Bulletin de versement QR (norme SIX Swiss Payment)</div>
+        <div id="bvPage" class="bv-page"></div>
+    </div>
+</div>
+
+<script>
+/* ─── Constantes Brimot ─── */
+var IBAN_BRIMOT = 'CH95 3000 5291 1478 8940 K';
+var NOM_BRIMOT  = 'Brimot Nettoyage';
+var RUE_BR      = 'Impasse des Griottes 3';
+var NPA_BR      = '1462';
 var VILLE_BR    = 'Yvonand';
 var TEL_BR      = '+41 79 000 00 00';
 var MAIL_BR     = 'info@brimot.ch';
@@ -31,6 +224,127 @@ function esc(s) {
     if (!s) return '';
     return String(s)
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDate(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('fr-CH', {
+        day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Zurich'
+    });
+}
+function fmt2(v) { return Number(v || 0).toFixed(2); }
+
+/* ─── Lire les donnees depuis le hash ─── */
+function getDataFromHash() {
+    var hash = window.location.hash; // #data=base64...
+    if (!hash || !hash.startsWith('#data=')) return null;
+    try {
+        var b64 = hash.slice(6);
+        var json = decodeURIComponent(escape(atob(b64)));
+        return JSON.parse(json);
+    } catch(e) {
+        console.error('Hash decode error:', e);
+        return null;
+    }
+}
+
+/* ─── Rendu facture ─── */
+function renderInvoice(f, lignes) {
+    var c = f.brimot_clients || {};
+    var isDevis = f.type === 'devis';
+    var color   = isDevis ? '#f59e0b' : '#0ea5e9';
+    var title   = isDevis ? 'DEVIS' : 'FACTURE';
+
+    document.title = title + ' ' + (f.numero || '') + ' — Brimot Nettoyage';
+
+    // Lignes
+    var rows = '';
+    if (lignes && lignes.length) {
+        lignes.forEach(function(l, i) {
+            var tot = Number(l.total_ht != null ? l.total_ht : (l.qte || 1) * (l.prix_ht || 0));
+            rows += '<tr style="background:' + (i % 2 === 0 ? '#f9fafb' : '#fff') + '">' +
+                '<td>' + esc(l.designation || '—') + '</td>' +
+                '<td>' + Number(l.qte || 1).toFixed(2) + '</td>' +
+                '<td>' + Number(l.prix_ht || 0).toFixed(2) + ' CHF</td>' +
+                '<td style="font-weight:600;">' + tot.toFixed(2) + ' CHF</td>' +
+                '</tr>';
+        });
+    } else {
+        rows = '<tr><td colspan="4" style="text-align:center;color:#bbb;padding:18px;font-style:italic;">Aucune ligne</td></tr>';
+    }
+
+    // Adresse client
+    var addrClient = '';
+    if (c.civilite) addrClient += '<div style="font-size:11px;color:#888;">' + esc(c.civilite) + '</div>';
+    if (c.nom)      addrClient += '<div class="cname">' + esc(c.nom) + '</div>';
+    if (c.contact)  addrClient += '<div class="cline">' + esc(c.contact) + '</div>';
+    if (c.adresse)  addrClient += '<div class="cline">' + esc(c.adresse) + '</div>';
+    if (c.npa || c.ville) addrClient += '<div class="cline">' + esc([c.npa, c.ville].filter(Boolean).join(' ')) + '</div>';
+    if (c.pays && c.pays !== 'CH') addrClient += '<div class="cline">' + esc(c.pays) + '</div>';
+
+    var ht  = Number(f.montant_ht  || 0);
+    var tva = Number(f.montant_tva || 0);
+    var ttc = Number(f.montant_ttc || 0);
+
+    var echeanceHtml = (!isDevis && f.echeance)
+        ? '<br>Echeance : <strong style="color:#e8311a;">' + fmtDate(f.echeance) + '</strong>'
+        : '';
+
+    var html =
+        // En-tete
+        '<div class="inv-hdr" style="border-bottom:3px solid ' + color + ';">' +
+          '<div class="inv-logo">' +
+            '<h1 style="color:' + color + ';">' + esc(NOM_BRIMOT) + '</h1>' +
+            '<p>' + esc(RUE_BR) + ' — ' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '<br>' +
+            esc(TEL_BR) + ' — ' + esc(MAIL_BR) + '</p>' +
+          '</div>' +
+          '<div class="inv-badge">' +
+            '<div class="doctype" style="color:' + color + ';">' + title + '</div>' +
+            '<div class="meta">N° ' + esc(f.numero || '—') +
+              '<br>Date : ' + fmtDate(f.date_facture || f.date_creation) +
+              echeanceHtml +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        // Adresses
+        '<div class="addr-row">' +
+          '<div class="addr-from">' +
+            '<div class="addr-lbl">Expediteur</div>' +
+            esc(NOM_BRIMOT) + '<br>' + esc(RUE_BR) + '<br>' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '<br>' + esc(MAIL_BR) +
+          '</div>' +
+          '<div class="addr-to">' +
+            '<div class="addr-lbl">Destinataire</div>' +
+            (addrClient || '<span style="color:#bbb;font-size:11px;">Aucun client</span>') +
+          '</div>' +
+        '</div>' +
+        // Objet
+        (f.objet ? '<div class="inv-objet"><strong>Objet :</strong> ' + esc(f.objet) + '</div>' : '') +
+        // Tableau
+        '<table class="lines">' +
+          '<thead><tr>' +
+            '<th style="background:' + color + ';">Designation</th>' +
+            '<th style="background:' + color + ';width:60px;">Qte</th>' +
+            '<th style="background:' + color + ';width:110px;">Prix unit. HT</th>' +
+            '<th style="background:' + color + ';width:110px;">Total HT</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+        // Totaux
+        '<div class="totals">' +
+          '<div class="tot"><span class="lbl">Sous-total HT</span><span class="val">' + ht.toFixed(2) + ' CHF</span></div>' +
+          '<div class="tot"><span class="lbl">TVA ' + (f.tva_pct || 0) + '%</span><span class="val">' + tva.toFixed(2) + ' CHF</span></div>' +
+          '<div class="tot ttc-row"><span class="lbl" style="color:' + color + ';">TOTAL TTC</span><span class="val" style="color:' + color + ';">' + ttc.toFixed(2) + ' CHF</span></div>' +
+        '</div>' +
+        (f.conditions ? '<div class="cond-box">Conditions : <strong>' + esc(f.conditions) + '</strong> &mdash; IBAN : ' + IBAN_BRIMOT + '</div>' : '') +
+        (f.notes ? '<div class="notes-box">' + esc(f.notes) + '</div>' : '') +
+        '<div class="inv-footer">' +
+          esc(NOM_BRIMOT) + ' &mdash; ' + esc(RUE_BR) + ', ' + esc(NPA_BR) + ' ' + esc(VILLE_BR) +
+          ' &mdash; ' + esc(TEL_BR) + ' &mdash; ' + esc(MAIL_BR) +
+          ' &mdash; IBAN : ' + IBAN_BRIMOT +
+        '</div>';
+
+    document.getElementById('invoiceDiv').innerHTML = html;
+}
 
 /* ─── Rendu QR-Bill ─── */
 async function renderQRBill(f, lignes) {
@@ -40,7 +354,6 @@ async function renderQRBill(f, lignes) {
     var ibanClean  = IBAN_BRIMOT.replace(/\s/g, '');
     var montantCHF = Number(f.montant_ttc || 0).toFixed(2);
     var debNom   = c.nom     || '';
-    var debRue   = c.adresse || '';
     var debRue   = debtorAddr.street || c.adresse || '';
     var debNo    = debtorAddr.building || '';
     var debNpa   = c.npa     || '';
@@ -50,7 +363,6 @@ async function renderQRBill(f, lignes) {
 
     // Référence QR-IBAN (27 chiffres, checksum Mod10 récursif)
     function buildQRRef(numero) {
-        var digits = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
         var seed = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
         var digits = /[1-9]/.test(seed) ? seed : (seed.slice(0, 25) + '1');
         var table = [0,9,4,6,8,2,7,1,3,5];
@@ -61,44 +373,42 @@ async function renderQRBill(f, lignes) {
         var check = (10 - carry) % 10;
         return digits + check;
     }
-    var qrRef = buildQRRef(f.numero || f.id || '');
     var qrRef = buildQRRef(f.numero || f.id || ('FAC-' + new Date().getFullYear() + '-0001'));
 
-    // Generer le QR (format SPC norme SIX — 31 champs — type S obligatoire)
     // Generer le QR (format SPC norme SIX — message + EPD au bon ordre)
     var qrDataUrl = '';
     try {
         var hasAddr = !!(debNom && debNpa && debVille);
         var qrLines = [
             'SPC',         // 1  Header
-            '0200',        // 2  Version
             '0203',        // 2  Version (IG QR-bill v2.3)
             '1',           // 3  Coding UTF-8
             ibanClean,     // 4  IBAN
             'S',           // 5  Creditor AddrType S=structured
             NOM_BRIMOT,    // 6  Creditor Name
-            RUE_BR,        // 7  Creditor StrtNm
-            '',            // 8  Creditor BldgNb
             (creditorAddr.street || RUE_BR).slice(0, 70), // 7  Creditor StrtNm
             (creditorAddr.building || '').slice(0, 16),   // 8  Creditor BldgNb
             NPA_BR,        // 9  Creditor PstCd
             VILLE_BR,      // 10 Creditor TwnNm
             'CH',          // 11 Creditor Ctry
             '',            // 12 UltimateCreditor AddrType
+            '',            // 13 UltimateCreditor Name
+            '',            // 14 UltimateCreditor StrtNm
+            '',            // 15 UltimateCreditor BldgNb
+            '',            // 16 UltimateCreditor PstCd
+            '',            // 17 UltimateCreditor TwnNm
+            '',            // 18 UltimateCreditor Ctry
+            montantCHF,    // 19 Amount
             'CHF',         // 20 Currency
             hasAddr ? 'S' : '',        // 21 UltimateDebtor AddrType
             hasAddr ? debNom : '',     // 22 UltimateDebtor Name
             hasAddr ? debRue : '',     // 23 UltimateDebtor StrtNm
-            '',                        // 24 UltimateDebtor BldgNb
             hasAddr ? debNo : '',      // 24 UltimateDebtor BldgNb
             hasAddr ? debNpa : '',     // 25 UltimateDebtor PstCd
             hasAddr ? debVille : '',   // 26 UltimateDebtor TwnNm
-            hasAddr ? 'CH' : '',       // 27 UltimateDebtor Ctry
             hasAddr ? debPays : '',    // 27 UltimateDebtor Ctry
             'QRR',         // 28 RmtInfTp — QR-IBAN PostFinance exige QRR
             qrRef,         // 29 Reference 27 chiffres
-            'EPD',         // 30 Trailer
-            ''             // 31 AltPmtInf
             msgLibre,      // 30 Unstructured message
             'EPD',         // 31 Trailer
             ''             // 32 AltPmtInf
@@ -106,3 +416,103 @@ async function renderQRBill(f, lignes) {
         qrDataUrl = await QRCode.toDataURL(qrLines.join('\n'), {
             errorCorrectionLevel: 'M', width: 298, margin: 0,
             color: { dark: '#000000', light: '#ffffff' }
+        });
+    } catch (e) {
+        console.warn('QR error:', e);
+    }
+
+    var qrImg = qrDataUrl
+        ? '<div class="bv-qr-wrap">' +
+          '<img src="' + qrDataUrl + '" alt="QR Swiss Payment">' +
+          '<div class="bv-cross"><div class="bv-cross-inner"><div class="bv-cross-v"></div><div class="bv-cross-h"></div></div></div>' +
+          '</div>'
+        : '<div style="width:180px;height:180px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;font-size:11px;color:#999;border-radius:4px;">QR indisponible</div>';
+
+    var html =
+        '<div class="bv-cut">' +
+          '<div class="bv-cut-line"></div>' +
+          '<span>&#9986;</span>' +
+          '<div class="bv-cut-line"></div>' +
+        '</div>' +
+        '<div class="bv-body">' +
+
+          // RECU
+          '<div class="bv-receipt">' +
+            '<div class="bv-section-title">Recu</div>' +
+            '<div class="bv-lbl">Compte / Payable a</div>' +
+            '<div class="bv-val-sm">' + ibanClean + '<br>' + esc(NOM_BRIMOT) + '<br>' + esc(RUE_BR) + '<br>' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '</div>' +
+            '<div class="bv-lbl">Reference</div>' +
+            '<div class="bv-val-sm">' + esc(qrRef) + '</div>' +
+            '<div class="bv-lbl">Paye par</div>' +
+            '<div class="bv-val-sm">' + esc(debNom) + (debRue ? '<br>' + esc(debRue) : '') + '<br>' + esc(debNpa) + ' ' + esc(debVille) + '</div>' +
+            '<div class="bv-receipt-bot">' +
+              '<div><div class="bv-lbl">Montant</div><div class="bv-val-bold">' + montantCHF + '</div></div>' +
+              '<div><div class="bv-lbl">Monnaie</div><div class="bv-val-sm">CHF</div></div>' +
+            '</div>' +
+            '<div><div class="bv-lbl" style="font-size:7px;">Point de depot</div><div class="bv-accept-box"></div></div>' +
+          '</div>' +
+
+          // SECTION PAIEMENT
+          '<div class="bv-payment">' +
+            '<div class="bv-section-title">Section de paiement</div>' +
+            '<div class="bv-pay-top">' +
+              '<div class="bv-qr-col">' + qrImg +
+                '<div class="bv-cur-amt">' +
+                  '<div><div class="bv-lbl">Monnaie</div><div class="bv-val-bold">CHF</div></div>' +
+                  '<div><div class="bv-lbl">Montant</div><div class="bv-val-bold">' + montantCHF + '</div></div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="bv-info-col">' +
+                '<div class="bv-lbl">Compte / Payable a</div>' +
+                '<div class="bv-val">' + ibanClean + '<br>' + esc(NOM_BRIMOT) + '<br>' + esc(RUE_BR) + '<br>' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '</div>' +
+                '<div class="bv-lbl" style="margin-top:8px;">Référence</div>' +
+                '<div class="bv-val">' + esc(qrRef) + '</div>' +
+                '<div class="bv-lbl" style="margin-top:8px;">Informations</div><div class="bv-val">' + esc(msgLibre) + '</div>' +
+                (f.objet ? '<div class="bv-lbl" style="margin-top:8px;">Objet</div><div class="bv-val">' + esc(f.objet) + '</div>' : '') +
+                '<div class="bv-lbl" style="margin-top:8px;">Paye par</div>' +
+                '<div class="bv-val">' + esc(debNom) + (debRue ? '<br>' + esc(debRue) : '') + '<br>' + esc(debNpa) + ' ' + esc(debVille) + '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+
+        '</div>';
+
+    document.getElementById('bvPage').innerHTML = html;
+    document.getElementById('sepBar').style.display = 'flex';
+    document.getElementById('bvWrap').style.display = 'block';
+}
+
+/* ─── Init ─── */
+async function init() {
+    var loader  = document.getElementById('loader');
+    var errBox  = document.getElementById('errorBox');
+    var errMsg  = document.getElementById('errorMsg');
+    var pageWrap = document.getElementById('pageWrap');
+
+    var data = getDataFromHash();
+
+    if (!data || !data.f) {
+        loader.style.display = 'none';
+        errBox.style.display = 'block';
+        errMsg.textContent = 'Le lien est invalide ou les donnees sont manquantes. Contactez Brimot Nettoyage pour un nouveau lien.';
+        return;
+    }
+
+    var f = data.f;
+    var lignes = data.ls || [];
+
+    renderInvoice(f, lignes);
+
+    // QR-Bill uniquement pour les factures
+    if (f.type !== 'devis') {
+        await renderQRBill(f, lignes);
+    }
+
+    loader.style.display = 'none';
+    pageWrap.style.display = 'block';
+}
+
+init();
+</script>
+</body>
+</html>
