@@ -1649,13 +1649,8 @@ function openModalEmail(id) {
     // Indiquer le mode d'envoi
     const modeLabel = $('emailModeLabel');
     if(modeLabel) {
-        if(EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY) {
-            modeLabel.textContent = '✅ Mode EmailJS actif — envoi automatique sans ouvrir votre messagerie.';
-            modeLabel.style.color = 'var(--green)';
-        } else {
-            modeLabel.textContent = '📧 Mode : ouverture du client de messagerie (mailto) — pour envoi automatique, configurez EmailJS dans le code.';
-            modeLabel.style.color = '';
-        }
+        modeLabel.textContent = '✅ Envoi via le serveur LWS (send_mail.php) — le PDF est généré séparément.';
+        modeLabel.style.color = 'var(--green)';
     }
     openModal('modalEmail');
 }
@@ -1762,48 +1757,32 @@ function selectFromCatalogue(pid, varIdx) {
 window.selectFromCatalogue = selectFromCatalogue;
 
 // ══════════════════════════════════════════════════════════
-//  EMAIL — envoi via EmailJS (sans backend)
+//  EMAIL — envoi via serveur LWS (send_mail.php)
 // ══════════════════════════════════════════════════════════
-// EmailJS est chargé depuis le CDN dans le <head>.
-// Pour activer : renseigner les 3 constantes ci-dessous
-// depuis votre compte EmailJS (https://www.emailjs.com/).
-// Service ID  → Settings > Email Services > Service ID
-// Template ID → Email Templates > Template ID
-// Public Key  → Account > API Keys > Public Key
-const EMAILJS_SERVICE_ID  = '';   // ex : 'service_abc123'
-const EMAILJS_TEMPLATE_ID = '';   // ex : 'template_xyz456'
-const EMAILJS_PUBLIC_KEY  = '';   // ex : 'ABCDEFGHIJKLMN123'
+// Le script PHP send_mail.php se trouve dans le même dossier.
+// Il utilise la fonction mail() de PHP, disponible sur tous
+// les hébergements LWS sans configuration supplémentaire.
+// Modifiez MAIL_FROM_EMAIL dans send_mail.php avec votre
+// adresse email enregistrée chez LWS.
+const SEND_MAIL_URL = 'send_mail.php'; // même dossier que facturation.html
 
-async function sendEmailViaEmailJS(to, subject, body, factureId) {
-    if(!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_PUBLIC_KEY) {
-        // Pas encore configuré → fallback mailto
-        const subj = encodeURIComponent(subject);
-        const bd   = encodeURIComponent(body + '\n\n[PDF joint — générez-le via le bouton PDF ci-dessus]');
-        window.open(`mailto:${to}?subject=${subj}&body=${bd}`);
-        return { ok: true, via: 'mailto' };
-    }
+async function sendEmailViaLWS(to, subject, body, factureId) {
     try {
-        // Charger EmailJS si pas encore chargé
-        if(!window.emailjs) {
-            await new Promise((res, rej) => {
-                const s = document.createElement('script');
-                s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-                s.onload = res; s.onerror = rej;
-                document.head.appendChild(s);
-            });
-        }
-        window.emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
-        const params = {
-            to_email:   to,
-            subject:    subject,
-            message:    body,
-            facture_id: factureId || ''
-        };
-        await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, params);
-        return { ok: true, via: 'emailjs' };
+        const resp = await fetch(SEND_MAIL_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to, subject, body, facture_id: factureId || '' })
+        });
+        const json = await resp.json();
+        if(json.ok) return { ok: true, via: 'lws' };
+        return { ok: false, error: json.error || 'Erreur serveur PHP' };
     } catch(err) {
-        console.error('EmailJS error:', err);
-        return { ok: false, error: err };
+        console.error('send_mail.php error:', err);
+        // Fallback mailto si fetch échoue (ex: en local sans PHP)
+        const subj = encodeURIComponent(subject);
+        const bd   = encodeURIComponent(body + '\n\n[Envoyez le PDF généré en pièce jointe]');
+        window.open(`mailto:${to}?subject=${subj}&body=${bd}`);
+        return { ok: true, via: 'mailto-fallback' };
     }
 }
 
@@ -1814,20 +1793,20 @@ async function sendEmail() {
     const subject = $('emailSubject').value;
     const body    = $('emailBody').value;
     showLoad();
-    // Générer et ouvrir le PDF (l'utilisateur peut l'enregistrer pour joindre manuellement)
+    // Générer et ouvrir le PDF (pour impression / pièce jointe manuelle)
     await previewPDF(id);
-    // Envoyer via EmailJS (ou mailto en fallback)
-    const result = await sendEmailViaEmailJS(to, subject, body, id);
+    // Envoyer le corps du message via le serveur LWS
+    const result = await sendEmailViaLWS(to, subject, body, id);
     hideLoad();
     if(result.ok) {
-        if(result.via === 'emailjs') {
-            toast('success','✅ Email envoyé via EmailJS');
+        if(result.via === 'lws') {
+            toast('success','✅ Email envoyé via le serveur LWS');
         } else {
             toast('success','✅ Client de messagerie ouvert — joignez le PDF généré');
         }
         closeModal('modalEmail');
     } else {
-        toast('error','❌ Erreur envoi email — '+( result.error?.text || 'vérifiez la configuration EmailJS'));
+        toast('error','❌ ' + (result.error || 'Erreur envoi email'));
     }
 }
 
