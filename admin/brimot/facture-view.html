@@ -346,41 +346,42 @@ async function renderQRBill(f, lignes) {
     var debVille = c.ville   || '';
     var msgLibre = ('Facture ' + (f.numero || '')).trim().slice(0, 140);
 
-    // Generer le QR (format SPC norme SIX Swiss Payment)
+    // Generer le QR (format SPC norme SIX — exactement 31 champs)
     var qrDataUrl = '';
     try {
-        // Le type d'adresse doit etre 'S' (structured) ou 'K' (combined) — jamais vide
-        var payerType = (debNpa && debVille && debNom) ? 'S' : 'K';
+        var hasAddr = !!(debNom && debNpa && debVille);
         var qrLines = [
-            'SPC',          // Type de donnees
-            '0200',         // Version
-            '1',            // Codage (UTF-8)
-            ibanClean,      // IBAN cree
-            'S',            // Type adresse creancier (Structured)
-            NOM_BRIMOT,     // Nom creancier
-            RUE_BR,         // Rue + numero creancier
-            NPA_BR,         // NPA creancier
-            VILLE_BR,       // Ville creancier
-            'CH',           // Pays creancier
-            '',             // Creancier final (vide)
-            '',             // Creancier final ligne 2
-            '',             // Creancier final ligne 3
-            '',             // Creancier final NPA
-            '',             // Creancier final ville
-            '',             // Creancier final pays
-            montantCHF,     // Montant
-            'CHF',          // Monnaie
-            payerType,      // Type adresse payeur
-            debNom,         // Nom payeur
-            debRue,         // Rue payeur
-            debNpa,         // NPA payeur
-            debVille,       // Ville payeur
-            'CH',           // Pays payeur
-            'NON',          // Identificateur reference (NON = sans reference structuree)
-            '',             // Reference (vide)
-            msgLibre,       // Message libre
-            'EPD',          // Indicateur fin
-            ''              // Informations alternatives (vide)
+            'SPC',         // 1  Header
+            '0200',        // 2  Version
+            '1',           // 3  Coding UTF-8
+            ibanClean,     // 4  IBAN
+            'K',           // 5  Creditor AddrType (K=combined)
+            NOM_BRIMOT,    // 6  Creditor Name
+            RUE_BR,        // 7  Creditor AdrLine1 (rue)
+            NPA_BR + ' ' + VILLE_BR, // 8  Creditor AdrLine2 (NPA ville)
+            '',            // 9  Creditor PstCd (vide si K)
+            '',            // 10 Creditor TwnNm (vide si K)
+            'CH',          // 11 Creditor Ctry
+            '',            // 12 UltimateCreditor AddrType
+            '',            // 13 UltimateCreditor Name
+            '',            // 14 UltimateCreditor AdrLine1
+            '',            // 15 UltimateCreditor AdrLine2
+            '',            // 16 UltimateCreditor PstCd
+            '',            // 17 UltimateCreditor TwnNm
+            '',            // 18 UltimateCreditor Ctry
+            montantCHF,    // 19 Amount
+            'CHF',         // 20 Currency
+            hasAddr ? 'K' : '',       // 21 UltimateDebtor AddrType
+            hasAddr ? debNom : '',    // 22 UltimateDebtor Name
+            hasAddr ? debRue : '',    // 23 UltimateDebtor AdrLine1
+            hasAddr ? (debNpa + ' ' + debVille) : '', // 24 AdrLine2
+            '',            // 25 UltimateDebtor PstCd (vide si K)
+            '',            // 26 UltimateDebtor TwnNm (vide si K)
+            hasAddr ? 'CH' : '',      // 27 UltimateDebtor Ctry
+            'NON',         // 28 RmtInfTp
+            '',            // 29 RmtInf
+            'EPD',         // 30 Trailer
+            ''             // 31 AltPmtInf
         ].join('\n');
         qrDataUrl = await QRCode.toDataURL(qrLines, {
             errorCorrectionLevel: 'M', width: 298, margin: 0,
