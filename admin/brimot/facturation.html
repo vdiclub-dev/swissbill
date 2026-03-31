@@ -1281,52 +1281,29 @@ async function loadFactureData(id) {
     return { f, ls: ls || [] };
 }
 
-/* ── Aperçu PDF — ouvre une nouvelle fenêtre avec les 2 pages ── */
-async function previewPDF(id) {
-    showLoad();
-    const { f, ls } = await loadFactureData(id);
-    hideLoad();
-    if (!f) { toast('error', 'Facture introuvable'); return; }
-
-    // Générer le QR dataUrl AVANT d'ouvrir la fenêtre
-    const qrDataUrl = await genQRDataUrl(f);
-
-    // window.open() DOIT être synchrone (pas après await) → on l'appelle ici
-    const win = window.open('', '_blank', 'width=960,height=1200');
-    if (!win) { toast('error', '❌ Popup bloqué — autorisez les popups pour ce site'); return; }
-
-    const html = buildInvoiceHTML(f, ls, qrDataUrl, false);
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-}
-window.previewPDF = previewPDF;
-
 /* ── Générer QR dataUrl (Swiss QR Payment) ── */
 async function genQRDataUrl(f) {
     const c = f.brimot_clients || {};
     const ibanClean  = IBAN_BRIMOT.replace(/\s/g, '');
     const montantCHF = Number(f.montant_ttc || 0).toFixed(2);
-    const debNom     = c.nom     || '';
-    const debRue     = c.adresse || '';
     const debNpa     = c.npa     || '';
     const debVille   = c.ville   || '';
     const debPays    = c.pays    || 'CH';
     const hasAddr    = !!(debNpa && debVille);
     const msgLibre   = ('Facture ' + (f.numero || '')).trim().slice(0, 140);
 
-    const lines = [
+    const qrLines = [
         'SPC', '0200', '1', ibanClean,
         'S', NOM_BRIMOT, RUE_BR, NPA_BR, VILLE_BR, PAYS_BR,
         '', '', '', '', '', '',
         montantCHF, 'CHF',
-        hasAddr ? 'S' : '', hasAddr ? debNom : '', hasAddr ? debRue : '',
+        hasAddr ? 'S' : '', hasAddr ? (c.nom||'') : '', hasAddr ? (c.adresse||'') : '',
         hasAddr ? debNpa : '', hasAddr ? debVille : '', hasAddr ? debPays : '',
         'NON', '', msgLibre, 'EPD', ''
     ];
 
     try {
-        return await QRCode.toDataURL(lines.join('\n'), {
+        return await QRCode.toDataURL(qrLines.join('\n'), {
             errorCorrectionLevel: 'M', width: 298, margin: 0,
             color: { dark: '#000000', light: '#ffffff' }
         });
@@ -1336,33 +1313,69 @@ async function genQRDataUrl(f) {
     }
 }
 
-/* ── Construire le HTML complet (page 1 facture + page 2 QR-Bill) ── */
-/* Cette fonction est SYNCHRONE — le QR dataUrl est passé en paramètre */
-function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
-    const c        = f.brimot_clients || {};
-    const isDevis  = f.type === 'devis';
-    const title    = isDevis ? 'DEVIS' : 'FACTURE';
-    const color    = isDevis ? '#f59e0b' : '#0ea5e9';
-    const ibanClean = IBAN_BRIMOT.replace(/\s/g, '');
-    const montantCHF = Number(f.montant_ttc || 0).toFixed(2);
+/* ══════════════════════════════════════════════════════════
+   APERCU PDF — overlay plein ecran (jamais bloque)
+   ══════════════════════════════════════════════════════════ */
+async function previewPDF(id) {
+    showLoad();
+    const { f, ls } = await loadFactureData(id);
+    if (!f) { hideLoad(); toast('error', 'Facture introuvable'); return null; }
+    const qrDataUrl = await genQRDataUrl(f);
+    hideLoad();
+    const html = buildInvoiceHTML(f, ls, qrDataUrl, false);
+    const frame   = document.getElementById('pdfFrame');
+    const overlay = document.getElementById('pdfOverlay');
+    if (!frame || !overlay) { toast('error', 'Overlay introuvable'); return null; }
+    frame.srcdoc = html;
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    return { f, ls, qrDataUrl };
+}
+window.previewPDF = previewPDF;
 
-    const fmtD = function(d) {
-        if (!d) return '—';
+function printPDFOverlay() {
+    const frame = document.getElementById('pdfFrame');
+    if (frame && frame.contentWindow) {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+    }
+}
+window.printPDFOverlay = printPDFOverlay;
+
+function closePDFOverlay() {
+    const overlay = document.getElementById('pdfOverlay');
+    if (overlay) overlay.style.display = 'none';
+    document.body.style.overflow = '';
+}
+window.closePDFOverlay = closePDFOverlay;
+
+/* ══════════════════════════════════════════════════════════
+   CONSTRUCTION HTML FACTURE (apercu iframe)
+   ══════════════════════════════════════════════════════════ */
+function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
+    var c        = f.brimot_clients || {};
+    var isDevis  = f.type === 'devis';
+    var title    = isDevis ? 'DEVIS' : 'FACTURE';
+    var color    = isDevis ? '#f59e0b' : '#0ea5e9';
+    var ibanClean = IBAN_BRIMOT.replace(/\s/g, '');
+    var montantCHF = Number(f.montant_ttc || 0).toFixed(2);
+
+    function fmtD(d) {
+        if (!d) return '-';
         return new Date(d).toLocaleDateString('fr-CH', {
             day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Zurich'
         });
-    };
+    }
 
     /* Adresse client */
-    const civHtml = c.civilite ? '<div style="font-size:11px;color:#888;margin-bottom:2px;">' + c.civilite + '</div>' : '';
     var addrParts = [];
-    if (civHtml)  addrParts.push(civHtml);
-    if (c.nom)     addrParts.push('<div style="font-weight:700;font-size:13px;">' + c.nom + '</div>');
-    if (c.contact) addrParts.push('<div style="font-size:12px;color:#555;">' + c.contact + '</div>');
-    if (c.adresse) addrParts.push('<div style="font-size:12px;">' + c.adresse + '</div>');
+    if (c.civilite) addrParts.push('<div style="font-size:11px;color:#888;">' + c.civilite + '</div>');
+    if (c.nom)      addrParts.push('<div style="font-weight:700;font-size:13px;">' + c.nom + '</div>');
+    if (c.contact)  addrParts.push('<div style="font-size:12px;color:#555;">' + c.contact + '</div>');
+    if (c.adresse)  addrParts.push('<div style="font-size:12px;">' + c.adresse + '</div>');
     if (c.npa || c.ville) addrParts.push('<div style="font-size:12px;">' + [c.npa, c.ville].filter(Boolean).join(' ') + '</div>');
     if (c.pays && c.pays !== 'CH') addrParts.push('<div style="font-size:12px;">' + c.pays + '</div>');
-    const addrClientHtml = addrParts.join('') || '<span style="color:#bbb;font-size:11px;">— Aucun client —</span>';
+    var addrClientHtml = addrParts.join('') || '<span style="color:#bbb;font-size:11px;">Aucun client</span>';
 
     /* Lignes tableau */
     var lignesHtml = '';
@@ -1370,7 +1383,7 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
         lignesData.forEach(function(l, i) {
             var tot = Number(l.total_ht != null ? l.total_ht : (l.qte || 1) * (l.prix_ht || 0));
             lignesHtml += '<tr style="background:' + (i % 2 === 0 ? '#f9fafb' : '#fff') + '">' +
-                '<td style="padding:7px 10px;font-size:12px;">' + (l.designation || '—') + '</td>' +
+                '<td style="padding:7px 10px;font-size:12px;">' + (l.designation || '-') + '</td>' +
                 '<td style="padding:7px 10px;text-align:right;font-size:12px;white-space:nowrap;">' + Number(l.qte || 1).toFixed(2) + '</td>' +
                 '<td style="padding:7px 10px;text-align:right;font-size:12px;white-space:nowrap;">' + Number(l.prix_ht || 0).toFixed(2) + ' CHF</td>' +
                 '<td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;white-space:nowrap;">' + tot.toFixed(2) + ' CHF</td>' +
@@ -1380,289 +1393,380 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
         lignesHtml = '<tr><td colspan="4" style="padding:14px;text-align:center;color:#999;font-style:italic;">Aucune ligne</td></tr>';
     }
 
-    /* Débiteur pour QR-Bill */
     var debNom   = c.nom     || '';
     var debRue   = c.adresse || '';
     var debNpa   = c.npa     || '';
     var debVille = c.ville   || '';
     var msgLibre = ('Facture ' + (f.numero || '')).trim().slice(0, 140);
 
-    /* Croix suisse (positionnée sur le QR via CSS) */
-    var crossHtml = qrDataUrl ? (
-        '<div style="position:relative;display:inline-block;line-height:0;">' +
-        '<img src="' + qrDataUrl + '" style="width:46mm;height:46mm;display:block;">' +
-        '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);">' +
-        '<div style="width:7mm;height:7mm;background:#fff;display:flex;align-items:center;justify-content:center;">' +
-        '<div style="position:relative;width:4.2mm;height:4.2mm;">' +
-        '<div style="position:absolute;left:1.4mm;top:0;width:1.4mm;height:4.2mm;background:#f00;"></div>' +
-        '<div style="position:absolute;top:1.4mm;left:0;width:4.2mm;height:1.4mm;background:#f00;"></div>' +
-        '</div></div></div></div>'
-    ) : '<div style="width:46mm;height:46mm;background:#eee;display:flex;align-items:center;justify-content:center;font-size:9pt;color:#999;">QR indisponible</div>';
+    /* Croix suisse sur le QR */
+    var crossHtml = qrDataUrl
+        ? '<div style="position:relative;display:inline-block;line-height:0;">' +
+          '<img src="' + qrDataUrl + '" style="width:46mm;height:46mm;display:block;">' +
+          '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);">' +
+          '<div style="width:7mm;height:7mm;background:#fff;display:flex;align-items:center;justify-content:center;">' +
+          '<div style="position:relative;width:4.2mm;height:4.2mm;">' +
+          '<div style="position:absolute;left:1.4mm;top:0;width:1.4mm;height:4.2mm;background:#f00;"></div>' +
+          '<div style="position:absolute;top:1.4mm;left:0;width:4.2mm;height:1.4mm;background:#f00;"></div>' +
+          '</div></div></div></div>'
+        : '<div style="width:46mm;height:46mm;background:#eee;display:flex;align-items:center;justify-content:center;font-size:9pt;color:#999;">QR indisponible</div>';
 
-    /* Page 2 : QR-Bill complet norme SIX */
+    /* Page 2 QR-Bill */
     var bvHtml = '';
     if (!isDevis && qrDataUrl) {
-        bvHtml =
-        '<div class="bv-page">' +
-          /* Ligne de découpe haut */
-          '<div class="bv-cut">' +
-            '<div class="bv-cut-line"></div>' +
-            '<span class="bv-scissors">&#9986;</span>' +
-            '<div class="bv-cut-line"></div>' +
-          '</div>' +
+        bvHtml = '<div class="bv-page">' +
+          '<div class="bv-cut"><div class="bv-cut-line"></div><span class="bv-scissors">&#9986;</span><div class="bv-cut-line"></div></div>' +
           '<div class="bv-body">' +
-
-            /* REÇU */
             '<div class="bv-receipt">' +
-              '<p class="bv-section-title">Reçu</p>' +
-              '<p class="bv-lbl">Compte / Payable à</p>' +
+              '<p class="bv-section-title">Recu</p>' +
+              '<p class="bv-lbl">Compte / Payable a</p>' +
               '<p class="bv-val-sm">' + ibanClean + '<br>' + NOM_BRIMOT + '<br>' + RUE_BR + '<br>' + NPA_BR + ' ' + VILLE_BR + '</p>' +
-              '<p class="bv-lbl">Référence</p>' +
+              '<p class="bv-lbl">Reference</p>' +
               '<p class="bv-val-sm">' + msgLibre + '</p>' +
-              '<p class="bv-lbl">Payé par</p>' +
+              '<p class="bv-lbl">Paye par</p>' +
               '<p class="bv-val-sm">' + debNom + (debRue ? '<br>' + debRue : '') + '<br>' + debNpa + ' ' + debVille + '</p>' +
               '<div class="bv-receipt-bot">' +
                 '<div><p class="bv-lbl">Montant</p><p class="bv-amount">' + montantCHF + '</p></div>' +
                 '<div><p class="bv-lbl">Monnaie</p><p class="bv-val-sm">CHF</p></div>' +
               '</div>' +
-              '<div><p class="bv-lbl" style="font-size:5pt;">Point de dépôt</p>' +
-              '<div class="bv-accept-box"></div></div>' +
+              '<div><p class="bv-lbl" style="font-size:5pt;">Point de depot</p><div class="bv-accept-box"></div></div>' +
             '</div>' +
-
-            /* SÉPARATEUR vertical */
-            '<div class="bv-sep">' +
-              '<div class="bv-sep-line"></div>' +
-              '<span class="bv-scissors" style="transform:none;">&#9986;</span>' +
-              '<div class="bv-sep-line"></div>' +
-            '</div>' +
-
-            /* SECTION DE PAIEMENT */
+            '<div class="bv-sep"><div class="bv-sep-line"></div><span class="bv-scissors" style="transform:none;">&#9986;</span><div class="bv-sep-line"></div></div>' +
             '<div class="bv-payment">' +
               '<p class="bv-section-title">Section de paiement</p>' +
               '<div class="bv-pay-top">' +
-                '<div class="bv-qr-col">' +
-                  crossHtml +
+                '<div class="bv-qr-col">' + crossHtml +
                   '<div style="display:flex;gap:10mm;margin-top:3mm;">' +
                     '<div><p class="bv-lbl">Monnaie</p><p class="bv-val-bold">CHF</p></div>' +
                     '<div><p class="bv-lbl">Montant</p><p class="bv-val-bold">' + montantCHF + '</p></div>' +
                   '</div>' +
                 '</div>' +
                 '<div class="bv-info-col">' +
-                  '<p class="bv-lbl">Compte / Payable à</p>' +
+                  '<p class="bv-lbl">Compte / Payable a</p>' +
                   '<p class="bv-val">' + ibanClean + '<br>' + NOM_BRIMOT + '<br>' + RUE_BR + '<br>' + NPA_BR + ' ' + VILLE_BR + '</p>' +
-                  '<p class="bv-lbl" style="margin-top:3mm;">Référence</p>' +
+                  '<p class="bv-lbl" style="margin-top:3mm;">Reference</p>' +
                   '<p class="bv-val">' + msgLibre + '</p>' +
                   (f.objet ? '<p class="bv-lbl" style="margin-top:3mm;">Informations</p><p class="bv-val">' + f.objet + '</p>' : '') +
-                  '<p class="bv-lbl" style="margin-top:3mm;">Payé par</p>' +
+                  '<p class="bv-lbl" style="margin-top:3mm;">Paye par</p>' +
                   '<p class="bv-val">' + debNom + (debRue ? '<br>' + debRue : '') + '<br>' + debNpa + ' ' + debVille + '</p>' +
                 '</div>' +
               '</div>' +
             '</div>' +
-
-          '</div>' +
-        '</div>';
+          '</div></div>';
     }
 
-    /* Boutons impression (cachés à l'impression) */
+    /* Boutons impression */
     var btns = silent ? '' :
         '<div class="no-print" style="position:fixed;bottom:24px;right:24px;display:flex;gap:10px;z-index:9999;">' +
-        '<button onclick="window.print()" style="padding:13px 26px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.22);">🖨️ Imprimer / Enregistrer PDF</button>' +
-        '<button onclick="window.close()" style="padding:13px 18px;background:#eee;color:#333;border:none;border-radius:10px;font-size:13px;cursor:pointer;">✕ Fermer</button>' +
+        '<button onclick="window.print()" style="padding:13px 26px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.22);">Imprimer / Enregistrer PDF</button>' +
         '</div>';
 
-    return '<!DOCTYPE html><html lang="fr"><head>' +
-    '<meta charset="UTF-8">' +
-    '<title>' + title + ' ' + (f.numero || '') + '</title>' +
-    '<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">' +
-    '<style>' +
-    /* Reset */
-    '*{margin:0;padding:0;box-sizing:border-box;}' +
-    'html,body{background:#fff;color:#111;font-family:\'Outfit\',Arial,sans-serif;font-size:13px;}' +
+    var css = '' +
+        '*{margin:0;padding:0;box-sizing:border-box;}' +
+        'html,body{background:#fff;color:#111;font-family:\'Outfit\',Arial,sans-serif;font-size:13px;}' +
+        '.p1{width:210mm;min-height:297mm;padding:18mm 15mm;background:#fff;}' +
+        '.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10mm;padding-bottom:5mm;border-bottom:3px solid ' + color + ';}' +
+        '.logo h1{font-size:20px;font-weight:700;color:' + color + ';}' +
+        '.logo p{font-size:10px;color:#666;margin-top:2px;}' +
+        '.badge-type{font-size:28px;font-weight:700;color:' + color + ';letter-spacing:2px;text-align:right;}' +
+        '.doc-meta{font-size:11px;color:#666;text-align:right;margin-top:3px;line-height:1.6;}' +
+        '.addr-row{display:flex;gap:10mm;margin:7mm 0;}' +
+        '.addr-from{flex:1;font-size:10px;color:#777;line-height:1.6;padding:3mm;}' +
+        '.addr-to{flex:1;min-height:35mm;padding:3mm 4mm;border:1px solid #ddd;border-radius:3px;}' +
+        '.addr-lbl{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin-bottom:3px;}' +
+        'table.lines{width:100%;border-collapse:collapse;margin:4mm 0;}' +
+        'table.lines th{background:' + color + ';color:#fff;padding:6px 8px;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;}' +
+        'table.lines th:not(:first-child){text-align:right;}' +
+        'table.lines td:not(:first-child){text-align:right;}' +
+        '.totals{display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:3mm 0 5mm;}' +
+        '.tot{display:flex;gap:20mm;font-size:12px;}' +
+        '.tot span:first-child{color:#666;min-width:80px;text-align:right;}' +
+        '.tot.ttc{font-weight:700;font-size:14px;border-top:2px solid #eee;padding-top:4px;margin-top:3px;}' +
+        '.cond{background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:8px 12px;font-size:11px;color:#0369a1;margin-bottom:4mm;}' +
+        '.notes-box{background:#fafafa;border-radius:5px;padding:8px 12px;font-size:11px;color:#555;margin-bottom:4mm;}' +
+        '.footer-doc{text-align:center;font-size:9px;color:#bbb;margin-top:auto;border-top:1px solid #f0f0f0;padding-top:4mm;}' +
+        '.page-sep{width:100%;height:6px;background:repeating-linear-gradient(90deg,#aaa 0,#aaa 6px,transparent 6px,transparent 12px);margin:8mm 0;}' +
+        '.bv-page{width:210mm;height:105mm;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;background:#fff;display:flex;flex-direction:column;overflow:hidden;}' +
+        '.bv-cut{display:flex;align-items:center;height:5mm;padding:0 2mm;gap:2mm;color:#aaa;}' +
+        '.bv-cut-line{flex:1;border-top:1px dashed #bbb;}' +
+        '.bv-scissors{font-size:9pt;color:#aaa;transform:rotate(90deg);display:inline-block;}' +
+        '.bv-body{display:flex;flex:1;height:100mm;overflow:hidden;}' +
+        '.bv-receipt{width:62mm;flex-shrink:0;padding:2mm 2mm 2mm 5mm;display:flex;flex-direction:column;overflow:hidden;}' +
+        '.bv-sep{width:5mm;display:flex;flex-direction:column;align-items:center;padding:2mm 0;}' +
+        '.bv-sep-line{flex:1;border-left:1px dashed #bbb;}' +
+        '.bv-payment{flex:1;padding:2mm 5mm 2mm 2mm;display:flex;flex-direction:column;overflow:hidden;}' +
+        '.bv-section-title{font-size:11pt;font-weight:700;margin-bottom:2mm;line-height:1;}' +
+        '.bv-lbl{font-size:6pt;font-weight:700;color:#000;margin-top:1.5mm;margin-bottom:.5mm;line-height:1;}' +
+        '.bv-val{font-size:8pt;line-height:1.3;}' +
+        '.bv-val-sm{font-size:7pt;line-height:1.3;}' +
+        '.bv-val-bold{font-size:10pt;font-weight:700;}' +
+        '.bv-amount{font-size:10pt;font-weight:700;}' +
+        '.bv-receipt-bot{display:flex;justify-content:space-between;margin-top:auto;padding-top:2mm;}' +
+        '.bv-accept-box{width:40mm;height:9mm;border:.75pt solid #000;border-radius:1mm;margin-top:1mm;}' +
+        '.bv-pay-top{display:flex;gap:4mm;flex:1;}' +
+        '.bv-qr-col{width:51mm;flex-shrink:0;}' +
+        '.bv-info-col{flex:1;overflow:hidden;}' +
+        '@media print{' +
+        '.no-print{display:none!important;}' +
+        '.page-sep{display:none!important;}' +
+        'html,body{margin:0;padding:0;background:#fff;}' +
+        '.p1{padding:12mm 12mm;width:100%;}' +
+        '.bv-page{page-break-before:always;break-before:page;margin:0;}' +
+        '@page{size:A4 portrait;margin:0;}' +
+        '}';
 
-    /* PAGE 1 */
-    '.p1{width:210mm;min-height:297mm;padding:18mm 15mm;background:#fff;}' +
-    '.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10mm;padding-bottom:5mm;border-bottom:3px solid ' + color + ';}' +
-    '.logo h1{font-size:20px;font-weight:700;color:' + color + ';}' +
-    '.logo p{font-size:10px;color:#666;margin-top:2px;}' +
-    '.badge-type{font-size:28px;font-weight:700;color:' + color + ';letter-spacing:2px;text-align:right;}' +
-    '.doc-meta{font-size:11px;color:#666;text-align:right;margin-top:3px;line-height:1.6;}' +
-    '.addr-row{display:flex;gap:10mm;margin:7mm 0;}' +
-    '.addr-from{flex:1;font-size:10px;color:#777;line-height:1.6;padding:3mm;}' +
-    '.addr-to{flex:1;min-height:35mm;padding:3mm 4mm;border:1px solid #ddd;border-radius:3px;}' +
-    '.addr-lbl{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#aaa;margin-bottom:3px;}' +
-    'table.lines{width:100%;border-collapse:collapse;margin:4mm 0;}' +
-    'table.lines th{background:' + color + ';color:#fff;padding:6px 8px;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;}' +
-    'table.lines th:not(:first-child){text-align:right;}' +
-    'table.lines td:not(:first-child){text-align:right;}' +
-    '.totals{display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:3mm 0 5mm;}' +
-    '.tot{display:flex;gap:20mm;font-size:12px;}' +
-    '.tot span:first-child{color:#666;min-width:80px;text-align:right;}' +
-    '.tot.ttc{font-weight:700;font-size:14px;border-top:2px solid #eee;padding-top:4px;margin-top:3px;}' +
-    '.cond{background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:8px 12px;font-size:11px;color:#0369a1;margin-bottom:4mm;}' +
-    '.notes-box{background:#fafafa;border-radius:5px;padding:8px 12px;font-size:11px;color:#555;margin-bottom:4mm;}' +
-    '.footer-doc{text-align:center;font-size:9px;color:#bbb;margin-top:auto;border-top:1px solid #f0f0f0;padding-top:4mm;}' +
-
-    /* PAGE 2 : QR-BILL norme SIX 2.2 — 210mm × 105mm */
-    '.bv-page{width:210mm;height:105mm;page-break-before:always;break-before:page;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;background:#fff;display:flex;flex-direction:column;overflow:hidden;}' +
-    '.bv-cut{display:flex;align-items:center;height:5mm;padding:0 2mm;gap:2mm;color:#aaa;}' +
-    '.bv-cut-line{flex:1;border-top:1px dashed #bbb;}' +
-    '.bv-scissors{font-size:9pt;color:#aaa;transform:rotate(90deg);display:inline-block;}' +
-    '.bv-body{display:flex;flex:1;height:100mm;overflow:hidden;}' +
-    '.bv-receipt{width:62mm;flex-shrink:0;padding:2mm 2mm 2mm 5mm;display:flex;flex-direction:column;overflow:hidden;}' +
-    '.bv-sep{width:5mm;display:flex;flex-direction:column;align-items:center;padding:2mm 0;}' +
-    '.bv-sep-line{flex:1;border-left:1px dashed #bbb;}' +
-    '.bv-payment{flex:1;padding:2mm 5mm 2mm 2mm;display:flex;flex-direction:column;overflow:hidden;}' +
-    '.bv-section-title{font-size:11pt;font-weight:700;margin-bottom:2mm;line-height:1;}' +
-    '.bv-lbl{font-size:6pt;font-weight:700;color:#000;margin-top:1.5mm;margin-bottom:.5mm;line-height:1;}' +
-    '.bv-val{font-size:8pt;line-height:1.3;}' +
-    '.bv-val-sm{font-size:7pt;line-height:1.3;}' +
-    '.bv-val-bold{font-size:10pt;font-weight:700;}' +
-    '.bv-amount{font-size:10pt;font-weight:700;}' +
-    '.bv-receipt-bot{display:flex;justify-content:space-between;margin-top:auto;padding-top:2mm;}' +
-    '.bv-accept-box{width:40mm;height:9mm;border:.75pt solid #000;border-radius:1mm;margin-top:1mm;}' +
-    '.bv-pay-top{display:flex;gap:4mm;flex:1;}' +
-    '.bv-qr-col{width:51mm;flex-shrink:0;}' +
-    '.bv-info-col{flex:1;overflow:hidden;}' +
-
-    /* IMPRESSION */
-    '@media print{' +
-    '.no-print{display:none!important;}' +
-    'html,body{margin:0;padding:0;background:#fff;}' +
-    '.p1{padding:12mm 12mm;width:100%;}' +
-    '.bv-page{page-break-before:always;break-before:page;margin:0;}' +
-    '@page{size:A4 portrait;margin:0;}' +
-    '}' +
-    '</style></head><body>' +
-
-    /* ══ PAGE 1 ══ */
-    '<div class="p1">' +
-      '<div class="hdr">' +
-        '<div class="logo">' +
-          '<h1>&#129529; ' + NOM_BRIMOT + '</h1>' +
-          '<p>' + RUE_BR + ' · ' + NPA_BR + ' ' + VILLE_BR + '</p>' +
-          '<p>' + MAIL_BR + ' · ' + TEL_BR + '</p>' +
-        '</div>' +
-        '<div>' +
-          '<div class="badge-type">' + title + '</div>' +
-          '<div class="doc-meta">' +
-            'N° ' + (f.numero || '—') + '<br>' +
-            'Date : ' + fmtD(f.date_facture) +
-            (!isDevis && f.echeance ? '<br>Échéance : <strong style="color:#e8311a">' + fmtD(f.echeance) + '</strong>' : '') +
+    var html = '<!DOCTYPE html><html lang="fr"><head>' +
+        '<meta charset="UTF-8">' +
+        '<title>' + title + ' ' + (f.numero || '') + '</title>' +
+        '<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">' +
+        '<style>' + css + '</style></head><body>' +
+        '<div class="p1">' +
+          '<div class="hdr">' +
+            '<div class="logo">' +
+              '<h1>Brimot Nettoyage</h1>' +
+              '<p>' + RUE_BR + ' - ' + NPA_BR + ' ' + VILLE_BR + '</p>' +
+              '<p>' + MAIL_BR + ' - ' + TEL_BR + '</p>' +
+            '</div>' +
+            '<div>' +
+              '<div class="badge-type">' + title + '</div>' +
+              '<div class="doc-meta">' +
+                'N° ' + (f.numero || '-') + '<br>' +
+                'Date : ' + fmtD(f.date_facture) +
+                (!isDevis && f.echeance ? '<br>Echeance : <strong style="color:#e8311a">' + fmtD(f.echeance) + '</strong>' : '') +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="addr-row">' +
+            '<div class="addr-from">' +
+              '<div class="addr-lbl">Expediteur</div>' +
+              NOM_BRIMOT + '<br>' + RUE_BR + '<br>' + NPA_BR + ' ' + VILLE_BR + '<br>' + MAIL_BR +
+            '</div>' +
+            '<div class="addr-to">' +
+              '<div class="addr-lbl">Destinataire</div>' +
+              addrClientHtml +
+            '</div>' +
+          '</div>' +
+          (f.objet ? '<div style="margin-bottom:5mm;"><strong style="font-size:14px;">' + f.objet + '</strong></div>' : '') +
+          '<table class="lines">' +
+            '<thead><tr>' +
+              '<th>Designation</th>' +
+              '<th style="width:55px;">Qte</th>' +
+              '<th style="width:100px;">Prix unit. HT</th>' +
+              '<th style="width:100px;">Total HT</th>' +
+            '</tr></thead>' +
+            '<tbody>' + lignesHtml + '</tbody>' +
+          '</table>' +
+          '<div class="totals">' +
+            '<div class="tot"><span>Sous-total HT</span><span>' + Number(f.montant_ht || 0).toFixed(2) + ' CHF</span></div>' +
+            '<div class="tot"><span>TVA ' + (f.tva_pct || 0) + '%</span><span>' + Number(f.montant_tva || 0).toFixed(2) + ' CHF</span></div>' +
+            '<div class="tot ttc"><span>TOTAL TTC</span><span>' + Number(f.montant_ttc || 0).toFixed(2) + ' CHF</span></div>' +
+          '</div>' +
+          (f.conditions ? '<div class="cond">Conditions : <strong>' + f.conditions + '</strong> - IBAN : ' + ibanClean + '</div>' : '') +
+          (f.notes ? '<div class="notes-box">' + f.notes + '</div>' : '') +
+          '<div class="footer-doc">' +
+            NOM_BRIMOT + ' - ' + RUE_BR + ', ' + NPA_BR + ' ' + VILLE_BR + ' - ' + MAIL_BR + '<br>' +
+            ibanClean + (c.num_tva ? ' - TVA : ' + c.num_tva : '') +
           '</div>' +
         '</div>' +
-      '</div>' +
+        ((!isDevis && qrDataUrl) ? '<div class="page-sep no-print"></div>' : '') +
+        bvHtml +
+        btns +
+        '</body></html>';
 
-      '<div class="addr-row">' +
-        '<div class="addr-from">' +
-          '<div class="addr-lbl">Expéditeur</div>' +
-          NOM_BRIMOT + '<br>' + RUE_BR + '<br>' + NPA_BR + ' ' + VILLE_BR + '<br>' + MAIL_BR +
-        '</div>' +
-        '<div class="addr-to">' +
-          '<div class="addr-lbl">Destinataire</div>' +
-          addrClientHtml +
-        '</div>' +
-      '</div>' +
-
-      (f.objet ? '<div style="margin-bottom:5mm;"><strong style="font-size:14px;">' + f.objet + '</strong></div>' : '') +
-
-      '<table class="lines">' +
-        '<thead><tr>' +
-          '<th>Désignation</th>' +
-          '<th style="width:55px;">Qté</th>' +
-          '<th style="width:100px;">Prix unit. HT</th>' +
-          '<th style="width:100px;">Total HT</th>' +
-        '</tr></thead>' +
-        '<tbody>' + lignesHtml + '</tbody>' +
-      '</table>' +
-
-      '<div class="totals">' +
-        '<div class="tot"><span>Sous-total HT</span><span>' + Number(f.montant_ht || 0).toFixed(2) + ' CHF</span></div>' +
-        '<div class="tot"><span>TVA ' + (f.tva_pct || 0) + '%</span><span>' + Number(f.montant_tva || 0).toFixed(2) + ' CHF</span></div>' +
-        '<div class="tot ttc"><span>TOTAL TTC</span><span>' + Number(f.montant_ttc || 0).toFixed(2) + ' CHF</span></div>' +
-      '</div>' +
-
-      (f.conditions ? '<div class="cond">&#128179; Conditions : <strong>' + f.conditions + '</strong> &nbsp;·&nbsp; IBAN : ' + ibanClean + '</div>' : '') +
-      (f.notes ? '<div class="notes-box">&#128221; ' + f.notes + '</div>' : '') +
-
-      '<div class="footer-doc">' +
-        NOM_BRIMOT + ' · ' + RUE_BR + ', ' + NPA_BR + ' ' + VILLE_BR + ' · ' + MAIL_BR + '<br>' +
-        ibanClean + (c.num_tva ? ' · N° TVA : ' + c.num_tva : '') +
-        ' · Document généré le ' + new Date().toLocaleString('fr-CH', { timeZone: 'Europe/Zurich' }) +
-      '</div>' +
-    '</div>' +
-
-    /* ══ PAGE 2 QR-BILL ══ */
-    bvHtml +
-
-    btns +
-    '</body></html>';
+    return html;
 }
 
-/* ── Génération PDF base64 via iframe (pour pièce jointe) ── */
+/* ══════════════════════════════════════════════════════════
+   GENERATION PDF BASE64 via jsPDF (piece jointe email)
+   ══════════════════════════════════════════════════════════ */
 async function buildPDFBase64(f, ls) {
-    const qrDataUrl = await genQRDataUrl(f);
-    const html = buildInvoiceHTML(f, ls, qrDataUrl, true);
+    var JsPDF = null;
+    if (window.jspdf && window.jspdf.jsPDF)       JsPDF = window.jspdf.jsPDF;
+    else if (window.jsPDF)                          JsPDF = window.jsPDF;
+    else if (window.jspdf && window.jspdf.default)  JsPDF = window.jspdf.default;
 
-    return new Promise(function(resolve) {
-        var iframe = document.createElement('iframe');
-        iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1400px;border:none;opacity:0;pointer-events:none;';
-        document.body.appendChild(iframe);
+    if (!JsPDF) {
+        console.warn('jsPDF non disponible — envoi sans piece jointe');
+        return null;
+    }
 
-        var done = false;
-        var timer = setTimeout(function() {
-            if (!done) { done = true; document.body.removeChild(iframe); resolve(null); }
-        }, 20000);
+    var c          = f.brimot_clients || {};
+    var isDevis    = f.type === 'devis';
+    var color      = isDevis ? [245,158,11] : [14,165,233];
+    var ibanClean  = IBAN_BRIMOT.replace(/\s/g,'');
+    var montantCHF = Number(f.montant_ttc||0).toFixed(2);
+    function fmtD(d) {
+        return d ? new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Europe/Zurich'}) : '-';
+    }
 
-        iframe.onload = async function() {
-            if (done) return;
-            try {
-                await new Promise(r => setTimeout(r, 800)); // laisser les fonts charger
-                var iDoc = iframe.contentDocument;
-                var page1El = iDoc.querySelector('.p1');
-                var page2El = iDoc.querySelector('.bv-page');
+    try {
+        var pdf = new JsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+        var W = 210, ml = 15, mr = 195;
 
-                var jsPDFLib = window.jspdf;
-                if (!jsPDFLib) throw new Error('jsPDF non chargé');
-                var pdf = new jsPDFLib.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        /* En-tete */
+        pdf.setDrawColor(color[0],color[1],color[2]); pdf.setLineWidth(0.8);
+        pdf.line(ml, 30, mr, 30);
+        pdf.setFontSize(18); pdf.setFont('helvetica','bold'); pdf.setTextColor(color[0],color[1],color[2]);
+        pdf.text('Brimot Nettoyage', ml, 20);
+        pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.setTextColor(100,100,100);
+        pdf.text(RUE_BR + ' - ' + NPA_BR + ' ' + VILLE_BR, ml, 25);
+        pdf.text(MAIL_BR + ' - ' + TEL_BR, ml, 28.5);
 
-                // Page 1
-                var c1 = await html2canvas(page1El, {
-                    scale: 2, useCORS: true, allowTaint: false,
-                    backgroundColor: '#ffffff',
-                    logging: false
-                });
-                pdf.addImage(c1.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, 297);
+        pdf.setFontSize(22); pdf.setFont('helvetica','bold'); pdf.setTextColor(color[0],color[1],color[2]);
+        pdf.text(isDevis ? 'DEVIS' : 'FACTURE', mr, 20, {align:'right'});
+        pdf.setFontSize(10); pdf.setFont('helvetica','normal'); pdf.setTextColor(60,60,60);
+        pdf.text('No ' + (f.numero||'-'), mr, 25, {align:'right'});
+        pdf.text('Date : ' + fmtD(f.date_facture), mr, 29, {align:'right'});
+        if (!isDevis && f.echeance) {
+            pdf.setTextColor(232,49,26);
+            pdf.text('Echeance : ' + fmtD(f.echeance), mr, 33, {align:'right'});
+        }
 
-                // Page 2 (QR-Bill)
-                if (page2El) {
-                    pdf.addPage();
-                    var c2 = await html2canvas(page2El, {
-                        scale: 2, useCORS: true, allowTaint: false,
-                        backgroundColor: '#ffffff',
-                        logging: false,
-                        height: page2El.scrollHeight
-                    });
-                    var ratio = 210 / c2.width * c2.height / c2.width * 210;
-                    var h2 = (c2.height / c2.width) * 210;
-                    pdf.addImage(c2.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, h2);
-                }
+        var y = 38;
+        pdf.setFontSize(7); pdf.setFont('helvetica','bold'); pdf.setTextColor(170,170,170);
+        pdf.text('EXPEDITEUR', ml, y); pdf.text('DESTINATAIRE', 105, y); y += 3;
+        pdf.setFontSize(9); pdf.setFont('helvetica','normal'); pdf.setTextColor(80,80,80);
+        pdf.text(NOM_BRIMOT, ml, y); pdf.text(RUE_BR, ml, y+4); pdf.text(NPA_BR + ' ' + VILLE_BR, ml, y+8);
 
-                var b64 = pdf.output('datauristring').split(',')[1];
-                done = true;
-                clearTimeout(timer);
-                document.body.removeChild(iframe);
-                resolve(b64);
-            } catch(e) {
-                console.error('buildPDFBase64 error:', e);
-                done = true;
-                clearTimeout(timer);
-                document.body.removeChild(iframe);
-                resolve(null);
+        pdf.setDrawColor(200,200,200); pdf.setLineWidth(0.3);
+        pdf.rect(103, y-3, 92, 28);
+        var cy = y;
+        if (c.civilite) { pdf.setFontSize(8); pdf.setTextColor(14,165,233); pdf.text(c.civilite, 106, cy); cy+=4; }
+        if (c.nom)      { pdf.setFontSize(10); pdf.setFont('helvetica','bold'); pdf.setTextColor(20,20,20); pdf.text(c.nom, 106, cy); cy+=5; }
+        pdf.setFontSize(9); pdf.setFont('helvetica','normal'); pdf.setTextColor(60,60,60);
+        if (c.contact) { pdf.text(c.contact, 106, cy); cy+=4; }
+        if (c.adresse) { pdf.text(c.adresse, 106, cy); cy+=4; }
+        if (c.npa||c.ville) { pdf.text([c.npa,c.ville].filter(Boolean).join(' '), 106, cy); }
+        y += 32;
+
+        if (f.objet) {
+            pdf.setFontSize(11); pdf.setFont('helvetica','bold'); pdf.setTextColor(20,20,20);
+            pdf.text(f.objet, ml, y); y+=7;
+        }
+
+        /* Tableau lignes */
+        var colW = [95, 20, 35, 35];
+        var cols = [ml, ml+colW[0], ml+colW[0]+colW[1], ml+colW[0]+colW[1]+colW[2]];
+        pdf.setFillColor(color[0],color[1],color[2]); pdf.setDrawColor(color[0],color[1],color[2]);
+        pdf.rect(ml, y, mr-ml, 7, 'F');
+        pdf.setFontSize(8); pdf.setFont('helvetica','bold'); pdf.setTextColor(255,255,255);
+        pdf.text('Designation', cols[0]+2, y+4.5);
+        pdf.text('Qte', cols[1]+colW[1]-2, y+4.5, {align:'right'});
+        pdf.text('Prix HT', cols[2]+colW[2]-2, y+4.5, {align:'right'});
+        pdf.text('Total HT', cols[3]+colW[3]-2, y+4.5, {align:'right'});
+        y += 7;
+        pdf.setFont('helvetica','normal'); pdf.setTextColor(30,30,30);
+        (ls||[]).forEach(function(l, i) {
+            var tot = Number(l.total_ht != null ? l.total_ht : (l.qte||1)*(l.prix_ht||0));
+            if (i%2===0) { pdf.setFillColor(249,250,251); pdf.rect(ml, y, mr-ml, 7, 'F'); }
+            pdf.setFontSize(9);
+            var desig = pdf.splitTextToSize(l.designation||'-', colW[0]-4);
+            var rowH = Math.max(7, desig.length * 4.5);
+            if (y + rowH > 270) { pdf.addPage(); y = 20; }
+            pdf.text(desig, cols[0]+2, y+4.5);
+            pdf.text(Number(l.qte||1).toFixed(2), cols[1]+colW[1]-2, y+4.5, {align:'right'});
+            pdf.text(Number(l.prix_ht||0).toFixed(2)+' CHF', cols[2]+colW[2]-2, y+4.5, {align:'right'});
+            pdf.text(tot.toFixed(2)+' CHF', cols[3]+colW[3]-2, y+4.5, {align:'right'});
+            y += rowH;
+        });
+        if (!ls||!ls.length) {
+            pdf.setTextColor(150,150,150); pdf.setFontSize(9);
+            pdf.text('Aucune ligne', W/2, y+4.5, {align:'center'}); y+=7;
+        }
+
+        /* Totaux */
+        pdf.setDrawColor(200,200,200); pdf.setLineWidth(0.3); pdf.line(ml, y+1, mr, y+1); y+=5;
+        var txR = mr, txL = 145;
+        pdf.setFontSize(9); pdf.setTextColor(100,100,100);
+        pdf.text('Sous-total HT', txL, y); pdf.text(Number(f.montant_ht||0).toFixed(2)+' CHF', txR, y, {align:'right'}); y+=5;
+        pdf.text('TVA '+(f.tva_pct||0)+'%', txL, y); pdf.text(Number(f.montant_tva||0).toFixed(2)+' CHF', txR, y, {align:'right'}); y+=5;
+        pdf.setDrawColor(color[0],color[1],color[2]); pdf.setLineWidth(0.5); pdf.line(txL, y, txR, y); y+=4;
+        pdf.setFontSize(12); pdf.setFont('helvetica','bold'); pdf.setTextColor(20,20,20);
+        pdf.text('TOTAL TTC', txL, y); pdf.text(Number(f.montant_ttc||0).toFixed(2)+' CHF', txR, y, {align:'right'}); y+=8;
+
+        if (f.conditions) {
+            pdf.setFontSize(9); pdf.setFont('helvetica','normal');
+            pdf.setFillColor(240,249,255); pdf.setDrawColor(186,230,253);
+            pdf.rect(ml, y, mr-ml, 8, 'FD'); pdf.setTextColor(3,105,161);
+            pdf.text('Conditions : ' + f.conditions + '  -  IBAN : ' + ibanClean, ml+3, y+5); y+=11;
+        }
+        if (f.notes) {
+            pdf.setFontSize(9); pdf.setFont('helvetica','italic'); pdf.setTextColor(80,80,80);
+            pdf.text('Note : ' + f.notes, ml, y); y+=6;
+        }
+        pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.setTextColor(180,180,180);
+        pdf.text(NOM_BRIMOT+' - '+RUE_BR+', '+NPA_BR+' '+VILLE_BR+' - '+MAIL_BR, W/2, 287, {align:'center'});
+        pdf.text(ibanClean, W/2, 291, {align:'center'});
+
+        /* Page 2 : QR-Bill */
+        if (!isDevis) {
+            pdf.addPage();
+            var qrDataUrl = await genQRDataUrl(f);
+            var bvY = 16;
+            pdf.setDrawColor(180,180,180); pdf.setLineWidth(0.3);
+            pdf.setLineDash([2,2]); pdf.line(0, 15, W, 15); pdf.setLineDash([]);
+
+            /* Recu (zone gauche 0-62mm) */
+            pdf.setFontSize(10); pdf.setFont('helvetica','bold'); pdf.setTextColor(0,0,0);
+            pdf.text('Recu', 5, bvY+6);
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold');
+            pdf.text('Compte / Payable a', 5, bvY+12);
+            pdf.setFontSize(7); pdf.setFont('helvetica','normal');
+            pdf.text(ibanClean, 5, bvY+16); pdf.text(NOM_BRIMOT, 5, bvY+20);
+            pdf.text(RUE_BR, 5, bvY+24); pdf.text(NPA_BR+' '+VILLE_BR, 5, bvY+28);
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Reference', 5, bvY+34);
+            pdf.setFontSize(7); pdf.setFont('helvetica','normal'); pdf.text(f.numero||'', 5, bvY+38);
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Paye par', 5, bvY+44);
+            pdf.setFontSize(7); pdf.setFont('helvetica','normal');
+            var debLines = [c.nom||'', c.adresse||'', (c.npa||'')+(c.ville?' '+c.ville:'')].filter(Boolean);
+            debLines.forEach(function(l,i) { pdf.text(l, 5, bvY+48+i*4); });
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold');
+            pdf.text('Montant', 5, bvY+70); pdf.text('Monnaie', 40, bvY+70);
+            pdf.setFontSize(9); pdf.setFont('helvetica','bold');
+            pdf.text(montantCHF, 5, bvY+76); pdf.text('CHF', 40, bvY+76);
+            pdf.setFontSize(5); pdf.setFont('helvetica','normal'); pdf.setTextColor(100,100,100);
+            pdf.text('Point de depot', 5, bvY+83);
+            pdf.setDrawColor(0,0,0); pdf.setLineWidth(0.5); pdf.rect(5, bvY+85, 42, 10);
+
+            /* Separateur vertical */
+            pdf.setDrawColor(160,160,160); pdf.setLineWidth(0.3);
+            pdf.setLineDash([2,2]); pdf.line(62, bvY, 62, bvY+95); pdf.setLineDash([]);
+
+            /* Section paiement (67-210mm) */
+            pdf.setFontSize(11); pdf.setFont('helvetica','bold'); pdf.setTextColor(0,0,0);
+            pdf.text('Section de paiement', 67, bvY+6);
+            if (qrDataUrl) {
+                pdf.addImage(qrDataUrl, 'PNG', 67, bvY+10, 46, 46);
+                pdf.setFillColor(255,255,255); pdf.rect(67+19.5, bvY+10+19.5, 7, 7, 'F');
+                pdf.setFillColor(220,0,0);
+                pdf.rect(67+19.5+2.8, bvY+10+19.5+1, 1.4, 5, 'F');
+                pdf.rect(67+19.5+1, bvY+10+19.5+2.8, 5, 1.4, 'F');
             }
-        };
-        iframe.srcdoc = html;
-    });
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.setTextColor(0,0,0);
+            pdf.text('Monnaie', 67, bvY+60); pdf.text('Montant', 82, bvY+60);
+            pdf.setFontSize(10); pdf.setFont('helvetica','bold');
+            pdf.text('CHF', 67, bvY+66); pdf.text(montantCHF, 82, bvY+66);
+
+            var ix = 118;
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold');
+            pdf.text('Compte / Payable a', ix, bvY+12);
+            pdf.setFontSize(8); pdf.setFont('helvetica','normal');
+            pdf.text(ibanClean, ix, bvY+17); pdf.text(NOM_BRIMOT, ix, bvY+22);
+            pdf.text(RUE_BR, ix, bvY+27); pdf.text(NPA_BR+' '+VILLE_BR, ix, bvY+32);
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Reference', ix, bvY+40);
+            pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.text(f.numero||'', ix, bvY+45);
+            pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Paye par', ix, bvY+55);
+            pdf.setFontSize(8); pdf.setFont('helvetica','normal');
+            debLines.forEach(function(l,i) { pdf.text(l, ix, bvY+60+i*5); });
+        }
+
+        return pdf.output('datauristring').split(',')[1];
+    } catch(err) {
+        console.error('buildPDFBase64 error:', err);
+        return null;
+    }
 }
+
 // ══════════════════════════════════════════════════════════
 //  CATALOGUE PRODUITS (modal sélection depuis ligne facture)
 // ══════════════════════════════════════════════════════════
