@@ -75,13 +75,14 @@ if ($hasAttach) {
     }
 }
 
+$viewUrlText = '';
 $viewUrlHtml = '';
 if ($viewUrl !== '') {
     $safeUrl = htmlspecialchars($viewUrl, ENT_QUOTES, 'UTF-8');
+    $viewUrlText = "\n\nVoir la facture en ligne :\n" . $viewUrl . "\n";
     $viewUrlHtml = '<div style="margin:18px 0;text-align:center;">'
         . '<a href="' . $safeUrl . '" style="display:inline-block;background:#0ea5e9;color:#fff;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:700;">Voir la facture en ligne</a>'
-        . '</div>'
-        . '<p style="font-size:11px;color:#999;text-align:center;">Ou copiez ce lien : <a href="' . $safeUrl . '" style="color:#0ea5e9;word-break:break-all;">' . $safeUrl . '</a></p>';
+        . '</div>';
 }
 
 $htmlEmail = <<<HTML
@@ -137,7 +138,7 @@ if ($hasAttach) {
     $mailBody .= "--{$innerBoundary}\r\n";
     $mailBody .= "Content-Type: text/plain; charset=UTF-8\r\n";
     $mailBody .= "Content-Transfer-Encoding: quoted-printable\r\n\r\n";
-    $mailBody .= quoted_printable_encode($body) . "\r\n\r\n";
+    $mailBody .= quoted_printable_encode($body . $viewUrlText) . "\r\n\r\n";
 
     // HTML corps
     $mailBody .= "--{$innerBoundary}\r\n";
@@ -164,7 +165,7 @@ if ($hasAttach) {
     $mailBody  = "--{$boundary}\r\n";
     $mailBody .= "Content-Type: text/plain; charset=UTF-8\r\n";
     $mailBody .= "Content-Transfer-Encoding: quoted-printable\r\n\r\n";
-    $mailBody .= quoted_printable_encode($body) . "\r\n\r\n";
+    $mailBody .= quoted_printable_encode($body . $viewUrlText) . "\r\n\r\n";
 
     $mailBody .= "--{$boundary}\r\n";
     $mailBody .= "Content-Type: text/html; charset=UTF-8\r\n";

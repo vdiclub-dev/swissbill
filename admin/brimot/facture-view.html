@@ -69,6 +69,7 @@
             padding-bottom: 18px; margin-bottom: 18px;
         }
         .inv-logo h1 { font-size: 22px; font-weight: 700; }
+        .inv-logo img { max-height: 52px; max-width: 240px; object-fit: contain; display: block; }
         .inv-logo p { font-size: 11px; color: #888; margin-top: 3px; line-height: 1.6; }
         .inv-badge { text-align: right; }
         .inv-badge .doctype { font-size: 32px; font-weight: 700; letter-spacing: 2px; }
@@ -182,7 +183,7 @@
     <h2>Facture introuvable</h2>
     <p id="errorMsg">Le lien est invalide ou a expire. Contactez Brimot Nettoyage pour obtenir un nouveau lien.</p>
     <p style="margin-top:16px;font-size:12px;color:#aaa;">
-        <a href="mailto:info@brimot.ch" style="color:#0ea5e9;">info@brimot.ch</a> &bull; +41 79 000 00 00
+        <a href="mailto:info@brimot.ch" style="color:#0ea5e9;">info@brimot.ch</a>
     </p>
 </div>
 
@@ -206,8 +207,9 @@ var NOM_BRIMOT  = 'Brimot Nettoyage';
 var RUE_BR      = 'Impasse des Griottes 3';
 var NPA_BR      = '1462';
 var VILLE_BR    = 'Yvonand';
-var TEL_BR      = '+41 79 000 00 00';
+var TEL_BR      = '+41 79 646 74 42';
 var MAIL_BR     = 'info@brimot.ch';
+var LOGO_BR_URL = 'https://drive.google.com/thumbnail?id=1nze-k7va7oY5OQFZeUXMMica9GQYnNsq&sz=w1000';
 
 function splitStreetAndBuilding(address) {
     var value = String(address || '').trim();
@@ -233,6 +235,26 @@ function fmtDate(d) {
     });
 }
 function fmt2(v) { return Number(v || 0).toFixed(2); }
+var LINE_INTERVENTION_TAG_RE = /\s*\[DI:(\d{4}-\d{2}-\d{2})\]\s*$/;
+function splitDesignationAndIntervention(rawDesignation) {
+    var raw = String(rawDesignation || '');
+    var m = raw.match(LINE_INTERVENTION_TAG_RE);
+    if (!m) return { designation: raw, date_intervention: '' };
+    return {
+        designation: raw.slice(0, m.index).replace(/\s+$/, ''),
+        date_intervention: m[1]
+    };
+}
+function fmtDateIntervention(d) {
+    if (!d) return '';
+    var s = String(d);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return fmtDate(s);
+    }
+    var parsed = new Date(s);
+    if (isNaN(parsed.getTime())) return '';
+    return fmtDate(parsed.toISOString().slice(0, 10));
+}
 
 /* ─── Lire les donnees depuis le hash ─── */
 function getDataFromHash() {
@@ -262,8 +284,12 @@ function renderInvoice(f, lignes) {
     if (lignes && lignes.length) {
         lignes.forEach(function(l, i) {
             var tot = Number(l.total_ht != null ? l.total_ht : (l.qte || 1) * (l.prix_ht || 0));
+            var lineParts = splitDesignationAndIntervention(l.designation || '');
+            var dateLbl = fmtDateIntervention(l.date_intervention || lineParts.date_intervention);
+            var desig = esc(lineParts.designation || '—');
+            if (dateLbl) desig = desig + '<br><span style="font-size:11px;color:#6b7280;">Intervention: ' + esc(dateLbl) + '</span>';
             rows += '<tr style="background:' + (i % 2 === 0 ? '#f9fafb' : '#fff') + '">' +
-                '<td>' + esc(l.designation || '—') + '</td>' +
+                '<td>' + desig + '</td>' +
                 '<td>' + Number(l.qte || 1).toFixed(2) + '</td>' +
                 '<td>' + Number(l.prix_ht || 0).toFixed(2) + ' CHF</td>' +
                 '<td style="font-weight:600;">' + tot.toFixed(2) + ' CHF</td>' +
@@ -289,14 +315,17 @@ function renderInvoice(f, lignes) {
     var echeanceHtml = (!isDevis && f.echeance)
         ? '<br>Echeance : <strong style="color:#e8311a;">' + fmtDate(f.echeance) + '</strong>'
         : '';
+    var brandHeaderHtml = LOGO_BR_URL
+        ? '<img src="' + esc(LOGO_BR_URL) + '" alt="' + esc(NOM_BRIMOT) + '">'
+        : '<h1 style="color:' + color + ';">' + esc(NOM_BRIMOT) + '</h1>';
 
     var html =
         // En-tete
         '<div class="inv-hdr" style="border-bottom:3px solid ' + color + ';">' +
           '<div class="inv-logo">' +
-            '<h1 style="color:' + color + ';">' + esc(NOM_BRIMOT) + '</h1>' +
+            brandHeaderHtml +
             '<p>' + esc(RUE_BR) + ' — ' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '<br>' +
-            esc(TEL_BR) + ' — ' + esc(MAIL_BR) + '</p>' +
+            esc(MAIL_BR) + '</p>' +
           '</div>' +
           '<div class="inv-badge">' +
             '<div class="doctype" style="color:' + color + ';">' + title + '</div>' +
@@ -339,7 +368,7 @@ function renderInvoice(f, lignes) {
         (f.notes ? '<div class="notes-box">' + esc(f.notes) + '</div>' : '') +
         '<div class="inv-footer">' +
           esc(NOM_BRIMOT) + ' &mdash; ' + esc(RUE_BR) + ', ' + esc(NPA_BR) + ' ' + esc(VILLE_BR) +
-          ' &mdash; ' + esc(TEL_BR) + ' &mdash; ' + esc(MAIL_BR) +
+          ' &mdash; ' + esc(MAIL_BR) +
           ' &mdash; IBAN : ' + IBAN_BRIMOT +
         '</div>';
 
@@ -381,7 +410,7 @@ async function renderQRBill(f, lignes) {
         var hasAddr = !!(debNom && debNpa && debVille);
         var qrLines = [
             'SPC',         // 1  Header
-            '0203',        // 2  Version (IG QR-bill v2.3)
+            '0200',        // 2  Version (compatible scanner bank apps)
             '1',           // 3  Coding UTF-8
             ibanClean,     // 4  IBAN
             'S',           // 5  Creditor AddrType S=structured
