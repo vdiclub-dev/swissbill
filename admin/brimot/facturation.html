@@ -526,17 +526,6 @@
     </div>
 </div>
 
-<!-- ══ OVERLAY PDF PLEIN ECRAN ══ -->
-<div id="pdfOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#525659;flex-direction:column;">
-    <div style="height:52px;background:#323639;display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;gap:10px;">
-        <span style="color:#fff;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;">Apercu — Facture / Devis</span>
-        <div style="display:flex;gap:10px;">
-            <button onclick="printPDFOverlay()" style="padding:8px 20px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Imprimer / Enregistrer PDF</button>
-            <button onclick="closePDFOverlay()" style="padding:8px 16px;background:#555;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">Fermer</button>
-        </div>
-    </div>
-    <iframe id="pdfFrame" style="flex:1;border:none;background:#fff;width:100%;" srcdoc=""></iframe>
-</div>
 
 <!-- ══ TOAST & LOADER ══ -->
 <div class="toast" id="toast"></div>
@@ -1327,47 +1316,28 @@ async function genQRDataUrl(f) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   APERCU PDF — overlay plein ecran (jamais bloque)
+   APERCU PDF — Blob + window.open() (meme principe que Colixo)
    ══════════════════════════════════════════════════════════ */
 async function previewPDF(id) {
-    showLoad();
+    showLoad('Preparation PDF...');
     const { f, ls } = await loadFactureData(id);
     if (!f) { hideLoad(); toast('error', 'Facture introuvable'); return null; }
     const qrDataUrl = await genQRDataUrl(f);
     hideLoad();
-    const html = buildInvoiceHTML(f, ls, qrDataUrl, false);
-    const frame   = document.getElementById('pdfFrame');
-    const overlay = document.getElementById('pdfOverlay');
-    if (!frame || !overlay) { toast('error', 'Overlay introuvable'); return null; }
-    frame.srcdoc = html;
-    overlay.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
+    const html = buildInvoiceHTML(f, ls, qrDataUrl);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(function() { URL.revokeObjectURL(url); }, 8000);
     return { f, ls, qrDataUrl };
 }
 window.previewPDF = previewPDF;
 
-function printPDFOverlay() {
-    const frame = document.getElementById('pdfFrame');
-    if (frame && frame.contentWindow) {
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
-    }
-}
-window.printPDFOverlay = printPDFOverlay;
-window.sendEmail = sendEmail;
-
-function closePDFOverlay() {
-    const overlay = document.getElementById('pdfOverlay');
-    if (overlay) overlay.style.display = 'none';
-    document.body.style.overflow = '';
-}
-window.closePDFOverlay = closePDFOverlay;
-window.sendEmailViaLWS = sendEmailViaLWS;
 
 /* ══════════════════════════════════════════════════════════
-   CONSTRUCTION HTML FACTURE (apercu iframe)
+   CONSTRUCTION HTML FACTURE — Blob autonome (comme Colixo)
    ══════════════════════════════════════════════════════════ */
-function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
+function buildInvoiceHTML(f, lignesData, qrDataUrl) {
     var c        = f.brimot_clients || {};
     var isDevis  = f.type === 'devis';
     var title    = isDevis ? 'DEVIS' : 'FACTURE';
@@ -1470,11 +1440,11 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
           '</div></div>';
     }
 
-    /* Boutons impression */
-    var btns = silent ? '' :
-        '<div class="no-print" style="position:fixed;bottom:24px;right:24px;display:flex;gap:10px;z-index:9999;">' +
-        '<button onclick="window.print()" style="padding:13px 26px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.22);">Imprimer / Enregistrer PDF</button>' +
-        '</div>';
+    /* Boutons impression — style Colixo */
+    var btns =
+        '<br>' +
+        '<button onclick="window.print()" style="background:#0ea5e9;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:8px;">Imprimer / Enregistrer PDF</button>' +
+        '<button onclick="window.close()" style="background:#f3f4f6;border:none;padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer;">Fermer</button>';
 
     var css = '' +
         '*{margin:0;padding:0;box-sizing:border-box;}' +
@@ -1523,7 +1493,6 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
         '.bv-info-col{flex:1;overflow:hidden;}' +
         '@media print{' +
         '.no-print{display:none!important;}' +
-        '.page-sep{display:none!important;}' +
         'html,body{margin:0;padding:0;background:#fff;}' +
         '.p1{padding:12mm 12mm;width:100%;}' +
         '.bv-page{page-break-before:always;break-before:page;margin:0;}' +
@@ -1583,9 +1552,9 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl, silent) {
             ibanClean + (c.num_tva ? ' - TVA : ' + c.num_tva : '') +
           '</div>' +
         '</div>' +
-        ((!isDevis && qrDataUrl) ? '<div class="page-sep no-print"></div>' : '') +
+        (!isDevis ? '<div style="page-break-before:always;"></div>' : '') +
         bvHtml +
-        btns +
+        '<div class="no-print" style="margin:20px 0 40px;">' + btns + '</div>' +
         '</body></html>';
 
     return html;
@@ -1877,9 +1846,11 @@ function openModalEmail(id) {
     $('modalEmailTitle').textContent = isDevis ? 'Envoyer le devis' : 'Envoyer la facture';
 
     // Lien vers la page web publique de la facture
+    // On inclut les donnees dans le hash pour que le client puisse voir sans authentification
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ f: f, ls: [] }))));
     const viewUrl = window.location.origin +
         window.location.pathname.replace('facturation.html', '') +
-        'facture-view.html?id=' + encodeURIComponent(id);
+        'facture-view.html#data=' + payload;
 
     $('emailSubject').value = isDevis
         ? 'Devis ' + f.numero + ' — Brimot Nettoyage'
@@ -1912,10 +1883,16 @@ function openModalEmail(id) {
 window.openModalEmail = openModalEmail;
 
 // ── Ouvrir la page web publique de la facture ──────────
-function openClientView(id) {
+async function openClientView(id) {
+    showLoad('Preparation...');
+    const { f, ls } = await loadFactureData(id);
+    hideLoad();
+    if (!f) { toast('error', 'Facture introuvable'); return; }
+    // Passer les donnees dans le hash pour eviter les problemes de RLS Supabase
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ f: f, ls: ls }))));
     const viewUrl = window.location.origin +
         window.location.pathname.replace('facturation.html', '') +
-        'facture-view.html?id=' + encodeURIComponent(id);
+        'facture-view.html#data=' + payload;
     window.open(viewUrl, '_blank');
 }
 window.openClientView = openClientView;
@@ -1947,15 +1924,18 @@ window.sendRappel = sendRappel;
 // adresse email enregistrée chez LWS.
 const SEND_MAIL_URL = 'send_mail.php'; // même dossier que facturation.html
 
-async function sendEmailViaLWS(to, subject, body, pdfBase64, filename, viewUrl) {
+async function sendEmailViaLWS(to, subject, body, fileBase64, filename, mimeType) {
     try {
         const payload = { to, subject, body };
-        if (pdfBase64) {
-            payload.pdf_base64 = pdfBase64;
-            payload.pdf_filename = filename || 'facture.pdf';
-        }
-        if (viewUrl) {
-            payload.view_url = viewUrl;
+        if (fileBase64) {
+            // Support PDF et HTML
+            if (mimeType === 'text/html') {
+                payload.html_base64 = fileBase64;
+                payload.html_filename = filename || 'facture.html';
+            } else {
+                payload.pdf_base64 = fileBase64;
+                payload.pdf_filename = filename || 'facture.pdf';
+            }
         }
         const resp = await fetch(SEND_MAIL_URL, {
             method: 'POST',
@@ -1969,8 +1949,7 @@ async function sendEmailViaLWS(to, subject, body, pdfBase64, filename, viewUrl) 
         console.error('send_mail.php error:', err);
         // Fallback mailto si fetch echoue (ex: en local sans PHP)
         const subj = encodeURIComponent(subject);
-        const linkNote = viewUrl ? '\n\nConsulter la facture en ligne : ' + viewUrl : '';
-        const bd   = encodeURIComponent(body + linkNote);
+        const bd   = encodeURIComponent(body);
         window.location.href = 'mailto:' + to + '?subject=' + subj + '&body=' + bd;
         return { ok: true, via: 'mailto-fallback' };
     }
@@ -1984,39 +1963,48 @@ async function sendEmail() {
     const body    = $('emailBody').value;
 
     showLoad();
-    toast('info', 'Generation du PDF en cours...');
+    toast('info', 'Preparation de l\'email...');
 
     // Charger les donnees de la facture
     const { f, ls } = await loadFactureData(id);
     if (!f) { hideLoad(); toast('error', 'Facture introuvable'); return; }
 
-    // Construire le lien vers la page web publique de la facture
-    const viewUrl = window.location.origin +
-        window.location.pathname.replace('facturation.html', '') +
-        'facture-view.html?id=' + encodeURIComponent(id);
+    const isDevis = f.type === 'devis';
+    const docName = (isDevis ? 'Devis' : 'Facture') + '_' + (f.numero || id);
 
-    // Generer le PDF base64 (avec les 2 pages)
+    // Generer le HTML de la facture (pièce jointe .html autonome — toujours possible)
+    const qrDataUrl = await genQRDataUrl(f);
+    const invoiceHtml = buildInvoiceHTML(f, ls, qrDataUrl);
+    const htmlB64 = btoa(unescape(encodeURIComponent(invoiceHtml)));
+
+    // Tenter de generer le PDF base64 via jsPDF (optionnel)
     let pdfBase64  = null;
-    let pdfFilename = (f.type === 'devis' ? 'Devis' : 'Facture') + '_' + (f.numero || id) + '.pdf';
+    let pdfFilename = docName + '.pdf';
     try {
         pdfBase64 = await buildPDFBase64(f, ls);
     } catch (e) {
-        console.error('PDF base64 error:', e);
+        console.warn('PDF base64 non disponible:', e);
     }
 
-    // Envoyer via LWS avec le PDF en piece jointe et le lien web
-    const result = await sendEmailViaLWS(to, subject, body, pdfBase64, pdfFilename, viewUrl);
+    // Envoyer via LWS
+    // Si PDF disponible : envoyer PDF. Sinon : envoyer HTML comme piece jointe
+    const result = await sendEmailViaLWS(
+        to, subject, body,
+        pdfBase64 || htmlB64,
+        pdfBase64 ? pdfFilename : docName + '.html',
+        pdfBase64 ? 'application/pdf' : 'text/html'
+    );
     hideLoad();
 
     if (result.ok) {
         if (result.via === 'lws') {
-            toast('success', '✅ Email envoyé avec le PDF en pièce jointe');
+            toast('success', pdfBase64 ? 'Email envoye avec PDF en piece jointe' : 'Email envoye avec facture HTML en piece jointe');
         } else {
-            toast('success', '✅ Client de messagerie ouvert (mode hors ligne)');
+            toast('success', 'Client de messagerie ouvert (mode hors ligne)');
         }
         closeModal('modalEmail');
     } else {
-        toast('error', '❌ ' + (result.error || 'Erreur envoi email'));
+        toast('error', result.error || 'Erreur envoi email');
     }
 }
 
