@@ -152,9 +152,9 @@
             width: 28px; height: 28px; background: #fff;
             display: flex; align-items: center; justify-content: center;
         }
-        .bv-cross-inner { position: relative; width: 24px; height: 24px; background: #000; }
-        .bv-cross-v { position: absolute; left: 9.66px; top: 4.22px; width: 4.68px; height: 15.56px; background: #fff; border-radius: 0; }
-        .bv-cross-h { position: absolute; top: 9.66px; left: 4.22px; width: 15.56px; height: 4.68px; background: #fff; border-radius: 0; }
+        .bv-cross-inner { position: relative; width: 16px; height: 16px; }
+        .bv-cross-v { position: absolute; left: 6px; top: 0; width: 5px; height: 16px; background: #e8311a; border-radius: 1px; }
+        .bv-cross-h { position: absolute; top: 6px; left: 0; width: 16px; height: 5px; background: #e8311a; border-radius: 1px; }
         .bv-cur-amt { display: flex; gap: 24px; margin-top: 10px; }
         .bv-info-col { flex: 1; }
 
@@ -208,17 +208,6 @@ var NPA_BR      = '1462';
 var VILLE_BR    = 'Yvonand';
 var TEL_BR      = '+41 79 000 00 00';
 var MAIL_BR     = 'info@brimot.ch';
-
-function splitStreetAndBuilding(address) {
-    var value = String(address || '').trim();
-    if (!value) return { street: '', building: '' };
-    var m = value.match(/^(.*?)(?:\s+)(\d[\dA-Za-z\-\/]*)$/);
-    if (!m) return { street: value.slice(0, 70), building: '' };
-    return {
-        street: m[1].trim().slice(0, 70),
-        building: m[2].trim().slice(0, 16)
-    };
-}
 
 function esc(s) {
     if (!s) return '';
@@ -349,22 +338,17 @@ function renderInvoice(f, lignes) {
 /* ─── Rendu QR-Bill ─── */
 async function renderQRBill(f, lignes) {
     var c = f.brimot_clients || {};
-    var creditorAddr = splitStreetAndBuilding(RUE_BR);
-    var debtorAddr = splitStreetAndBuilding(c.adresse || '');
     var ibanClean  = IBAN_BRIMOT.replace(/\s/g, '');
     var montantCHF = Number(f.montant_ttc || 0).toFixed(2);
     var debNom   = c.nom     || '';
-    var debRue   = debtorAddr.street || c.adresse || '';
-    var debNo    = debtorAddr.building || '';
+    var debRue   = c.adresse || '';
     var debNpa   = c.npa     || '';
     var debVille = c.ville   || '';
-    var debPays  = (c.pays || 'CH').slice(0, 2).toUpperCase();
     var msgLibre = ('Facture ' + (f.numero || '')).trim().slice(0, 140);
 
     // Référence QR-IBAN (27 chiffres, checksum Mod10 récursif)
     function buildQRRef(numero) {
-        var seed = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
-        var digits = /[1-9]/.test(seed) ? seed : (seed.slice(0, 25) + '1');
+        var digits = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
         var table = [0,9,4,6,8,2,7,1,3,5];
         var carry = 0;
         for (var i = 0; i < digits.length; i++) {
@@ -373,21 +357,21 @@ async function renderQRBill(f, lignes) {
         var check = (10 - carry) % 10;
         return digits + check;
     }
-    var qrRef = buildQRRef(f.numero || f.id || ('FAC-' + new Date().getFullYear() + '-0001'));
+    var qrRef = buildQRRef(f.numero || f.id || '');
 
-    // Generer le QR (format SPC norme SIX — message + EPD au bon ordre)
+    // Generer le QR (format SPC norme SIX — 31 champs — type S obligatoire)
     var qrDataUrl = '';
     try {
         var hasAddr = !!(debNom && debNpa && debVille);
         var qrLines = [
             'SPC',         // 1  Header
-            '0203',        // 2  Version (IG QR-bill v2.3)
+            '0200',        // 2  Version
             '1',           // 3  Coding UTF-8
             ibanClean,     // 4  IBAN
             'S',           // 5  Creditor AddrType S=structured
             NOM_BRIMOT,    // 6  Creditor Name
-            (creditorAddr.street || RUE_BR).slice(0, 70), // 7  Creditor StrtNm
-            (creditorAddr.building || '').slice(0, 16),   // 8  Creditor BldgNb
+            RUE_BR,        // 7  Creditor StrtNm
+            '',            // 8  Creditor BldgNb
             NPA_BR,        // 9  Creditor PstCd
             VILLE_BR,      // 10 Creditor TwnNm
             'CH',          // 11 Creditor Ctry
@@ -403,15 +387,14 @@ async function renderQRBill(f, lignes) {
             hasAddr ? 'S' : '',        // 21 UltimateDebtor AddrType
             hasAddr ? debNom : '',     // 22 UltimateDebtor Name
             hasAddr ? debRue : '',     // 23 UltimateDebtor StrtNm
-            hasAddr ? debNo : '',      // 24 UltimateDebtor BldgNb
+            '',                        // 24 UltimateDebtor BldgNb
             hasAddr ? debNpa : '',     // 25 UltimateDebtor PstCd
             hasAddr ? debVille : '',   // 26 UltimateDebtor TwnNm
-            hasAddr ? debPays : '',    // 27 UltimateDebtor Ctry
+            hasAddr ? 'CH' : '',       // 27 UltimateDebtor Ctry
             'QRR',         // 28 RmtInfTp — QR-IBAN PostFinance exige QRR
             qrRef,         // 29 Reference 27 chiffres
-            msgLibre,      // 30 Unstructured message
-            'EPD',         // 31 Trailer
-            ''             // 32 AltPmtInf
+            'EPD',         // 30 Trailer
+            ''             // 31 AltPmtInf
         ];
         qrDataUrl = await QRCode.toDataURL(qrLines.join('\n'), {
             errorCorrectionLevel: 'M', width: 298, margin: 0,
