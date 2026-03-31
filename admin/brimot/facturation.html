@@ -435,7 +435,7 @@
                 <label>IBAN destinataire (QR-facture)
                     <span style="font-size:9px;color:var(--muted);margin-left:4px;">laisser vide = IBAN Brimot</span>
                 </label>
-                <input type="text" id="cIBAN" placeholder="CH77 3000 5204 2780 5601 Y">
+                <input type="text" id="cIBAN" placeholder="CH95 3000 5291 1478 8940 K">
             </div>
         </div>
         <div class="field"><label>Notes</label><textarea id="cNotes" rows="2" placeholder="Notes internes…"></textarea></div>
@@ -1265,12 +1265,13 @@ window.deleteFacture = deleteFacture;
 // ══════════════════════════════════════════════════════════
 
 /* ── Constantes Brimot ── */
-const IBAN_BRIMOT = 'CH77 3000 5204 2780 5601 Y';
+const IBAN_BRIMOT = 'CH95 3000 5291 1478 8940 K';
 const NOM_BRIMOT  = 'Brimot Nettoyage';
 const RUE_BR      = 'Impasse des Griottes 3';
 const NPA_BR      = '1462';
 const VILLE_BR    = 'Yvonand';
 const PAYS_BR     = 'CH';
+const QR_IBAN_PREFIX = '3000'; // PostFinance QR-IBAN — référence de type QRR
 const TEL_BR      = '+41 79 000 00 00';
 const MAIL_BR     = 'info@brimot.ch';
 
@@ -1295,17 +1296,28 @@ async function genQRDataUrl(f) {
     const debPays  = (c.pays    || 'CH').slice(0, 2).toUpperCase();
     const hasAddr  = !!(debNom && debNpa && debVille);
 
-    // Format SPC norme SIX — 31 champs — type S (Structured) obligatoire
-    // pour compatibilite maximale avec les apps bancaires suisses
+    // QR-IBAN PostFinance (3000...) => type QRR obligatoire avec ref 27 chiffres
+    // Ref = numero facture padde a 27 chiffres avec checksum mod10 recursif
+    function buildQRRef(numero) {
+        const digits = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+        const table = [0,9,4,6,8,2,7,1,3,5];
+        let carry = 0;
+        for (const d of digits) { carry = table[(carry + parseInt(d)) % 10]; }
+        const check = (10 - carry) % 10;
+        return digits + check;
+    }
+    const qrRef = buildQRRef(f.numero || f.id || '');
+
+    // Format SPC norme SIX — 31 champs — QR-IBAN + QRR
     const qrLines = [
         'SPC',         // 1  Header
         '0200',        // 2  Version
         '1',           // 3  Coding UTF-8
-        ibanClean,     // 4  IBAN
-        'S',           // 5  Creditor AddrType S=structured
+        ibanClean,     // 4  QR-IBAN
+        'S',           // 5  Creditor AddrType
         NOM_BRIMOT,    // 6  Creditor Name
-        RUE_BR,        // 7  Creditor StrtNm (rue + numero)
-        '',            // 8  Creditor BldgNb (vide car inclus dans rue)
+        RUE_BR,        // 7  Creditor StrtNm
+        '',            // 8  Creditor BldgNb
         NPA_BR,        // 9  Creditor PstCd
         VILLE_BR,      // 10 Creditor TwnNm
         PAYS_BR,       // 11 Creditor Ctry
@@ -1318,15 +1330,15 @@ async function genQRDataUrl(f) {
         '',            // 18 UltimateCreditor Ctry
         montantCHF,    // 19 Amount
         'CHF',         // 20 Currency
-        hasAddr ? 'S' : '',   // 21 UltimateDebtor AddrType
+        hasAddr ? 'S' : '',    // 21 UltimateDebtor AddrType
         hasAddr ? debNom : '', // 22 UltimateDebtor Name
         hasAddr ? debRue : '', // 23 UltimateDebtor StrtNm
-        '',            // 24 UltimateDebtor BldgNb
+        '',                    // 24 UltimateDebtor BldgNb
         hasAddr ? debNpa : '', // 25 UltimateDebtor PstCd
-        hasAddr ? debVille : '', // 26 UltimateDebtor TwnNm
-        hasAddr ? debPays : '', // 27 UltimateDebtor Ctry
-        'NON',         // 28 RmtInfTp
-        '',            // 29 RmtInf
+        hasAddr ? debVille : '',// 26 UltimateDebtor TwnNm
+        hasAddr ? debPays : '',// 27 UltimateDebtor Ctry
+        'QRR',         // 28 RmtInfTp — QR-IBAN exige QRR
+        qrRef,         // 29 Reference 27 chiffres
         'EPD',         // 30 Trailer
         ''             // 31 AltPmtInf
     ];
@@ -1411,6 +1423,16 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
     var debVille = c.ville   || '';
     var msgLibre = ('Facture ' + (f.numero || '')).trim().slice(0, 140);
 
+    // Référence QR-IBAN (27 chiffres Mod10 récursif)
+    function buildQRRefHTML(numero) {
+        var digits = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+        var table = [0,9,4,6,8,2,7,1,3,5];
+        var carry = 0;
+        for (var i = 0; i < digits.length; i++) { carry = table[(carry + parseInt(digits[i])) % 10]; }
+        return digits + ((10 - carry) % 10);
+    }
+    var qrRefHTML = buildQRRefHTML(f.numero || f.id || '');
+
     /* Croix suisse sur le QR */
     var crossHtml = qrDataUrl
         ? '<div style="position:relative;display:inline-block;line-height:0;">' +
@@ -1434,7 +1456,7 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
               '<p class="bv-lbl">Compte / Payable a</p>' +
               '<p class="bv-val-sm">' + ibanClean + '<br>' + NOM_BRIMOT + '<br>' + RUE_BR + '<br>' + NPA_BR + ' ' + VILLE_BR + '</p>' +
               '<p class="bv-lbl">Reference</p>' +
-              '<p class="bv-val-sm">' + msgLibre + '</p>' +
+              '<p class="bv-val-sm">' + qrRefHTML + '</p>' +
               '<p class="bv-lbl">Paye par</p>' +
               '<p class="bv-val-sm">' + debNom + (debRue ? '<br>' + debRue : '') + '<br>' + debNpa + ' ' + debVille + '</p>' +
               '<div class="bv-receipt-bot">' +
@@ -1457,8 +1479,9 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
                   '<p class="bv-lbl">Compte / Payable a</p>' +
                   '<p class="bv-val">' + ibanClean + '<br>' + NOM_BRIMOT + '<br>' + RUE_BR + '<br>' + NPA_BR + ' ' + VILLE_BR + '</p>' +
                   '<p class="bv-lbl" style="margin-top:3mm;">Reference</p>' +
-                  '<p class="bv-val">' + msgLibre + '</p>' +
-                  (f.objet ? '<p class="bv-lbl" style="margin-top:3mm;">Informations</p><p class="bv-val">' + f.objet + '</p>' : '') +
+                  '<p class="bv-val">' + qrRefHTML + '</p>' +
+                  '<p class="bv-lbl" style="margin-top:3mm;">Informations</p><p class="bv-val">' + msgLibre + '</p>' +
+                  (f.objet ? '<p class="bv-lbl" style="margin-top:3mm;">Objet</p><p class="bv-val">' + f.objet + '</p>' : '') +
                   '<p class="bv-lbl" style="margin-top:3mm;">Paye par</p>' +
                   '<p class="bv-val">' + debNom + (debRue ? '<br>' + debRue : '') + '<br>' + debNpa + ' ' + debVille + '</p>' +
                 '</div>' +
