@@ -1299,7 +1299,7 @@ async function genQRDataUrl(f) {
         'S', NOM_BRIMOT, RUE_BR, NPA_BR, VILLE_BR, PAYS_BR,
         '', '', '', '', '', '',
         montantCHF, 'CHF',
-        hasAddr ? 'S' : '', hasAddr ? (c.nom||'') : '', hasAddr ? (c.adresse||'') : '',
+        hasAddr ? 'S' : 'K', hasAddr ? (c.nom||'') : '', hasAddr ? (c.adresse||'') : '',
         hasAddr ? debNpa : '', hasAddr ? debVille : '', hasAddr ? debPays : '',
         'NON', '', msgLibre, 'EPD', ''
     ];
@@ -1471,31 +1471,31 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
         '.notes-box{background:#fafafa;border-radius:5px;padding:8px 12px;font-size:11px;color:#555;margin-bottom:4mm;}' +
         '.footer-doc{text-align:center;font-size:9px;color:#bbb;margin-top:auto;border-top:1px solid #f0f0f0;padding-top:4mm;}' +
         '.page-sep{width:100%;height:6px;background:repeating-linear-gradient(90deg,#aaa 0,#aaa 6px,transparent 6px,transparent 12px);margin:8mm 0;}' +
-        '.bv-page{width:210mm;height:105mm;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;background:#fff;display:flex;flex-direction:column;overflow:hidden;}' +
-        '.bv-cut{display:flex;align-items:center;height:5mm;padding:0 2mm;gap:2mm;color:#aaa;}' +
+        '.bv-page{width:210mm;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;background:#fff;display:flex;flex-direction:column;border:1px solid #ccc;border-radius:6px;margin-top:6mm;}' +
+        '.bv-cut{display:flex;align-items:center;height:7mm;padding:0 3mm;gap:3mm;color:#aaa;}' +
         '.bv-cut-line{flex:1;border-top:1px dashed #bbb;}' +
         '.bv-scissors{font-size:9pt;color:#aaa;transform:rotate(90deg);display:inline-block;}' +
-        '.bv-body{display:flex;flex:1;height:100mm;overflow:hidden;}' +
-        '.bv-receipt{width:62mm;flex-shrink:0;padding:2mm 2mm 2mm 5mm;display:flex;flex-direction:column;overflow:hidden;}' +
+        '.bv-body{display:flex;flex:1;}' +
+        '.bv-receipt{width:62mm;flex-shrink:0;padding:3mm 3mm 3mm 5mm;display:flex;flex-direction:column;border-right:1px dashed #ccc;}' +
         '.bv-sep{width:5mm;display:flex;flex-direction:column;align-items:center;padding:2mm 0;}' +
         '.bv-sep-line{flex:1;border-left:1px dashed #bbb;}' +
-        '.bv-payment{flex:1;padding:2mm 5mm 2mm 2mm;display:flex;flex-direction:column;overflow:hidden;}' +
-        '.bv-section-title{font-size:11pt;font-weight:700;margin-bottom:2mm;line-height:1;}' +
-        '.bv-lbl{font-size:6pt;font-weight:700;color:#000;margin-top:1.5mm;margin-bottom:.5mm;line-height:1;}' +
-        '.bv-val{font-size:8pt;line-height:1.3;}' +
-        '.bv-val-sm{font-size:7pt;line-height:1.3;}' +
+        '.bv-payment{flex:1;padding:3mm 5mm 3mm 3mm;display:flex;flex-direction:column;}' +
+        '.bv-section-title{font-size:11pt;font-weight:700;margin-bottom:3mm;line-height:1;}' +
+        '.bv-lbl{font-size:6pt;font-weight:700;color:#000;margin-top:2mm;margin-bottom:1mm;line-height:1;}' +
+        '.bv-val{font-size:8pt;line-height:1.4;}' +
+        '.bv-val-sm{font-size:7pt;line-height:1.4;}' +
         '.bv-val-bold{font-size:10pt;font-weight:700;}' +
         '.bv-amount{font-size:10pt;font-weight:700;}' +
-        '.bv-receipt-bot{display:flex;justify-content:space-between;margin-top:auto;padding-top:2mm;}' +
-        '.bv-accept-box{width:40mm;height:9mm;border:.75pt solid #000;border-radius:1mm;margin-top:1mm;}' +
+        '.bv-receipt-bot{display:flex;justify-content:space-between;margin-top:auto;padding-top:3mm;border-top:1px solid #eee;}' +
+        '.bv-accept-box{width:40mm;height:9mm;border:.75pt solid #000;border-radius:1mm;margin-top:2mm;}' +
         '.bv-pay-top{display:flex;gap:4mm;flex:1;}' +
         '.bv-qr-col{width:51mm;flex-shrink:0;}' +
-        '.bv-info-col{flex:1;overflow:hidden;}' +
+        '.bv-info-col{flex:1;}' +
         '@media print{' +
         '.no-print{display:none!important;}' +
         'html,body{margin:0;padding:0;background:#fff;}' +
         '.p1{padding:12mm 12mm;width:100%;}' +
-        '.bv-page{page-break-before:always;break-before:page;margin:0;}' +
+        '.bv-page{page-break-before:always;break-before:page;margin:0;border:none;border-radius:0;}' +
         '@page{size:A4 portrait;margin:0;}' +
         '}';
 
@@ -1924,9 +1924,10 @@ window.sendRappel = sendRappel;
 // adresse email enregistrée chez LWS.
 const SEND_MAIL_URL = 'send_mail.php'; // même dossier que facturation.html
 
-async function sendEmailViaLWS(to, subject, body, fileBase64, filename, mimeType) {
+async function sendEmailViaLWS(to, subject, body, fileBase64, filename, mimeType, viewUrl) {
     try {
         const payload = { to, subject, body };
+        if (viewUrl) payload.view_url = viewUrl;
         if (fileBase64) {
             // Support PDF et HTML
             if (mimeType === 'text/html') {
@@ -1950,7 +1951,7 @@ async function sendEmailViaLWS(to, subject, body, fileBase64, filename, mimeType
         // Fallback mailto si fetch echoue (ex: en local sans PHP)
         const subj = encodeURIComponent(subject);
         const bd   = encodeURIComponent(body);
-        window.location.href = 'mailto:' + to + '?subject=' + subj + '&body=' + bd;
+        window.open('mailto:' + to + '?subject=' + subj + '&body=' + bd);
         return { ok: true, via: 'mailto-fallback' };
     }
 }
@@ -1986,13 +1987,23 @@ async function sendEmail() {
         console.warn('PDF base64 non disponible:', e);
     }
 
+    // Construire le lien page web public (avec donnees encodees dans le hash)
+    let viewUrl = '';
+    if (!isDevis) {
+        const vPayload = btoa(unescape(encodeURIComponent(JSON.stringify({ f: f, ls: ls }))));
+        viewUrl = window.location.origin +
+            window.location.pathname.replace('facturation.html', '') +
+            'facture-view.html#data=' + vPayload;
+    }
+
     // Envoyer via LWS
     // Si PDF disponible : envoyer PDF. Sinon : envoyer HTML comme piece jointe
     const result = await sendEmailViaLWS(
         to, subject, body,
         pdfBase64 || htmlB64,
         pdfBase64 ? pdfFilename : docName + '.html',
-        pdfBase64 ? 'application/pdf' : 'text/html'
+        pdfBase64 ? 'application/pdf' : 'text/html',
+        viewUrl
     );
     hideLoad();
 
