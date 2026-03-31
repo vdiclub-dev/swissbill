@@ -938,6 +938,7 @@ function renderFactures(list) {
                 <div style="display:flex;gap:4px;flex-wrap:wrap;">
                     <button class="btn btn-ghost btn-sm" title="Modifier" onclick="editFacture('${f.id}')"><i class="fas fa-edit"></i></button>
                     <button class="btn btn-ghost btn-sm" title="PDF + QR" onclick="previewPDF('${f.id}')"><i class="fas fa-file-pdf"></i></button>
+                    <button class="btn btn-ghost btn-sm" title="Page web client" onclick="openClientView('${f.id}')"><i class="fas fa-globe"></i></button>
                     <button class="btn btn-ghost btn-sm" title="Envoyer par email" onclick="openModalEmail('${f.id}')"><i class="fas fa-paper-plane"></i></button>
                     ${f.statut==='devis'?`<button class="btn btn-yellow btn-sm" title="Convertir en facture" onclick="convertToFacture('${f.id}')"><i class="fas fa-file-invoice"></i> Facturer</button>`:''}
                     ${f.statut==='facture'?`<button class="btn btn-green btn-sm" title="Marquer payée" onclick="markPaid('${f.id}')"><i class="fas fa-check"></i></button>`:''}
@@ -1874,19 +1875,50 @@ function openModalEmail(id) {
     $('emailTo').value = c?.email || '';
     const isDevis = f.type === 'devis';
     $('modalEmailTitle').textContent = isDevis ? 'Envoyer le devis' : 'Envoyer la facture';
+
+    // Lien vers la page web publique de la facture
+    const viewUrl = window.location.origin +
+        window.location.pathname.replace('facturation.html', '') +
+        'facture-view.html?id=' + encodeURIComponent(id);
+
     $('emailSubject').value = isDevis
-        ? `Devis ${f.numero} — Brimot Nettoyage`
-        : `Facture ${f.numero} — Brimot Nettoyage`;
+        ? 'Devis ' + f.numero + ' — Brimot Nettoyage'
+        : 'Facture ' + f.numero + ' — Brimot Nettoyage';
+
     $('emailBody').value = isDevis
-        ? `Bonjour${c?.contact ? ' ' + c.contact : ''},\n\nVeuillez trouver ci-joint notre devis ${f.numero}${f.objet ? ' concernant : ' + f.objet : ''}.\n\nMontant : ${fmtMoney(f.montant_ttc)} (TVA ${f.tva_pct}% incluse)\n\nN'hésitez pas à nous contacter pour toute question.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimot.ch`
-        : `Bonjour${c?.contact ? ' ' + c.contact : ''},\n\nVeuillez trouver ci-joint notre facture ${f.numero}${f.objet ? ' concernant : ' + f.objet : ''}.\n\nMontant à payer : ${fmtMoney(f.montant_ttc)} (TVA ${f.tva_pct}% incluse)\nEchéance : ${fmtDate(f.echeance)}\nConditions : ${f.conditions || '30 jours net'}\n\nPour tout paiement, merci d'utiliser le QR code joint au document.\n\nCordialement,\nBrimot Nettoyage\ninfo@brimot.ch`;
+        ? 'Bonjour' + (c?.contact ? ' ' + c.contact : '') + ',\n\n' +
+          'Veuillez trouver ci-joint notre devis ' + f.numero +
+          (f.objet ? ' concernant : ' + f.objet : '') + '.\n\n' +
+          'Montant : ' + fmtMoney(f.montant_ttc) + ' (TVA ' + f.tva_pct + '% incluse)\n\n' +
+          'N\'hesitez pas a nous contacter pour toute question.\n\n' +
+          'Cordialement,\nBrimot Nettoyage\ninfo@brimot.ch'
+        : 'Bonjour' + (c?.contact ? ' ' + c.contact : '') + ',\n\n' +
+          'Veuillez trouver ci-joint notre facture ' + f.numero +
+          (f.objet ? ' concernant : ' + f.objet : '') + '.\n\n' +
+          'Montant a payer : ' + fmtMoney(f.montant_ttc) + ' (TVA ' + f.tva_pct + '% incluse)\n' +
+          'Echeance : ' + fmtDate(f.echeance) + '\n' +
+          'Conditions : ' + (f.conditions || '30 jours net') + '\n\n' +
+          'Vous pouvez consulter votre facture en ligne avec le QR-Bill de paiement :\n' +
+          viewUrl + '\n\n' +
+          'Le PDF est egalement joint a cet email.\n\n' +
+          'Cordialement,\nBrimot Nettoyage\ninfo@brimot.ch';
+
     const modeLabel = $('emailModeLabel');
     if (modeLabel) {
-        modeLabel.textContent = 'Envoi via le serveur LWS — le PDF est joint automatiquement.';
+        modeLabel.innerHTML = 'Envoi via le serveur LWS &mdash; PDF joint + <strong>lien page web</strong> pour le client.';
     }
     openModal('modalEmail');
 }
 window.openModalEmail = openModalEmail;
+
+// ── Ouvrir la page web publique de la facture ──────────
+function openClientView(id) {
+    const viewUrl = window.location.origin +
+        window.location.pathname.replace('facturation.html', '') +
+        'facture-view.html?id=' + encodeURIComponent(id);
+    window.open(viewUrl, '_blank');
+}
+window.openClientView = openClientView;
 
 // ── Rappel ────────────────────────────────────────────────
 async function sendRappel(id) {
@@ -1915,12 +1947,15 @@ window.sendRappel = sendRappel;
 // adresse email enregistrée chez LWS.
 const SEND_MAIL_URL = 'send_mail.php'; // même dossier que facturation.html
 
-async function sendEmailViaLWS(to, subject, body, pdfBase64, filename) {
+async function sendEmailViaLWS(to, subject, body, pdfBase64, filename, viewUrl) {
     try {
         const payload = { to, subject, body };
         if (pdfBase64) {
             payload.pdf_base64 = pdfBase64;
             payload.pdf_filename = filename || 'facture.pdf';
+        }
+        if (viewUrl) {
+            payload.view_url = viewUrl;
         }
         const resp = await fetch(SEND_MAIL_URL, {
             method: 'POST',
@@ -1932,39 +1967,45 @@ async function sendEmailViaLWS(to, subject, body, pdfBase64, filename) {
         return { ok: false, error: json.error || 'Erreur serveur PHP' };
     } catch (err) {
         console.error('send_mail.php error:', err);
-        // Fallback mailto si fetch échoue (ex: en local sans PHP)
+        // Fallback mailto si fetch echoue (ex: en local sans PHP)
         const subj = encodeURIComponent(subject);
-        const bd   = encodeURIComponent(body + '\n\n[PDF disponible — utilisez le bouton 📄 PDF dans l\'application]');
-        window.open(`mailto:${to}?subject=${subj}&body=${bd}`);
+        const linkNote = viewUrl ? '\n\nConsulter la facture en ligne : ' + viewUrl : '';
+        const bd   = encodeURIComponent(body + linkNote);
+        window.location.href = 'mailto:' + to + '?subject=' + subj + '&body=' + bd;
         return { ok: true, via: 'mailto-fallback' };
     }
 }
 
 async function sendEmail() {
     const to = $('emailTo').value.trim();
-    if (!to || !to.includes('@')) { toast('error', '❌ Email invalide'); return; }
+    if (!to || !to.includes('@')) { toast('error', 'Email invalide'); return; }
     const id      = $('emailFactureId').value;
     const subject = $('emailSubject').value;
     const body    = $('emailBody').value;
 
     showLoad();
-    toast('info', '⏳ Génération du PDF en cours…');
+    toast('info', 'Generation du PDF en cours...');
 
-    // Charger les données de la facture
+    // Charger les donnees de la facture
     const { f, ls } = await loadFactureData(id);
-    if (!f) { hideLoad(); toast('error', '❌ Facture introuvable'); return; }
+    if (!f) { hideLoad(); toast('error', 'Facture introuvable'); return; }
 
-    // Générer le PDF base64 (avec les 2 pages)
+    // Construire le lien vers la page web publique de la facture
+    const viewUrl = window.location.origin +
+        window.location.pathname.replace('facturation.html', '') +
+        'facture-view.html?id=' + encodeURIComponent(id);
+
+    // Generer le PDF base64 (avec les 2 pages)
     let pdfBase64  = null;
-    let pdfFilename = `${f.type === 'devis' ? 'Devis' : 'Facture'}_${f.numero || id}.pdf`;
+    let pdfFilename = (f.type === 'devis' ? 'Devis' : 'Facture') + '_' + (f.numero || id) + '.pdf';
     try {
         pdfBase64 = await buildPDFBase64(f, ls);
     } catch (e) {
         console.error('PDF base64 error:', e);
     }
 
-    // Envoyer via LWS avec le PDF en pièce jointe
-    const result = await sendEmailViaLWS(to, subject, body, pdfBase64, pdfFilename);
+    // Envoyer via LWS avec le PDF en piece jointe et le lien web
+    const result = await sendEmailViaLWS(to, subject, body, pdfBase64, pdfFilename, viewUrl);
     hideLoad();
 
     if (result.ok) {
