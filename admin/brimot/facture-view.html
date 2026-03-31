@@ -255,6 +255,56 @@ function fmtDateIntervention(d) {
     if (isNaN(parsed.getTime())) return '';
     return fmtDate(parsed.toISOString().slice(0, 10));
 }
+var SB_META_PREFIX = '##SBMETA##';
+function parseMetaTaggedNotes(rawText) {
+    var raw = String(rawText || '');
+    var lines = raw.split(/\r?\n/);
+    var textLines = [];
+    var meta = {};
+    lines.forEach(function(line) {
+        var trimmed = String(line || '').trim();
+        if (!trimmed.startsWith(SB_META_PREFIX)) {
+            textLines.push(line);
+            return;
+        }
+        var payload = trimmed.slice(SB_META_PREFIX.length).trim();
+        var idx = payload.indexOf('=');
+        if (idx <= 0) return;
+        var key = payload.slice(0, idx).trim();
+        var val = payload.slice(idx + 1).trim();
+        if (key && val) meta[key] = val;
+    });
+    return { text: textLines.join('\n').trim(), meta: meta };
+}
+function parseAddressString(rawAddress) {
+    var txt = String(rawAddress || '').trim();
+    if (!txt) return { address: '', postal: '', city: '', country: 'CH' };
+    var parts = txt.split(',');
+    if (parts.length === 1) return { address: txt, postal: '', city: '', country: 'CH' };
+    var address = parts[0].trim();
+    var cityPart = parts.slice(1).join(',').trim();
+    var m = cityPart.match(/(\d{4,6})\s+(.+)/);
+    if (m) return { address: address, postal: m[1].trim(), city: m[2].trim(), country: 'CH' };
+    return { address: address, postal: '', city: cityPart, country: 'CH' };
+}
+function addressLabel(addrObj) {
+    var a = addrObj || {};
+    return [a.address || '', [a.postal || '', a.city || ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+}
+function getFactureInterventionAddress(f, c) {
+    var parsed = parseMetaTaggedNotes((f && f.notes) || '');
+    var raw = String((parsed.meta || {}).intervention || '').trim();
+    if (raw) return parseAddressString(raw);
+    return {
+        address: (c && c.adresse) || '',
+        postal: (c && c.npa) || '',
+        city: (c && c.ville) || '',
+        country: ((c && c.pays) || 'CH')
+    };
+}
+function getFactureDisplayNotes(f) {
+    return parseMetaTaggedNotes((f && f.notes) || '').text || '';
+}
 
 /* ─── Lire les donnees depuis le hash ─── */
 function getDataFromHash() {
@@ -273,6 +323,9 @@ function getDataFromHash() {
 /* ─── Rendu facture ─── */
 function renderInvoice(f, lignes) {
     var c = f.brimot_clients || {};
+    var debAddr = getFactureInterventionAddress(f, c);
+    var worksiteLabel = addressLabel(debAddr);
+    var visibleNotes = getFactureDisplayNotes(f);
     var isDevis = f.type === 'devis';
     var color   = isDevis ? '#f59e0b' : '#0ea5e9';
     var title   = isDevis ? 'DEVIS' : 'FACTURE';
@@ -348,6 +401,7 @@ function renderInvoice(f, lignes) {
         '</div>' +
         // Objet
         (f.objet ? '<div class="inv-objet"><strong>Objet :</strong> ' + esc(f.objet) + '</div>' : '') +
+        (worksiteLabel ? '<div class="inv-objet"><strong>Adresse d\'intervention :</strong> ' + esc(worksiteLabel) + '</div>' : '') +
         // Tableau
         '<table class="lines">' +
           '<thead><tr>' +
@@ -365,7 +419,7 @@ function renderInvoice(f, lignes) {
           '<div class="tot ttc-row"><span class="lbl" style="color:' + color + ';">TOTAL TTC</span><span class="val" style="color:' + color + ';">' + ttc.toFixed(2) + ' CHF</span></div>' +
         '</div>' +
         (f.conditions ? '<div class="cond-box">Conditions : <strong>' + esc(f.conditions) + '</strong> &mdash; IBAN : ' + IBAN_BRIMOT + '</div>' : '') +
-        (f.notes ? '<div class="notes-box">' + esc(f.notes) + '</div>' : '') +
+        (visibleNotes ? '<div class="notes-box">' + esc(visibleNotes) + '</div>' : '') +
         '<div class="inv-footer">' +
           esc(NOM_BRIMOT) + ' &mdash; ' + esc(RUE_BR) + ', ' + esc(NPA_BR) + ' ' + esc(VILLE_BR) +
           ' &mdash; ' + esc(MAIL_BR) +

@@ -330,6 +330,10 @@
             <label>Objet / titre</label>
             <input type="text" id="fObjet" placeholder="Ex: Nettoyage locaux janvier 2026">
         </div>
+        <div class="field">
+            <label>Adresse d'intervention (si différente du payeur)</label>
+            <input type="text" id="fAdresseIntervention" placeholder="Ex: Rue de la Gare 12, 1000 Lausanne">
+        </div>
 
         <!-- Lignes -->
         <div style="margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Lignes</div>
@@ -589,6 +593,71 @@ function mergeDesignationAndIntervention(designation, dateIntervention) {
 function fmtDateIntervention(d) {
     const di = normalizeInterventionDate(d);
     return di ? fmtDate(di) : '';
+}
+
+const SB_META_PREFIX = '##SBMETA##';
+
+function parseMetaTaggedNotes(rawText) {
+    const raw = String(rawText || '');
+    const lines = raw.split(/\r?\n/);
+    const textLines = [];
+    const meta = {};
+    lines.forEach(function(line) {
+        const trimmed = String(line || '').trim();
+        if (!trimmed.startsWith(SB_META_PREFIX)) {
+            textLines.push(line);
+            return;
+        }
+        const payload = trimmed.slice(SB_META_PREFIX.length).trim();
+        const idx = payload.indexOf('=');
+        if (idx <= 0) return;
+        const key = payload.slice(0, idx).trim();
+        const val = payload.slice(idx + 1).trim();
+        if (key && val) meta[key] = val;
+    });
+    return { text: textLines.join('\n').trim(), meta: meta };
+}
+
+function buildMetaTaggedNotes(baseText, metaObj) {
+    const lines = [];
+    const clean = String(baseText || '').trim();
+    if (clean) lines.push(clean);
+    Object.entries(metaObj || {}).forEach(function(entry) {
+        const key = String(entry[0] || '').trim();
+        const val = String(entry[1] || '').trim();
+        if (!key || !val) return;
+        lines.push(SB_META_PREFIX + ' ' + key + '=' + val);
+    });
+    return lines.join('\n').trim();
+}
+
+function parseAddressString(rawAddress) {
+    const txt = String(rawAddress || '').trim();
+    if (!txt) return { address: '', postal: '', city: '', country: 'CH' };
+    const parts = txt.split(',');
+    if (parts.length === 1) return { address: txt, postal: '', city: '', country: 'CH' };
+    const address = parts[0].trim();
+    const cityPart = parts.slice(1).join(',').trim();
+    const m = cityPart.match(/(\d{4,6})\s+(.+)/);
+    if (m) return { address: address, postal: m[1].trim(), city: m[2].trim(), country: 'CH' };
+    return { address: address, postal: '', city: cityPart, country: 'CH' };
+}
+
+function addressLabel(addrObj) {
+    const a = addrObj || {};
+    return [a.address || '', [a.postal || '', a.city || ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+}
+
+function getFactureInterventionAddress(f, c) {
+    const parsed = parseMetaTaggedNotes(f?.notes || '');
+    const raw = String(parsed.meta.intervention || '').trim();
+    if (raw) return parseAddressString(raw);
+    return {
+        address: c?.adresse || '',
+        postal: c?.npa || '',
+        city: c?.ville || '',
+        country: (c?.pays || 'CH')
+    };
 }
 
 // ── State ─────────────────────────────────────────────────
@@ -1137,7 +1206,7 @@ function calcTotaux() {
 function openModalFacture(id=null) {
     try {
         lignes = [];
-        ['fId','fNumero','fObjet','fNotes'].forEach(function(fid){
+        ['fId','fNumero','fObjet','fNotes','fAdresseIntervention'].forEach(function(fid){
             const el = $(fid);
             if (el) el.value = '';
         });
@@ -1179,7 +1248,10 @@ async function editFacture(id) {
     $('fClient').value=f.client_id||''; $('fObjet').value=f.objet||'';
     $('fDate').value=f.date_facture||''; $('fEcheance').value=f.echeance||'';
     $('fTVA').value=f.tva_pct||'8.1'; $('fConditions').value=f.conditions||'30 jours net';
-    $('fStatut').value=f.statut||'facture'; $('fNotes').value=f.notes||'';
+    $('fStatut').value=f.statut||'facture';
+    const parsedNotes = parseMetaTaggedNotes(f.notes || '');
+    $('fNotes').value = parsedNotes.text || '';
+    if ($('fAdresseIntervention')) $('fAdresseIntervention').value = parsedNotes.meta.intervention || '';
     lignes = (ls||[]).map(l=>{
         const parsed = splitDesignationAndIntervention(l.designation || '');
         return {
@@ -1241,6 +1313,12 @@ async function saveFacture(openPreview=false) {
         numero = `${prefix}-${year}-${String((count||0)+1).padStart(4,'0')}`;
     }
 
+    const notesParsed = parseMetaTaggedNotes($('fNotes').value || '');
+    const meta = Object.assign({}, notesParsed.meta || {});
+    const interventionRaw = String($('fAdresseIntervention')?.value || '').trim();
+    if (interventionRaw) meta.intervention = interventionRaw;
+    else delete meta.intervention;
+
     const payload = {
         client_id: clientId, type:$('fType').value, numero,
         objet:$('fObjet').value.trim()||null,
@@ -1248,7 +1326,7 @@ async function saveFacture(openPreview=false) {
         echeance:$('fEcheance').value||null,
         tva_pct:tvaPct, montant_ht:ht, montant_tva:tva, montant_ttc:ttc,
         conditions:$('fConditions').value, statut:$('fStatut').value,
-        notes:$('fNotes').value.trim()||null,
+        notes:buildMetaTaggedNotes(notesParsed.text || '', meta) || null,
         updated_at:nowCH()
     };
 
@@ -1480,6 +1558,9 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
     if (c.npa || c.ville) addrParts.push('<div style="font-size:12px;">' + [c.npa, c.ville].filter(Boolean).join(' ') + '</div>');
     if (c.pays && c.pays !== 'CH') addrParts.push('<div style="font-size:12px;">' + c.pays + '</div>');
     var addrClientHtml = addrParts.join('') || '<span style="color:#bbb;font-size:11px;">Aucun client</span>';
+    var parsedMeta = parseMetaTaggedNotes(f.notes || '');
+    var worksiteAddr = parseAddressString(parsedMeta.meta.intervention || '');
+    var worksiteLabel = addressLabel(worksiteAddr);
 
     /* Lignes tableau */
     var lignesHtml = '';
@@ -1662,6 +1743,7 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
             '</div>' +
           '</div>' +
           (f.objet ? '<div style="margin-bottom:5mm;"><strong style="font-size:14px;">' + f.objet + '</strong></div>' : '') +
+          (worksiteLabel ? '<div style="margin-bottom:3mm;font-size:12px;color:#4b5563;"><strong>Adresse d\'intervention :</strong> ' + worksiteLabel + '</div>' : '') +
           '<table class="lines">' +
             '<thead><tr>' +
               '<th>Designation</th>' +
@@ -1677,7 +1759,7 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
             '<div class="tot ttc"><span>TOTAL TTC</span><span>' + Number(f.montant_ttc || 0).toFixed(2) + ' CHF</span></div>' +
           '</div>' +
           (f.conditions ? '<div class="cond">Conditions : <strong>' + f.conditions + '</strong> - IBAN : ' + ibanClean + '</div>' : '') +
-          (f.notes ? '<div class="notes-box">' + f.notes + '</div>' : '') +
+          (function(){ var pn = parseMetaTaggedNotes(f.notes || ''); return pn.text ? '<div class="notes-box">' + pn.text + '</div>' : ''; })() +
           '<div class="footer-doc">' +
             NOM_BRIMOT + ' - ' + RUE_BR + ', ' + NPA_BR + ' ' + VILLE_BR + '<br>' +
             ibanClean + (c.num_tva ? ' - TVA : ' + c.num_tva : '') +
@@ -1752,6 +1834,7 @@ async function buildPDFBase64(f, ls) {
         pdf.setFontSize(9); pdf.setFont('helvetica','normal'); pdf.setTextColor(80,80,80);
         pdf.text(NOM_BRIMOT, ml, y); pdf.text(RUE_BR, ml, y+4); pdf.text(NPA_BR + ' ' + VILLE_BR, ml, y+8);
 
+        var interventionAddr = getFactureInterventionAddress(f, c);
         pdf.setDrawColor(200,200,200); pdf.setLineWidth(0.3);
         pdf.rect(103, y-3, 92, 28);
         var cy = y;
@@ -1759,8 +1842,8 @@ async function buildPDFBase64(f, ls) {
         if (c.nom)      { pdf.setFontSize(10); pdf.setFont('helvetica','bold'); pdf.setTextColor(20,20,20); pdf.text(c.nom, 106, cy); cy+=5; }
         pdf.setFontSize(9); pdf.setFont('helvetica','normal'); pdf.setTextColor(60,60,60);
         if (c.contact) { pdf.text(c.contact, 106, cy); cy+=4; }
-        if (c.adresse) { pdf.text(c.adresse, 106, cy); cy+=4; }
-        if (c.npa||c.ville) { pdf.text([c.npa,c.ville].filter(Boolean).join(' '), 106, cy); }
+        if (interventionAddr.address) { pdf.text(interventionAddr.address, 106, cy); cy+=4; }
+        if (interventionAddr.postal||interventionAddr.city) { pdf.text([interventionAddr.postal,interventionAddr.city].filter(Boolean).join(' '), 106, cy); }
         y += 32;
 
         if (f.objet) {
@@ -1818,9 +1901,10 @@ async function buildPDFBase64(f, ls) {
             pdf.rect(ml, y, mr-ml, 8, 'FD'); pdf.setTextColor(3,105,161);
             pdf.text('Conditions : ' + f.conditions + '  -  IBAN : ' + ibanClean, ml+3, y+5); y+=11;
         }
-        if (f.notes) {
+        var visiblePdfNotes = parseMetaTaggedNotes(f.notes || '').text || '';
+        if (visiblePdfNotes) {
             pdf.setFontSize(9); pdf.setFont('helvetica','italic'); pdf.setTextColor(80,80,80);
-            pdf.text('Note : ' + f.notes, ml, y); y+=6;
+            pdf.text('Note : ' + visiblePdfNotes, ml, y); y+=6;
         }
         pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.setTextColor(180,180,180);
         pdf.text(NOM_BRIMOT+' - '+RUE_BR+', '+NPA_BR+' '+VILLE_BR, W/2, 287, {align:'center'});
@@ -1846,7 +1930,7 @@ async function buildPDFBase64(f, ls) {
             pdf.setFontSize(7); pdf.setFont('helvetica','normal'); pdf.text(qrRefPdf, 5, bvY+38);
             pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Paye par', 5, bvY+44);
             pdf.setFontSize(7); pdf.setFont('helvetica','normal');
-            var debLines = [c.nom||'', c.adresse||'', (c.npa||'')+(c.ville?' '+c.ville:'')].filter(Boolean);
+            var debLines = [c.nom||'', c.adresse||'', [c.npa, c.ville].filter(Boolean).join(' ')].filter(Boolean);
             debLines.forEach(function(l,i) { pdf.text(l, 5, bvY+48+i*4); });
             pdf.setFontSize(6); pdf.setFont('helvetica','bold');
             pdf.text('Montant', 5, bvY+70); pdf.text('Monnaie', 40, bvY+70);
