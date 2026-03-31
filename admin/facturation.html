@@ -897,20 +897,38 @@
 
         const ent=f.entreprises||{};
         const svcColor={eco:'#6b7280',prioritaire:'#3b82f6',express:'#f59e0b',urgent:'#ef4444'};
+        const splitStreetAndBuilding = (address) => {
+            const value = String(address || '').trim();
+            if (!value) return { street: '', building: '' };
+            const m = value.match(/^(.*?)(?:\s+)(\d[\dA-Za-z\-\/]*)$/);
+            if (!m) return { street: value.slice(0, 70), building: '' };
+            return { street: m[1].trim().slice(0, 70), building: m[2].trim().slice(0, 16) };
+        };
+        const buildQRRef = (numero) => {
+            const seed = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+            const digits = /[1-9]/.test(seed) ? seed : `${seed.slice(0, 25)}1`;
+            const table = [0,9,4,6,8,2,7,1,3,5];
+            let carry = 0;
+            for (const d of digits) carry = table[(carry + parseInt(d, 10)) % 10];
+            return digits + ((10 - carry) % 10);
+        };
+        const creditor = splitStreetAndBuilding('Yverdon-les-Bains');
+        const debtor = splitStreetAndBuilding(ent.adresse || '');
+        const qrRef = buildQRRef(f.numero || f.id || `FAC-${new Date().getFullYear()}-0001`);
 
         // Générer QR Bill en base64
         let qrBillBase64 = '';
         try {
             await loadQRLib();
             const spcData = [
-                'SPC','0200','1',
+                'SPC','0203','1',
                 'CH953000529114788940K',
-                'S','Didier Gysling','Yvonand','','1462','Yvonand','CH',
+                'S','Didier Gysling', (creditor.street||'Yvonand').substring(0,70), (creditor.building||'').substring(0,16), '1462','Yvonand','CH',
                 '','','','','','','',
                 fmt(f.montant_ttc),'CHF',
-                'S', (ent.nom||'').substring(0,70), (ent.adresse||'').substring(0,70), '',
+                'S', (ent.nom||'').substring(0,70), (debtor.street||ent.adresse||'').substring(0,70), (debtor.building||'').substring(0,16),
                 (ent.npa||'').substring(0,16), (ent.ville||'').substring(0,35), 'CH',
-                'NON','', ('Facture '+f.numero).substring(0,140),
+                'QRR', qrRef, ('Facture '+f.numero).substring(0,140),
                 'EPD',''
             ].join('\n');
             if(typeof QRCode !== 'undefined') {
@@ -1067,8 +1085,14 @@
                 <div style="flex:1;padding:5mm;font-size:8pt;">
                     <div style="display:flex;gap:5mm;">
                         <!-- QR Code -->
-                        <div>
+                        <div style="position:relative;display:inline-block;line-height:0;">
                             <img src="${qrBillBase64}" style="width:140px;height:140px;" alt="QR Bill">
+                            <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:21.3px;height:21.3px;background:#fff;display:flex;align-items:center;justify-content:center;">
+                                <div style="position:relative;width:18.3px;height:18.3px;background:#000;">
+                                    <div style="position:absolute;left:7.37px;top:3.22px;width:3.57px;height:11.87px;background:#fff;"></div>
+                                    <div style="position:absolute;left:3.22px;top:7.37px;width:11.87px;height:3.57px;background:#fff;"></div>
+                                </div>
+                            </div>
                             <div style="font-size:7pt;text-align:center;margin-top:1mm;color:#666;">QR-IBAN</div>
                         </div>
 
@@ -1083,7 +1107,7 @@
                             </div>
 
                             <div style="font-size:7pt;font-weight:bold;color:#666;margin-bottom:1mm;">Référence</div>
-                            <div style="margin-bottom:3mm;font-family:monospace;font-size:9pt;">${f.numero}</div>
+                            <div style="margin-bottom:3mm;font-family:monospace;font-size:9pt;">${qrRef}</div>
 
                             <div style="font-size:7pt;font-weight:bold;color:#666;margin-bottom:1mm;">Informations supplémentaires</div>
                             <div style="margin-bottom:3mm;font-size:8pt;">Facture ${f.numero} — Période ${new Date(f.periode_debut).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'})} au ${new Date(f.periode_fin).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'})}</div>

@@ -1276,6 +1276,17 @@ const QR_IBAN_PREFIX = '3000'; // PostFinance QR-IBAN — référence de type QR
 const TEL_BR      = '+41 79 000 00 00';
 const MAIL_BR     = 'info@brimot.ch';
 
+function splitStreetAndBuilding(address) {
+    const value = String(address || '').trim();
+    if (!value) return { street: '', building: '' };
+    const m = value.match(/^(.*?)(?:\s+)(\d[\dA-Za-z\-\/]*)$/);
+    if (!m) return { street: value.slice(0, 70), building: '' };
+    return {
+        street: m[1].trim().slice(0, 70),
+        building: m[2].trim().slice(0, 16)
+    };
+}
+
 /* ── Charger facture + lignes ── */
 async function loadFactureData(id) {
     const [{ data: f }, { data: ls }] = await Promise.all([
@@ -1288,37 +1299,44 @@ async function loadFactureData(id) {
 /* ── Générer QR dataUrl (Swiss QR Payment) ── */
 async function genQRDataUrl(f) {
     const c = f.brimot_clients || {};
+    const creditorAddr = splitStreetAndBuilding(RUE_BR);
+    const debtorAddr = splitStreetAndBuilding(c.adresse || '');
     const ibanClean  = IBAN_BRIMOT.replace(/\s/g, '');
     const montantCHF = Number(f.montant_ttc || 0).toFixed(2);
     const debNom   = (c.nom     || '').slice(0, 70);
-    const debRue   = (c.adresse || '').slice(0, 70);
+    const debRue   = (debtorAddr.street || c.adresse || '').slice(0, 70);
+    const debNo    = (debtorAddr.building || '').slice(0, 16);
     const debNpa   = (c.npa     || '').slice(0, 16);
     const debVille = (c.ville   || '').slice(0, 35);
     const debPays  = (c.pays    || 'CH').slice(0, 2).toUpperCase();
     const hasAddr  = !!(debNom && debNpa && debVille);
+    const msgLibre = (`Facture ${f.numero || ''}`).trim().slice(0, 140);
 
     // QR-IBAN PostFinance (3000...) => type QRR obligatoire avec ref 27 chiffres
     // Ref = numero facture padde a 27 chiffres avec checksum mod10 recursif
+    // (la référence ne doit pas être composée uniquement de zéros)
     function buildQRRef(numero) {
-        const digits = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+        const seed = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+        const digits = /[1-9]/.test(seed) ? seed : `${seed.slice(0, 25)}1`;
         const table = [0,9,4,6,8,2,7,1,3,5];
         let carry = 0;
         for (const d of digits) { carry = table[(carry + parseInt(d)) % 10]; }
         const check = (10 - carry) % 10;
         return digits + check;
     }
-    const qrRef = buildQRRef(f.numero || f.id || '');
+    const refSeed = f.numero || f.id || `FAC-${new Date().getFullYear()}-0001`;
+    const qrRef = buildQRRef(refSeed);
 
     // Format SPC norme SIX — 31 champs — QR-IBAN + QRR
     const qrLines = [
         'SPC',         // 1  Header
-        '0200',        // 2  Version
+        '0203',        // 2  Version (IG QR-bill v2.3)
         '1',           // 3  Coding UTF-8
         ibanClean,     // 4  QR-IBAN
         'S',           // 5  Creditor AddrType
         NOM_BRIMOT,    // 6  Creditor Name
-        RUE_BR,        // 7  Creditor StrtNm
-        '',            // 8  Creditor BldgNb
+        (creditorAddr.street || RUE_BR).slice(0, 70), // 7  Creditor StrtNm
+        (creditorAddr.building || '').slice(0, 16),   // 8  Creditor BldgNb
         NPA_BR,        // 9  Creditor PstCd
         VILLE_BR,      // 10 Creditor TwnNm
         PAYS_BR,       // 11 Creditor Ctry
@@ -1334,14 +1352,15 @@ async function genQRDataUrl(f) {
         hasAddr ? 'S' : '',    // 21 UltimateDebtor AddrType
         hasAddr ? debNom : '', // 22 UltimateDebtor Name
         hasAddr ? debRue : '', // 23 UltimateDebtor StrtNm
-        '',                    // 24 UltimateDebtor BldgNb
+        hasAddr ? debNo : '',  // 24 UltimateDebtor BldgNb
         hasAddr ? debNpa : '', // 25 UltimateDebtor PstCd
         hasAddr ? debVille : '',// 26 UltimateDebtor TwnNm
         hasAddr ? debPays : '',// 27 UltimateDebtor Ctry
         'QRR',         // 28 RmtInfTp — QR-IBAN exige QRR
         qrRef,         // 29 Reference 27 chiffres
-        'EPD',         // 30 Trailer
-        ''             // 31 AltPmtInf
+        msgLibre,      // 30 Unstructured message
+        'EPD',         // 31 Trailer
+        ''             // 32 AltPmtInf
     ];
 
     try {
@@ -1426,13 +1445,14 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
 
     // Référence QR-IBAN (27 chiffres Mod10 récursif)
     function buildQRRefHTML(numero) {
-        var digits = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+        var seed = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+        var digits = /[1-9]/.test(seed) ? seed : (seed.slice(0, 25) + '1');
         var table = [0,9,4,6,8,2,7,1,3,5];
         var carry = 0;
         for (var i = 0; i < digits.length; i++) { carry = table[(carry + parseInt(digits[i])) % 10]; }
         return digits + ((10 - carry) % 10);
     }
-    var qrRefHTML = buildQRRefHTML(f.numero || f.id || '');
+    var qrRefHTML = buildQRRefHTML(f.numero || f.id || ('FAC-' + new Date().getFullYear() + '-0001'));
 
     /* Croix suisse sur le QR */
     var crossHtml = qrDataUrl
@@ -1440,9 +1460,9 @@ function buildInvoiceHTML(f, lignesData, qrDataUrl) {
           '<img src="' + qrDataUrl + '" style="width:46mm;height:46mm;display:block;">' +
           '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);">' +
           '<div style="width:7mm;height:7mm;background:#fff;display:flex;align-items:center;justify-content:center;">' +
-          '<div style="position:relative;width:4.2mm;height:4.2mm;">' +
-          '<div style="position:absolute;left:1.4mm;top:0;width:1.4mm;height:4.2mm;background:#f00;"></div>' +
-          '<div style="position:absolute;top:1.4mm;left:0;width:4.2mm;height:1.4mm;background:#f00;"></div>' +
+          '<div style="position:relative;width:6mm;height:6mm;background:#000;">' +
+          '<div style="position:absolute;left:2.415mm;top:1.055mm;width:1.17mm;height:3.89mm;background:#fff;"></div>' +
+          '<div style="position:absolute;left:1.055mm;top:2.415mm;width:3.89mm;height:1.17mm;background:#fff;"></div>' +
           '</div></div></div></div>'
         : '<div style="width:46mm;height:46mm;background:#eee;display:flex;align-items:center;justify-content:center;font-size:9pt;color:#999;">QR indisponible</div>';
 
@@ -1630,6 +1650,15 @@ async function buildPDFBase64(f, ls) {
     var color      = isDevis ? [245,158,11] : [14,165,233];
     var ibanClean  = IBAN_BRIMOT.replace(/\s/g,'');
     var montantCHF = Number(f.montant_ttc||0).toFixed(2);
+    function buildQRRefPDF(numero) {
+        var seed = (numero || '').replace(/\D/g, '').slice(-26).padStart(26, '0');
+        var digits = /[1-9]/.test(seed) ? seed : (seed.slice(0, 25) + '1');
+        var table = [0,9,4,6,8,2,7,1,3,5];
+        var carry = 0;
+        for (var i = 0; i < digits.length; i++) { carry = table[(carry + parseInt(digits[i])) % 10]; }
+        return digits + ((10 - carry) % 10);
+    }
+    var qrRefPdf = buildQRRefPDF(f.numero || f.id || ('FAC-' + new Date().getFullYear() + '-0001'));
     function fmtD(d) {
         return d ? new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Europe/Zurich'}) : '-';
     }
@@ -1750,7 +1779,7 @@ async function buildPDFBase64(f, ls) {
             pdf.text(ibanClean, 5, bvY+16); pdf.text(NOM_BRIMOT, 5, bvY+20);
             pdf.text(RUE_BR, 5, bvY+24); pdf.text(NPA_BR+' '+VILLE_BR, 5, bvY+28);
             pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Reference', 5, bvY+34);
-            pdf.setFontSize(7); pdf.setFont('helvetica','normal'); pdf.text(f.numero||'', 5, bvY+38);
+            pdf.setFontSize(7); pdf.setFont('helvetica','normal'); pdf.text(qrRefPdf, 5, bvY+38);
             pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Paye par', 5, bvY+44);
             pdf.setFontSize(7); pdf.setFont('helvetica','normal');
             var debLines = [c.nom||'', c.adresse||'', (c.npa||'')+(c.ville?' '+c.ville:'')].filter(Boolean);
@@ -1772,10 +1801,12 @@ async function buildPDFBase64(f, ls) {
             pdf.text('Section de paiement', 67, bvY+6);
             if (qrDataUrl) {
                 pdf.addImage(qrDataUrl, 'PNG', 67, bvY+10, 46, 46);
-                pdf.setFillColor(255,255,255); pdf.rect(67+19.5, bvY+10+19.5, 7, 7, 'F');
-                pdf.setFillColor(220,0,0);
-                pdf.rect(67+19.5+2.8, bvY+10+19.5+1, 1.4, 5, 'F');
-                pdf.rect(67+19.5+1, bvY+10+19.5+2.8, 5, 1.4, 'F');
+                var cx = 67 + 19.5, cy = bvY + 10 + 19.5;
+                pdf.setFillColor(255,255,255); pdf.rect(cx, cy, 7, 7, 'F');
+                pdf.setFillColor(0,0,0);       pdf.rect(cx + 0.5, cy + 0.5, 6, 6, 'F');
+                pdf.setFillColor(255,255,255);
+                pdf.rect(cx + 2.415, cy + 1.055, 1.17, 3.89, 'F');
+                pdf.rect(cx + 1.055, cy + 2.415, 3.89, 1.17, 'F');
             }
             pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.setTextColor(0,0,0);
             pdf.text('Monnaie', 67, bvY+60); pdf.text('Montant', 82, bvY+60);
@@ -1789,7 +1820,7 @@ async function buildPDFBase64(f, ls) {
             pdf.text(ibanClean, ix, bvY+17); pdf.text(NOM_BRIMOT, ix, bvY+22);
             pdf.text(RUE_BR, ix, bvY+27); pdf.text(NPA_BR+' '+VILLE_BR, ix, bvY+32);
             pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Reference', ix, bvY+40);
-            pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.text(f.numero||'', ix, bvY+45);
+            pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.text(qrRefPdf, ix, bvY+45);
             pdf.setFontSize(6); pdf.setFont('helvetica','bold'); pdf.text('Paye par', ix, bvY+55);
             pdf.setFontSize(8); pdf.setFont('helvetica','normal');
             debLines.forEach(function(l,i) { pdf.text(l, ix, bvY+60+i*5); });
