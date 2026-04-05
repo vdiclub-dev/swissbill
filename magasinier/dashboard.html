@@ -1256,21 +1256,29 @@
             
             searchTimeout = setTimeout(async () => {
                 try {
-                    // Rechercher dans les transports existants
-                    const { data: transports, error } = await db
-                        .from('transport_orders_simple')
-                        .select('destinataire_nom, client_phone, pickup_street, pickup_postal, pickup_city, delivery_street, delivery_postal, delivery_city')
-                        .or(`destinataire_nom.ilike.%${query}%,client_phone.ilike.%${query}%`)
-                        .limit(10);
+                    // Rechercher dans les transports existants ET dans la table clients
+                    const [transportsData, clientsData] = await Promise.all([
+                        db
+                            .from('transport_orders_simple')
+                            .select('destinataire_nom, client_phone, pickup_street, pickup_postal, pickup_city, delivery_street, delivery_postal, delivery_city')
+                            .or(`destinataire_nom.ilike.%${query}%,client_phone.ilike.%${query}%`)
+                            .limit(10),
+                        db
+                            .from('clients')
+                            .select('name, phone, pickup_street, pickup_postal, pickup_city, delivery_street, delivery_postal, delivery_city')
+                            .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
+                            .limit(10)
+                    ]);
                     
-                    if (error) throw error;
+                    // Combiner les résultats
+                    const allResults = [];
                     
-                    // Créer un dictionnaire de clients uniques
-                    const clientsMap = new Map();
-                    transports?.forEach(transport => {
+                    // Ajouter les clients des transports
+                    transportsData.data?.forEach(transport => {
                         const key = transport.destinataire_nom + '|' + transport.client_phone;
-                        if (!clientsMap.has(key)) {
-                            clientsMap.set(key, {
+                        if (!allResults.find(r => r.key === key)) {
+                            allResults.push({
+                                key: key,
                                 name: transport.destinataire_nom,
                                 phone: transport.client_phone,
                                 pickupStreet: transport.pickup_street,
@@ -1278,19 +1286,57 @@
                                 pickupCity: transport.pickup_city,
                                 deliveryStreet: transport.delivery_street,
                                 deliveryPostal: transport.delivery_postal,
-                                deliveryCity: transport.delivery_city
+                                deliveryCity: transport.delivery_city,
+                                source: 'transport'
                             });
                         }
                     });
                     
-                    const uniqueClients = Array.from(clientsMap.values());
+                    // Ajouter les clients enregistrés
+                    clientsData.data?.forEach(client => {
+                        const key = client.name + '|' + client.phone;
+                        const existing = allResults.find(r => r.key === key);
+                        if (!existing) {
+                            allResults.push({
+                                key: key,
+                                name: client.name,
+                                phone: client.phone,
+                                pickupStreet: client.pickup_street,
+                                pickupPostal: client.pickup_postal,
+                                pickupCity: client.pickup_city,
+                                deliveryStreet: client.delivery_street,
+                                deliveryPostal: client.delivery_postal,
+                                deliveryCity: client.delivery_city,
+                                source: 'client'
+                            });
+                        } else {
+                            // Mettre à jour avec les données les plus complètes
+                            Object.assign(existing, {
+                                pickupStreet: existing.pickupStreet || client.pickup_street,
+                                pickupPostal: existing.pickupPostal || client.pickup_postal,
+                                pickupCity: existing.pickupCity || client.pickup_city,
+                                deliveryStreet: existing.deliveryStreet || client.delivery_street,
+                                deliveryPostal: existing.deliveryPostal || client.delivery_postal,
+                                deliveryCity: existing.deliveryCity || client.delivery_city
+                            });
+                        }
+                    });
                     
-                    if (uniqueClients.length === 0) {
+                    if (allResults.length === 0) {
                         resultsDiv.innerHTML = '<div class="search-result-item">Aucun client trouvé</div>';
                     } else {
-                        resultsDiv.innerHTML = uniqueClients.map(client => `
-                            <div class="search-result-item" onclick="selectClient(${JSON.stringify(client).replace(/"/g, '&quot;')})">
-                                <div class="search-result-name">${client.name}</div>
+                        resultsDiv.innerHTML = allResults.map(client => `
+                            <div class="search-result-item" onclick="selectClient(${JSON.stringify({
+                                name: client.name,
+                                phone: client.phone,
+                                pickupStreet: client.pickupStreet,
+                                pickupPostal: client.pickupPostal,
+                                pickupCity: client.pickupCity,
+                                deliveryStreet: client.deliveryStreet,
+                                deliveryPostal: client.deliveryPostal,
+                                deliveryCity: client.deliveryCity
+                            }).replace(/"/g, '&quot;')})">
+                                <div class="search-result-name">${client.name} ${client.source === 'client' ? '✓' : ''}</div>
                                 <div class="search-result-phone">${client.phone}</div>
                                 <div class="search-result-address">${client.pickupStreet || ''} ${client.pickupPostal || ''} ${client.pickupCity || ''}</div>
                             </div>
@@ -1327,6 +1373,119 @@
             document.getElementById('clientSearchResults').classList.remove('active');
             document.getElementById('clientSearch').value = '';
         };
+
+        // Enregistrement automatique d'un nouveau client
+        window.registerNewClient = async function() {
+            const name = document.getElementById('clientName').value.trim();
+            const phone = document.getElementById('clientPhone').value.trim();
+            const pickupStreet = document.getElementById('pickupStreet').value.trim();
+            const pickupPostal = document.getElementById('pickupPostal').value.trim();
+            const pickupCity = document.getElementById('pickupCity').value.trim();
+            const deliveryStreet = document.getElementById('deliveryStreet').value.trim();
+            const deliveryPostal = document.getElementById('deliveryPostal').value.trim();
+            const deliveryCity = document.getElementById('deliveryCity').value.trim();
+
+            if (!name || !phone) {
+                alert('Veuillez remplir au minimum le nom et le téléphone du client');
+                return;
+            }
+
+            try {
+                // Vérifier si le client existe déjà
+                const { data: existingClient, error: checkError } = await db
+                    .from('clients')
+                    .select('*')
+                    .eq('phone', phone)
+                    .single();
+
+                if (checkError && checkError.code !== 'PGRST116') {
+                    throw checkError;
+                }
+
+                if (existingClient) {
+                    alert('Ce client existe déjà dans la base de données');
+                    return;
+                }
+
+                // Créer le nouveau client
+                const { data: newClient, error: insertError } = await db
+                    .from('clients')
+                    .insert([{
+                        name: name,
+                        phone: phone,
+                        pickup_street: pickupStreet || null,
+                        pickup_postal: pickupPostal || null,
+                        pickup_city: pickupCity || null,
+                        delivery_street: deliveryStreet || null,
+                        delivery_postal: deliveryPostal || null,
+                        delivery_city: deliveryCity || null,
+                        created_by: currentUser.id,
+                        created_at: new Date().toISOString()
+                    }]);
+
+                if (insertError) throw insertError;
+
+                alert('Client enregistré avec succès dans la base de données!');
+
+            } catch (error) {
+                console.error('Erreur enregistrement client:', error);
+                alert('Erreur lors de l\'enregistrement du client: ' + error.message);
+            }
+        };
+
+        // Vérifier si le client existe et proposer l'enregistrement
+        document.getElementById('clientName')?.addEventListener('blur', async function() {
+            const name = this.value.trim();
+            const phone = document.getElementById('clientPhone').value.trim();
+            
+            if (name && phone) {
+                try {
+                    const { data: existingClient, error } = await db
+                        .from('clients')
+                        .select('*')
+                        .or(`name.ilike.%${name}%,phone.ilike.%${phone}%`)
+                        .limit(1);
+
+                    if (!error && existingClient && existingClient.length === 0) {
+                        // Client non trouvé, proposer l'enregistrement
+                        const registerBtn = document.createElement('div');
+                        registerBtn.id = 'registerClientBtn';
+                        registerBtn.style.cssText = `
+                            margin-top: 8px;
+                            padding: 8px 12px;
+                            background: var(--success);
+                            color: white;
+                            border: none;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            font-weight: 600;
+                            text-align: center;
+                            transition: all 0.3s ease;
+                        `;
+                        registerBtn.innerHTML = '<i class="fas fa-user-plus"></i> Enregistrer ce nouveau client';
+                        registerBtn.onclick = registerNewClient;
+                        
+                        // Supprimer le bouton s'il existe déjà
+                        const existingBtn = document.getElementById('registerClientBtn');
+                        if (existingBtn) existingBtn.remove();
+                        
+                        // Ajouter le nouveau bouton
+                        this.parentNode.appendChild(registerBtn);
+                    } else {
+                        // Client trouvé, supprimer le bouton d'enregistrement
+                        const existingBtn = document.getElementById('registerClientBtn');
+                        if (existingBtn) existingBtn.remove();
+                    }
+                } catch (error) {
+                    console.error('Erreur vérification client:', error);
+                }
+            }
+        });
+
+        document.getElementById('clientPhone')?.addEventListener('blur', function() {
+            document.getElementById('clientName').dispatchEvent(new Event('blur'));
+        });
 
         // Fermer les résultats au clic ailleurs
         document.addEventListener('click', function(e) {
