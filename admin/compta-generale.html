@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Comptabilité générale & Bilan | Colixo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <style>
+        :root{--red:#e8311a;--red-dark:#c0280f;--night:#0a0a0f;--night2:#111118;--night3:#18181f;--surface:#1e1e28;
+            --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--white:#fff;--muted:rgba(255,255,255,0.38);--muted2:rgba(255,255,255,0.6);
+            --green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b;--purple:#a855f7;--sidebar:220px;}
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+        html,body{height:100%;}
+        body{font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);display:flex;}
+        .sidebar{width:var(--sidebar);flex-shrink:0;background:var(--night2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;inset:0 auto 0 0;z-index:100;}
+        .sb-logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;}
+        .sb-mark{width:34px;height:34px;background:var(--red);border-radius:9px;display:grid;place-items:center;font-size:15px;}
+        .sb-text{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;color:var(--white);}
+        .sb-text em{color:var(--red);font-style:normal;}
+        .nav-sec{padding:14px 12px 5px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;margin:2px 8px;font-size:13px;font-weight:500;color:var(--muted2);text-decoration:none;transition:all 0.2s;border:1px solid transparent;}
+        .nav-item i{width:16px;text-align:center;font-size:14px;}
+        .nav-item:hover{background:var(--night3);color:var(--white);}
+        .nav-item.active{background:rgba(232,49,26,0.1);color:var(--white);border-color:rgba(232,49,26,0.2);}
+        .nav-item.active i{color:var(--red);}
+        .sb-footer{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border);}
+        .user-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--night3);}
+        .user-av{width:30px;height:30px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:13px;}
+        .user-name{font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;}
+        .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+        .topbar{background:var(--night2);border-bottom:1px solid var(--border);padding:0 28px;min-height:60px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:50;}
+        .page-title{font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;}
+        .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+        select.period{background:var(--night3);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;color:var(--white);font-family:inherit;font-size:13px;}
+        .tabs{display:flex;border-bottom:1px solid var(--border);padding:0 28px;background:var(--night2);flex-wrap:wrap;}
+        .tab{padding:12px 16px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;}
+        .tab:hover{color:var(--muted2);}
+        .tab.active{color:var(--white);border-bottom-color:var(--red);}
+        .content{padding:24px 28px;flex:1;overflow-y:auto;}
+        .tab-pane{display:none;}
+        .tab-pane.active{display:block;}
+        .btn{font-family:inherit;font-weight:600;font-size:13px;padding:8px 16px;border-radius:9px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
+        .btn-green{background:var(--green);color:var(--night);}
+        .btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border2);color:var(--muted2);}
+        .btn-ghost:hover{color:var(--white);}
+        .btn-sm{padding:5px 12px;font-size:12px;}
+        .card{background:var(--night2);border:1px solid var(--border2);border-radius:16px;margin-bottom:18px;overflow:hidden;}
+        .card-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+        .card-title{font-family:'Bebas Neue',cursive;font-size:15px;letter-spacing:1px;}
+        .tbl{width:100%;border-collapse:collapse;font-size:13px;}
+        .tbl th{padding:10px 16px;text-align:left;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);background:var(--night3);}
+        .tbl td{padding:10px 16px;border-top:1px solid var(--border);}
+        .tbl tr:hover td{background:rgba(255,255,255,0.02);}
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+        .kpi{background:var(--night3);border:1px solid var(--border2);border-radius:12px;padding:14px 18px;}
+        .kpi-l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;}
+        .kpi-v{font-family:'Bebas Neue',cursive;font-size:22px;margin-top:4px;}
+        .muted{color:var(--muted2);font-size:12px;line-height:1.5;}
+        .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:500;align-items:center;justify-content:center;padding:16px;}
+        .modal.open{display:flex;}
+        .modal-box{background:var(--night3);border:1px solid var(--border2);border-radius:20px;padding:28px;width:100%;max-width:640px;max-height:92vh;overflow-y:auto;}
+        .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+        .modal-title{font-family:'Bebas Neue',cursive;font-size:20px;}
+        .modal-close{width:32px;height:32px;border:none;border-radius:50%;background:var(--surface);color:var(--muted);cursor:pointer;}
+        .field{margin-bottom:10px;}
+        .field label{display:block;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
+        .field input,.field select{width:100%;padding:9px 11px;background:var(--surface);border:1.5px solid var(--border2);border-radius:8px;color:var(--white);font-size:14px;}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+        .toast{position:fixed;top:16px;right:16px;padding:12px 18px;border-radius:10px;background:var(--night3);border:1px solid var(--border2);z-index:9999;transform:translateX(120%);transition:transform 0.35s;}
+        .toast.show{transform:translateX(0);}
+        .loader{display:none;position:fixed;inset:0;background:rgba(10,10,15,0.85);place-items:center;z-index:2000;}
+        .loader.on{display:grid;}
+        .spin{width:36px;height:36px;border:2px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:sp 0.8s linear infinite;}
+        @keyframes sp{to{transform:rotate(360deg)}}
+        .line-row{display:grid;grid-template-columns:1.4fr 1fr 80px 80px 36px;gap:8px;align-items:end;margin-bottom:8px;}
+        @media(max-width:900px){.grid2{grid-template-columns:1fr;}.line-row{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div class="loader" id="loader"><div class="spin"></div></div>
+
+<aside class="sidebar">
+    <a href="dashboard.html" class="sb-logo"><div class="sb-mark">🚚</div><div class="sb-text">Colixo <em>Dispatch</em></div></a>
+    <div class="nav-sec">Navigation</div>
+    <a href="dashboard.html" class="nav-item"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
+    <a href="finances.html" class="nav-item"><i class="fas fa-euro-sign"></i><span>Finances</span></a>
+    <a href="compta-generale.html" class="nav-item active"><i class="fas fa-book"></i><span>Compta générale</span></a>
+    <div class="sb-footer">
+        <div class="user-chip">
+            <div class="user-av" id="sbAv">SA</div>
+            <div class="user-name" id="sbName">Admin</div>
+            <button class="btn-logout" id="btnLogout" type="button"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+    </div>
+</aside>
+
+<div class="main">
+    <header class="topbar">
+        <div class="page-title">COMPTABILITÉ GÉNÉRALE & BILAN</div>
+        <div class="toolbar">
+            <label class="muted">Société</label>
+            <select id="selEntite" class="period">
+                <option value="colixo">Colixo</option>
+                <option value="brimot">Brimot Nettoyage</option>
+            </select>
+            <label class="muted">Exercice</label>
+            <select id="selExercice" class="period"></select>
+            <button type="button" class="btn btn-green btn-sm" onclick="loadData()"><i class="fas fa-sync-alt"></i> Charger</button>
+        </div>
+    </header>
+    <div class="tabs">
+        <div class="tab active" data-tab="plan"><i class="fas fa-list-ol"></i> Plan comptable</div>
+        <div class="tab" data-tab="ecritures"><i class="fas fa-pen"></i> Écritures</div>
+        <div class="tab" data-tab="bilan"><i class="fas fa-balance-scale"></i> Bilan</div>
+        <div class="tab" data-tab="cr"><i class="fas fa-chart-pie"></i> Compte de résultat</div>
+    </div>
+    <div class="content">
+        <div id="comptaSchemaBanner" class="card" style="display:none;margin-bottom:18px;border-color:rgba(232,49,26,0.55);background:rgba(232,49,26,0.08);">
+            <div style="padding:16px 20px;">
+                <strong style="color:var(--white);"><i class="fas fa-exclamation-triangle" style="color:var(--red);"></i> Tables Supabase non créées</strong>
+                <p class="muted" style="margin:10px 0;">Le message <code>Could not find the table 'public.compta_comptes'</code> (ou « schema cache ») indique que le script SQL de comptabilité n’a pas encore été exécuté sur ce projet Supabase.</p>
+                <ol style="margin:0 0 0 18px;font-size:13px;color:var(--muted2);line-height:1.65;">
+                    <li>Ouvrez le <a href="https://supabase.com/dashboard" target="_blank" rel="noopener" style="color:var(--blue);">tableau de bord Supabase</a> → votre projet → <strong>SQL Editor</strong></li>
+                    <li><strong>New query</strong> → copiez-collez tout le fichier <code style="color:var(--yellow);">compta_generale_schema.sql</code> à la racine du dépôt (ou depuis votre clone)</li>
+                    <li>Cliquez <strong>Run</strong> (succès attendu), puis revenez ici et cliquez <strong>Charger</strong>.</li>
+                </ol>
+            </div>
+        </div>
+        <div class="tab-pane active" id="pane-plan">
+            <div class="card" style="margin-bottom:16px;border-color:rgba(59,130,246,0.35);">
+                <div style="padding:16px 20px;">
+                    <p class="muted" style="margin-bottom:10px;">En Suisse, le <strong>plan comptable de référence pour les PME</strong> est le <strong>Kontenrahmen KMU</strong> (« plan comptable suisse PME »). Il est publié <strong>gratuitement en PDF</strong> (français, allemand, italien) par la Confédération :</p>
+                    <p style="font-size:13px;margin-bottom:8px;"><a href="https://www.kmu.admin.ch/dam/kmu/fr/dokumente/savoir-pratique/Finances/kmu-kontenplan-franzoesisch.pdf.download.pdf/KMU-Kontenplan-Franz%C3%B6sisch.pdf" target="_blank" rel="noopener" style="color:var(--blue);">PDF — Plan comptable suisse PME (français, SECO / kmu.admin.ch)</a></p>
+                    <p class="muted" style="margin-bottom:12px;">Le fichier <code>swiss-kmu-kontenplan.json</code> dans ce dossier est un <strong>extrait structuré</strong> pour démarrer dans Colixo (pas le plan exhaustif). Les numéros doivent correspondre à votre paramétrage Bexio / fiduciaire.</p>
+                    <button type="button" class="btn btn-green btn-sm" onclick="importKmuPlan()"><i class="fas fa-file-import"></i> Importer l’extrait KMU pour la société sélectionnée</button>
+                </div>
+            </div>
+            <p class="muted" style="margin-bottom:16px;">Exécutez <code>compta_generale_schema.sql</code> dans Supabase pour créer les tables. Vous pouvez compléter avec l’import KMU ci-dessus ou des comptes manuels.</p>
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">COMPTES</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="importKmuPlan()"><i class="fas fa-file-import"></i> Importer extrait KMU</button>
+                        <button type="button" class="btn btn-green btn-sm" onclick="openModalCompte()"><i class="fas fa-plus"></i> Compte</button>
+                    </div>
+                </div>
+                <table class="tbl"><thead><tr><th>Code</th><th>Libellé</th><th>Classe</th><th>Nature</th></tr></thead><tbody id="planTable"></tbody></table>
+            </div>
+            <div class="card">
+                <div class="card-head"><div class="card-title">SOLDES D'OUVERTURE AU 1<sup>er</sup> JANVIER (exercice sélectionné)</div>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="saveSoldesOuverture()"><i class="fas fa-save"></i> Enregistrer les soldes</button>
+                </div>
+                <div style="padding:16px 20px;">
+                    <p class="muted" style="margin-bottom:12px;">Montant positif = côté normal du compte (débit pour actif/charges, crédit pour passif/produits/capitaux).</p>
+                    <div id="soldesOuvertureWrap"></div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-pane" id="pane-ecritures">
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">JOURNAL — partie double (Σ débit = Σ crédit)</div>
+                    <button type="button" class="btn btn-green btn-sm" onclick="openModalEcriture()"><i class="fas fa-plus"></i> Nouvelle écriture</button>
+                </div>
+                <table class="tbl"><thead><tr><th>Date</th><th>Libellé</th><th>Pièce</th><th>Débit</th><th>Crédit</th><th></th></tr></thead><tbody id="ecrituresTable"></tbody></table>
+            </div>
+            <div class="card" style="border-color:rgba(59,130,246,0.35);">
+                <div class="card-head"><div class="card-title">EXPORT BEXIO (CSV)</div></div>
+                <div style="padding:16px 20px;">
+                    <p class="muted" style="margin-bottom:14px;">Fichiers <strong>UTF-8 avec séparateur « ; »</strong>, entêtes en allemand (usage courant pour l’import journal Suisse / Bexio). Les <strong>numéros de compte doivent correspondre</strong> à ceux créés dans Bexio (ou mappez les colonnes à l’import). Colonne TVA vide : à compléter dans Bexio si besoin (ex. codes <code>VM81</code> selon votre plan).</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                        <button type="button" class="btn btn-green btn-sm" onclick="exportBexioJournalLignes()"><i class="fas fa-file-export"></i> Journal — une ligne par compte (Soll / Haben)</button>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="exportBexioJournalSimple()"><i class="fas fa-columns"></i> Écritures simples — 1 ligne (Sollkonto → Habenkonto)</button>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="exportBexioPlanComptes()"><i class="fas fa-list-ol"></i> Plan comptes (Kontonummer)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-pane" id="pane-bilan">
+            <p class="muted" style="margin-bottom:12px;">Arrêté des comptes de bilan au <strong>passif / actif</strong> : soldes au choix de la date de clôture (dans l'exercice chargé).</p>
+            <div class="toolbar" style="margin-bottom:16px;">
+                <label>Date de bilan</label>
+                <input type="date" id="bilanDate" class="period" style="padding:7px 12px;background:var(--night3);border:1px solid var(--border2);border-radius:8px;color:var(--white);">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="renderBilan()"><i class="fas fa-calculator"></i> Calculer</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportBilanCsv()"><i class="fas fa-file-csv"></i> Export CSV</button>
+            </div>
+            <div class="grid2">
+                <div class="card"><div class="card-head"><div class="card-title">ACTIF</div></div><table class="tbl"><thead><tr><th>Compte</th><th>Libellé</th><th>Solde CHF</th></tr></thead><tbody id="bilanActif"></tbody></table></div>
+                <div class="card"><div class="card-head"><div class="card-title">PASSIF & CAPITAUX PROPRES</div></div><table class="tbl"><thead><tr><th>Compte</th><th>Libellé</th><th>Solde CHF</th></tr></thead><tbody id="bilanPassif"></tbody></table></div>
+            </div>
+            <div class="kpi" id="bilanCheck" style="margin-top:8px;"></div>
+        </div>
+        <div class="tab-pane" id="pane-cr">
+            <div class="toolbar" style="margin-bottom:16px;flex-wrap:wrap;">
+                <label>Du</label>
+                <input type="date" id="crDu" class="period" style="padding:7px 12px;background:var(--night3);border:1px solid var(--border2);border-radius:8px;color:var(--white);">
+                <label>au</label>
+                <input type="date" id="crAu" class="period" style="padding:7px 12px;background:var(--night3);border:1px solid var(--border2);border-radius:8px;color:var(--white);">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="renderCR()"><i class="fas fa-calculator"></i> Calculer</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportCrCsv()"><i class="fas fa-file-csv"></i> Export CSV</button>
+            </div>
+            <div class="grid2">
+                <div class="card"><div class="card-head"><div class="card-title">PRODUITS</div></div><table class="tbl"><thead><tr><th>Compte</th><th>Montant CHF</th></tr></thead><tbody id="crProduits"></tbody></table></div>
+                <div class="card"><div class="card-head"><div class="card-title">CHARGES</div></div><table class="tbl"><thead><tr><th>Compte</th><th>Montant CHF</th></tr></thead><tbody id="crCharges"></tbody></table></div>
+            </div>
+            <div class="kpi" style="margin-top:12px;" id="crResultat"></div>
+        </div>
+    </div>
+</div>
+
+<div id="modalCompte" class="modal">
+    <div class="modal-box">
+        <div class="modal-head"><div class="modal-title">NOUVEAU COMPTE</div><button type="button" class="modal-close" onclick="closeModal('modalCompte')">✕</button></div>
+        <div class="field-row">
+            <div class="field"><label>Code</label><input type="text" id="cCode" placeholder="ex. 5850"></div>
+            <div class="field"><label>Classe</label>
+                <select id="cClasse" onchange="syncNature()">
+                    <option value="actif">Actif</option>
+                    <option value="passif">Passif</option>
+                    <option value="capitaux_propres">Capitaux propres</option>
+                    <option value="charge">Charge</option>
+                    <option value="produit">Produit</option>
+                </select>
+            </div>
+        </div>
+        <div class="field"><label>Libellé</label><input type="text" id="cLibelle"></div>
+        <div class="field"><label>Nature du solde</label>
+            <select id="cNature"><option value="debit">Débit (actif, charges)</option><option value="credit">Crédit (passif, produits, capitaux)</option></select>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+            <button type="button" class="btn btn-green" style="flex:1;justify-content:center;" onclick="saveCompte()">Enregistrer</button>
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalCompte')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalEcriture" class="modal">
+    <div class="modal-box" style="max-width:720px;">
+        <div class="modal-head"><div class="modal-title" id="ecrTitle">NOUVELLE ÉCRITURE</div><button type="button" class="modal-close" onclick="closeModal('modalEcriture')">✕</button></div>
+        <input type="hidden" id="ecrId">
+        <div class="field-row">
+            <div class="field"><label>Date</label><input type="date" id="ecrDate"></div>
+            <div class="field"><label>Réf. pièce</label><input type="text" id="ecrPiece" placeholder="Fac. n°, bordereau…"></div>
+        </div>
+        <div class="field"><label>Libellé global</label><input type="text" id="ecrLibelle" placeholder="Description de l'écriture"></div>
+        <div style="margin:12px 0 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;">Lignes</div>
+        <div id="ecrLines"></div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addEcrLine()" style="margin-bottom:12px;"><i class="fas fa-plus"></i> Ligne</button>
+        <div class="muted" id="ecrBalance" style="margin-bottom:8px;">Total débit : 0.00 | Total crédit : 0.00</div>
+        <div style="display:flex;gap:10px;">
+            <button type="button" class="btn btn-green" style="flex:1;justify-content:center;" onclick="saveEcriture()">Valider (équilibre obligatoire)</button>
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalEcriture')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+if(!window.SUPABASE_CONFIG){ document.body.innerHTML='<div style="padding:40px;color:red;">config.js manquant</div>'; return; }
+const db = window.SUPABASE_CLIENT;
+let comptes=[], ecritures=[], lignes=[], soldesMap=new Map();
+const toastEl=document.getElementById('toast');
+function toast(msg, err){
+    toastEl.textContent=(err?'✕ ':'✓ ')+msg;
+    toastEl.style.borderColor=err?'var(--red)':'var(--green)';
+    toastEl.classList.add('show');
+    setTimeout(()=>toastEl.classList.remove('show'), 3500);
+}
+function showL(on){ document.getElementById('loader').classList.toggle('on', !!on); }
+window.closeModal=function(id){ const m=document.getElementById(id); if(m){ m.classList.remove('open'); m.style.display='none'; } };
+function openModal(id){ const m=document.getElementById(id); if(m){ m.style.display='flex'; m.classList.add('open'); } }
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) closeModal(m.id); }));
+
+document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click',()=>{
+        document.querySelectorAll('.tab,.tab-pane').forEach(x=>x.classList.remove('active'));
+        t.classList.add('active');
+        document.getElementById('pane-'+t.dataset.tab)?.classList.add('active');
+        if(t.dataset.tab==='bilan') renderBilan();
+        if(t.dataset.tab==='cr') renderCR();
+    });
+});
+
+function esc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function fmt(n){ return (parseFloat(n)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function toCHDate(iso){
+    if(!iso) return '';
+    const p=String(iso).slice(0,10).split('-');
+    if(p.length!==3) return '';
+    return `${p[2]}.${p[1]}.${p[0]}`;
+}
+function csvEsc(v){
+    const s=String(v??'');
+    if(/[;"\r\n]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+    return s;
+}
+function compteMap(){
+    const m=new Map();
+    (comptes||[]).forEach(c=>m.set(c.id,c));
+    return m;
+}
+function downloadCsvFile(filename, lineStrings){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['\ufeff'+lineStrings.join('\n')],{type:'text/csv;charset=utf-8'}));
+    a.download=filename;
+    a.click();
+}
+
+window.exportBexioJournalLignes=function(){
+    if(!lignes.length){ toast('Aucune ligne à exporter',true); return; }
+    const cm=compteMap(), byE=ecritureById();
+    const sorted=[...lignes].sort((a,b)=>{
+        const ea=byE.get(a.ecriture_id), eb=byE.get(b.ecriture_id);
+        if(!ea||!eb) return 0;
+        const c=ea.date_ecriture.localeCompare(eb.date_ecriture);
+        if(c!==0) return c;
+        const eid=String(a.ecriture_id).localeCompare(String(b.ecriture_id));
+        if(eid!==0) return eid;
+        return String(a.id).localeCompare(String(b.id));
+    });
+    const H=['Datum','Beleg','Buchungstext','Kontonummer','Soll','Haben','MwSt-Code'];
+    const out=[H.join(';')];
+    for(const l of sorted){
+        const e=byE.get(l.ecriture_id);
+        if(!e) continue;
+        const c=cm.get(l.compte_id);
+        if(!c) continue;
+        const sub=l.libelle?String(l.libelle).trim():'';
+        const txt=sub?`${e.libelle||''} — ${sub}`:(e.libelle||'');
+        const d=parseFloat(l.debit)||0, cr=parseFloat(l.credit)||0;
+        out.push([
+            toCHDate(e.date_ecriture),
+            csvEsc(e.piece_ref||''),
+            csvEsc(txt),
+            csvEsc(c.code),
+            d>0?d.toFixed(2):'',
+            cr>0?cr.toFixed(2):'',
+            ''
+        ].join(';'));
+    }
+    const fn=`bexio-journal-lignes-${entite()}-${exercice()}.csv`;
+    downloadCsvFile(fn,out);
+    toast('CSV Bexio (lignes) téléchargé');
+};
+
+window.exportBexioJournalSimple=function(){
+    if(!ecritures.length){ toast('Aucune écriture',true); return; }
+    const cm=compteMap();
+    const H=['Datum','Beleg','Buchungstext','Sollkonto','Habenkonto','Betrag','MwSt-Code'];
+    const out=[H.join(';')];
+    let skip=0;
+    for(const e of ecritures){
+        const ls=lignes.filter(x=>x.ecriture_id===e.id);
+        if(ls.length!==2){ skip++; continue; }
+        const [a,b]=ls;
+        const da=parseFloat(a.debit)||0, ca=parseFloat(a.credit)||0;
+        const db=parseFloat(b.debit)||0, cb=parseFloat(b.credit)||0;
+        let debitLine, creditLine;
+        if(da>0&&cb>0&&ca===0&&db===0){ debitLine=a; creditLine=b; }
+        else if(db>0&&ca>0&&cb===0&&da===0){ debitLine=b; creditLine=a; }
+        else { skip++; continue; }
+        const amt=Math.max(da,db);
+        const cD=cm.get(debitLine.compte_id), cC=cm.get(creditLine.compte_id);
+        if(!cD||!cC){ skip++; continue; }
+        out.push([
+            toCHDate(e.date_ecriture),
+            csvEsc(e.piece_ref||''),
+            csvEsc(e.libelle||''),
+            csvEsc(cD.code),
+            csvEsc(cC.code),
+            amt.toFixed(2),
+            ''
+        ].join(';'));
+    }
+    downloadCsvFile(`bexio-journal-simple-${entite()}-${exercice()}.csv`,out);
+    toast(`Bexio simple : ${out.length-1} ligne(s). ${skip} écriture(s) ignorées (≠ 2 lignes avec 1 débit / 1 crédit).`);
+};
+
+window.importKmuPlan=async function(){
+    showL(true);
+    try{
+        const r=await fetch('swiss-kmu-kontenplan.json',{cache:'no-store'});
+        if(!r.ok) throw new Error('Fichier swiss-kmu-kontenplan.json introuvable (servez la page en HTTP, pas en file://).');
+        const data=await r.json();
+        const list=data.comptes;
+        if(!Array.isArray(list)||!list.length) throw new Error('JSON KMU invalide');
+        const ent=entite();
+        let n=0, skip=0;
+        for(const c of list){
+            const { data: ex }=await db.from('compta_comptes').select('id').eq('entite',ent).eq('code',String(c.code)).maybeSingle();
+            if(ex){ skip++; continue; }
+            const { error }=await db.from('compta_comptes').insert([{
+                entite:ent,
+                code:String(c.code),
+                libelle:c.libelle,
+                classe:c.classe,
+                nature_solde:c.nature_solde
+            }]);
+            if(error) throw error;
+            n++;
+        }
+        await loadData();
+        toast(`Plan KMU : ${n} compte(s) ajouté(s), ${skip} déjà existant(s) (ignorés).`);
+    } catch(e){ toast(e.message||String(e),true); }
+    finally{ showL(false); }
+};
+
+window.exportBexioPlanComptes=function(){
+    if(!comptes.length){ toast('Aucun compte',true); return; }
+    const H=['Kontonummer','Bezeichnung','Typ'];
+    const out=[H.join(';')];
+    const typ={ actif:'Aktiva', passif:'Passiva', capitaux_propres:'Eigenkapital', charge:'Aufwand', produit:'Ertrag' };
+    for(const c of [...comptes].sort((a,b)=>String(a.code).localeCompare(String(b.code)))){
+        out.push([csvEsc(c.code),csvEsc(c.libelle),csvEsc(typ[c.classe]||c.classe)].join(';'));
+    }
+    downloadCsvFile(`bexio-plan-comptes-${entite()}.csv`,out);
+    toast('Plan comptes exporté (pour aligner les numéros dans Bexio)');
+};
+
+function entite(){ return document.getElementById('selEntite').value; }
+function exercice(){ return parseInt(document.getElementById('selExercice').value,10); }
+
+function ecritureById(){
+    const m=new Map();
+    (ecritures||[]).forEach(e=>m.set(e.id,e));
+    return m;
+}
+
+function ouverturePour(compteId){
+    const k=compteId+'|'+exercice();
+    return soldesMap.get(k) ?? 0;
+}
+
+function mouvementPeriode(compte, d1, d2){
+    const byE=ecritureById();
+    let d=0,c=0;
+    for(const l of lignes){
+        if(l.compte_id!==compte.id) continue;
+        const e=byE.get(l.ecriture_id);
+        if(!e) continue;
+        const dt=e.date_ecriture;
+        if(dt<d1||dt>d2) continue;
+        d+=parseFloat(l.debit)||0;
+        c+=parseFloat(l.credit)||0;
+    }
+    const o=ouverturePour(compte.id);
+    return compte.nature_solde==='debit' ? o+d-c : o+c-d;
+}
+
+window.syncNature=function(){
+    const cl=document.getElementById('cClasse').value;
+    document.getElementById('cNature').value=(cl==='actif'||cl==='charge')?'debit':'credit';
+};
+
+window.loadData=async function(){
+    showL(true);
+    try{
+        const ent=entite(), ex=exercice();
+        const { data:c, error:e1 }=await db.from('compta_comptes').select('*').eq('entite',ent).eq('actif',true).order('code');
+        if(e1) throw e1;
+        comptes=c||[];
+        const { data:ec, error:e2 }=await db.from('compta_ecritures').select('*').eq('entite',ent).gte('date_ecriture',ex+'-01-01').lte('date_ecriture',ex+'-12-31').order('date_ecriture',{ascending:false});
+        if(e2) throw e2;
+        ecritures=ec||[];
+        const ids=ecritures.map(x=>x.id);
+        if(ids.length){
+            const { data:ln, error:e3 }=await db.from('compta_ecritures_lignes').select('*').in('ecriture_id',ids);
+            if(e3) throw e3;
+            lignes=ln||[];
+        } else lignes=[];
+        const { data:so, error:e4 }=await db.from('compta_solde_ouverture').select('*').eq('exercice',ex);
+        if(e4) console.warn(e4);
+        soldesMap=new Map();
+        (so||[]).forEach(s=>soldesMap.set(s.compte_id+'|'+s.exercice, parseFloat(s.ouverture_solde)||0));
+        renderPlan();
+        renderSoldesForm();
+        renderEcrituresList();
+        const y=String(ex);
+        document.getElementById('bilanDate').value=y+'-12-31';
+        document.getElementById('crDu').value=y+'-01-01';
+        document.getElementById('crAu').value=y+'-12-31';
+        const ban=document.getElementById('comptaSchemaBanner');
+        if(ban) ban.style.display='none';
+        toast('Données chargées');
+    } catch(err){
+        console.error(err);
+        const msg=String(err&&err.message||err||'');
+        const missing=/schema cache|could not find the table|compta_comptes|PGRST205|does not exist|relation.*does not exist/i.test(msg);
+        const ban=document.getElementById('comptaSchemaBanner');
+        if(ban) ban.style.display=missing?'block':'none';
+        toast(missing?'Exécutez d’abord compta_generale_schema.sql dans Supabase (voir encadré rouge).':(err.message||String(err)), true);
+        comptes=[]; ecritures=[]; lignes=[];
+        renderPlan();
+        document.getElementById('planTable').innerHTML='<tr><td colspan="4" class="muted">'+(missing?'Tables manquantes — exécutez le script SQL dans Supabase (voir ci-dessus).':'Erreur de chargement.')+'</td></tr>';
+    } finally{ showL(false); }
+};
+
+function renderPlan(){
+    const tb=document.getElementById('planTable');
+    if(!comptes.length){ tb.innerHTML='<tr><td colspan="4" class="muted">Aucun compte — exécutez le script SQL ou créez un compte.</td></tr>'; return; }
+    tb.innerHTML=comptes.map(c=>`<tr>
+        <td><strong>${esc(c.code)}</strong></td>
+        <td>${esc(c.libelle)}</td>
+        <td>${esc(c.classe)}</td>
+        <td>${esc(c.nature_solde)}</td>
+    </tr>`).join('');
+}
+
+function renderSoldesForm(){
+    const w=document.getElementById('soldesOuvertureWrap');
+    if(!comptes.length){ w.innerHTML=''; return; }
+    const ex=exercice();
+    w.innerHTML='<table class="tbl"><thead><tr><th>Code</th><th>Libellé</th><th>Solde ouverture CHF</th></tr></thead><tbody>'+
+    comptes.map(c=>{
+        const val=soldesMap.has(c.id+'|'+ex) ? soldesMap.get(c.id+'|'+ex) : '';
+        return `<tr>
+            <td>${esc(c.code)}</td>
+            <td>${esc(c.libelle)}</td>
+            <td><input type="number" step="0.01" data-cid="${c.id}" class="so-input" style="width:100%;max-width:160px;padding:8px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--white);" value="${val!==''?val:''}"></td>
+        </tr>`;
+    }).join('')+'</tbody></table>';
+}
+
+window.saveSoldesOuverture=async function(){
+    const ex=exercice();
+    const rows=[];
+    document.querySelectorAll('.so-input').forEach(inp=>{
+        const cid=inp.getAttribute('data-cid');
+        const v=inp.value.trim();
+        if(v==='') return;
+        rows.push({ compte_id:cid, exercice:ex, ouverture_solde: parseFloat(v)||0 });
+    });
+    showL(true);
+    try{
+        for(const r of rows){
+            const { error }=await db.from('compta_solde_ouverture').upsert(r,{ onConflict:'compte_id,exercice' });
+            if(error) throw error;
+        }
+        await loadData();
+        toast('Soldes enregistrés');
+    } catch(e){ toast(e.message,true); }
+    finally{ showL(false); }
+};
+
+window.openModalCompte=function(){ document.getElementById('cCode').value=''; document.getElementById('cLibelle').value=''; syncNature(); openModal('modalCompte'); };
+window.saveCompte=async function(){
+    const code=document.getElementById('cCode').value.trim();
+    const libelle=document.getElementById('cLibelle').value.trim();
+    const classe=document.getElementById('cClasse').value;
+    const nature_solde=document.getElementById('cNature').value;
+    if(!code||!libelle){ toast('Code et libellé requis',true); return; }
+    showL(true);
+    try{
+        const { error }=await db.from('compta_comptes').insert([{ entite:entite(), code, libelle, classe, nature_solde }]);
+        if(error) throw error;
+        closeModal('modalCompte');
+        await loadData();
+        toast('Compte créé');
+    } catch(e){ toast(e.message,true); }
+    finally{ showL(false); }
+};
+
+let ecrLineId=0;
+function compteOptions(){
+    return comptes.map(c=>`<option value="${c.id}">${esc(c.code)} — ${esc(c.libelle)}</option>`).join('');
+}
+window.addEcrLine=function(){
+    const id=++ecrLineId;
+    const div=document.createElement('div');
+    div.className='line-row';
+    div.dataset.lid=String(id);
+    div.innerHTML=`<select class="ecr-c" style="padding:8px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--white);width:100%;">${compteOptions()}</select>
+        <input type="text" class="ecr-lib" placeholder="Libellé ligne" style="padding:8px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--white);">
+        <input type="number" step="0.01" class="ecr-d" placeholder="Débit" style="padding:8px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--white);">
+        <input type="number" step="0.01" class="ecr-cr" placeholder="Crédit" style="padding:8px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--white);">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.line-row').remove();updateEcrBal();">✕</button>`;
+    document.getElementById('ecrLines').appendChild(div);
+    div.querySelectorAll('.ecr-d,.ecr-cr').forEach(x=>x.addEventListener('input',updateEcrBal));
+};
+function updateEcrBal(){
+    let sd=0, sc=0;
+    document.querySelectorAll('#ecrLines .line-row').forEach(row=>{
+        sd+=parseFloat(row.querySelector('.ecr-d').value)||0;
+        sc+=parseFloat(row.querySelector('.ecr-cr').value)||0;
+    });
+    const el=document.getElementById('ecrBalance');
+    const ok=Math.abs(sd-sc)<0.01;
+    el.textContent=`Total débit : ${fmt(sd)} | Total crédit : ${fmt(sc)}`+(ok?' ✓ équilibré':' — doit être égal');
+    el.style.color=ok?'var(--green)':'var(--yellow)';
+}
+window.openModalEcriture=function(){
+    document.getElementById('ecrTitle').textContent='NOUVELLE ÉCRITURE';
+    document.getElementById('ecrId').value='';
+    document.getElementById('ecrDate').value=new Date().toISOString().slice(0,10);
+    document.getElementById('ecrPiece').value='';
+    document.getElementById('ecrLibelle').value='';
+    document.getElementById('ecrLines').innerHTML='';
+    if(!comptes.length){ toast('Créez d\'abord des comptes (script SQL ou plan)',true); return; }
+    addEcrLine(); addEcrLine();
+    updateEcrBal();
+    openModal('modalEcriture');
+};
+window.saveEcriture=async function(){
+    const date_ecriture=document.getElementById('ecrDate').value;
+    const libelle=document.getElementById('ecrLibelle').value.trim();
+    const piece_ref=document.getElementById('ecrPiece').value.trim()||null;
+    if(!date_ecriture||!libelle){ toast('Date et libellé requis',true); return; }
+    const rows=[];
+    let sd=0, sc=0;
+    const lineRows=document.querySelectorAll('#ecrLines .line-row');
+    for(let i=0;i<lineRows.length;i++){
+        const row=lineRows[i];
+        const compte_id=row.querySelector('.ecr-c').value;
+        const lib=row.querySelector('.ecr-lib').value.trim()||null;
+        const d=parseFloat(row.querySelector('.ecr-d').value)||0;
+        const c=parseFloat(row.querySelector('.ecr-cr').value)||0;
+        if(!compte_id) continue;
+        if((d>0 && c>0)||(d<=0 && c<=0)){ toast('Chaque ligne : débit OU crédit, pas les deux',true); return; }
+        rows.push({ compte_id, libelle:lib, debit:d, credit:c });
+        sd+=d; sc+=c;
+    }
+    if(rows.length<2){ toast('Au moins 2 lignes',true); return; }
+    if(Math.abs(sd-sc)>0.01){ toast('Écriture non équilibrée',true); return; }
+    showL(true);
+    try{
+        const { data: { session } }=await db.auth.getSession();
+        const { data: head, error:herr }=await db.from('compta_ecritures').insert([{
+            entite:entite(), date_ecriture, libelle, piece_ref,
+            created_by: session?.user?.id??null
+        }]).select('id').single();
+        if(herr) throw herr;
+        const ins=rows.map(r=>({ ecriture_id:head.id, compte_id:r.compte_id, libelle:r.libelle, debit:r.debit, credit:r.credit }));
+        const { error: lerr }=await db.from('compta_ecritures_lignes').insert(ins);
+        if(lerr) throw lerr;
+        closeModal('modalEcriture');
+        await loadData();
+        toast('Écriture enregistrée');
+    } catch(e){
+        toast(e.message||String(e),true);
+    } finally{ showL(false); }
+};
+
+function sumLignesEcriture(eid){
+    let d=0,c=0;
+    lignes.filter(l=>l.ecriture_id===eid).forEach(l=>{ d+=parseFloat(l.debit)||0; c+=parseFloat(l.credit)||0; });
+    return { d, c };
+}
+
+function renderEcrituresList(){
+    const tb=document.getElementById('ecrituresTable');
+    if(!ecritures.length){ tb.innerHTML='<tr><td colspan="6" class="muted">Aucune écriture sur cet exercice.</td></tr>'; return; }
+    tb.innerHTML=ecritures.map(e=>{
+        const { d, c }=sumLignesEcriture(e.id);
+        return `<tr>
+            <td>${esc(e.date_ecriture)}</td>
+            <td>${esc(e.libelle)}</td>
+            <td>${esc(e.piece_ref||'')}</td>
+            <td>${fmt(d)}</td>
+            <td>${fmt(c)}</td>
+            <td><button type="button" class="btn btn-ghost btn-sm" onclick="deleteEcriture('${e.id}')"><i class="fas fa-trash" style="color:var(--red)"></i></button></td>
+        </tr>`;
+    }).join('');
+}
+window.deleteEcriture=async function(id){
+    if(!confirm('Supprimer cette écriture et ses lignes ?')) return;
+    showL(true);
+    try{
+        const { error }=await db.from('compta_ecritures').delete().eq('id',id);
+        if(error) throw error;
+        await loadData();
+        toast('Supprimé');
+    } catch(e){ toast(e.message,true); }
+    finally{ showL(false); }
+};
+
+window.renderBilan=function(){
+    const dFin=document.getElementById('bilanDate').value;
+    const ex=exercice();
+    const d1=ex+'-01-01';
+    if(!dFin||dFin<d1||dFin>(ex+'-12-31')){ toast('Date de bilan invalide pour l\'exercice',true); return; }
+    const act=[], pass=[];
+    for(const c of comptes){
+        if(!['actif','passif','capitaux_propres'].includes(c.classe)) continue;
+        const sol=mouvementPeriode(c,d1,dFin);
+        const row={ c, sol };
+        if(c.classe==='actif') act.push(row);
+        else pass.push(row);
+    }
+    const ta=act.reduce((s,x)=>s+x.sol,0);
+    const tp=pass.reduce((s,x)=>s+x.sol,0);
+    document.getElementById('bilanActif').innerHTML=act.map(x=>`<tr><td>${esc(x.c.code)}</td><td>${esc(x.c.libelle)}</td><td>${fmt(x.sol)}</td></tr>`).join('')+
+        `<tr style="font-weight:700;border-top:2px solid var(--border);"><td colspan="2">Total actif</td><td>${fmt(ta)}</td></tr>`;
+    document.getElementById('bilanPassif').innerHTML=pass.map(x=>`<tr><td>${esc(x.c.code)}</td><td>${esc(x.c.libelle)}</td><td>${fmt(x.sol)}</td></tr>`).join('')+
+        `<tr style="font-weight:700;border-top:2px solid var(--border);"><td colspan="2">Total passif + capitaux</td><td>${fmt(tp)}</td></tr>`;
+    const ecart=ta-tp;
+    document.getElementById('bilanCheck').innerHTML='<div class="kpi-l">Contrôle</div><div class="kpi-v" style="color:'+(Math.abs(ecart)<1?'var(--green)':'var(--yellow)')+'">Écart actif − (passif+capitaux) : '+fmt(ecart)+' CHF</div>'+
+        '<p class="muted" style="margin-top:8px;">Un écart proche de zéro indique un bilan cohérent. Sinon vérifiez les écritures et les soldes d\'ouverture.</p>';
+};
+
+window.renderCR=function(){
+    const d1=document.getElementById('crDu').value;
+    const d2=document.getElementById('crAu').value;
+    if(!d1||!d2||d1>d2){ toast('Période invalide',true); return; }
+    let tp=0, tc=0;
+    const pr=[], ch=[];
+    for(const c of comptes){
+        if(c.classe!=='produit'&&c.classe!=='charge') continue;
+        const sol=mouvementPeriode(c,d1,d2);
+        if(c.classe==='produit'){ pr.push({ c, sol:Math.abs(sol) }); tp+=Math.abs(sol); }
+        else { ch.push({ c, sol:Math.abs(sol) }); tc+=Math.abs(sol); }
+    }
+    document.getElementById('crProduits').innerHTML=pr.map(x=>`<tr><td>${esc(x.c.code)} ${esc(x.c.libelle)}</td><td>${fmt(x.sol)}</td></tr>`).join('')+
+        `<tr style="font-weight:700"><td>Total produits</td><td>${fmt(tp)}</td></tr>`;
+    document.getElementById('crCharges').innerHTML=ch.map(x=>`<tr><td>${esc(x.c.code)} ${esc(x.c.libelle)}</td><td>${fmt(x.sol)}</td></tr>`).join('')+
+        `<tr style="font-weight:700"><td>Total charges</td><td>${fmt(tc)}</td></tr>`;
+    const res=tp-tc;
+    document.getElementById('crResultat').innerHTML='<div class="kpi-l">Résultat de la période (produits − charges)</div><div class="kpi-v" style="color:'+(res>=0?'var(--green)':'var(--red)')+'">'+fmt(res)+' CHF</div>';
+};
+
+window.exportBilanCsv=function(){
+    renderBilan();
+    const a=document.createElement('a');
+    const t=document.getElementById('bilanActif').innerText+'\n'+document.getElementById('bilanPassif').innerText;
+    a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv;charset=utf-8'}));
+    a.download='bilan-'+entite()+'-'+document.getElementById('bilanDate').value+'.csv';
+    a.click();
+};
+window.exportCrCsv=function(){
+    renderCR();
+    const t=document.getElementById('crProduits').innerText+'\n'+document.getElementById('crCharges').innerText+'\n'+document.getElementById('crResultat').innerText;
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv;charset=utf-8'}));
+    a.download='compte-resultat-'+entite()+'.csv';
+    a.click();
+};
+
+document.getElementById('selEntite').addEventListener('change', loadData);
+document.getElementById('selExercice').addEventListener('change', loadData);
+
+async function init(){
+    const { data:{ session } }=await db.auth.getSession();
+    if(!session){ window.location.href='../login/index.html'; return; }
+    const { data:user }=await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
+    if(!user||!['admin','super_admin'].includes(user.role)){ await db.auth.signOut(); window.location.href='../login/index.html'; return; }
+    document.getElementById('sbAv').textContent=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'A';
+    document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
+    document.getElementById('btnLogout').addEventListener('click', async()=>{ await db.auth.signOut(); window.location.href='../login/index.html'; });
+    const y=new Date().getFullYear();
+    const sel=document.getElementById('selExercice');
+    for(let i=0;i<4;i++){ const yy=y-i; const o=document.createElement('option'); o.value=yy; o.textContent=yy; if(i===0) o.selected=true; sel.appendChild(o); }
+    await loadData();
+}
+init();
+})();
+</script>
+</body>
+</html>

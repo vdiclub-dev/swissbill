@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Colixo Driver</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <style>
+        :root {
+            --red:#e8311a; --night:#0a0a0f; --night2:#111118; --night3:#18181f;
+            --border2:rgba(255,255,255,0.13); --white:#fff; --muted:rgba(255,255,255,0.38);
+            --green:#22c55e;
+        }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+        html,body{height:100%;overflow:hidden;}
+        body{
+            font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            padding:32px 24px;
+        }
+        .wrap{text-align:center;max-width:320px;}
+        .icon{width:80px;height:80px;background:var(--red);border-radius:20px;display:grid;place-items:center;font-size:36px;margin:0 auto 20px;box-shadow:0 8px 32px rgba(232,49,26,0.35);animation:pulse 2s ease-in-out infinite;}
+        @keyframes pulse{0%,100%{box-shadow:0 8px 32px rgba(232,49,26,0.35)}50%{box-shadow:0 8px 48px rgba(232,49,26,0.55)}}
+        .title{font-family:'Bebas Neue',cursive;font-size:32px;letter-spacing:2px;margin-bottom:8px;}
+        .sub{font-size:14px;color:var(--muted);margin-bottom:32px;line-height:1.6;}
+        .spin{width:32px;height:32px;border:2.5px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .info{font-size:12px;color:var(--muted);margin-top:16px;}
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="icon">🚚</div>
+    <div class="title">COLIXO DRIVER</div>
+    <div class="sub">Vérification de votre session…</div>
+    <div class="spin"></div>
+    <div class="info" id="info">Redirection en cours…</div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
+        window.location.href = (window.colixoHref || function (p) { return p; })('/login/index.html');
+        return;
+    }
+    const db = window.SUPABASE_CLIENT;
+    /* Évite cache navigateur / PWA sur une vieille driver-app.html */
+    const driverApp = () => '/admin/driver-app.html?_=' + Date.now();
+
+    async function redirect() {
+        try {
+            const { data: { session } } = await db.auth.getSession();
+            if (!session) {
+                window.location.replace(driverApp());
+                return;
+            }
+            const { data: user } = await db.from('utilisateurs').select('role').eq('id', session.user.id).single();
+            const role = user?.role || 'client';
+
+            if (['chauffeur', 'admin', 'super_admin'].includes(role)) {
+                window.location.replace(driverApp());
+            } else if (role === 'magasinier') {
+                window.location.href = (window.colixoHref || function (p) { return p; })('/magasinier/dashboard.html');
+            } else {
+                window.location.href = (window.colixoHref || function (p) { return p; })('/admin/client/portal.html');
+            }
+        } catch (e) {
+            document.getElementById('info').textContent = 'Redirection…';
+            window.location.replace(driverApp());
+        }
+    }
+
+    redirect();
+})();
+</script>
+</body>
+</html>
