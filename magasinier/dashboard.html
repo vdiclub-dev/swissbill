@@ -1003,7 +1003,7 @@
                                 </div>
                                 <div class="form-row">
                                     <input type="text" class="form-input colis-reference" placeholder="Référence du colis" required>
-                                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required oninput="updateTotalWeight()">
+                                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required>
                                 </div>
                                 <input type="text" class="form-input colis-description" placeholder="Description du contenu">
                             </div>
@@ -1265,7 +1265,7 @@
                 </div>
                 <div class="form-row">
                     <input type="text" class="form-input colis-reference" placeholder="Référence du colis" required>
-                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required oninput="updateTotalWeight()">
+                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required>
                 </div>
                 <input type="text" class="form-input colis-description" placeholder="Description du contenu">
             `;
@@ -1333,9 +1333,44 @@
 
         function updateTotalWeight() {
             const colisData = getColisData();
-            const totalWeight = colisData.reduce((sum, colis) => sum + colis.poids, 0);
-            document.getElementById('totalWeight').value = totalWeight.toFixed(2);
+            const totalWeight = colisData.reduce((sum, colis) => sum + (parseFloat(colis.poids) || 0), 0);
+            const totalWeightElement = document.getElementById('totalWeight');
+            if (totalWeightElement) {
+                totalWeightElement.value = totalWeight.toFixed(2);
+            }
         }
+
+        // Ajouter les event listeners pour le calcul en temps réel
+        document.addEventListener('DOMContentLoaded', function() {
+            // Event listener pour les champs de poids existants
+            document.querySelectorAll('.colis-weight').forEach(input => {
+                input.addEventListener('input', updateTotalWeight);
+            });
+            
+            // Observer pour les nouveaux colis ajoutés dynamiquement
+            const colisContainer = document.getElementById('colisContainer');
+            if (colisContainer) {
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'childList') {
+                            mutation.addedNodes.forEach(function(node) {
+                                if (node.nodeType === 1) { // Element node
+                                    const weightInput = node.querySelector('.colis-weight');
+                                    if (weightInput) {
+                                        weightInput.addEventListener('input', updateTotalWeight);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+                
+                observer.observe(colisContainer, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        });
 
         // Recherche rapide de clients (sans filtre entreprise_id pour éviter les foreign key issues)
         let searchTimeout;
