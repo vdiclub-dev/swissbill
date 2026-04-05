@@ -563,6 +563,77 @@
             gap: 16px;
         }
         
+        .address-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .colis-item {
+            background: var(--light);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .colis-item:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .colis-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .colis-header span {
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        .btn-add-colis {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .btn-add-colis:hover {
+            background: #16a34a;
+            transform: translateY(-1px);
+        }
+        
+        .btn-remove-colis {
+            background: var(--danger);
+            color: white;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-remove-colis:hover {
+            background: #dc2626;
+            transform: scale(1.1);
+        }
+        
         .btn-primary {
             width: 100%;
             padding: 16px 32px;
@@ -749,15 +820,25 @@
                         <input type="tel" class="form-input" id="clientPhone" required placeholder="+41 XX XXX XX XX">
                     </div>
                     
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">Adresse d'enlèvement</label>
-                            <input type="text" class="form-input" id="pickupAddress" required placeholder="Adresse complète">
+                    <div class="form-group">
+                        <label class="form-label">Adresse d'enlèvement</label>
+                        <div class="address-form">
+                            <input type="text" class="form-input" id="pickupStreet" required placeholder="Rue et numéro">
+                            <div class="form-row">
+                                <input type="text" class="form-input" id="pickupPostal" required placeholder="NPA">
+                                <input type="text" class="form-input" id="pickupCity" required placeholder="Ville">
+                            </div>
                         </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Adresse de livraison</label>
-                            <input type="text" class="form-input" id="deliveryAddress" required placeholder="Adresse complète">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Adresse de livraison</label>
+                        <div class="address-form">
+                            <input type="text" class="form-input" id="deliveryStreet" required placeholder="Rue et numéro">
+                            <div class="form-row">
+                                <input type="text" class="form-input" id="deliveryPostal" required placeholder="NPA">
+                                <input type="text" class="form-input" id="deliveryCity" required placeholder="Ville">
+                            </div>
                         </div>
                     </div>
                     
@@ -777,6 +858,28 @@
                                 <option value="autre">Autre</option>
                             </select>
                         </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Gestion des colis</label>
+                        <div id="colisContainer">
+                            <div class="colis-item">
+                                <div class="colis-header">
+                                    <span>Colis 1</span>
+                                    <button type="button" class="btn-remove-colis" onclick="removeColis(this)" style="display: none;">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="form-row">
+                                    <input type="text" class="form-input colis-reference" placeholder="Référence du colis" required>
+                                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required>
+                                </div>
+                                <input type="text" class="form-input colis-description" placeholder="Description du contenu">
+                            </div>
+                        </div>
+                        <button type="button" class="btn-add-colis" onclick="addColis()">
+                            <i class="fas fa-plus"></i> Ajouter un colis
+                        </button>
                     </div>
                     
                     <div class="form-group">
@@ -927,29 +1030,45 @@
                             <th>Enlèvement</th>
                             <th>Livraison</th>
                             <th>Statut</th>
-                            <th>Poids</th>
+                            <th>Colis</th>
+                            <th>Poids total</th>
                             <th>Saisi par</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${filteredTransports.map(transport => `
-                            <tr>
-                                <td><strong>${transport.order_number || transport.id.slice(0, 8)}</strong></td>
-                                <td>${transport.destinataire_nom || transport.client_name || '—'}</td>
-                                <td>${transport.pickup_address || '—'}</td>
-                                <td>${transport.delivery_address || '—'}</td>
-                                <td>
-                                    <span class="status-badge status-${transport.status}">
-                                        ${transport.status === 'delivered' ? 'Livré' : 
-                                          transport.status === 'in_transit' ? 'En route' : 'En attente'}
-                                    </span>
-                                </td>
-                                <td>${transport.weight || '—'} kg</td>
-                                <td>
-                                    <span class="magasinier-badge">${currentUser.name}</span>
-                                </td>
-                            </tr>
-                        `).join('')}
+                        ${filteredTransports.map(transport => {
+                            const pickupAddress = transport.pickup_street ? 
+                                `${transport.pickup_street}<br>${transport.pickup_postal || ''} ${transport.pickup_city || ''}` : 
+                                transport.pickup_address || '—';
+                            const deliveryAddress = transport.delivery_street ? 
+                                `${transport.delivery_street}<br>${transport.delivery_postal || ''} ${transport.delivery_city || ''}` : 
+                                transport.delivery_address || '—';
+                            const colisCount = transport.colis ? transport.colis.length : 1;
+                            
+                            return `
+                                <tr>
+                                    <td><strong>${transport.order_number || transport.id.slice(0, 8)}</strong></td>
+                                    <td>${transport.destinataire_nom || transport.client_name || '—'}</td>
+                                    <td>${pickupAddress}</td>
+                                    <td>${deliveryAddress}</td>
+                                    <td>
+                                        <span class="status-badge status-${transport.status}">
+                                            ${transport.status === 'delivered' ? 'Livré' : 
+                                              transport.status === 'in_transit' ? 'En route' : 'En attente'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span style="background: var(--primary-light); color: var(--primary); padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                                            ${colisCount} colis
+                                        </span>
+                                    </td>
+                                    <td>${transport.weight || '—'} kg</td>
+                                    <td>
+                                        <span class="magasinier-badge">${currentUser.name}</span>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
             `;
@@ -982,6 +1101,72 @@
             loadTransports();
         };
 
+        window.addColis = function() {
+            const container = document.getElementById('colisContainer');
+            const colisCount = container.children.length + 1;
+            
+            const newColis = document.createElement('div');
+            newColis.className = 'colis-item';
+            newColis.innerHTML = `
+                <div class="colis-header">
+                    <span>Colis ${colisCount}</span>
+                    <button type="button" class="btn-remove-colis" onclick="removeColis(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="form-row">
+                    <input type="text" class="form-input colis-reference" placeholder="Référence du colis" required>
+                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required>
+                </div>
+                <input type="text" class="form-input colis-description" placeholder="Description du contenu">
+            `;
+            
+            container.appendChild(newColis);
+            updateRemoveButtons();
+        };
+
+        window.removeColis = function(button) {
+            const colisItem = button.closest('.colis-item');
+            colisItem.remove();
+            updateColisNumbers();
+            updateRemoveButtons();
+        };
+
+        function updateColisNumbers() {
+            const container = document.getElementById('colisContainer');
+            const colisItems = container.querySelectorAll('.colis-item');
+            
+            colisItems.forEach((item, index) => {
+                const span = item.querySelector('.colis-header span');
+                span.textContent = `Colis ${index + 1}`;
+            });
+        }
+
+        function updateRemoveButtons() {
+            const container = document.getElementById('colisContainer');
+            const removeButtons = container.querySelectorAll('.btn-remove-colis');
+            
+            removeButtons.forEach(button => {
+                button.style.display = container.children.length > 1 ? 'flex' : 'none';
+            });
+        }
+
+        function getColisData() {
+            const colisItems = document.querySelectorAll('.colis-item');
+            const colisData = [];
+            
+            colisItems.forEach((item, index) => {
+                colisData.push({
+                    numero: index + 1,
+                    reference: item.querySelector('.colis-reference').value,
+                    poids: parseFloat(item.querySelector('.colis-weight').value),
+                    description: item.querySelector('.colis-description').value
+                });
+            });
+            
+            return colisData;
+        }
+
         window.logout = async function() {
             await db.auth.signOut();
             window.location.href = '../login/index.html';
@@ -991,13 +1176,32 @@
         document.getElementById('newTransportForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
+            // Récupérer les données des colis
+            const colisData = getColisData();
+            const totalWeight = colisData.reduce((sum, colis) => sum + colis.poids, 0);
+            
             const formData = {
                 order_number: 'MAG-' + Date.now(),
                 destinataire_nom: document.getElementById('clientName').value,
                 client_phone: document.getElementById('clientPhone').value,
-                pickup_address: document.getElementById('pickupAddress').value,
-                delivery_address: document.getElementById('deliveryAddress').value,
-                weight: parseFloat(document.getElementById('weight').value),
+                
+                // Adresses structurées
+                pickup_street: document.getElementById('pickupStreet').value,
+                pickup_postal: document.getElementById('pickupPostal').value,
+                pickup_city: document.getElementById('pickupCity').value,
+                pickup_address: `${document.getElementById('pickupStreet').value}, ${document.getElementById('pickupPostal').value} ${document.getElementById('pickupCity').value}`,
+                
+                delivery_street: document.getElementById('deliveryStreet').value,
+                delivery_postal: document.getElementById('deliveryPostal').value,
+                delivery_city: document.getElementById('deliveryCity').value,
+                delivery_address: `${document.getElementById('deliveryStreet').value}, ${document.getElementById('deliveryPostal').value} ${document.getElementById('deliveryCity').value}`,
+                
+                // Colis et poids
+                colis: colisData,
+                nb_colis: colisData.length,
+                weight: totalWeight,
+                
+                // Autres informations
                 merchandise_type: document.getElementById('merchandiseType').value,
                 description: document.getElementById('description').value,
                 priority: document.getElementById('priority').value,
@@ -1015,8 +1219,26 @@
 
                 if (error) throw error;
 
-                alert('Transport créé avec succès!');
+                alert('Transport créé avec succès! ' + colisData.length + ' colis enregistrés.');
                 document.getElementById('newTransportForm').reset();
+                
+                // Réinitialiser les colis
+                document.getElementById('colisContainer').innerHTML = `
+                    <div class="colis-item">
+                        <div class="colis-header">
+                            <span>Colis 1</span>
+                            <button type="button" class="btn-remove-colis" onclick="removeColis(this)" style="display: none;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        <div class="form-row">
+                            <input type="text" class="form-input colis-reference" placeholder="Référence du colis" required>
+                            <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required>
+                        </div>
+                        <input type="text" class="form-input colis-description" placeholder="Description du contenu">
+                    </div>
+                `;
+                
                 closeModal('modalNewTransport');
                 loadStats();
                 loadTransports();
