@@ -1337,7 +1337,7 @@
             document.getElementById('totalWeight').value = totalWeight.toFixed(2);
         }
 
-        // Recherche rapide de clients (tous les clients de la même entreprise)
+        // Recherche rapide de clients (tous les clients du même magasinier pour éviter les foreign key issues)
         let searchTimeout;
         document.getElementById('clientSearch')?.addEventListener('input', function(e) {
             clearTimeout(searchTimeout);
@@ -1352,21 +1352,21 @@
             
             searchTimeout = setTimeout(async () => {
                 try {
-                    // Utiliser l'entreprise_id du magasinier ou fallback sur son ID
-                    const entrepriseId = currentUser.entreprise_id || currentUser.id;
+                    // Utiliser directement l'ID du magasinier pour éviter les foreign key issues
+                    const entrepriseId = currentUser.id;
                     
-                    // Rechercher dans les transports existants ET dans les adresses clients (tous ceux de la même entreprise)
+                    // Rechercher dans les transports existants ET dans les adresses clients (tous ceux du même magasinier)
                     const [transportsData, addressesData] = await Promise.all([
                         db
                             .from('transport_orders_simple')
                             .select('destinataire_nom, destinataire_tel, pickup_address, delivery_address')
-                            .eq('entreprise_id', entrepriseId) // Tous les transports de l'entreprise
+                            .eq('entreprise_id', entrepriseId) // Tous les transports du magasinier
                             .or(`destinataire_nom.ilike.%${query}%,destinataire_tel.ilike.%${query}%`)
                             .limit(10),
                         db
                             .from('client_addresses')
                             .select('nom, telephone, adresse, npa, ville, entreprise_id')
-                            .eq('entreprise_id', entrepriseId) // Tous les clients de l'entreprise
+                            .eq('entreprise_id', entrepriseId) // Tous les clients du magasinier
                             .or(`nom.ilike.%${query}%,telephone.ilike.%${query}%`)
                             .limit(10)
                     ]);
@@ -1374,7 +1374,7 @@
                     // Combiner les résultats
                     const allResults = [];
                     
-                    // Ajouter les clients des transports de l'entreprise uniquement
+                    // Ajouter les clients des transports du magasinier uniquement
                     transportsData.data?.forEach(transport => {
                         const key = transport.destinataire_nom + '|' + transport.destinataire_tel;
                         if (!allResults.find(r => r.key === key)) {
@@ -1393,7 +1393,7 @@
                         }
                     });
                     
-                    // Ajouter les adresses des clients de l'entreprise uniquement
+                    // Ajouter les adresses des clients du magasinier uniquement
                     addressesData.data?.forEach(address => {
                         const key = address.nom + '|' + address.telephone;
                         const existing = allResults.find(r => r.key === key);
@@ -1733,7 +1733,7 @@
             
             const formData = {
                 order_number: 'MAG-' + Date.now(),
-                entreprise_id: currentUser.entreprise_id || currentUser.id, // Utiliser entreprise_id si disponible, sinon l'ID du magasinier
+                entreprise_id: currentUser.id, // Utiliser directement l'ID du magasinier pour éviter les foreign key issues
                 pickup_address: `${document.getElementById('pickupStreet').value}, ${document.getElementById('pickupPostal').value} ${document.getElementById('pickupCity').value}`,
                 delivery_address: `${document.getElementById('deliveryStreet').value}, ${document.getElementById('deliveryPostal').value} ${document.getElementById('deliveryCity').value}`,
                 destinataire_nom: document.getElementById('clientName').value,
