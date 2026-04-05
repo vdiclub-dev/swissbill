@@ -954,7 +954,7 @@
                     </div>
                     
                     <!-- Adresses -->
-                    <div class="form-group">
+                    <div class="form-group" id="pickupAddressGroup">
                         <label class="form-label">Adresse d'enlèvement</label>
                         <div class="address-form">
                             <input type="text" class="form-input" id="pickupStreet" required placeholder="Rue et numéro">
@@ -974,6 +974,17 @@
                                 <input type="text" class="form-input" id="deliveryCity" required placeholder="Ville">
                             </div>
                         </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Client payeur</label>
+                        <select class="form-input" id="clientPayeur" required>
+                            <option value="">Sélectionnez...</option>
+                            <option value="client">Le client</option>
+                            <option value="expediteur">L'expéditeur</option>
+                            <option value="destinataire">Le destinataire</option>
+                            <option value="autre">Autre</option>
+                        </select>
                     </div>
                     
                     <!-- Colis (maintenant en premier) -->
@@ -1475,27 +1486,30 @@
         // Vérifier et remplir l'adresse selon le type d'enlèvement
         window.checkPickupType = function() {
             const pickupType = document.querySelector('input[name="pickupType"]:checked').value;
+            const pickupAddressGroup = document.getElementById('pickupAddressGroup');
             const pickupStreet = document.getElementById('pickupStreet');
             const pickupPostal = document.getElementById('pickupPostal');
             const pickupCity = document.getElementById('pickupCity');
             
             if (pickupType === 'client') {
-                // Remplir avec l'adresse du client (si disponible)
-                const clientName = document.getElementById('clientName').value.trim();
-                const clientPhone = document.getElementById('clientPhone').value.trim();
+                // Masquer l'adresse d'enlèvement (chez le client)
+                pickupAddressGroup.style.display = 'none';
                 
-                if (clientName && clientPhone) {
-                    // Chercher l'adresse du client dans la base
-                    findClientAddress(clientName, clientPhone).then(clientData => {
-                        if (clientData && clientData.pickup_street) {
-                            pickupStreet.value = clientData.pickup_street;
-                            pickupPostal.value = clientData.pickup_postal || '';
-                            pickupCity.value = clientData.pickup_city || '';
-                        }
-                    });
-                }
+                // Enlever l'attribut required des champs d'enlèvement
+                pickupStreet.removeAttribute('required');
+                pickupPostal.removeAttribute('required');
+                pickupCity.removeAttribute('required');
+                
             } else {
-                // Vider les champs pour enlèvement extérieur
+                // Afficher l'adresse d'enlèvement (extérieur)
+                pickupAddressGroup.style.display = 'block';
+                
+                // Remettre l'attribut required
+                pickupStreet.setAttribute('required', '');
+                pickupPostal.setAttribute('required', '');
+                pickupCity.setAttribute('required', '');
+                
+                // Vider les champs si non modifiés manuellement
                 if (!pickupStreet.hasAttribute('data-manual')) {
                     pickupStreet.value = '';
                     pickupPostal.value = '';
@@ -1710,6 +1724,9 @@
                 delivery_postal: document.getElementById('deliveryPostal').value,
                 delivery_city: document.getElementById('deliveryCity').value,
                 delivery_address: `${document.getElementById('deliveryStreet').value}, ${document.getElementById('deliveryPostal').value} ${document.getElementById('deliveryCity').value}`,
+                
+                // Client payeur
+                client_payeur: document.getElementById('clientPayeur').value,
                 
                 // Colis et poids
                 colis: colisData,
