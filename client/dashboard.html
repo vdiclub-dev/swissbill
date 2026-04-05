@@ -345,18 +345,60 @@
     </style>
 </head>
 <body>
-    <div class="topbar">
-        <div class="logo">
-            <i class="fas fa-truck"></i>
-            Colixo
-        </div>
-        <div class="user-info">
-            <span id="userEmail">Chargement...</span>
-            <button class="btn-logout" onclick="logout()">
-                <i class="fas fa-sign-out-alt"></i> Déconnexion
-            </button>
+    <!-- Section Login pour utilisateurs non connectés -->
+    <div id="loginSection" style="display: none; min-height: 100vh; background: #f1f5f9; padding: 50px 20px;">
+        <div style="max-width: 400px; margin: 0 auto; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <div style="font-size: 32px; font-weight: 700; color: #e53935; margin-bottom: 10px;">
+                    <i class="fas fa-users"></i> Espace Client
+                </div>
+                <p style="color: #64748b; font-size: 14px;">Connectez-vous pour accéder à votre espace client</p>
+            </div>
+            
+            <div id="loginError" style="background: #fee2e2; color: #e53935; padding: 12px; border-radius: 8px; margin-bottom: 20px; display: none;"></div>
+            
+            <form id="loginForm" style="display: flex; flex-direction: column; gap: 20px;">
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Email</label>
+                    <input type="email" id="clientEmail" required placeholder="votre@email.com" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
+                </div>
+                
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Mot de passe</label>
+                    <input type="password" id="clientPassword" required placeholder="••••••••" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
+                </div>
+                
+                <button type="submit" style="background: #e53935; color: white; border: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer;">
+                    <i class="fas fa-sign-in-alt"></i> Se connecter
+                </button>
+            </form>
+            
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                <p style="color: #64748b; font-size: 14px;">
+                    Pas encore de compte ? 
+                    <a href="/login/index.html" style="color: #e53935; font-weight: 600; text-decoration: none;">Créer un compte</a>
+                </p>
+                <p style="color: #64748b; font-size: 14px; margin-top: 10px;">
+                    <a href="/login/index.html?forgot=1" style="color: #e53935; text-decoration: none;">Mot de passe oublié ?</a>
+                </p>
+            </div>
         </div>
     </div>
+
+    <!-- Section Dashboard pour utilisateurs connectés -->
+    <div id="dashboardSection">
+        <div class="topbar">
+            <div class="logo">
+                <i class="fas fa-truck"></i>
+                Colixo
+            </div>
+            <div class="user-info">
+                <span id="userEmail">Chargement...</span>
+                <button class="btn-logout" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i> Déconnexion
+                </button>
+            </div>
+        </div>
     
     <div class="container">
         <div class="welcome">
@@ -458,16 +500,29 @@
 
         async function checkAuth() {
             const { data: { session } } = await db.auth.getSession();
-            if (!session) { window.location.href = (window.colixoHref || function (p) { return p; })('/login/index.html'); return; }
+            if (!session) {
+                // Afficher la section login
+                document.getElementById('loginSection').style.display = 'block';
+                document.getElementById('dashboardSection').style.display = 'none';
+                console.log('[Client] Session non trouvée - affichage page de login client');
+                return;
+            }
 
             const { data: utilisateur } = await db.from('utilisateurs')
                 .select('role, prenom, nom').eq('id', session.user.id).single();
 
             if (!utilisateur || utilisateur.role !== 'client') {
                 await db.auth.signOut();
-                window.location.href = (window.colixoHref || function (p) { return p; })('/login/index.html');
+                // Afficher la section login
+                document.getElementById('loginSection').style.display = 'block';
+                document.getElementById('dashboardSection').style.display = 'none';
+                console.log('[Client] Rôle incorrect - déconnexion');
                 return;
             }
+
+            // Afficher la section dashboard
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'block';
 
             document.getElementById('userEmail').textContent = session.user.email;
             document.getElementById('userName').textContent =
@@ -476,6 +531,43 @@
             loadStats(session.user.id);
             loadRecentOrders(session.user.id);
         }
+
+        // Gestionnaire du formulaire de login client
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('clientEmail').value.trim();
+            const password = document.getElementById('clientPassword').value;
+            const errorDiv = document.getElementById('loginError');
+            
+            if (!email || !password) {
+                errorDiv.textContent = 'Veuillez remplir tous les champs';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            try {
+                const { data, error } = await db.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                
+                // Vérifier que c'est bien un client
+                const { data: utilisateur } = await db.from('utilisateurs')
+                    .select('role').eq('id', data.user.id).single();
+                
+                if (!utilisateur || utilisateur.role !== 'client') {
+                    await db.auth.signOut();
+                    errorDiv.textContent = 'Accès réservé aux clients uniquement';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                // Recharger la page pour afficher le dashboard
+                window.location.reload();
+                
+            } catch (err) {
+                errorDiv.textContent = err.message || 'Erreur de connexion';
+                errorDiv.style.display = 'block';
+            }
+        });
 
         async function loadStats(userId) {
             const thisMonth = new Date().toISOString().slice(0, 7);
