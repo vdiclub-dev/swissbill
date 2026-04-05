@@ -1411,7 +1411,7 @@
             }
         });
 
-        // Recherche rapide de clients (sans filtre entreprise_id pour éviter les foreign key issues)
+        // Recherche rapide de clients (partage par entreprise pour éviter "client inconnu")
         let searchTimeout;
         document.getElementById('clientSearch')?.addEventListener('input', function(e) {
             clearTimeout(searchTimeout);
@@ -1426,25 +1426,32 @@
             
             searchTimeout = setTimeout(async () => {
                 try {
-                    // Rechercher dans les transports existants ET dans les adresses clients (sans filtre entreprise_id)
+                    // Utiliser l'entreprise du magasinier pour partager les clients
+                    const entrepriseId = currentUser.entreprise_id || currentUser.id;
+                    const isEntrepriseUser = currentUser.entreprise_id && currentUser.entreprise_id !== currentUser.id;
+                    
+                    console.log('Recherche avec entreprise:', entrepriseId, 'Utilisateur entreprise:', isEntrepriseUser);
+                    
+                    // Rechercher selon le type d'utilisateur
                     const [transportsData, addressesData] = await Promise.all([
                         db
                             .from('transport_orders_simple')
                             .select('destinataire_nom, destinataire_tel, pickup_address, delivery_address')
+                            .eq('entreprise_id', entrepriseId) // Filtre par entreprise
                             .or(`destinataire_nom.ilike.%${query}%,destinataire_tel.ilike.%${query}%`)
-                            .limit(10),
+                            .limit(20),
                         db
                             .from('client_addresses')
                             .select('nom, telephone, adresse, npa, ville, created_by')
-                            .eq('created_by', currentUser.id) // Uniquement les adresses créées par ce magasinier
+                            .eq('entreprise_id', entrepriseId) // Filtre par entreprise
                             .or(`nom.ilike.%${query}%,telephone.ilike.%${query}%`)
-                            .limit(10)
+                            .limit(20)
                     ]);
                     
                     // Combiner les résultats
                     const allResults = [];
                     
-                    // Ajouter les clients des transports (tous, sans filtre)
+                    // Ajouter les clients des transports de l'entreprise
                     transportsData.data?.forEach(transport => {
                         const key = transport.destinataire_nom + '|' + transport.destinataire_tel;
                         if (!allResults.find(r => r.key === key)) {
@@ -1469,7 +1476,7 @@
                                 pickupStreet: pickupStreet,
                                 pickupPostal: pickupPostal,
                                 pickupCity: pickupCity,
-                                deliveryStreet: pickupStreet, // Même adresse pour livraison par défaut
+                                deliveryStreet: pickupStreet,
                                 deliveryPostal: pickupPostal,
                                 deliveryCity: pickupCity,
                                 source: 'transport'
@@ -1477,7 +1484,7 @@
                         }
                     });
                     
-                    // Ajouter les adresses des clients créées par ce magasinier
+                    // Ajouter les adresses des clients de l'entreprise
                     addressesData.data?.forEach(address => {
                         const key = address.nom + '|' + address.telephone;
                         const existing = allResults.find(r => r.key === key);
@@ -1504,6 +1511,7 @@
                     if (allResults.length === 0) {
                         resultsDiv.innerHTML = '<div class="search-result-item">Aucun client trouvé</div>';
                     } else {
+                        const entrepriseInfo = currentUser.entreprise_nom || currentUser.entreprise || 'Entreprise';
                         resultsDiv.innerHTML = allResults.map(client => `
                             <div class="search-result-item" onclick="selectClient(${JSON.stringify({
                                 name: client.name,
@@ -1526,6 +1534,9 @@
                                         ${client.pickupPostal || ''} ${client.pickupCity || ''}
                                     </div>
                                 ` : '<div class="search-result-address">📍 Adresse non disponible</div>'}
+                                <div class="search-result-company">
+                                    <strong>🏢 ${entrepriseInfo}</strong>
+                                </div>
                             </div>
                         `).join('');
                     }
@@ -1610,14 +1621,15 @@
                 document.getElementById('deliveryCity').value = client.deliveryCity;
             }
             
-            // Ajouter une note dans le champ description pour rappeler le nom du client
+            // Ajouter une note dans le champ description avec l'entreprise du magasinier
             const descriptionField = document.getElementById('description');
             if (descriptionField && client.name) {
                 const currentDescription = descriptionField.value || '';
+                const entrepriseInfo = currentUser.entreprise_nom || currentUser.entreprise || 'Entreprise';
                 if (!currentDescription.includes(`Pour ${client.name}`)) {
                     descriptionField.value = currentDescription ? 
-                        `${currentDescription} (Pour ${client.name})` : 
-                        `Pour ${client.name}`;
+                        `${currentDescription} (Pour ${client.name} - ${entrepriseInfo})` : 
+                        `Pour ${client.name} - ${entrepriseInfo}`;
                 }
             }
             
@@ -1641,12 +1653,14 @@
             const addressText = client.pickupStreet ? 
                 `${client.pickupStreet}, ${client.pickupPostal || ''} ${client.pickupCity || ''}` : 
                 'Adresse non spécifiée';
+            const entrepriseInfo = currentUser.entreprise_nom || currentUser.entreprise || 'Entreprise';
                 
             confirmationDiv.innerHTML = `
                 ✅ <strong>Client sélectionné:</strong><br>
                 📋 ${client.name}<br>
                 📞 ${client.phone}<br>
-                🏠 ${addressText}
+                🏠 ${addressText}<br>
+                🏢 <strong>${entrepriseInfo}</strong>
             `;
             
             // Insérer après le champ de recherche
@@ -1698,16 +1712,15 @@
             }
         };
 
-        // Fonction pour trouver l'adresse du client (utilise created_by)
+        // Fonction pour trouver l'adresse du client (recherche dans TOUS les clients)
         async function findClientAddress(name, phone) {
             try {
-                // Chercher dans les adresses clients créées par ce magasinier
+                // Chercher dans les adresses clients (TOUS, sans restriction)
                 const { data: addressData, error: addressError } = await db
                     .from('client_addresses')
                     .select('adresse, npa, ville')
                     .eq('telephone', phone)
                     .eq('nom', name)
-                    .eq('created_by', currentUser.id) // Uniquement celles créées par ce magasinier
                     .order('created_at', { ascending: false })
                     .limit(1);
 
@@ -1724,7 +1737,7 @@
                     };
                 }
 
-                // Si pas trouvé, chercher dans les transports anciens
+                // Si pas trouvé, chercher dans les transports anciens (TOUS)
                 const { data: transportData, error: transportError } = await db
                     .from('transport_orders_simple')
                     .select('pickup_address')
