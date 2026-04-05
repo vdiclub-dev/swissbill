@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <title>Super Admin | Colixo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <style>
+        :root {
+            --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
+            --night:#0a0a0f; --night2:#111118; --night3:#18181f; --surface:#1e1e28;
+            --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.12);
+            --white:#ffffff; --muted:rgba(255,255,255,0.38); --muted2:rgba(255,255,255,0.6);
+            --green:#22c55e; --blue:#3b82f6; --yellow:#f59e0b; --purple:#a855f7; --orange:#f97316;
+            --sidebar:220px;
+        }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+        html,body{height:100%;}
+        body{font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);display:flex;}
+
+        /* SIDEBAR */
+        .sidebar{width:var(--sidebar);background:var(--night2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;}
+        .sidebar-logo{padding:24px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;}
+        .logo-mark{width:36px;height:36px;background:var(--red);border-radius:9px;display:grid;place-items:center;font-size:16px;flex-shrink:0;}
+        .logo-text{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;color:var(--white);}
+        .sidebar-section{padding:20px 12px 8px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;margin:2px 8px;font-size:14px;font-weight:500;color:var(--muted2);cursor:pointer;transition:all 0.2s;border:1px solid transparent;text-decoration:none;}
+        .nav-item i{width:18px;text-align:center;font-size:15px;}
+        .nav-item:hover{background:var(--night3);color:var(--white);}
+        .nav-item.active{background:rgba(232,49,26,0.1);color:var(--white);border-color:rgba(232,49,26,0.2);}
+        .nav-item.active i{color:var(--red);}
+        .nav-badge{margin-left:auto;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;}
+        .sidebar-footer{margin-top:auto;padding:16px 8px;border-top:1px solid var(--border);}
+        .user-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--night3);}
+        .user-avatar{width:32px;height:32px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:14px;flex-shrink:0;}
+        .user-info{flex:1;overflow:hidden;}
+        .user-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .user-role{font-size:11px;color:var(--red);font-weight:600;}
+        .btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;transition:color 0.2s;}
+        .btn-logout:hover{color:var(--red);}
+
+        /* MAIN */
+        .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+        .topbar{background:var(--night2);border-bottom:1px solid var(--border);padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+        .page-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;}
+        .topbar-right{display:flex;gap:10px;align-items:center;}
+        .btn{font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;padding:9px 20px;border-radius:10px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:all 0.2s;text-decoration:none;white-space:nowrap;}
+        .btn-red{background:var(--red);color:var(--white);box-shadow:0 4px 16px var(--red-glow);}
+        .btn-red:hover{background:var(--red-dark);transform:translateY(-1px);}
+        .btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border2);}
+        .btn-ghost:hover{color:var(--white);border-color:rgba(255,255,255,0.3);}
+        .btn-sm{padding:7px 14px;font-size:12px;border-radius:8px;}
+        .content{padding:32px;flex:1;}
+
+        /* SECTIONS */
+        .section{display:none;}
+        .section.active{display:block;}
+
+        /* STATS */
+        .stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px;}
+        .stat-card{background:var(--night2);border:1px solid var(--border2);border-radius:16px;padding:22px 20px;transition:border-color 0.3s,transform 0.2s;cursor:default;}
+        .stat-card:hover{border-color:rgba(232,49,26,0.3);transform:translateY(-2px);}
+        .stat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+        .stat-icon{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:16px;}
+        .stat-icon.red{background:rgba(232,49,26,0.12);color:var(--red);}
+        .stat-icon.blue{background:rgba(59,130,246,0.12);color:var(--blue);}
+        .stat-icon.green{background:rgba(34,197,94,0.12);color:var(--green);}
+        .stat-icon.yellow{background:rgba(245,158,11,0.12);color:var(--yellow);}
+        .stat-icon.purple{background:rgba(168,85,247,0.12);color:var(--purple);}
+        .stat-num{font-family:'Bebas Neue',cursive;font-size:38px;letter-spacing:1px;line-height:1;}
+        .stat-lbl{font-size:12px;color:var(--muted);margin-top:4px;font-weight:300;}
+
+        /* GRID */
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+        .grid3{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:20px;}
+
+        /* CARD */
+        .card{background:var(--night2);border:1px solid var(--border2);border-radius:20px;overflow:hidden;}
+        .card-head{padding:20px 24px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+        .card-title{font-family:'Bebas Neue',cursive;font-size:17px;letter-spacing:1px;color:var(--white);}
+        .card-body{padding:0;}
+
+        /* TABLE */
+        .tbl{width:100%;border-collapse:collapse;}
+        .tbl th{padding:12px 20px;text-align:left;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);background:var(--night3);}
+        .tbl td{padding:14px 20px;border-top:1px solid var(--border);font-size:13px;}
+        .tbl tbody tr{transition:background 0.15s;}
+        .tbl tbody tr:hover{background:rgba(255,255,255,0.02);}
+
+        .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;}
+        .chip.admin{background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.2);}
+        .chip.client{background:rgba(59,130,246,0.12);color:var(--blue);border:1px solid rgba(59,130,246,0.2);}
+        .chip.chauffeur{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.2);}
+        .chip.magasinier{background:rgba(245,158,11,0.12);color:var(--yellow);border:1px solid rgba(245,158,11,0.2);}
+        .chip.super_admin{background:rgba(168,85,247,0.12);color:var(--purple);border:1px solid rgba(168,85,247,0.2);}
+        .chip.actif{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.2);}
+        .chip.inactif{background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid var(--border2);}
+
+        .avatar-sm{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:12px;flex-shrink:0;}
+        .cell-user{display:flex;align-items:center;gap:10px;}
+        .cell-main{font-weight:600;font-size:13px;}
+        .cell-sub{font-size:11px;color:var(--muted);margin-top:1px;}
+
+        .action-btn{width:28px;height:28px;border-radius:7px;border:none;background:transparent;cursor:pointer;display:inline-grid;place-items:center;font-size:12px;color:var(--muted);transition:all 0.2s;}
+        .action-btn.edit:hover{background:rgba(59,130,246,0.12);color:var(--blue);}
+        .action-btn.delete:hover{background:rgba(232,49,26,0.12);color:var(--red);}
+
+        /* FEED */
+        .feed{padding:8px 0;}
+        .feed-item{display:flex;align-items:flex-start;gap:14px;padding:14px 24px;border-bottom:1px solid var(--border);}
+        .feed-item:last-child{border:none;}
+        .feed-dot{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:14px;flex-shrink:0;margin-top:2px;}
+        .feed-content{flex:1;}
+        .feed-text{font-size:13px;line-height:1.5;}
+        .feed-text strong{color:var(--white);font-weight:600;}
+        .feed-time{font-size:11px;color:var(--muted);margin-top:3px;}
+
+        /* MODAL */
+        .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(10px);z-index:500;align-items:center;justify-content:center;padding:20px;}
+        .modal.open{display:flex;}
+        .modal-box{background:var(--night3);border:1px solid var(--border2);border-radius:24px;padding:40px;width:100%;max-width:500px;box-shadow:0 40px 100px rgba(0,0,0,0.6);animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1);}
+        @keyframes boxIn{from{opacity:0;transform:scale(0.94) translateY(16px)}to{opacity:1;transform:none}}
+        .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;}
+        .modal-title{font-family:'Bebas Neue',cursive;font-size:26px;letter-spacing:1px;}
+        .modal-close{width:34px;height:34px;background:var(--surface);border:none;border-radius:50%;cursor:pointer;display:grid;place-items:center;font-size:15px;color:var(--muted);transition:all 0.2s;}
+        .modal-close:hover{background:var(--border2);color:var(--white);}
+        .field{margin-bottom:14px;}
+        .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+        .field input,.field select,.field textarea{width:100%;padding:11px 14px;background:var(--surface);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);transition:border-color 0.2s;}
+        .field input:focus,.field select:focus{outline:none;border-color:var(--red);}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .modal-actions{display:flex;gap:10px;margin-top:24px;}
+        .modal-actions .btn{flex:1;justify-content:center;padding:13px;}
+
+        /* TOAST */
+        .toast{position:fixed;top:20px;right:20px;padding:14px 20px;border-radius:12px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;background:var(--night3);border:1px solid var(--border2);box-shadow:0 12px 40px rgba(0,0,0,0.4);z-index:9999;transform:translateX(calc(100% + 40px));transition:transform 0.4s cubic-bezier(0.4,0,0.2,1);}
+        .toast.show{transform:translateX(0);}
+        .toast.success .t-ico{color:var(--green);}
+        .toast.error .t-ico{color:var(--red);}
+        .t-ico{font-size:16px;}
+
+        /* LOADER */
+        .loader{display:none;position:fixed;inset:0;background:rgba(10,10,15,0.8);backdrop-filter:blur(4px);place-items:center;z-index:2000;}
+        .loader.on{display:grid;}
+        .spin{width:40px;height:40px;border:2.5px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:spin 0.8s linear infinite;}
+        @keyframes spin{to{transform:rotate(360deg)}}
+
+        /* EMPTY */
+        .empty{padding:60px 20px;text-align:center;}
+        .empty-ico{font-size:36px;opacity:0.2;margin-bottom:12px;}
+        .empty-txt{font-size:14px;color:var(--muted);}
+
+        /* CONFIRM */
+        .confirm-box{background:var(--night3);border:1px solid var(--border2);border-radius:24px;padding:40px;width:100%;max-width:400px;text-align:center;}
+        .confirm-ico{font-size:48px;margin-bottom:16px;}
+        .confirm-title{font-family:'Bebas Neue',cursive;font-size:24px;margin-bottom:8px;}
+        .confirm-text{font-size:14px;color:var(--muted2);margin-bottom:24px;}
+        .confirm-actions{display:flex;gap:10px;justify-content:center;}
+
+        @media(max-width:1200px){.stats-grid{grid-template-columns:repeat(3,1fr);}}
+        @media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr;}.stats-grid{grid-template-columns:1fr 1fr;}}
+        @media(max-width:768px){.sidebar{width:60px;}.logo-text,.nav-item span,.sidebar-section,.user-info{display:none;}.main{margin-left:60px;}.content{padding:16px;}}
+    </style>
+</head>
+<body>
+
+<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<div class="loader" id="loader"><div class="spin"></div></div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+    <a href="#" class="sidebar-logo">
+        <div class="logo-mark">🚚</div>
+        <div class="logo-text">Colixo</div>
+    </a>
+    <div class="sidebar-section">Principal</div>
+    <a class="nav-item active" data-section="dashboard" href="#"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
+    <a class="nav-item" data-section="clients" href="#"><i class="fas fa-building"></i><span>Entreprises</span><span class="nav-badge" id="badgeClients">0</span></a>
+    <a class="nav-item" data-section="utilisateurs" href="#"><i class="fas fa-users"></i><span>Utilisateurs</span></a>
+    <div class="sidebar-section">Opérations</div>
+    <a class="nav-item" data-section="chauffeurs" href="#"><i class="fas fa-id-card"></i><span>Chauffeurs</span></a>
+    <a class="nav-item" data-section="transports" href="#"><i class="fas fa-truck"></i><span>Transports</span></a>
+    <a class="nav-item" href="new-transport.html"><i class="fas fa-plus-circle"></i><span>Nouveau transport</span></a>
+    <a class="nav-item" href="dispatch.html"><i class="fas fa-map-marked-alt"></i><span>Carte Dispatch</span></a>
+    <a class="nav-item" href="carte-conducteurs.html"><i class="fas fa-location-dot"></i><span>Carte conducteurs</span></a>
+    <a class="nav-item" href="transports-dispatch.html"><i class="fas fa-list-ul"></i><span>Liste transports → Dispatch</span></a>
+    <a class="nav-item" href="../commandes-client.html"><i class="fas fa-inbox"></i><span>Commandes clients</span><span class="nav-badge" id="badgeCommandes" style="display:none;">0</span></a>
+    <div class="sidebar-section">Analytiques</div>
+    <a class="nav-item" href="analytics.html"><i class="fas fa-chart-bar"></i><span>Analytics</span></a>
+    <a class="nav-item" href="rh.html"><i class="fas fa-users-cog"></i><span>Gestion RH</span></a>
+    <a class="nav-item" href="tarification.html"><i class="fas fa-tags"></i><span>Tarification</span></a>
+    <a class="nav-item" href="facturation.html"><i class="fas fa-file-invoice-dollar"></i><span>Facturation</span></a>
+    <a class="nav-item" href="finances.html"><i class="fas fa-euro-sign"></i><span>Finances</span></a>
+    <div class="sidebar-section">Brimot Nettoyage</div>
+    <a class="nav-item" href="brimot/facturation.html"><i class="fas fa-broom" style="color:#0ea5e9"></i><span>Facturation Brimot</span></a>
+    <div class="sidebar-section">Application</div>
+    <a class="nav-item" href="driver-app.html"><i class="fas fa-mobile-alt"></i><span>App Chauffeur</span></a>
+    <div class="sidebar-section">Système</div>
+    <a class="nav-item" data-section="activite" href="#"><i class="fas fa-clock"></i><span>Activité</span></a>
+    <div class="sidebar-footer">
+        <div class="user-chip">
+            <div class="user-avatar" id="sideAvatar">SA</div>
+            <div class="user-info">
+                <div class="user-name" id="sideName">Super Admin</div>
+                <div class="user-role">super_admin</div>
+            </div>
+            <button class="btn-logout" id="btnLogout"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+    </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+    <header class="topbar">
+        <div class="page-title" id="pageTitle">DASHBOARD</div>
+        <div class="topbar-right">
+            <a href="../commandes-client.html" class="btn btn-ghost btn-sm"><i class="fas fa-inbox"></i> Commandes</a>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="window.refreshDashboard()" title="Actualiser les données">
+                <i class="fas fa-sync-alt"></i> Actualiser
+            </button>
+        </div>
+    </header>
+
+    <div class="content">
+
+        <!-- DASHBOARD -->
+        <div class="section active" id="sec-dashboard">
+            <div class="stats-grid">
+                <div class="stat-card"><div class="stat-top"><div class="stat-icon red"><i class="fas fa-building"></i></div></div><div class="stat-num" id="s-entreprises">—</div><div class="stat-lbl">Entreprises</div></div>
+                <div class="stat-card"><div class="stat-top"><div class="stat-icon blue"><i class="fas fa-users"></i></div></div><div class="stat-num" id="s-utilisateurs">—</div><div class="stat-lbl">Utilisateurs</div></div>
+                <div class="stat-card"><div class="stat-top"><div class="stat-icon green"><i class="fas fa-id-card"></i></div></div><div class="stat-num" id="s-chauffeurs">—</div><div class="stat-lbl">Chauffeurs</div></div>
+                <div class="stat-card"><div class="stat-top"><div class="stat-icon yellow"><i class="fas fa-box"></i></div></div><div class="stat-num" id="s-employees">—</div><div class="stat-lbl">Magasiniers</div></div>
+                <div class="stat-card"><div class="stat-top"><div class="stat-icon purple"><i class="fas fa-route"></i></div></div><div class="stat-num" id="s-transports">—</div><div class="stat-lbl">Transports</div></div>
+            </div>
+            <div style="display:flex;gap:10px;margin:0 0 18px;flex-wrap:wrap;align-items:center;">
+                <button class="btn btn-ghost btn-sm" type="button" onclick="window.refreshDashboard()" title="Actualiser le dashboard (transports + commandes)">
+                    <i class="fas fa-sync-alt"></i> Actualiser le dashboard
+                </button>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+                <a href="new-transport.html" class="btn btn-red"><i class="fas fa-plus"></i> Nouveau transport</a>
+                <a href="dispatch.html" class="btn btn-ghost"><i class="fas fa-map-marked-alt"></i> Carte Dispatch</a>
+                <a href="../commandes-client.html" class="btn btn-ghost"><i class="fas fa-inbox"></i> Commandes clients</a>
+            </div>
+            <!-- Commandes en attente -->
+            <div class="card" style="margin-bottom:20px;border-color:rgba(245,158,11,0.3);">
+                <div class="card-head" style="background:rgba(245,158,11,0.05);">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:10px;height:10px;background:var(--yellow);border-radius:50%;"></div>
+                        <div class="card-title">COMMANDES CLIENTS EN ATTENTE</div>
+                        <span id="badgeCommandesWidget" style="background:var(--yellow);color:var(--night);font-size:11px;font-weight:700;padding:2px 9px;border-radius:100px;">0</span>
+                    </div>
+                    <a href="../commandes-client.html" class="btn btn-ghost btn-sm"><i class="fas fa-external-link-alt"></i> Gérer</a>
+                </div>
+                <div id="commandesList"><div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">Aucune commande en attente</div></div></div>
+            </div>
+            <div class="grid3">
+                <div class="card">
+                    <div class="card-head"><div class="card-title">DERNIÈRES ENTREPRISES</div><button class="btn btn-ghost btn-sm" onclick="goSection('clients')">Voir tout</button></div>
+                    <table class="tbl"><thead><tr><th>Entreprise</th><th>Ville</th><th>Statut</th></tr></thead><tbody id="recentClients"><tr><td colspan="3"><div class="empty"><div class="empty-ico">⏳</div></div></td></tr></tbody></table>
+                </div>
+                <div class="card">
+                    <div class="card-head"><div class="card-title">ACTIVITÉ</div></div>
+                    <div class="feed" id="activityFeed"><div class="empty"><div class="empty-ico">⏳</div></div></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-head"><div class="card-title">DERNIÈRES INSCRIPTIONS</div><button class="btn btn-ghost btn-sm" onclick="goSection('utilisateurs')">Voir tout</button></div>
+                <table class="tbl"><thead><tr><th>Utilisateur</th><th>Rôle</th><th>Entreprise</th><th>Date</th></tr></thead><tbody id="recentUsers"></tbody></table>
+            </div>
+        </div>
+
+        <!-- ENTREPRISES -->
+        <div class="section" id="sec-clients">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div><div style="font-family:'Bebas Neue',cursive;font-size:32px;">ENTREPRISES</div><div style="font-size:13px;color:var(--muted);margin-top:2px;">Gestion de tous vos clients</div></div>
+                <button class="btn btn-red" onclick="openModalEntreprise()"><i class="fas fa-plus"></i> Nouvelle entreprise</button>
+            </div>
+            <div class="card">
+                <div class="card-head"><input type="text" id="searchEntreprises" placeholder="🔍 Rechercher…" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;width:260px;" oninput="renderEntreprises(this.value.toLowerCase())"></div>
+                <table class="tbl"><thead><tr><th>Entreprise</th><th>Contact</th><th>Ville</th><th>N° client</th><th>Utilisateurs</th><th>Actions</th></tr></thead><tbody id="entreprisesList"></tbody></table>
+            </div>
+        </div>
+
+        <!-- UTILISATEURS -->
+        <div class="section" id="sec-utilisateurs">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div><div style="font-family:'Bebas Neue',cursive;font-size:32px;">UTILISATEURS</div><div style="font-size:13px;color:var(--muted);margin-top:2px;">Tous les comptes de la plateforme</div></div>
+                <button class="btn btn-red" onclick="openModalUser()"><i class="fas fa-plus"></i> Nouvel utilisateur</button>
+            </div>
+            <div class="card">
+                <div class="card-head" style="gap:10px;flex-wrap:wrap;">
+                    <input type="text" id="searchUsers" placeholder="🔍 Rechercher…" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;width:240px;" oninput="renderUtilisateurs(this.value.toLowerCase(), document.getElementById('filterRole').value)">
+                    <select id="filterRole" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;" onchange="renderUtilisateurs(document.getElementById('searchUsers').value.toLowerCase(), this.value)">
+                        <option value="">Tous les rôles</option>
+                        <option value="super_admin">Super Admin</option>
+                        <option value="admin">Admin</option>
+                        <option value="client">Client</option>
+                        <option value="chauffeur">Chauffeur</option>
+                        <option value="magasinier">Magasinier</option>
+                    </select>
+                </div>
+                <table class="tbl"><thead><tr><th>Utilisateur</th><th>Rôle</th><th>Entreprise</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="utilisateursList"></tbody></table>
+            </div>
+        </div>
+
+        <!-- CHAUFFEURS -->
+        <div class="section" id="sec-chauffeurs">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div><div style="font-family:'Bebas Neue',cursive;font-size:32px;">CHAUFFEURS</div><div style="font-size:13px;color:var(--muted);margin-top:2px;">Gestion des chauffeurs et leurs accès</div></div>
+                <button class="btn btn-red" onclick="openModalChauffeur()"><i class="fas fa-plus"></i> Nouveau chauffeur</button>
+            </div>
+            <div class="card">
+                <div class="card-head"><input type="text" id="searchChauffeurs" placeholder="🔍 Rechercher…" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;width:260px;" oninput="renderChauffeurs(this.value.toLowerCase())"></div>
+                <table class="tbl"><thead><tr><th>Chauffeur</th><th>Permis</th><th>Téléphone</th><th>Entreprise</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="chauffeursList"></tbody></table>
+            </div>
+        </div>
+
+        <!-- TRANSPORTS -->
+        <div class="section" id="sec-transports">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div><div style="font-family:'Bebas Neue',cursive;font-size:32px;">TRANSPORTS</div></div>
+                <a href="new-transport.html" class="btn btn-red"><i class="fas fa-plus"></i> Nouveau transport</a>
+            </div>
+            <div class="card">
+                <table class="tbl"><thead><tr><th>Référence</th><th>Entreprise</th><th>Adresse livraison</th><th>Service</th><th>Statut</th><th>Date</th></tr></thead><tbody id="transportsList"></tbody></table>
+            </div>
+        </div>
+
+        <!-- ACTIVITÉ -->
+        <div class="section" id="sec-activite">
+            <div style="font-family:'Bebas Neue',cursive;font-size:32px;margin-bottom:20px;">ACTIVITÉ RÉCENTE</div>
+            <div class="card"><div class="feed" id="fullActivityFeed"><div class="empty"><div class="empty-ico">⏳</div></div></div></div>
+        </div>
+
+    </div>
+</div>
+
+<!-- MODAL ENTREPRISE -->
+<div id="modalEntreprise" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title" id="modalEntrepriseTitle">NOUVELLE ENTREPRISE</div>
+            <button class="modal-close" onclick="closeModal('modalEntreprise')">✕</button>
+        </div>
+        <input type="hidden" id="entrepriseId">
+        <div class="field-row">
+            <div class="field"><label>Nom *</label><input type="text" id="eNom" placeholder="Acme SA"></div>
+            <div class="field"><label>N° client *</label><input type="text" id="eNumeroClient" placeholder="CLI-001"></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Email *</label><input type="email" id="eEmail" placeholder="contact@acme.ch"></div>
+            <div class="field"><label>Téléphone</label><input type="tel" id="eTel" placeholder="+41 21 000 00 00"></div>
+        </div>
+        <div class="field"><label>Adresse</label><input type="text" id="eAdresse" placeholder="Rue de la Paix 1"></div>
+        <div class="field-row">
+            <div class="field"><label>NPA</label><input type="text" id="eNpa" placeholder="1000"></div>
+            <div class="field"><label>Ville</label><input type="text" id="eVille" placeholder="Lausanne"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" onclick="saveEntreprise()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalEntreprise')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL UTILISATEUR -->
+<div id="modalUser" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title" id="modalUserTitle">NOUVEL UTILISATEUR</div>
+            <button class="modal-close" onclick="closeModal('modalUser')">✕</button>
+        </div>
+        <input type="hidden" id="userId">
+        <div class="field"><label>Email *</label><input type="email" id="uEmail" placeholder="user@colixo.ch"></div>
+        <div class="field" id="uPwdField"><label>Mot de passe *</label><input type="password" id="uPassword" placeholder="••••••••" minlength="6"></div>
+        <div class="field-row">
+            <div class="field"><label>Prénom</label><input type="text" id="uPrenom" placeholder="Jean"></div>
+            <div class="field"><label>Nom</label><input type="text" id="uNom" placeholder="Dupont"></div>
+        </div>
+        <div class="field"><label>Téléphone</label><input type="tel" id="uTel" placeholder="+41 79 000 00 00"></div>
+        <div class="field-row">
+            <div class="field"><label>Rôle</label>
+                <select id="uRole">
+                    <option value="client">Client</option>
+                    <option value="chauffeur">Chauffeur</option>
+                    <option value="magasinier">Magasinier</option>
+                    <option value="admin">Admin</option>
+                    <option value="super_admin">Super Admin</option>
+                </select>
+            </div>
+            <div class="field"><label>Entreprise</label><select id="uEntreprise"><option value="">— Aucune —</option></select></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" onclick="saveUser()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalUser')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CHAUFFEUR -->
+<div id="modalChauffeur" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title" id="modalChauffeurTitle">NOUVEAU CHAUFFEUR</div>
+            <button class="modal-close" onclick="closeModal('modalChauffeur')">✕</button>
+        </div>
+        <input type="hidden" id="chauffeurId">
+        <div class="field-row">
+            <div class="field"><label>Prénom *</label><input type="text" id="cPrenom" placeholder="Marc"></div>
+            <div class="field"><label>Nom *</label><input type="text" id="cNom" placeholder="Martin"></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Téléphone</label><input type="tel" id="cTel" placeholder="+41 79 000 00 00"></div>
+            <div class="field"><label>N° Permis</label><input type="text" id="cPermis" placeholder="VD-123456"></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Date naissance</label><input type="date" id="cNaissance"></div>
+            <div class="field"><label>Date embauche</label><input type="date" id="cEmbauche"></div>
+        </div>
+        <div class="field"><label>Entreprise</label><select id="cEntreprise"><option value="">— Aucune —</option></select></div>
+        <div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:16px;margin-bottom:14px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:12px;">🔐 Compte d'accès (App Chauffeur)</div>
+            <div class="field" style="margin-bottom:10px;"><label>Email *</label><input type="email" id="cEmail" placeholder="chauffeur@colixo.ch"></div>
+            <div class="field" style="margin-bottom:0;"><label>Mot de passe *</label><input type="password" id="cPassword" placeholder="••••••••" minlength="6"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" onclick="saveChauffeur()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalChauffeur')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CONFIRM -->
+<div id="modalConfirm" class="modal">
+    <div class="confirm-box">
+        <div class="confirm-ico" id="confirmIco">🛡️</div>
+        <div class="confirm-title" id="confirmTitle">CONFIRMATION</div>
+        <div class="confirm-text" id="confirmText"></div>
+        <div class="confirm-actions">
+            <button class="btn btn-red" id="confirmYes">Confirmer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalConfirm')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>';return;}
+const db = window.SUPABASE_CLIENT;
+
+// Client temporaire isolé pour créer des comptes sans écraser la session admin
+function makeTempClient() {
+    return window.supabase.createClient(
+        window.SUPABASE_CONFIG.url,
+        window.SUPABASE_CONFIG.key,
+        { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+    );
+}
+
+// Crée un compte Auth ou récupère l'ID si l'email existe déjà
+// Retourne { userId, isNew }
+async function getOrCreateAuthUser(email, pwd) {
+    const tmpDb = makeTempClient();
+    const { data, error } = await tmpDb.auth.signUp({ email, password: pwd });
+
+    // Cas 1 : succès — nouveau compte créé
+    if (!error && data.user?.id) {
+        return { userId: data.user.id, isNew: true };
+    }
+
+    // Cas 2 : email déjà dans auth.users
+    if (error && (error.message?.toLowerCase().includes('already registered') ||
+                  error.message?.toLowerCase().includes('already been registered') ||
+                  error.status === 422)) {
+
+        // 1. Chercher dans la table utilisateurs
+        const { data: existing } = await db.from('utilisateurs')
+            .select('id').eq('email', email).maybeSingle();
+        if (existing?.id) return { userId: existing.id, isNew: false };
+
+        // 2. Compte auth.users orphelin (pas dans utilisateurs)
+        //    Récupérer l'ID via RPC
+        try {
+            const { data: authUser } = await db.rpc('get_user_id_by_email', { user_email: email });
+            if (authUser) return { userId: authUser, isNew: false };
+        } catch(e){ console.warn('get_user_id_by_email:', e.message); }
+
+        // 3. RPC non disponible — on crée un profil sans ID auth (fallback)
+        throw new Error(`L'email "${email}" existe déjà dans Supabase Auth mais sans profil.\nExécutez le SQL 'get_user_id_by_email' dans Supabase (fichier supabase_delete_user.sql) puis réessayez.`);
+    }
+
+    throw error || new Error('Création du compte échouée');
+}
+
+let entreprises=[], utilisateurs=[], chauffeurs=[], transports=[];
+
+// ── TOAST ──
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function toast(type, msg){
+    clearTimeout(toastTimer);
+    toastEl.className='toast '+type+' show';
+    document.getElementById('toastIco').textContent = type==='success'?'✓':'✕';
+    document.getElementById('toastTxt').textContent = msg;
+    toastTimer = setTimeout(()=>toastEl.classList.remove('show'),4000);
+}
+
+// ── LOADER ──
+const loaderEl = document.getElementById('loader');
+const showLoad = ()=>loaderEl.classList.add('on');
+const hideLoad = ()=>loaderEl.classList.remove('on');
+
+// ── MODALS ──
+function openModal(id){const m=document.getElementById(id);if(m){m.style.display='flex';m.classList.add('open');}}
+function closeModal(id){const m=document.getElementById(id);if(m){m.style.display='none';m.classList.remove('open');}}
+window.closeModal=closeModal;
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id);}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.open').forEach(m=>closeModal(m.id));});
+
+// ── NAVIGATION ──
+window.goSection = function(name){
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    const sec=document.getElementById('sec-'+name);
+    const nav=document.querySelector(`[data-section="${name}"]`);
+    if(sec)sec.classList.add('active');
+    if(nav)nav.classList.add('active');
+    const titles={dashboard:'DASHBOARD',clients:'ENTREPRISES',utilisateurs:'UTILISATEURS',chauffeurs:'CHAUFFEURS',transports:'TRANSPORTS',activite:'ACTIVITÉ'};
+    document.getElementById('pageTitle').textContent=titles[name]||name.toUpperCase();
+};
+document.querySelectorAll('.nav-item[data-section]').forEach(item=>{
+    item.addEventListener('click',e=>{e.preventDefault();goSection(item.dataset.section);});
+});
+
+// ── HELPERS ──
+function timeAgo(d){
+    const diff=(Date.now()-new Date(d))/1000;
+    if(diff<60)return 'À l\'instant';
+    if(diff<3600)return Math.floor(diff/60)+' min';
+    if(diff<86400)return Math.floor(diff/3600)+'h';
+    return Math.floor(diff/86400)+'j';
+}
+function initials(str){return (str||'?')[0].toUpperCase();}
+
+// ── POPULATE SELECTS ──
+function populateSelects(){
+    const opts='<option value="">— Aucune —</option>'+entreprises.map(e=>`<option value="${e.id}">${e.nom}</option>`).join('');
+    ['uEntreprise','cEntreprise'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});
+}
+
+// ══════════════════════════════════════
+//  LOAD DATA
+// ══════════════════════════════════════
+async function loadEntreprises(){
+    const {data}=await db.from('entreprises').select('*').order('created_at',{ascending:false});
+    entreprises=data||[];
+    document.getElementById('badgeClients').textContent=entreprises.length;
+    document.getElementById('s-entreprises').textContent=entreprises.length;
+    populateSelects();
+}
+async function loadUtilisateurs(){
+    const {data}=await db.from('utilisateurs').select('*,entreprises(nom)').order('created_at',{ascending:false});
+    utilisateurs=data||[];
+    document.getElementById('s-utilisateurs').textContent=utilisateurs.length;
+    document.getElementById('s-chauffeurs').textContent=utilisateurs.filter(u=>u.role==='chauffeur').length;
+    document.getElementById('s-employees').textContent=utilisateurs.filter(u=>u.role==='magasinier').length;
+}
+async function loadChauffeurs(){
+    const {data}=await db.from('chauffeurs').select('*,entreprises(nom)').order('created_at',{ascending:false});
+    chauffeurs=data||[];
+}
+async function loadTransports(){
+    // Afficher les 50 derniers pour le tableau, mais compter le total exact pour le KPI
+    const [{data},{count}]=await Promise.all([
+        db.from('transport_orders_simple')
+            .select('*')
+            .order('created_at',{ascending:false})
+            .limit(50),
+        db.from('transport_orders_simple')
+            .select('*', { count: 'exact', head: true })
+    ]);
+    transports=data||[];
+    const totalCount = typeof count === 'number' ? count : transports.length;
+    document.getElementById('s-transports').textContent=totalCount;
+}
+async function loadCommandes(){
+    const {data}=await db.from('transport_orders_simple').select('*').eq('admin_status','pending_validation').order('created_at',{ascending:false});
+    const commandes=data||[];
+    const badge=document.getElementById('badgeCommandes');
+    const badgeW=document.getElementById('badgeCommandesWidget');
+    if(badge){badge.textContent=commandes.length;badge.style.display=commandes.length>0?'inline':'none';}
+    if(badgeW)badgeW.textContent=commandes.length;
+    const el=document.getElementById('commandesList');
+    if(!commandes.length){el.innerHTML='<div class="empty"><div class="empty-ico">📭</div><div class="empty-txt">Aucune commande en attente</div></div>';return;}
+    el.innerHTML=commandes.map(o=>{
+        const ent=entreprises.find(e=>e.id===o.entreprise_id);
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border);gap:12px;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:13px;">${o.order_number||o.id.slice(0,8)}</div>
+                <div style="font-size:12px;color:var(--muted2);margin-top:2px;">${ent?.nom||'Client'} · ${o.delivery_address?.split(',')[0]||'—'}</div>
+            </div>
+            <a href="../commandes-client.html" class="btn btn-ghost btn-sm" style="color:var(--green);border-color:rgba(34,197,94,0.3);"><i class="fas fa-check"></i> Traiter</a>
+        </div>`;
+    }).join('');
+}
+
+// ══════════════════════════════════════
+//  REFRESH DASHBOARD (orders + transports)
+// ══════════════════════════════════════
+window.refreshDashboard = async function(){
+    let ok = false;
+    try{
+        showLoad();
+        await Promise.all([
+            loadEntreprises(),
+            loadUtilisateurs(),
+            loadChauffeurs(),
+            loadTransports(),
+            loadCommandes()
+        ]);
+
+        // Re-render tout le dashboard (cartes + listes) pour refléter l'état réel.
+        renderDashboard();
+        renderEntreprises();
+        renderUtilisateurs();
+        renderChauffeurs();
+        renderTransports();
+        ok = true;
+    } catch(e){
+        console.warn('[Dashboard] refresh failed', e);
+        toast('error','Erreur lors de l\'actualisation');
+    } finally{
+        hideLoad();
+        if(ok) toast('success','Dashboard actualisé');
+    }
+};
+
+// ══════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════
+function renderDashboard(){
+    // Recent entreprises
+    document.getElementById('recentClients').innerHTML=entreprises.slice(0,5).map(e=>`
+        <tr><td><div class="cell-user"><div class="avatar-sm" style="background:rgba(232,49,26,0.12);color:var(--red)">${initials(e.nom)}</div><div><div class="cell-main">${e.nom}</div><div class="cell-sub">${e.email||''}</div></div></div></td>
+        <td style="color:var(--muted2)">${e.ville||'—'}</td><td><span class="chip actif">Actif</span></td></tr>
+    `).join('')||'<tr><td colspan="3"><div class="empty"><div class="empty-ico">🏢</div><div class="empty-txt">Aucune entreprise</div></div></td></tr>';
+
+    // Recent users
+    document.getElementById('recentUsers').innerHTML=utilisateurs.slice(0,5).map(u=>{
+        const name=[u.prenom,u.nom].filter(Boolean).join(' ')||u.email;
+        return `<tr><td><div class="cell-user"><div class="avatar-sm" style="background:rgba(59,130,246,0.12);color:var(--blue)">${initials(u.prenom||u.email)}</div><div><div class="cell-main">${name}</div><div class="cell-sub">${u.email}</div></div></div></td>
+        <td><span class="chip ${u.role}">${u.role}</span></td>
+        <td style="color:var(--muted2)">${u.entreprises?.nom||'—'}</td>
+        <td style="color:var(--muted)">${new Date(u.created_at).toLocaleDateString('fr-CH')}</td></tr>`;
+    }).join('')||'<tr><td colspan="4"><div class="empty"><div class="empty-ico">👤</div><div class="empty-txt">Aucun utilisateur</div></div></td></tr>';
+
+    // Activity feed
+    const items=[
+        ...utilisateurs.slice(0,4).map(u=>({label:`Nouvel utilisateur <strong>${u.email}</strong>`,time:u.created_at,ico:'👤',bg:'rgba(59,130,246,0.12)'})),
+        ...entreprises.slice(0,3).map(e=>({label:`Nouvelle entreprise <strong>${e.nom}</strong>`,time:e.created_at,ico:'🏢',bg:'rgba(232,49,26,0.12)'})),
+        ...chauffeurs.slice(0,2).map(c=>({label:`Chauffeur ajouté <strong>${c.prenom} ${c.nom}</strong>`,time:c.created_at,ico:'🚚',bg:'rgba(34,197,94,0.12)'}))
+    ].sort((a,b)=>new Date(b.time)-new Date(a.time)).slice(0,10);
+    const feedHtml=items.map(i=>`<div class="feed-item"><div class="feed-dot" style="background:${i.bg}">${i.ico}</div><div class="feed-content"><div class="feed-text">${i.label}</div><div class="feed-time">${timeAgo(i.time)}</div></div></div>`).join('')||'<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Aucune activité</div></div>';
+    document.getElementById('activityFeed').innerHTML=feedHtml;
+    document.getElementById('fullActivityFeed').innerHTML=feedHtml;
+}
+
+window.renderEntreprises = function(filter=''){
+    const list=filter?entreprises.filter(e=>(e.nom+e.email+e.ville).toLowerCase().includes(filter)):entreprises;
+    document.getElementById('entreprisesList').innerHTML=list.length?list.map(e=>{
+        const nbUsers=utilisateurs.filter(u=>u.entreprise_id===e.id).length;
+        return `<tr>
+            <td><div class="cell-user"><div class="avatar-sm" style="background:rgba(232,49,26,0.12);color:var(--red)">${initials(e.nom)}</div><div><div class="cell-main">${e.nom}</div><div class="cell-sub">${e.email||''}</div></div></div></td>
+            <td style="color:var(--muted2)">${e.telephone||'—'}</td>
+            <td style="color:var(--muted2)">${e.ville||'—'}</td>
+            <td><span class="chip client">${e.numero_client||'—'}</span></td>
+            <td style="color:var(--muted2)">${nbUsers} utilisateur${nbUsers>1?'s':''}</td>
+            <td><div style="display:flex;gap:4px;">
+                <button class="action-btn edit" onclick="editEntreprise('${e.id}')" title="Modifier"><i class="fas fa-pen"></i></button>
+                <button class="action-btn delete" onclick="askDelete('entreprise','${e.id}','${e.nom.replace(/'/g,"\\'")}','entreprises')" title="Supprimer"><i class="fas fa-trash"></i></button>
+            </div></td>
+        </tr>`;
+    }).join(''):`<tr><td colspan="6"><div class="empty"><div class="empty-ico">🏢</div><div class="empty-txt">Aucune entreprise trouvée</div></div></td></tr>`;
+};
+
+window.renderUtilisateurs = function(filter='', roleFilter=''){
+    let list=utilisateurs;
+    if(filter) list=list.filter(u=>(u.email+(u.prenom||'')+(u.nom||'')).toLowerCase().includes(filter));
+    if(roleFilter) list=list.filter(u=>u.role===roleFilter);
+    document.getElementById('utilisateursList').innerHTML=list.length?list.map(u=>{
+        const name=[u.prenom,u.nom].filter(Boolean).join(' ')||'—';
+        const ent=u.entreprises?.nom||'—';
+        return `<tr>
+            <td><div class="cell-user"><div class="avatar-sm" style="background:rgba(59,130,246,0.12);color:var(--blue)">${initials(u.prenom||u.email)}</div><div><div class="cell-main">${name}</div><div class="cell-sub">${u.email}</div></div></div></td>
+            <td><span class="chip ${u.role}">${u.role}</span></td>
+            <td style="color:var(--muted2)">${ent}</td>
+            <td><span class="chip actif">Actif</span></td>
+            <td><div style="display:flex;gap:4px;">
+                <button class="action-btn edit" onclick="editUser('${u.id}')" title="Modifier"><i class="fas fa-pen"></i></button>
+                <button class="action-btn delete" onclick="askDelete('utilisateur','${u.id}','${u.email}','utilisateurs')" title="Supprimer"><i class="fas fa-trash"></i></button>
+            </div></td>
+        </tr>`;
+    }).join(''):`<tr><td colspan="5"><div class="empty"><div class="empty-ico">👤</div><div class="empty-txt">Aucun utilisateur trouvé</div></div></td></tr>`;
+};
+
+window.renderChauffeurs = function(filter=''){
+    const list=filter?chauffeurs.filter(c=>(c.prenom+c.nom+c.telephone||'').toLowerCase().includes(filter)):chauffeurs;
+    document.getElementById('chauffeursList').innerHTML=list.length?list.map(c=>{
+        return `<tr>
+            <td><div class="cell-user"><div class="avatar-sm" style="background:rgba(34,197,94,0.12);color:var(--green)">${initials(c.prenom)}</div><div><div class="cell-main">${c.prenom} ${c.nom}</div><div class="cell-sub">${c.date_embauche?'Embauché le '+new Date(c.date_embauche).toLocaleDateString('fr-CH'):''}</div></div></div></td>
+            <td style="color:var(--muted2)">${c.numero_permis||'—'}</td>
+            <td style="color:var(--muted2)">${c.telephone||'—'}</td>
+            <td style="color:var(--muted2)">${c.entreprises?.nom||'—'}</td>
+            <td><span class="chip actif">Actif</span></td>
+            <td><div style="display:flex;gap:4px;">
+                <button class="action-btn edit" onclick="editChauffeur('${c.id}')" title="Modifier"><i class="fas fa-pen"></i></button>
+                <button class="action-btn delete" onclick="askDelete('chauffeur','${c.id}','${c.prenom} ${c.nom}','chauffeurs')" title="Supprimer"><i class="fas fa-trash"></i></button>
+            </div></td>
+        </tr>`;
+    }).join(''):`<tr><td colspan="6"><div class="empty"><div class="empty-ico">🚚</div><div class="empty-txt">Aucun chauffeur trouvé</div></div></td></tr>`;
+};
+
+function renderTransports(){
+    const stMap={pending:'En attente',pending_validation:'À valider',accepted:'Accepté',picked_up:'Enlevé',in_transit:'En route',delivered:'Livré'};
+    const stColor={pending:'var(--muted)',pending_validation:'var(--yellow)',accepted:'var(--blue)',picked_up:'var(--orange)',in_transit:'var(--blue)',delivered:'var(--green)'};
+    document.getElementById('transportsList').innerHTML=transports.length?transports.map(o=>`
+        <tr>
+            <td><div class="cell-main">${o.order_number||o.id.slice(0,8)}</div></td>
+            <td style="color:var(--muted2)">${entreprises.find(e=>e.id===o.entreprise_id)?.nom||'—'}</td>
+            <td style="color:var(--muted2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${o.delivery_address||'—'}</td>
+            <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(59,130,246,0.1);color:var(--blue);">${o.service_type||'normal'}</span></td>
+            <td><span style="font-size:11px;color:${stColor[o.admin_status||o.status]||'var(--muted)'};">${stMap[o.admin_status||o.status]||o.status}</span></td>
+            <td style="color:var(--muted)">${new Date(o.created_at).toLocaleDateString('fr-CH')}</td>
+        </tr>
+    `).join(''):`<tr><td colspan="6"><div class="empty"><div class="empty-ico">🚚</div><div class="empty-txt">Aucun transport</div></div></td></tr>`;
+}
+
+// ══════════════════════════════════════
+//  SAVE ENTREPRISE ✅
+// ══════════════════════════════════════
+window.openModalEntreprise = function(){
+    document.getElementById('entrepriseId').value='';
+    document.getElementById('modalEntrepriseTitle').textContent='NOUVELLE ENTREPRISE';
+    ['eNom','eNumeroClient','eEmail','eTel','eAdresse','eNpa','eVille'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    openModal('modalEntreprise');
+};
+
+window.editEntreprise = function(id){
+    const e=entreprises.find(x=>x.id===id); if(!e) return;
+    document.getElementById('entrepriseId').value=e.id;
+    document.getElementById('modalEntrepriseTitle').textContent='MODIFIER ENTREPRISE';
+    document.getElementById('eNom').value=e.nom||'';
+    document.getElementById('eNumeroClient').value=e.numero_client||'';
+    document.getElementById('eEmail').value=e.email||'';
+    document.getElementById('eTel').value=e.telephone||'';
+    document.getElementById('eAdresse').value=e.adresse||'';
+    document.getElementById('eNpa').value=e.npa||'';
+    document.getElementById('eVille').value=e.ville||'';
+    openModal('modalEntreprise');
+};
+
+window.saveEntreprise = async function(){
+    const nom=document.getElementById('eNom').value.trim();
+    const numeroClient=document.getElementById('eNumeroClient').value.trim();
+    const email=document.getElementById('eEmail').value.trim();
+    if(!nom||!email){toast('error','Nom et email requis');return;}
+    showLoad();
+    const id=document.getElementById('entrepriseId').value;
+    const payload={nom,numero_client:numeroClient,email,telephone:document.getElementById('eTel').value.trim()||null,adresse:document.getElementById('eAdresse').value.trim()||null,npa:document.getElementById('eNpa').value.trim()||null,ville:document.getElementById('eVille').value.trim()||null};
+    const {error}=id ? await db.from('entreprises').update(payload).eq('id',id) : await db.from('entreprises').insert([payload]);
+    hideLoad();
+    if(error){toast('error','Erreur: '+error.message);return;}
+    toast('success',id?'Entreprise modifiée ✓':'Entreprise créée ✓');
+    closeModal('modalEntreprise');
+    await loadEntreprises();
+    await loadUtilisateurs();
+    renderEntreprises();
+    renderDashboard();
+};
+
+// ══════════════════════════════════════
+//  SAVE UTILISATEUR ✅
+// ══════════════════════════════════════
+window.openModalUser = function(){
+    document.getElementById('userId').value='';
+    document.getElementById('modalUserTitle').textContent='NOUVEL UTILISATEUR';
+    ['uEmail','uPassword','uPrenom','uNom','uTel'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('uRole').value='client';
+    document.getElementById('uEntreprise').value='';
+    document.getElementById('uPwdField').style.display='block';
+    openModal('modalUser');
+};
+
+window.editUser = function(id){
+    const u=utilisateurs.find(x=>x.id===id); if(!u) return;
+    document.getElementById('userId').value=u.id;
+    document.getElementById('modalUserTitle').textContent='MODIFIER UTILISATEUR';
+    document.getElementById('uEmail').value=u.email||'';
+    document.getElementById('uPassword').value='';
+    document.getElementById('uPrenom').value=u.prenom||'';
+    document.getElementById('uNom').value=u.nom||'';
+    document.getElementById('uTel').value=u.telephone||'';
+    document.getElementById('uRole').value=u.role||'client';
+    document.getElementById('uEntreprise').value=u.entreprise_id||'';
+    document.getElementById('uPwdField').style.display='none';
+    openModal('modalUser');
+};
+
+window.saveUser = async function(){
+    const email=document.getElementById('uEmail').value.trim();
+    const pwd=document.getElementById('uPassword').value;
+    const id=document.getElementById('userId').value;
+    if(!email){toast('error','Email requis');return;}
+    if(!id && !pwd){toast('error','Mot de passe requis');return;}
+    showLoad();
+    try{
+        const profilePayload={
+            email,
+            prenom:document.getElementById('uPrenom').value.trim()||null,
+            nom:document.getElementById('uNom').value.trim()||null,
+            telephone:document.getElementById('uTel').value.trim()||null,
+            role:document.getElementById('uRole').value,
+            entreprise_id:document.getElementById('uEntreprise').value||null
+        };
+        if(id){
+            // Modifier profil seulement
+            const {error}=await db.from('utilisateurs').update(profilePayload).eq('id',id);
+            if(error) throw error;
+        } else {
+            // Créer ou récupérer le compte Auth
+            const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
+            // UPSERT : insère si nouveau, met à jour si existant
+            const {error:upsErr}=await db.from('utilisateurs')
+                .upsert([{id:userId,...profilePayload}], {onConflict:'id'});
+            if(upsErr) throw upsErr;
+        }
+        toast('success',id?'Utilisateur modifié ✓':'Utilisateur créé ✓');
+        closeModal('modalUser');
+        await loadUtilisateurs();
+        renderUtilisateurs();
+        renderDashboard();
+    } catch(e){toast('error','Erreur: '+e.message);}
+    finally{hideLoad();}
+};
+
+// ══════════════════════════════════════
+//  SAVE CHAUFFEUR ✅
+// ══════════════════════════════════════
+window.openModalChauffeur = function(){
+    document.getElementById('chauffeurId').value='';
+    document.getElementById('modalChauffeurTitle').textContent='NOUVEAU CHAUFFEUR';
+    ['cPrenom','cNom','cTel','cPermis','cEmail','cPassword'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('cNaissance').value='';
+    document.getElementById('cEmbauche').value='';
+    document.getElementById('cEntreprise').value='';
+    openModal('modalChauffeur');
+};
+
+window.editChauffeur = function(id){
+    const c=chauffeurs.find(x=>x.id===id); if(!c) return;
+    document.getElementById('chauffeurId').value=c.id;
+    document.getElementById('modalChauffeurTitle').textContent='MODIFIER CHAUFFEUR';
+    document.getElementById('cPrenom').value=c.prenom||'';
+    document.getElementById('cNom').value=c.nom||'';
+    document.getElementById('cTel').value=c.telephone||'';
+    document.getElementById('cPermis').value=c.numero_permis||'';
+    document.getElementById('cNaissance').value=c.date_naissance||'';
+    document.getElementById('cEmbauche').value=c.date_embauche||'';
+    document.getElementById('cEntreprise').value=c.entreprise_id||'';
+    document.getElementById('cEmail').value='';
+    document.getElementById('cPassword').value='';
+    openModal('modalChauffeur');
+};
+
+window.saveChauffeur = async function(){
+    const prenom=document.getElementById('cPrenom').value.trim();
+    const nom=document.getElementById('cNom').value.trim();
+    const email=document.getElementById('cEmail').value.trim();
+    const pwd=document.getElementById('cPassword').value;
+    const id=document.getElementById('chauffeurId').value;
+    if(!prenom||!nom){toast('error','Prénom et nom requis');return;}
+    if(!id&&(!email||!pwd)){toast('error','Email et mot de passe requis pour le compte');return;}
+    showLoad();
+    try{
+        // Dates : chaîne vide → null pour éviter l'erreur "date not defined"
+        const naissance = document.getElementById('cNaissance').value.trim();
+        const embauche  = document.getElementById('cEmbauche').value.trim();
+        const entId     = document.getElementById('cEntreprise').value || null;
+
+        const chauffeurPayload={
+            prenom, nom,
+            telephone:    document.getElementById('cTel').value.trim()    || null,
+            numero_permis:document.getElementById('cPermis').value.trim() || null,
+            date_naissance: naissance  ? naissance  : null,
+            date_embauche:  embauche   ? embauche   : null,
+            entreprise_id:  entId
+        };
+
+        if(id){
+            // Modification — pas de recréation de compte
+            const {error}=await db.from('chauffeurs').update(chauffeurPayload).eq('id',id);
+            if(error) throw error;
+        } else {
+            // Création compte Auth via client temporaire (sans écraser la session admin)
+            const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
+
+            // UPSERT dans utilisateurs (insère si nouveau, met à jour si existant)
+            if(userId){
+                const {error:uErr}=await db.from('utilisateurs').upsert([{
+                    id:userId, email, prenom, nom,
+                    role:'chauffeur',
+                    entreprise_id: entId
+                }], {onConflict:'id'});
+                if(uErr) console.warn('utilisateurs upsert warning:', uErr.message);
+            }
+
+            // Insérer dans chauffeurs — user_id seulement si la colonne existe
+            const insertPayload={...chauffeurPayload};
+            if(userId) insertPayload.user_id = userId;
+
+            const {error:cErr}=await db.from('chauffeurs').insert([insertPayload]);
+            if(cErr){
+                // Si user_id n'existe pas dans la table, réessayer sans
+                if(cErr.message?.includes('user_id')){
+                    delete insertPayload.user_id;
+                    const {error:cErr2}=await db.from('chauffeurs').insert([insertPayload]);
+                    if(cErr2) throw cErr2;
+                } else {
+                    throw cErr;
+                }
+            }
+        }
+
+        toast('success', id ? 'Chauffeur modifié ✓' : 'Chauffeur créé ✓');
+        closeModal('modalChauffeur');
+        await loadChauffeurs();
+        await loadUtilisateurs();
+        renderChauffeurs();
+        renderDashboard();
+    } catch(e){ toast('error','Erreur: '+e.message); }
+    finally{ hideLoad(); }
+};
+
+// ══════════════════════════════════════
+//  SUPPRESSION COMPLÈTE UTILISATEUR
+// ══════════════════════════════════════
+
+// Supprime tout : données liées + profil + compte auth.users
+async function deleteUserData(uid){
+    // 1. Données liées
+    const tables = [
+        ['notifications',         'user_id'],
+        ['push_subscriptions',    'user_id'],
+        ['client_addresses',      'client_id'],
+        ['client_destinataires',  'client_id'],
+        ['conges',                'driver_id'],
+        ['pointages',             'driver_id'],
+        ['soldes_rh',             'driver_id'],
+        ['deliveries',            'driver_id'],
+        ['vehicule_km',           'chauffeur_id'],
+        ['campagnes_prospection', 'created_by'],
+    ];
+    for(const [table, col] of tables){
+        try{ await db.from(table).delete().eq(col, uid); } catch(e){ console.warn(`delete ${table}:`, e.message); }
+    }
+    // 2. Profil utilisateurs
+    try{ await db.from('utilisateurs').delete().eq('id', uid); } catch(e){ console.warn('delete utilisateurs:', e.message); }
+    // 3. Compte auth.users via RPC
+    try{ await db.rpc('admin_delete_user', { target_user_id: uid }); }
+    catch(e){ console.warn('admin_delete_user RPC:', e.message); }
+}
+
+window.askDelete = function(type, id, label, table){
+    // Utilisateurs : désactivation (compte auth conservé)
+    // Entreprises/chauffeurs : suppression réelle
+    const isUser = (table === 'utilisateurs');
+    document.getElementById('confirmIco').textContent  = '🗑️';
+    document.getElementById('confirmTitle').textContent = 'SUPPRIMER DÉFINITIVEMENT ?';
+    document.getElementById('confirmText').textContent  = isUser
+        ? `Supprimer "${label}" ?\nToutes les données et le compte seront effacés. Irréversible.`
+        : `Supprimer "${label}" ? Cette action est irréversible.`;
+    document.getElementById('confirmYes').textContent   = 'Supprimer';
+    document.getElementById('confirmYes').onclick=async()=>{
+        showLoad();
+        try{
+            if(table === 'entreprises'){
+                // 1. Commandes et données liées
+                const {data:orders}=await db.from('transport_orders_simple').select('id').eq('entreprise_id',id);
+                if(orders&&orders.length){
+                    const oIds=orders.map(o=>o.id);
+                    await db.from('facture_lignes').delete().in('order_id',oIds);
+                    await db.from('tracking_events').delete().in('order_id',oIds);
+                    await db.from('preuves_livraison').delete().in('stop_id',oIds);
+                    await db.from('tournee_arrets').delete().in('transport_id',oIds);
+                }
+                await db.from('transport_orders_simple').delete().eq('entreprise_id',id);
+
+                // 2. Factures
+                await db.from('factures').delete().eq('entreprise_id',id);
+
+                // 3. Tarifs
+                await db.from('tarifs_clients').delete().eq('entreprise_id',id);
+                await db.from('tarifs_speciaux').delete().eq('entreprise_id',id);
+
+                // 4. Chauffeurs liés
+                const {data:chaufs}=await db.from('chauffeurs').select('id').eq('entreprise_id',id);
+                if(chaufs&&chaufs.length){
+                    const cIds=chaufs.map(c=>c.id);
+                    await db.from('vehicule_km').delete().in('chauffeur_id',cIds);
+                }
+                await db.from('chauffeurs').delete().eq('entreprise_id',id);
+
+                // 5. Employés
+                await db.from('employees').delete().eq('entreprise_id',id);
+
+                // 6. Utilisateurs liés (toutes leurs données)
+                const {data:users}=await db.from('utilisateurs').select('id').eq('entreprise_id',id);
+                if(users&&users.length){
+                    for(const u of users){ await deleteUserData(u.id); }
+                }
+
+                // 7. Supprimer l'entreprise
+                const {error}=await db.from('entreprises').delete().eq('id',id);
+                if(error) throw error;
+
+                await loadEntreprises();
+                await loadUtilisateurs();
+                renderEntreprises();
+                renderDashboard();
+
+            } else if(table === 'utilisateurs'){
+                // Désactivation — compte auth conservé
+                await deleteUserData(id);
+                await loadUtilisateurs();
+                renderUtilisateurs();
+                renderDashboard();
+
+            } else if(table === 'chauffeurs'){
+                await db.from('vehicule_km').delete().eq('chauffeur_id',id);
+                const {error}=await db.from('chauffeurs').delete().eq('id',id);
+                if(error) throw error;
+                await loadChauffeurs();
+                renderChauffeurs();
+
+            } else {
+                const {error}=await db.from(table).delete().eq('id',id);
+                if(error) throw error;
+            }
+
+            toast('success', 'Supprimé ✓');
+            closeModal('modalConfirm');
+        } catch(e){
+            console.error('Erreur suppression:',e);
+            toast('error','Erreur: '+e.message);
+        } finally {
+            hideLoad();
+        }
+    };
+    openModal('modalConfirm');
+};
+
+// ══════════════════════════════════════
+//  INIT ✅
+// ══════════════════════════════════════
+async function init(){
+    const {data:{session}}=await db.auth.getSession();
+    if(!session){window.location.href='../index.html';return;}
+    showLoad();
+    await loadEntreprises();
+    await loadUtilisateurs();
+    await loadChauffeurs();
+    await loadTransports();
+    await loadCommandes();
+    renderDashboard();
+    renderEntreprises();
+    renderUtilisateurs();
+    renderChauffeurs();
+    renderTransports();
+    // Nom admin
+    const {data:me}=await db.from('utilisateurs').select('prenom,nom').eq('id',session.user.id).single();
+    if(me){
+        const name=[me.prenom,me.nom].filter(Boolean).join(' ')||session.user.email;
+        document.getElementById('sideName').textContent=name;
+        document.getElementById('sideAvatar').textContent=initials(me.prenom||session.user.email);
+    }
+    // Realtime commandes
+    db.channel('dashboard').on(
+        'postgres_changes',
+        {event:'*',schema:'public',table:'transport_orders_simple'},
+        async ()=> {
+            try{
+                // Transports (stat-card) + commandes en attente (liste/badge)
+                await Promise.all([loadTransports(), loadCommandes()]);
+                if(document.getElementById('sec-transports')?.classList.contains('active')) renderTransports();
+            } catch(e){
+                console.warn('[Dashboard] realtime refresh failed', e);
+            }
+        }
+    ).subscribe();
+    hideLoad();
+}
+
+document.getElementById('btnLogout')?.addEventListener('click',async()=>{await db.auth.signOut();window.location.href='../index.html';});
+init();
+})();
+</script>
+</body>
+</html>

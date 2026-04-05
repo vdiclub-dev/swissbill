@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <title>Gestion Financière | Colixo Dispatch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <style>
+        :root{
+            --red:#e8311a;--red-dark:#c0280f;
+            --night:#0a0a0f;--night2:#111118;--night3:#18181f;--surface:#1e1e28;
+            --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+            --white:#ffffff;--muted:rgba(255,255,255,0.38);--muted2:rgba(255,255,255,0.6);
+            --green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b;--orange:#f97316;--purple:#a855f7;
+            --sidebar:220px;
+        }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+        html,body{height:100%;}
+        body{font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);display:flex;}
+
+        .sidebar{width:var(--sidebar);flex-shrink:0;background:var(--night2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;}
+        .sb-logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;}
+        .sb-mark{width:34px;height:34px;background:var(--red);border-radius:9px;display:grid;place-items:center;font-size:15px;}
+        .sb-text{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;color:var(--white);}
+        .sb-text em{color:var(--red);font-style:normal;}
+        .nav-sec{padding:14px 12px 5px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;margin:2px 8px;font-size:13px;font-weight:500;color:var(--muted2);text-decoration:none;transition:all 0.2s;border:1px solid transparent;}
+        .nav-item i{width:16px;text-align:center;font-size:14px;}
+        .nav-item:hover{background:var(--night3);color:var(--white);}
+        .nav-item.active{background:rgba(232,49,26,0.1);color:var(--white);border-color:rgba(232,49,26,0.2);}
+        .nav-item.active i{color:var(--red);}
+        .sb-footer{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border);}
+        .user-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--night3);}
+        .user-av{width:30px;height:30px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:13px;flex-shrink:0;}
+        .user-name{font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;}
+
+        .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+        .topbar{background:var(--night2);border-bottom:1px solid var(--border);padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+        .page-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;}
+        .topbar-right{display:flex;gap:10px;align-items:center;}
+
+        /* PERIOD SELECT */
+        .period-bar{background:var(--night2);border-bottom:1px solid var(--border);padding:10px 32px;display:flex;gap:10px;align-items:center;}
+        select.period{background:var(--night3);border:1px solid var(--border2);border-radius:8px;padding:7px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;}
+
+        /* TABS */
+        .tabs{display:flex;border-bottom:1px solid var(--border);padding:0 32px;background:var(--night2);}
+        .tab{padding:13px 18px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;display:flex;align-items:center;gap:7px;}
+        .tab:hover{color:var(--muted2);}
+        .tab.active{color:var(--white);border-bottom-color:var(--red);}
+
+        .content{padding:28px 32px;flex:1;overflow-y:auto;}
+        .tab-pane{display:none;}
+        .tab-pane.active{display:block;}
+
+        .btn{font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;padding:8px 18px;border-radius:9px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;text-decoration:none;white-space:nowrap;}
+        .btn-red{background:var(--red);color:var(--white);}
+        .btn-red:hover{background:var(--red-dark);}
+        .btn-green{background:var(--green);color:var(--night);font-weight:700;}
+        .btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border2);}
+        .btn-ghost:hover{color:var(--white);}
+        .btn-sm{padding:5px 12px;font-size:12px;border-radius:7px;}
+
+        /* KPI GRID */
+        .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+        .kpi{background:var(--night2);border:1px solid var(--border2);border-radius:16px;padding:20px;transition:all 0.3s;}
+        .kpi:hover{transform:translateY(-2px);}
+        .kpi-ico{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:16px;margin-bottom:12px;}
+        .kpi-val{font-family:'Bebas Neue',cursive;font-size:28px;letter-spacing:1px;line-height:1;margin-bottom:4px;}
+        .kpi-lbl{font-size:12px;color:var(--muted);}
+        .kpi-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+
+        /* CARDS */
+        .card{background:var(--night2);border:1px solid var(--border2);border-radius:18px;overflow:hidden;margin-bottom:20px;}
+        .card-head{padding:18px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+        .card-title{font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;}
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+        .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;}
+
+        /* TABLE */
+        .tbl{width:100%;border-collapse:collapse;}
+        .tbl th{padding:11px 18px;text-align:left;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);background:var(--night3);}
+        .tbl td{padding:12px 18px;border-top:1px solid var(--border);font-size:13px;vertical-align:middle;}
+        .tbl tr:hover td{background:rgba(255,255,255,0.02);}
+
+        /* VEHICLE CARD */
+        .veh-card{background:var(--night3);border:1.5px solid var(--border2);border-radius:16px;padding:20px;transition:all 0.2s;}
+        .veh-card:hover{border-color:rgba(255,255,255,0.25);}
+        .veh-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+        .veh-icon{width:44px;height:44px;background:rgba(59,130,246,0.15);color:var(--blue);border-radius:12px;display:grid;place-items:center;font-size:20px;flex-shrink:0;}
+        .veh-immat{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:2px;}
+        .veh-model{font-size:12px;color:var(--muted);}
+        .veh-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+        .vs{background:var(--surface);border-radius:9px;padding:10px;text-align:center;}
+        .vs-val{font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;}
+        .vs-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;}
+        .veh-actions{display:flex;gap:6px;}
+        .veh-actions .btn{flex:1;justify-content:center;}
+
+        /* FRAIS FORM */
+        .frais-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+        .frais-field{display:flex;flex-direction:column;gap:5px;}
+        .frais-field label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
+        .frais-field input{padding:9px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);}
+        .frais-field input:focus{outline:none;border-color:var(--red);}
+
+        /* CHART */
+        .chart-wrap{padding:20px;height:260px;position:relative;}
+
+        /* PROFIT INDICATOR */
+        .profit-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700;}
+        .profit-badge.pos{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25);}
+        .profit-badge.neg{background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.25);}
+        .profit-badge.zero{background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid var(--border2);}
+
+        /* MODAL */
+        .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(10px);z-index:500;align-items:center;justify-content:center;padding:20px;}
+        .modal.open{display:flex;}
+        .modal-box{background:var(--night3);border:1px solid var(--border2);border-radius:24px;padding:36px;width:100%;max-width:520px;box-shadow:0 40px 100px rgba(0,0,0,0.6);animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1);max-height:90vh;overflow-y:auto;}
+        @keyframes boxIn{from{opacity:0;transform:scale(0.94) translateY(14px)}to{opacity:1;transform:none}}
+        .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+        .modal-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;}
+        .modal-close{width:32px;height:32px;background:var(--surface);border:none;border-radius:50%;cursor:pointer;display:grid;place-items:center;font-size:14px;color:var(--muted);}
+        .modal-close:hover{background:var(--border2);color:var(--white);}
+        .field{margin-bottom:12px;}
+        .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+        .field input,.field select,.field textarea{width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);}
+        .field textarea{min-height:80px;resize:vertical;line-height:1.45;}
+        .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--red);}
+        .field select option{background:var(--night3);}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .modal-actions{display:flex;gap:10px;margin-top:20px;}
+        .modal-actions .btn{flex:1;justify-content:center;padding:12px;}
+
+        /* TOAST */
+        .toast{position:fixed;top:18px;right:18px;padding:12px 18px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;background:var(--night3);border:1px solid var(--border2);box-shadow:0 12px 40px rgba(0,0,0,0.4);z-index:9999;transform:translateX(calc(100% + 40px));transition:transform 0.4s cubic-bezier(0.4,0,0.2,1);}
+        .toast.show{transform:translateX(0);}
+        .toast.success .ti{color:var(--green);}
+        .toast.error   .ti{color:var(--red);}
+        .toast.info    .ti{color:var(--blue);}
+        .ti{font-size:14px;}
+
+        .loader{display:none;position:fixed;inset:0;background:rgba(10,10,15,0.85);backdrop-filter:blur(4px);place-items:center;z-index:2000;flex-direction:column;gap:12px;}
+        .loader.on{display:grid;}
+        .spin{width:40px;height:40px;border:2.5px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:spin 0.8s linear infinite;}
+        .loader-txt{font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:2px;color:var(--muted2);}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;text-transform:uppercase;}
+        .chip.green{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25);}
+        .chip.red{background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.25);}
+        .empty{padding:50px;text-align:center;}
+        .empty-ico{font-size:36px;opacity:0.12;margin-bottom:12px;}
+        .empty-txt{font-size:13px;color:var(--muted);}
+        @media(max-width:1200px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
+        @media(max-width:900px){.sidebar{width:60px;}.sb-text,.nav-item span,.nav-sec,.user-name{display:none;}.main{margin-left:60px;}.content{padding:16px;}.kpi-grid,.grid2,.grid3,.frais-grid{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+
+<div class="toast" id="toast"><span class="ti" id="tIco"></span><span id="tTxt"></span></div>
+<div class="loader" id="loader"><div class="spin"></div><div class="loader-txt" id="loaderTxt">Chargement…</div></div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+    <a href="dashboard.html" class="sb-logo"><div class="sb-mark">🚚</div><div class="sb-text">Colixo <em>Dispatch</em></div></a>
+    <div class="nav-sec">Navigation</div>
+    <a href="dashboard.html"     class="nav-item"><i class="fas fa-th-large"></i>    <span>Dashboard</span></a>
+    <a href="dispatch.html"      class="nav-item"><i class="fas fa-map"></i>          <span>Dispatch</span></a>
+    <a href="analytics.html"     class="nav-item"><i class="fas fa-chart-bar"></i>    <span>Analytics</span></a>
+    <a href="rh.html"            class="nav-item"><i class="fas fa-users-cog"></i>    <span>Gestion RH</span></a>
+    <a href="tarification.html"  class="nav-item"><i class="fas fa-tags"></i>         <span>Tarification</span></a>
+    <a href="finances.html"      class="nav-item active"><i class="fas fa-euro-sign"></i> <span>Finances</span></a>
+    <a href="compta-generale.html" class="nav-item"><i class="fas fa-book"></i> <span>Compta générale</span></a>
+    <div class="sb-footer">
+        <div class="user-chip">
+            <div class="user-av" id="sbAv">SA</div>
+            <div class="user-name" id="sbName">Admin</div>
+            <button class="btn-logout" id="btnLogout"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+    </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+    <header class="topbar">
+        <div class="page-title">GESTION FINANCIÈRE</div>
+        <div class="topbar-right">
+            <select id="selPeriod" class="period" onchange="loadAll()" style="background:var(--night3);border:1px solid var(--border2);border-radius:8px;padding:7px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;"></select>
+            <select id="selAnnee" class="period" onchange="loadAll()" style="background:var(--night3);border:1px solid var(--border2);border-radius:8px;padding:7px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;"></select>
+            <button class="btn btn-ghost" onclick="exportCSV()"><i class="fas fa-download"></i> Export</button>
+            <button class="btn btn-red"   onclick="openModalVehicule()"><i class="fas fa-plus"></i> Véhicule</button>
+        </div>
+    </header>
+
+    <!-- TABS -->
+    <div class="tabs">
+        <div class="tab active" data-tab="tableau"><i class="fas fa-tachometer-alt"></i> Tableau de bord</div>
+        <div class="tab" data-tab="vehicules"><i class="fas fa-truck"></i> Véhicules & Frais</div>
+        <div class="tab" data-tab="ca"><i class="fas fa-chart-line"></i> CA & Marges</div>
+        <div class="tab" data-tab="dispatch"><i class="fas fa-map-marked-alt"></i> Tournées dispatch</div>
+        <div class="tab" data-tab="km"><i class="fas fa-route"></i> Km parcourus</div>
+        <div class="tab" data-tab="compta"><i class="fas fa-balance-scale"></i> Comptabilité CH</div>
+        <div class="tab" data-tab="flux"><i class="fas fa-exchange-alt"></i> Journal des flux</div>
+    </div>
+
+    <div class="content">
+
+        <!-- ══ TABLEAU DE BORD ══ -->
+        <div class="tab-pane active" id="pane-tableau">
+            <!-- KPIs globaux -->
+            <div class="kpi-grid">
+                <div class="kpi">
+                    <div class="kpi-ico" style="background:rgba(34,197,94,0.12);color:var(--green)"><i class="fas fa-arrow-up"></i></div>
+                    <div class="kpi-val" id="kCA" style="color:var(--green)">—</div>
+                    <div class="kpi-lbl">CA total CHF</div>
+                    <div class="kpi-sub" id="kCAann">Année —</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-ico" style="background:rgba(232,49,26,0.12);color:var(--red)"><i class="fas fa-arrow-down"></i></div>
+                    <div class="kpi-val" id="kFrais" style="color:var(--red)">—</div>
+                    <div class="kpi-lbl">Frais totaux CHF</div>
+                    <div class="kpi-sub" id="kFraisann">Véhicules + charges</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-ico" style="background:rgba(59,130,246,0.12);color:var(--blue)"><i class="fas fa-balance-scale"></i></div>
+                    <div class="kpi-val" id="kMarge">—</div>
+                    <div class="kpi-lbl">Marge nette CHF</div>
+                    <div class="kpi-sub" id="kMargePct">— %</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-ico" style="background:rgba(245,158,11,0.12);color:var(--yellow)"><i class="fas fa-route"></i></div>
+                    <div class="kpi-val" id="kKm" style="color:var(--yellow)">—</div>
+                    <div class="kpi-lbl">Km parcourus</div>
+                    <div class="kpi-sub" id="kCoutKm">— CHF/km réel</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-ico" style="background:rgba(168,85,247,0.12);color:var(--purple)"><i class="fas fa-truck"></i></div>
+                    <div class="kpi-val" id="kVehs" style="color:var(--purple)">—</div>
+                    <div class="kpi-lbl">Véhicules actifs</div>
+                    <div class="kpi-sub" id="kTrans">— transports</div>
+                </div>
+            </div>
+
+            <!-- Graphiques -->
+            <div class="grid2">
+                <div class="card">
+                    <div class="card-head"><div class="card-title">CA MENSUEL</div></div>
+                    <div class="chart-wrap"><canvas id="chartCA"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-head"><div class="card-title">FRAIS PAR CATÉGORIE</div></div>
+                    <div class="chart-wrap"><canvas id="chartFrais"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Résultat par véhicule -->
+            <div class="card">
+                <div class="card-head"><div class="card-title">RÉSULTAT PAR VÉHICULE — PÉRIODE SÉLECTIONNÉE</div></div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Véhicule</th>
+                        <th>Chauffeur</th>
+                        <th>Km parcourus</th>
+                        <th>Coût réel/km</th>
+                        <th>CA transport</th>
+                        <th>Frais véhicule</th>
+                        <th>Marge brute</th>
+                        <th>Résultat</th>
+                    </tr></thead>
+                    <tbody id="vehResultTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ VÉHICULES & FRAIS ══ -->
+        <div class="tab-pane" id="pane-vehicules">
+            <div class="grid3" id="vehGrid"></div>
+
+            <!-- Saisie frais mensuel -->
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">SAISIE DES FRAIS MENSUELS</div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select id="fraisVehicule" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;color:var(--white);font-family:'Outfit',sans-serif;font-size:12px;" onchange="loadFrais()"></select>
+                        <select id="fraisMois" style="background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;color:var(--white);font-family:'Outfit',sans-serif;font-size:12px;" onchange="loadFrais()"></select>
+                    </div>
+                </div>
+                <div style="padding:22px;">
+                    <div class="frais-grid">
+                        <div class="frais-field">
+                            <label>⛽ Carburant CHF</label>
+                            <input type="number" id="fCarb" value="0" step="0.50" min="0">
+                        </div>
+                        <div class="frais-field">
+                            <label>🔢 Litres carburant</label>
+                            <input type="number" id="fLitres" value="0" step="1" min="0">
+                        </div>
+                        <div class="frais-field">
+                            <label>🚗 Leasing / crédit CHF</label>
+                            <input type="number" id="fLeasing" value="0" step="0.50" min="0">
+                        </div>
+                        <div class="frais-field">
+                            <label>🛡️ Assurance CHF</label>
+                            <input type="number" id="fAssurance" value="0" step="0.50" min="0">
+                        </div>
+                        <div class="frais-field">
+                            <label>🔧 Entretien CHF</label>
+                            <input type="number" id="fEntretien" value="0" step="0.50" min="0">
+                        </div>
+                        <div class="frais-field">
+                            <label>🚨 Réparations CHF</label>
+                            <input type="number" id="fReparations" value="0" step="0.50" min="0">
+                        </div>
+                        <div class="frais-field">
+                            <label>📋 Divers CHF</label>
+                            <input type="number" id="fDivers" value="0" step="0.50" min="0">
+                        </div>
+                        <div class="frais-field">
+                            <label>📝 Notes</label>
+                            <input type="text" id="fNotes" placeholder="Observations…">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:10px;margin-top:18px;align-items:center;">
+                        <button class="btn btn-green" onclick="saveFrais()"><i class="fas fa-save"></i> Sauvegarder les frais</button>
+                        <div id="fraisTotal" style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;color:var(--yellow)">Total : — CHF</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historique frais -->
+            <div class="card">
+                <div class="card-head"><div class="card-title">HISTORIQUE FRAIS PAR VÉHICULE</div></div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Mois</th><th>Véhicule</th><th>Carburant</th><th>Leasing</th><th>Assurance</th><th>Entretien</th><th>Réparations</th><th>Divers</th><th>Total</th>
+                    </tr></thead>
+                    <tbody id="fraisTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ CA & MARGES ══ -->
+        <div class="tab-pane" id="pane-ca">
+            <!-- Par client -->
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-head"><div class="card-title">CA PAR CLIENT</div></div>
+                <table class="tbl">
+                    <thead><tr><th>Client</th><th>Transports</th><th>CA CHF</th><th>Part %</th><th>Marge estimée</th></tr></thead>
+                    <tbody id="caClientTable"></tbody>
+                </table>
+            </div>
+            <!-- Par mois (année) -->
+            <div class="card">
+                <div class="card-head"><div class="card-title">CA MENSUEL — ANNÉE <span id="caAnneeTitle">—</span></div></div>
+                <table class="tbl">
+                    <thead><tr><th>Mois</th><th>Transports</th><th>CA CHF</th><th>Frais véhicules</th><th>Marge brute</th><th>Marge %</th></tr></thead>
+                    <tbody id="caMoisTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ TOURNÉES DISPATCH (snapshots) ══ -->
+        <div class="tab-pane" id="pane-dispatch">
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-head"><div class="card-title">AGRÉGÉ PAR VÉHICULE ET JOUR — MOIS SÉLECTIONNÉ</div></div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Date</th><th>Véhicule</th><th>Chauffeur</th><th>Tournées</th><th>Km</th><th>CA CHF</th><th>Coût</th><th>Marge</th>
+                    </tr></thead>
+                    <tbody id="dispatchAggTable"></tbody>
+                </table>
+            </div>
+            <div class="card">
+                <div class="card-head"><div class="card-title">DÉTAIL SNAPSHOTS (chaque sauvegarde dispatch avec route calculée)</div></div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Date tournée</th><th>Enregistré</th><th>Véhicule</th><th>Chauffeur</th><th>ID tournée</th><th>Km</th><th>Stops</th><th>CA</th><th>Coût</th><th>Marge</th><th>%</th>
+                    </tr></thead>
+                    <tbody id="dispatchSnapsTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ KM PARCOURUS ══ -->
+        <div class="tab-pane" id="pane-km">
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">KM PARCOURUS PAR CHAUFFEUR</div>
+                </div>
+                <table class="tbl">
+                    <thead><tr><th>Date</th><th>Chauffeur</th><th>Véhicule</th><th>Km début</th><th>Km fin</th><th>Km parcourus</th></tr></thead>
+                    <tbody id="kmTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ COMPTABILITÉ SUISSE MULTI-ENTREPRISE ══ -->
+        <div class="tab-pane" id="pane-compta">
+            <div class="card" style="margin-bottom:16px;border-color:rgba(232,49,26,0.35);">
+                <div style="padding:16px 22px;font-size:13px;line-height:1.55;color:var(--muted2);">
+                    <strong style="color:var(--white);">Colixo</strong> (transport) et <strong style="color:var(--white);">Brimot Nettoyage</strong> : synthèse TVA conforme aux taux suisses en vigueur (8,1 % normal, 2,6 % réduit, 3,8 % hébergement, 0 %).
+                    Les montants <strong>Colixo</strong> sont dérivés du prix transport en considérant le tarif <strong>TTC au taux normal 8,1 %</strong> (HT = TTC ÷ 1,081). Ajustez en fiduciaire si vos factures sont en HT.
+                    Les <strong>Brimot</strong> proviennent des factures en base (montants HT / TVA / TTC déjà saisis).
+                </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px;">
+                <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Entité</span>
+                <select id="comptaEntity" class="period" style="min-width:220px;" onchange="renderComptaCH()">
+                    <option value="both">Colixo + Brimot (consolidé)</option>
+                    <option value="colixo">Colixo — Transport</option>
+                    <option value="brimot">Brimot — Nettoyage</option>
+                </select>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportComptaTvaCSV()"><i class="fas fa-file-csv"></i> Export TVA (CSV)</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportComptaJournalCSV()"><i class="fas fa-book"></i> Journal simplifié (CSV)</button>
+            </div>
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;" id="comptaKpiRow">
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(59,130,246,0.12);color:var(--blue)"><i class="fas fa-coins"></i></div><div class="kpi-val" id="cHT">—</div><div class="kpi-lbl">Total HT CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(245,158,11,0.12);color:var(--yellow)"><i class="fas fa-percent"></i></div><div class="kpi-val" id="cTVA">—</div><div class="kpi-lbl">TVA collectée CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(34,197,94,0.12);color:var(--green)"><i class="fas fa-file-invoice-dollar"></i></div><div class="kpi-val" id="cTTC">—</div><div class="kpi-lbl">Total TTC CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(168,85,247,0.12);color:var(--purple)"><i class="fas fa-list"></i></div><div class="kpi-val" id="cNb">—</div><div class="kpi-lbl">Pièces / lignes</div></div>
+            </div>
+            <div class="grid2">
+                <div class="card">
+                    <div class="card-head"><div class="card-title">TVA PAR TAUX (période sélectionnée)</div></div>
+                    <table class="tbl">
+                        <thead><tr><th>Taux</th><th>Libellé</th><th>Base HT</th><th>TVA</th></tr></thead>
+                        <tbody id="comptaTvaParTaux"></tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <div class="card-head"><div class="card-title">CHARGES VÉHICULES (Colixo) — suivi coûts HT</div></div>
+                    <div style="padding:14px 18px;font-size:12px;color:var(--muted);">Total frais véhicules la période (saisie mensuelle). Pour la déduction TVA, ventilez selon vos factures fournisseurs.</div>
+                    <table class="tbl">
+                        <thead><tr><th>Poste</th><th>Montant CHF</th></tr></thead>
+                        <tbody id="comptaChargesColixo"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-head"><div class="card-title">BRIMOT NETTOYAGE — Factures (période)</div></div>
+                <table class="tbl">
+                    <thead><tr><th>N°</th><th>Date</th><th>Statut</th><th>HT</th><th>TVA</th><th>TTC</th><th>Taux TVA</th></tr></thead>
+                    <tbody id="comptaBrimotTable"></tbody>
+                </table>
+            </div>
+            <div class="card">
+                <div class="card-head"><div class="card-title">COLIXO — Transports (CA TTC 8,1 %)</div></div>
+                <table class="tbl">
+                    <thead><tr><th>N° / Ref</th><th>Date</th><th>Statut</th><th>TTC</th><th>HT</th><th>TVA 8,1%</th></tr></thead>
+                    <tbody id="comptaColixoTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ JOURNAL DES FLUX (saisie entrées / sorties) ══ -->
+        <div class="tab-pane" id="pane-flux">
+            <div class="card" style="margin-bottom:16px;border-color:rgba(34,197,94,0.25);">
+                <div style="padding:16px 22px;font-size:13px;line-height:1.55;color:var(--muted2);">
+                    <strong style="color:var(--white);">Journal de trésorerie</strong> : enregistrez ici chaque mouvement réel (virement, facture payée, salaire, achat, TVA, etc.) pour Colixo ou Brimot.
+                    Ce journal est <strong>indépendant</strong> des transports et factures Brimot automatiques — utile pour une vision complète de la caisse et pour préparer votre compta ou votre fiduciaire.
+                </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px;">
+                <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Période</span>
+                <select id="fluxPeriode" class="period" style="min-width:180px;" onchange="loadJournalFlux()">
+                    <option value="mois">Mois (barre du haut)</option>
+                    <option value="annee">Année entière</option>
+                </select>
+                <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Entité</span>
+                <select id="fluxEntity" class="period" style="min-width:200px;" onchange="renderJournalFlux()">
+                    <option value="both">Colixo + Brimot</option>
+                    <option value="colixo">Colixo</option>
+                    <option value="brimot">Brimot</option>
+                </select>
+                <button type="button" class="btn btn-green btn-sm" onclick="openModalFlux(null)"><i class="fas fa-plus"></i> Nouvelle écriture</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportFluxCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="loadJournalFlux()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+            </div>
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(34,197,94,0.12);color:var(--green)"><i class="fas fa-arrow-circle-down"></i></div><div class="kpi-val" id="fluxKin">—</div><div class="kpi-lbl">Entrées CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(232,49,26,0.12);color:var(--red)"><i class="fas fa-arrow-circle-up"></i></div><div class="kpi-val" id="fluxKout">—</div><div class="kpi-lbl">Sorties CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(59,130,246,0.12);color:var(--blue)"><i class="fas fa-equals"></i></div><div class="kpi-val" id="fluxKnet">—</div><div class="kpi-lbl">Solde net période</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(168,85,247,0.12);color:var(--purple)"><i class="fas fa-list-ol"></i></div><div class="kpi-val" id="fluxKnb">—</div><div class="kpi-lbl">Écritures</div></div>
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">ÉCRITURES — ordre chronologique (solde cumulé après chaque ligne)</div>
+                </div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Date</th><th>Société</th><th>Sens</th><th>Montant</th><th>Libellé</th><th>Catégorie</th><th>Compte</th><th>Réf.</th><th>Paiement</th><th>Solde cumulé</th><th></th>
+                    </tr></thead>
+                    <tbody id="fluxTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- MODAL JOURNAL FLUX -->
+<div id="modalFlux" class="modal">
+    <div class="modal-box" style="max-width:580px;">
+        <div class="modal-head">
+            <div class="modal-title" id="fluxModalTitle">NOUVELLE ÉCRITURE</div>
+            <button class="modal-close" onclick="closeModal('modalFlux')">✕</button>
+        </div>
+        <input type="hidden" id="fluxId">
+        <div class="field-row">
+            <div class="field">
+                <label>Société *</label>
+                <select id="fluxEntite">
+                    <option value="colixo">Colixo (transport)</option>
+                    <option value="brimot">Brimot Nettoyage</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Date *</label>
+                <input type="date" id="fluxDate">
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label>Sens *</label>
+                <select id="fluxSens">
+                    <option value="entree">Entrée (encaissement)</option>
+                    <option value="sortie">Sortie (décaissement)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Montant CHF *</label>
+                <input type="number" id="fluxMontant" min="0.01" step="0.01" placeholder="0.00">
+            </div>
+        </div>
+        <div class="field">
+            <label>Libellé *</label>
+            <input type="text" id="fluxLibelle" placeholder="Ex. Paiement facture fournisseur XY">
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label>Catégorie</label>
+                <select id="fluxCategorie">
+                    <option value="">—</option>
+                    <option value="Ventes / prestations">Ventes / prestations</option>
+                    <option value="Achats / fournisseurs">Achats / fournisseurs</option>
+                    <option value="Salaires & charges sociales">Salaires & charges sociales</option>
+                    <option value="Frais généraux">Frais généraux</option>
+                    <option value="TVA">TVA</option>
+                    <option value="Financier (banque, intérêts)">Financier (banque, intérêts)</option>
+                    <option value="Véhicule / carburant">Véhicule / carburant</option>
+                    <option value="Investissement">Investissement</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Compte (plan suisse, optionnel)</label>
+                <input type="text" id="fluxCompte" placeholder="ex. 3200">
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label>Réf. pièce / n° facture</label>
+                <input type="text" id="fluxRef" placeholder="Réf. bancaire, n° facture…">
+            </div>
+            <div class="field">
+                <label>Moyen de paiement</label>
+                <select id="fluxMoyen">
+                    <option value="">—</option>
+                    <option value="Virement">Virement</option>
+                    <option value="QR-facture">QR-facture</option>
+                    <option value="Carte bancaire">Carte bancaire</option>
+                    <option value="Espèces">Espèces</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+        </div>
+        <div class="field">
+            <label>Notes internes</label>
+            <textarea id="fluxNotes" placeholder="Détail optionnel…"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-green" type="button" onclick="saveFlux()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" type="button" onclick="closeModal('modalFlux')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL VÉHICULE -->
+<div id="modalVehicule" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title" id="mVehTitle">NOUVEAU VÉHICULE</div>
+            <button class="modal-close" onclick="closeModal('modalVehicule')">✕</button>
+        </div>
+        <input type="hidden" id="mVehId">
+        <div class="field-row">
+            <div class="field"><label>Immatriculation *</label><input type="text" id="mImmat" placeholder="VD 123 456" style="text-transform:uppercase;"></div>
+            <div class="field"><label>Marque</label><input type="text" id="mMarque" placeholder="Mercedes"></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Modèle</label><input type="text" id="mModele" placeholder="Sprinter 316"></div>
+            <div class="field"><label>Année</label><input type="number" id="mAnnee" value="2022" min="2000" max="2030"></div>
+        </div>
+        <div class="field">
+            <label>Chauffeur assigné</label>
+            <select id="mChauffeur">
+                <option value="">— Aucun —</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Coût chauffeur / jour (CHF)</label>
+            <input type="number" id="mCoutChauffeurJour" value="0" step="1" min="0" placeholder="Salaire charges / jour travaillé">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="saveVehicule()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalVehicule')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+    if(!window.SUPABASE_CONFIG){ document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>'; return; }
+    const db = window.SUPABASE_CLIENT;
+
+    /* ── State ── */
+    let vehicules=[], fraisList=[], kmList=[], transports=[], chauffeurs=[], entreprises=[], dispatchSnaps=[], brimotFactures=[], journalFlux=[];
+    let selMois, selAnnee, charts={};
+    let comptaFraisMois=[], comptaTransMois=[];
+    let comptaLast={ entity:'both', periodLabel:'', rowsTva:[], rowsBrimot:[], rowsColixo:[], charges:[], tot:{ ht:0,tva:0,ttc:0,nb:0 } };
+    const COLIXO_TTC_FACTOR = 1.081;
+    const TVA_CH_LIB = { '8.1':'Taux normal 8,1 %', '2.6':'Taux réduit 2,6 %', '3.8':'Hébergement 3,8 %', '0':'0 % / exonéré' };
+
+    /* ── Helpers ── */
+    const toastEl=document.getElementById('toast');
+    let tt;
+    function toast(type,msg){ clearTimeout(tt); toastEl.className='toast '+type+' show'; document.getElementById('tIco').textContent=type==='success'?'✓':type==='error'?'✕':'ℹ'; document.getElementById('tTxt').textContent=msg; tt=setTimeout(()=>toastEl.classList.remove('show'),4000); }
+    const loaderEl=document.getElementById('loader');
+    function showLoad(t='Chargement…'){ document.getElementById('loaderTxt').textContent=t; loaderEl.classList.add('on'); }
+    function hideLoad(){ loaderEl.classList.remove('on'); }
+    function openModal(id){ const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
+    window.closeModal=id=>{ const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} };
+    document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) window.closeModal(m.id); }));
+    const fmtCHF=n=>parseFloat(n||0).toFixed(2);
+    const fmtN  =n=>parseFloat(n||0).toFixed(0);
+    function esc(s){ if(s==null||s==='') return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function normTvaKey(pct){
+        const n=parseFloat(pct);
+        if(isNaN(n)||n<0.01) return '0';
+        if(Math.abs(n-8.1)<0.06) return '8.1';
+        if(Math.abs(n-2.6)<0.06) return '2.6';
+        if(Math.abs(n-3.8)<0.06) return '3.8';
+        return n.toFixed(2);
+    }
+    function colixoTtcSplit(ttc){
+        const t=parseFloat(ttc)||0;
+        const ht=t/COLIXO_TTC_FACTOR;
+        const tva=t-ht;
+        return { ttc:t, ht, tva };
+    }
+    function brimotComptaOk(f){
+        if(!f||f.type==='devis') return false;
+        return f.statut==='facture'||f.statut==='payee';
+    }
+
+    /* ── TABS ── */
+    document.querySelectorAll('.tab').forEach(t=>{
+        t.addEventListener('click',()=>{
+            document.querySelectorAll('.tab,.tab-pane').forEach(x=>x.classList.remove('active'));
+            t.classList.add('active');
+            document.getElementById('pane-'+t.dataset.tab)?.classList.add('active');
+            if(t.dataset.tab==='compta') renderComptaCH();
+            if(t.dataset.tab==='flux') loadJournalFlux();
+        });
+    });
+
+    /* ── PERIOD INIT ── */
+    function initPeriods() {
+        const now=new Date();
+        const mois=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const selP=document.getElementById('selPeriod');
+        const selA=document.getElementById('selAnnee');
+        selP.innerHTML=mois.map((m,i)=>`<option value="${i+1}" ${i+1===now.getMonth()+1?'selected':''}>${m}</option>`).join('');
+        for(let y=now.getFullYear();y>=now.getFullYear()-3;y--){
+            const o=document.createElement('option');
+            o.value=y; o.textContent=y; if(y===now.getFullYear()) o.selected=true;
+            selA.appendChild(o);
+        }
+        selMois=now.getMonth()+1; selAnnee=now.getFullYear();
+
+        // Frais month select
+        const fm=document.getElementById('fraisMois');
+        fm.innerHTML=Array.from({length:6},(_,i)=>{
+            const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+            const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            return `<option value="${v}" ${i===0?'selected':''}>${mois[d.getMonth()]} ${d.getFullYear()}</option>`;
+        }).join('');
+    }
+
+    document.getElementById('selPeriod').addEventListener('change',e=>{ selMois=parseInt(e.target.value); loadAll(); });
+    document.getElementById('selAnnee').addEventListener('change',e=>{ selAnnee=parseInt(e.target.value); loadAll(); });
+
+    /* ── LOAD ALL ── */
+    window.loadAll = async function() {
+        showLoad('Chargement des données…');
+        selMois  = parseInt(document.getElementById('selPeriod').value)||selMois;
+        selAnnee = parseInt(document.getElementById('selAnnee').value)||selAnnee;
+
+        const mStart = `${selAnnee}-${String(selMois).padStart(2,'0')}-01`;
+        const mEnd   = new Date(selAnnee,selMois,0).toISOString().slice(0,10);
+        const aStart = `${selAnnee}-01-01`;
+        const aEnd   = `${selAnnee}-12-31`;
+
+        const [
+            {data:vehs}, {data:frais}, {data:km}, {data:trans}, {data:chauf}, {data:ents}, snapQ, brimotQ
+        ] = await Promise.all([
+            db.from('vehicules').select('*').eq('actif',true),
+            db.from('vehicule_frais').select('*').order('mois',{ascending:false}),
+            db.from('vehicule_km').select('*').gte('date',aStart).lte('date',aEnd).order('date',{ascending:false}),
+            db.from('transport_orders_simple').select('*').gte('created_at',aStart+'T00:00:00').lte('created_at',aEnd+'T23:59:59'),
+            db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur'),
+            db.from('entreprises').select('id,nom'),
+            db.from('dispatch_tour_snapshots').select('*').gte('tour_planned_date',mStart).lte('tour_planned_date',mEnd).order('created_at',{ascending:false}),
+            db.from('brimot_factures').select('*').gte('date_facture',mStart).lte('date_facture',mEnd)
+        ]);
+
+        vehicules=vehs||[]; fraisList=frais||[]; kmList=km||[]; transports=trans||[]; chauffeurs=chauf||[]; entreprises=ents||[];
+        dispatchSnaps = (!snapQ.error && snapQ.data) ? snapQ.data : [];
+        brimotFactures = (!brimotQ.error && brimotQ.data) ? brimotQ.data : [];
+        if(brimotQ.error) console.warn('Brimot factures (compta):', brimotQ.error.message||brimotQ.error);
+
+        // Frais du mois sélectionné
+        const fraisMois = fraisList.filter(f=>f.mois===`${selAnnee}-${String(selMois).padStart(2,'0')}`);
+        const transMois = transports.filter(t=>{
+            const d=new Date(t.created_at);
+            return d.getFullYear()===selAnnee && d.getMonth()+1===selMois;
+        });
+        const kmMois    = kmList.filter(k=>k.date>=mStart&&k.date<=mEnd);
+
+        renderKPIs(fraisMois, transMois, kmMois);
+        renderVehGrid(fraisMois, kmMois, transMois);
+        renderVehResultTable(fraisMois, kmMois, transMois);
+        renderCharts();
+        renderCAClient();
+        renderCAMois();
+        renderKMTable();
+        renderDispatchTables();
+        populateFraisSelects();
+        comptaFraisMois=fraisMois; comptaTransMois=transMois;
+        renderComptaCH();
+        await loadJournalFlux();
+
+        document.getElementById('caAnneeTitle').textContent=selAnnee;
+        hideLoad();
+    };
+
+    /* ── COMPTABILITÉ CH MULTI-ENTREPRISE ── */
+    function renderComptaCH(){
+        const entity=(document.getElementById('comptaEntity')||{}).value||'both';
+        const periodLabel=`${selAnnee}-${String(selMois).padStart(2,'0')}`;
+        const fraisMois=comptaFraisMois||[];
+        const transMois=comptaTransMois||[];
+        const brimotRows=(brimotFactures||[]).filter(brimotComptaOk);
+
+        const buckets=new Map();
+        function addBucket(key,ht,tva){
+            const k=normTvaKey(key==='8.1'?8.1:key);
+            if(!buckets.has(k)) buckets.set(k,{ rate:k, ht:0, tva:0 });
+            const b=buckets.get(k);
+            b.ht+=ht; b.tva+=tva;
+        }
+
+        let sumHt=0, sumTva=0, sumTtc=0, nb=0;
+
+        if(entity==='colixo'||entity==='both'){
+            for(const t of transMois){
+                const { ttc, ht, tva }=colixoTtcSplit(t.price_chf);
+                sumHt+=ht; sumTva+=tva; sumTtc+=ttc; nb+=1;
+                addBucket('8.1',ht,tva);
+            }
+        }
+        if(entity==='brimot'||entity==='both'){
+            for(const f of brimotRows){
+                const ht=parseFloat(f.montant_ht)||0;
+                const tva=parseFloat(f.montant_tva)||0;
+                const ttc=parseFloat(f.montant_ttc)||0;
+                sumHt+=ht; sumTva+=tva; sumTtc+=ttc; nb+=1;
+                addBucket(f.tva_pct,ht,tva);
+            }
+        }
+
+        const rowsTva=[...buckets.entries()].map(([k,v])=>({
+            taux:k,
+            lib:TVA_CH_LIB[k]||`${k} %`,
+            ht:v.ht,
+            tva:v.tva
+        })).sort((a,b)=>parseFloat(b.taux)-parseFloat(a.taux));
+
+        const charges=[];
+        if(entity==='colixo'||entity==='both'){
+            const posts=[
+                ['Carburant',fraisMois.reduce((s,f)=>s+(parseFloat(f.carburant_chf)||0),0)],
+                ['Leasing',fraisMois.reduce((s,f)=>s+(parseFloat(f.leasing_chf)||0),0)],
+                ['Assurance',fraisMois.reduce((s,f)=>s+(parseFloat(f.assurance_chf)||0),0)],
+                ['Entretien',fraisMois.reduce((s,f)=>s+(parseFloat(f.entretien_chf)||0),0)],
+                ['Réparations',fraisMois.reduce((s,f)=>s+(parseFloat(f.reparations_chf)||0),0)],
+                ['Divers',fraisMois.reduce((s,f)=>s+(parseFloat(f.divers_chf)||0),0)]
+            ];
+            for(const [label,val] of posts) if(val>0.005) charges.push({ label, val });
+        }
+
+        comptaLast={ entity, periodLabel, rowsTva, rowsBrimot:brimotRows, rowsColixo:transMois, charges, tot:{ ht:sumHt,tva:sumTva,ttc:sumTtc,nb } };
+
+        const el=id=>document.getElementById(id);
+        if(el('cHT')) el('cHT').textContent=sumHt.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('cTVA')) el('cTVA').textContent=sumTva.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('cTTC')) el('cTTC').textContent=sumTtc.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('cNb')) el('cNb').textContent=String(nb);
+
+        const tbTva=document.getElementById('comptaTvaParTaux');
+        if(tbTva){
+            if(!rowsTva.length) tbTva.innerHTML='<tr><td colspan="4"><div class="empty"><div class="empty-txt">Aucune base TVA pour cette période / entité</div></div></td></tr>';
+            else tbTva.innerHTML=rowsTva.map(r=>`<tr>
+                <td>${esc(r.taux)} %</td>
+                <td style="color:var(--muted2)">${esc(r.lib)}</td>
+                <td>${r.ht.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${r.tva.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            </tr>`).join('');
+        }
+
+        const tbCh=document.getElementById('comptaChargesColixo');
+        if(tbCh){
+            if(entity==='brimot') tbCh.innerHTML='<tr><td colspan="2" style="color:var(--muted);">Non applicable (entité Brimot seule)</td></tr>';
+            else if(!charges.length) tbCh.innerHTML='<tr><td colspan="2"><div class="empty"><div class="empty-txt">Aucun frais véhicule ce mois</div></div></td></tr>';
+            else tbCh.innerHTML=charges.map(c=>`<tr><td>${esc(c.label)}</td><td>${c.val.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join('');
+        }
+
+        const tbB=document.getElementById('comptaBrimotTable');
+        if(tbB){
+            const show=entity==='brimot'||entity==='both';
+            if(!show) tbB.innerHTML='<tr><td colspan="7" style="color:var(--muted);">Masqué — sélectionnez Brimot ou consolidé</td></tr>';
+            else if(!brimotRows.length) tbB.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-txt">Aucune facture Brimot (facturée / payée) sur la période</div></div></td></tr>';
+            else tbB.innerHTML=brimotRows.map(f=>`<tr>
+                <td>${esc(f.numero||'—')}</td>
+                <td>${esc(f.date_facture||'—')}</td>
+                <td>${esc(f.statut||'—')}</td>
+                <td>${(parseFloat(f.montant_ht)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${(parseFloat(f.montant_tva)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${(parseFloat(f.montant_ttc)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${esc(String(f.tva_pct??'—'))} %</td>
+            </tr>`).join('');
+        }
+
+        const tbC=document.getElementById('comptaColixoTable');
+        if(tbC){
+            const show=entity==='colixo'||entity==='both';
+            if(!show) tbC.innerHTML='<tr><td colspan="6" style="color:var(--muted);">Masqué — sélectionnez Colixo ou consolidé</td></tr>';
+            else if(!transMois.length) tbC.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-txt">Aucun transport ce mois (création dans la période)</div></div></td></tr>';
+            else tbC.innerHTML=transMois.map(t=>{
+                const ref=esc(t.order_number||t.id?.slice(0,8)||'—');
+                const d=t.created_at?new Date(t.created_at).toLocaleDateString('fr-CH'):'—';
+                const { ttc, ht, tva }=colixoTtcSplit(t.price_chf);
+                return `<tr>
+                    <td>${ref}</td>
+                    <td>${d}</td>
+                    <td>${esc(t.status||'—')}</td>
+                    <td>${ttc.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                    <td>${ht.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                    <td>${tva.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                </tr>`;
+            }).join('');
+        }
+    }
+    window.renderComptaCH=renderComptaCH;
+
+    function downloadCsv(filename, lines){
+        const csv=lines.join('\n');
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
+        a.download=filename;
+        a.click();
+    }
+    window.exportComptaTvaCSV=function(){
+        const { entity, periodLabel, rowsTva, tot }=comptaLast;
+        const H=['Période','Entité','Taux_%','Libellé_taux','Base_HT_CHF','TVA_CHF'];
+        const entLabel=entity==='both'?'Colixo+Brimot':entity==='colixo'?'Colixo':'Brimot';
+        const rows=rowsTva.map(r=>[periodLabel,entLabel,r.taux,String(r.lib||'').replace(/;/g,','),r.ht.toFixed(2),r.tva.toFixed(2)].join(';'));
+        const sum=[periodLabel,entLabel,'TOTAL','',tot.ht.toFixed(2),tot.tva.toFixed(2)].join(';');
+        downloadCsv(`compta-tva-ch-${entLabel}-${periodLabel}.csv`,[H.join(';'),...rows,sum]);
+        toast('success','Export TVA téléchargé');
+    };
+    window.exportComptaJournalCSV=function(){
+        const { entity, periodLabel, rowsBrimot, rowsColixo, tot }=comptaLast;
+        const entLabel=entity==='both'?'Colixo+Brimot':entity==='colixo'?'Colixo':'Brimot';
+        const H=['Période','Société','Date','Référence','Libellé','Compte_suggéré','HT','TVA','TTC','Taux_TVA'];
+        const out=[H.join(';')];
+        if(entity==='colixo'||entity==='both'){
+            for(const t of rowsColixo||[]){
+                const { ttc, ht, tva }=colixoTtcSplit(t.price_chf);
+                const d=t.created_at?t.created_at.slice(0,10):'';
+                const ref=(t.order_number||t.id||'').toString().replace(/;/g,',');
+                out.push([periodLabel,'Colixo Transport',d,ref,'Vente transport','3200 / 2200',ht.toFixed(2),tva.toFixed(2),ttc.toFixed(2),'8.1'].join(';'));
+            }
+        }
+        if(entity==='brimot'||entity==='both'){
+            for(const f of rowsBrimot||[]){
+                if(!brimotComptaOk(f)) continue;
+                const d=f.date_facture||'';
+                const ref=(f.numero||f.id||'').toString().replace(/;/g,',');
+                const ht=parseFloat(f.montant_ht)||0, tva=parseFloat(f.montant_tva)||0, ttc=parseFloat(f.montant_ttc)||0;
+                out.push([periodLabel,'Brimot Nettoyage',d,ref,'Vente nettoyage','3200 / 2200',ht.toFixed(2),tva.toFixed(2),ttc.toFixed(2),String(f.tva_pct||'')].join(';'));
+            }
+        }
+        out.push([periodLabel,entLabel,'','','TOTAL PÉRIODE','',tot.ht.toFixed(2),tot.tva.toFixed(2),tot.ttc.toFixed(2),''].join(';'));
+        downloadCsv(`compta-journal-simplifie-${entLabel}-${periodLabel}.csv`,out);
+        toast('success','Export journal téléchargé');
+    };
+
+    /* ── JOURNAL DES FLUX (saisie manuelle entrées / sorties) ── */
+    function getFluxDateBounds(){
+        const scope=(document.getElementById('fluxPeriode')||{}).value||'mois';
+        const sm=parseInt(document.getElementById('selPeriod').value,10)||selMois;
+        const sa=parseInt(document.getElementById('selAnnee').value,10)||selAnnee;
+        if(scope==='annee') return { d1:`${sa}-01-01`, d2:`${sa}-12-31` };
+        const mStart=`${sa}-${String(sm).padStart(2,'0')}-01`;
+        const mEnd=new Date(sa,sm,0).toISOString().slice(0,10);
+        return { d1:mStart, d2:mEnd };
+    }
+    async function loadJournalFlux(){
+        const { d1, d2 }=getFluxDateBounds();
+        const q=await db.from('compta_journal_flux').select('*').gte('date_mouvement',d1).lte('date_mouvement',d2).order('date_mouvement',{ascending:true}).order('created_at',{ascending:true});
+        journalFlux=(!q.error&&q.data)?q.data:[];
+        if(q.error) console.warn('Journal flux:',q.error.message||q.error);
+        renderJournalFlux();
+    }
+    window.loadJournalFlux=loadJournalFlux;
+
+    function renderJournalFlux(){
+        const entity=(document.getElementById('fluxEntity')||{}).value||'both';
+        let rows=(journalFlux||[]).filter(r=>entity==='both'||r.entite===entity);
+        rows.sort((a,b)=>{
+            const da=String(a.date_mouvement), db=String(b.date_mouvement);
+            if(da!==db) return da.localeCompare(db);
+            return String(a.created_at||'').localeCompare(String(b.created_at||''));
+        });
+        let cum=0;
+        const withBal=rows.map(r=>{
+            const amt=parseFloat(r.montant_chf)||0;
+            if(r.sens==='entree') cum+=amt; else cum-=amt;
+            return { ...r, _cum:cum };
+        });
+        let sumIn=0, sumOut=0;
+        rows.forEach(r=>{
+            const amt=parseFloat(r.montant_chf)||0;
+            if(r.sens==='entree') sumIn+=amt; else sumOut+=amt;
+        });
+        const net=sumIn-sumOut;
+        const el=id=>document.getElementById(id);
+        if(el('fluxKin')) el('fluxKin').textContent=sumIn.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('fluxKout')) el('fluxKout').textContent=sumOut.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('fluxKnet')){
+            el('fluxKnet').textContent=net.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+            el('fluxKnet').style.color=net>=0?'var(--green)':'var(--red)';
+        }
+        if(el('fluxKnb')) el('fluxKnb').textContent=String(rows.length);
+
+        const tb=document.getElementById('fluxTable');
+        if(!tb) return;
+        if(!withBal.length){
+            tb.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-txt">Aucune écriture sur cette période. Exécutez le script SQL <code>compta_journal_flux_schema.sql</code> dans Supabase si la table n’existe pas encore, puis « Nouvelle écriture ».</div></div></td></tr>';
+            return;
+        }
+        const entLabel=e=>e==='colixo'?'Colixo':'Brimot';
+        const sensLabel=s=>s==='entree'?'Entrée':'Sortie';
+        tb.innerHTML=withBal.map(r=>{
+            const colSens=r.sens==='entree'?'var(--green)':'var(--red)';
+            return `<tr>
+                <td>${esc(r.date_mouvement||'')}</td>
+                <td>${entLabel(r.entite)}</td>
+                <td style="color:${colSens};font-weight:600">${sensLabel(r.sens)}</td>
+                <td style="font-weight:600">${(parseFloat(r.montant_chf)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${esc(r.libelle||'')}</td>
+                <td style="color:var(--muted2)">${esc(r.categorie||'')}</td>
+                <td style="font-family:monospace;font-size:12px">${esc(r.compte_comptable||'')}</td>
+                <td style="font-size:12px">${esc(r.reference_piece||'')}</td>
+                <td style="font-size:12px">${esc(r.moyen_paiement||'')}</td>
+                <td style="font-weight:600;color:var(--blue)">${r._cum.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td style="white-space:nowrap">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="openModalFlux('${r.id}')"><i class="fas fa-edit"></i></button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="deleteFlux('${r.id}')"><i class="fas fa-trash" style="color:var(--red)"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    window.openModalFlux=function(id){
+        document.getElementById('fluxModalTitle').textContent=id?'MODIFIER ÉCRITURE':'NOUVELLE ÉCRITURE';
+        document.getElementById('fluxId').value=id||'';
+        if(!id){
+            document.getElementById('fluxEntite').value='colixo';
+            document.getElementById('fluxDate').value=new Date().toISOString().slice(0,10);
+            document.getElementById('fluxSens').value='entree';
+            document.getElementById('fluxMontant').value='';
+            document.getElementById('fluxLibelle').value='';
+            document.getElementById('fluxCategorie').value='';
+            document.getElementById('fluxCompte').value='';
+            document.getElementById('fluxRef').value='';
+            document.getElementById('fluxMoyen').value='';
+            document.getElementById('fluxNotes').value='';
+        } else {
+            const row=journalFlux.find(x=>x.id===id);
+            if(!row){ toast('error','Écriture introuvable'); return; }
+            document.getElementById('fluxEntite').value=row.entite||'colixo';
+            document.getElementById('fluxDate').value=String(row.date_mouvement||'').slice(0,10);
+            document.getElementById('fluxSens').value=row.sens||'entree';
+            document.getElementById('fluxMontant').value=row.montant_chf!=null?String(row.montant_chf):'';
+            document.getElementById('fluxLibelle').value=row.libelle||'';
+            document.getElementById('fluxCategorie').value=row.categorie||'';
+            document.getElementById('fluxCompte').value=row.compte_comptable||'';
+            document.getElementById('fluxRef').value=row.reference_piece||'';
+            document.getElementById('fluxMoyen').value=row.moyen_paiement||'';
+            document.getElementById('fluxNotes').value=row.notes||'';
+        }
+        openModal('modalFlux');
+    };
+
+    window.saveFlux=async function(){
+        const id=document.getElementById('fluxId').value.trim();
+        const entite=document.getElementById('fluxEntite').value;
+        const date_mouvement=document.getElementById('fluxDate').value;
+        const sens=document.getElementById('fluxSens').value;
+        const montant_chf=parseFloat(document.getElementById('fluxMontant').value);
+        const libelle=document.getElementById('fluxLibelle').value.trim();
+        if(!date_mouvement||!libelle||!(montant_chf>0)){ toast('error','Date, libellé et montant valides requis'); return; }
+        const payload={
+            entite,
+            date_mouvement,
+            sens,
+            montant_chf,
+            libelle,
+            categorie: document.getElementById('fluxCategorie').value||null,
+            compte_comptable: document.getElementById('fluxCompte').value.trim()||null,
+            reference_piece: document.getElementById('fluxRef').value.trim()||null,
+            moyen_paiement: document.getElementById('fluxMoyen').value||null,
+            notes: document.getElementById('fluxNotes').value.trim()||null,
+            updated_at: new Date().toISOString()
+        };
+        showLoad('Enregistrement…');
+        try{
+            const { data: { session } }=await db.auth.getSession();
+            if(id){
+                const { error }=await db.from('compta_journal_flux').update(payload).eq('id',id);
+                if(error) throw error;
+                toast('success','Écriture mise à jour');
+            } else {
+                payload.created_by=session?.user?.id??null;
+                const { error }=await db.from('compta_journal_flux').insert([payload]);
+                if(error) throw error;
+                toast('success','Écriture créée');
+            }
+            closeModal('modalFlux');
+            await loadJournalFlux();
+        } catch(e){ toast('error', e.message||String(e)); }
+        finally{ hideLoad(); }
+    };
+
+    window.deleteFlux=async function(fid){
+        if(!fid||!confirm('Supprimer cette écriture ?')) return;
+        showLoad('Suppression…');
+        try{
+            const { error }=await db.from('compta_journal_flux').delete().eq('id',fid);
+            if(error) throw error;
+            toast('success','Supprimé');
+            await loadJournalFlux();
+        } catch(e){ toast('error', e.message||String(e)); }
+        finally{ hideLoad(); }
+    };
+
+    window.exportFluxCSV=function(){
+        const entity=(document.getElementById('fluxEntity')||{}).value||'both';
+        const { d1, d2 }=getFluxDateBounds();
+        let rows=(journalFlux||[]).filter(r=>entity==='both'||r.entite===entity);
+        rows.sort((a,b)=>{
+            const da=String(a.date_mouvement), db=String(b.date_mouvement);
+            if(da!==db) return da.localeCompare(db);
+            return String(a.created_at||'').localeCompare(String(b.created_at||''));
+        });
+        let cum=0;
+        const H=['Date','Société','Sens','Montant_CHF','Libellé','Catégorie','Compte','Référence','Moyen_paiement','Notes','Solde_cumulé_CHF'];
+        const lines=[H.join(';')];
+        for(const r of rows){
+            const amt=parseFloat(r.montant_chf)||0;
+            if(r.sens==='entree') cum+=amt; else cum-=amt;
+            const soc=r.entite==='colixo'?'Colixo':'Brimot';
+            const sens=r.sens==='entree'?'entree':'sortie';
+            lines.push([r.date_mouvement,soc,sens,amt.toFixed(2),String(r.libelle||'').replace(/;/g,','),String(r.categorie||'').replace(/;/g,','),String(r.compte_comptable||''),String(r.reference_piece||'').replace(/;/g,','),String(r.moyen_paiement||''),String(r.notes||'').replace(/\r?\n/g,' ').replace(/;/g,','),cum.toFixed(2)].join(';'));
+        }
+        downloadCsv(`journal-flux-${d1}_${d2}.csv`,lines);
+        toast('success','Export téléchargé');
+    };
+
+    /* ── KPIs ── */
+    function renderKPIs(frais, trans, km) {
+        const CA     = trans.reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
+        const fraisT = frais.reduce((s,f)=>s+(parseFloat(f.carburant_chf||0))+(parseFloat(f.leasing_chf||0))+(parseFloat(f.assurance_chf||0))+(parseFloat(f.entretien_chf||0))+(parseFloat(f.reparations_chf||0))+(parseFloat(f.divers_chf||0)),0);
+        const marge  = CA - fraisT;
+        const kmT    = km.reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
+        const coutKm = kmT>0 ? fraisT/kmT : 0;
+        const margePct = CA>0 ? (marge/CA*100).toFixed(1) : 0;
+
+        document.getElementById('kCA').textContent     = CA.toFixed(0);
+        document.getElementById('kFrais').textContent  = fraisT.toFixed(0);
+        document.getElementById('kMarge').textContent  = marge.toFixed(0);
+        document.getElementById('kMarge').style.color  = marge>=0?'var(--green)':'var(--red)';
+        document.getElementById('kMargePct').textContent = `${margePct}% marge`;
+        document.getElementById('kKm').textContent     = kmT.toFixed(0);
+        document.getElementById('kCoutKm').textContent = `${coutKm.toFixed(2)} CHF/km réel`;
+        document.getElementById('kVehs').textContent   = vehicules.length;
+        document.getElementById('kTrans').textContent  = `${trans.length} transports`;
+
+        // Année totale
+        const CAAnn = transports.reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
+        document.getElementById('kCAann').textContent = `Année : ${CAAnn.toFixed(0)} CHF`;
+    }
+
+    /* ── VEH GRID ── */
+    function renderVehGrid(fraisMois, kmMois, transMois) {
+        const grid=document.getElementById('vehGrid');
+        if(!vehicules.length){ grid.innerHTML=`<div style="grid-column:1/-1"><div class="empty"><div class="empty-ico">🚛</div><div class="empty-txt">Aucun véhicule.<br>Cliquez "+ Véhicule"</div></div></div>`; return; }
+        grid.innerHTML=vehicules.map(v=>{
+            const chauf = chauffeurs.find(c=>c.id===v.chauffeur_id);
+            const km    = kmMois.filter(k=>k.vehicule_id===v.id).reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
+            const frais = fraisMois.find(f=>f.vehicule_id===v.id);
+            const fraisT= frais ? [(frais.carburant_chf||0),(frais.leasing_chf||0),(frais.assurance_chf||0),(frais.entretien_chf||0),(frais.reparations_chf||0),(frais.divers_chf||0)].reduce((s,n)=>s+parseFloat(n||0),0) : 0;
+            const coutKm= km>0 ? fraisT/km : 0;
+            return `<div class="veh-card">
+                <div class="veh-head">
+                    <div class="veh-icon"><i class="fas fa-truck"></i></div>
+                    <div>
+                        <div class="veh-immat">${v.immatriculation}</div>
+                        <div class="veh-model">${v.marque||''} ${v.modele||''} ${v.annee||''}</div>
+                    </div>
+                </div>
+                <div class="veh-stats">
+                    <div class="vs"><div class="vs-val" style="color:var(--yellow)">${fmtN(km)}</div><div class="vs-lbl">km mois</div></div>
+                    <div class="vs"><div class="vs-val" style="color:var(--red)">${fmtN(fraisT)}</div><div class="vs-lbl">CHF frais</div></div>
+                    <div class="vs"><div class="vs-val" style="color:var(--blue)">${coutKm>0?coutKm.toFixed(2):'—'}</div><div class="vs-lbl">CHF/km</div></div>
+                </div>
+                <div style="font-size:12px;color:var(--muted2);margin-bottom:12px;display:flex;align-items:center;gap:6px;"><i class="fas fa-user" style="color:var(--green)"></i>${chauf?`${chauf.prenom||''} ${chauf.nom||''}`.trim():'Non assigné'}</div>
+                <div class="veh-actions">
+                    <button class="btn btn-ghost btn-sm" onclick="editVehicule('${v.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-ghost btn-sm" onclick="loadFraisVehicule('${v.id}')"><i class="fas fa-euro-sign"></i> Frais</button>
+                    <button class="btn btn-ghost btn-sm" onclick="deleteVehicule('${v.id}')"><i class="fas fa-trash" style="color:var(--red)"></i></button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    /* ── DISPATCH SNAPSHOTS ── */
+    function renderDispatchTables() {
+        const aggBody = document.getElementById('dispatchAggTable');
+        const detBody = document.getElementById('dispatchSnapsTable');
+        if (!aggBody || !detBody) return;
+
+        const byKey = new Map();
+        for (const s of dispatchSnaps) {
+            const vid = s.vehicle_id || 'null';
+            const d = s.tour_planned_date;
+            const did = s.driver_id || '';
+            const k = `${vid}|${d}|${did}`;
+            if (!byKey.has(k)) {
+                byKey.set(k, {
+                    vehicle_id: s.vehicle_id,
+                    tour_planned_date: d,
+                    driver_id: s.driver_id,
+                    n: 0,
+                    km: 0,
+                    rev: 0,
+                    cost: 0
+                });
+            }
+            const row = byKey.get(k);
+            row.n += 1;
+            row.km += parseFloat(s.total_km) || 0;
+            row.rev += parseFloat(s.revenue_chf) || 0;
+            row.cost += parseFloat(s.cost_chf) || 0;
+        }
+        const aggRows = [...byKey.values()].sort((a, b) => String(b.tour_planned_date).localeCompare(String(a.tour_planned_date)));
+        if (!aggRows.length) {
+            aggBody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-ico">🗺️</div><div class="empty-txt">Aucun snapshot ce mois.<br>Dans Dispatch, calculez la route puis « Sauver » (script SQL <code>dispatch_tour_schema.sql</code> requis).</div></div></td></tr>`;
+        } else {
+            aggBody.innerHTML = aggRows.map(r => {
+                const v = vehicules.find(x => x.id === r.vehicle_id);
+                const ch = chauffeurs.find(c => c.id === r.driver_id);
+                const mar = r.rev - r.cost;
+                const marCol = mar >= 0 ? 'var(--green)' : 'var(--red)';
+                return `<tr>
+                    <td>${r.tour_planned_date || '—'}</td>
+                    <td><strong>${v?.immatriculation || '—'}</strong></td>
+                    <td>${ch ? `${ch.prenom||''} ${ch.nom||''}`.trim() : '—'}</td>
+                    <td>${r.n}</td>
+                    <td style="color:var(--yellow)">${r.km.toFixed(1)}</td>
+                    <td style="color:var(--green)">${fmtCHF(r.rev)}</td>
+                    <td style="color:var(--orange)">${fmtCHF(r.cost)}</td>
+                    <td style="color:${marCol};font-weight:700">${fmtCHF(mar)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        if (!dispatchSnaps.length) {
+            detBody.innerHTML = `<tr><td colspan="11"><div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Pas encore d’historique.</div></div></td></tr>`;
+        } else {
+            detBody.innerHTML = dispatchSnaps.map(s => {
+                const v = vehicules.find(x => x.id === s.vehicle_id);
+                const ch = chauffeurs.find(c => c.id === s.driver_id);
+                const created = s.created_at ? new Date(s.created_at).toLocaleString('fr-CH', { timeZone: 'Europe/Zurich', hour12: false }) : '—';
+                const m = parseFloat(s.margin_chf) || 0;
+                const mCol = m >= 0 ? 'var(--green)' : 'var(--red)';
+                return `<tr>
+                    <td>${s.tour_planned_date || '—'}</td>
+                    <td style="font-size:11px;color:var(--muted)">${created}</td>
+                    <td><strong>${v?.immatriculation || '—'}</strong></td>
+                    <td>${ch ? `${ch.prenom||''} ${ch.nom||''}`.trim() : '—'}</td>
+                    <td style="font-size:11px;font-family:monospace">${(s.tour_id || '').slice(0, 18)}</td>
+                    <td>${(parseFloat(s.total_km)||0).toFixed(1)}</td>
+                    <td>${s.nb_stops ?? '—'}</td>
+                    <td style="color:var(--green)">${fmtCHF(s.revenue_chf)}</td>
+                    <td style="color:var(--orange)">${fmtCHF(s.cost_chf)}</td>
+                    <td style="color:${mCol};font-weight:600">${fmtCHF(s.margin_chf)}</td>
+                    <td>${Number(s.margin_pct || 0).toFixed(1)}%</td>
+                </tr>`;
+            }).join('');
+        }
+    }
+
+    /* ── VEH RESULT TABLE ── */
+    function renderVehResultTable(fraisMois, kmMois, transMois) {
+        const tbody=document.getElementById('vehResultTable');
+        if(!vehicules.length){ tbody.innerHTML=`<tr><td colspan="8"><div class="empty"><div class="empty-ico">📊</div><div class="empty-txt">Aucun véhicule enregistré</div></div></td></tr>`; return; }
+        tbody.innerHTML=vehicules.map(v=>{
+            const chauf  = chauffeurs.find(c=>c.id===v.chauffeur_id);
+            const km     = kmMois.filter(k=>k.vehicule_id===v.id).reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
+            const frais  = fraisMois.find(f=>f.vehicule_id===v.id);
+            const fraisT = frais?[(frais.carburant_chf||0),(frais.leasing_chf||0),(frais.assurance_chf||0),(frais.entretien_chf||0),(frais.reparations_chf||0),(frais.divers_chf||0)].reduce((s,n)=>s+parseFloat(n||0),0):0;
+            const coutKm = km>0?fraisT/km:0;
+            // CA des transports de ce chauffeur ce mois
+            const caV = transMois.filter(t=>t.driver_id===v.chauffeur_id).reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
+            const marge= caV-fraisT;
+            const badge = marge>0?`<span class="profit-badge pos"><i class="fas fa-arrow-up"></i> ${marge.toFixed(0)}</span>`:marge<0?`<span class="profit-badge neg"><i class="fas fa-arrow-down"></i> ${Math.abs(marge).toFixed(0)}</span>`:`<span class="profit-badge zero">—</span>`;
+            return `<tr>
+                <td><strong>${v.immatriculation}</strong><div style="font-size:11px;color:var(--muted)">${v.marque||''} ${v.modele||''}</div></td>
+                <td>${chauf?`${chauf.prenom||''} ${chauf.nom||''}`.trim():'—'}</td>
+                <td style="color:var(--yellow);font-weight:600">${fmtN(km)} km</td>
+                <td style="color:var(--blue)">${coutKm>0?coutKm.toFixed(3):' —'} CHF/km</td>
+                <td style="color:var(--green);font-weight:600">${fmtCHF(caV)} CHF</td>
+                <td style="color:var(--red)">${fmtCHF(fraisT)} CHF</td>
+                <td>${badge}</td>
+                <td>${marge>0?`<span class="chip green">${(marge/Math.max(caV,1)*100).toFixed(0)}%</span>`:`<span class="chip red">${(marge/Math.max(caV,1)*100).toFixed(0)}%</span>`}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    /* ── CHARTS ── */
+    function renderCharts() {
+        Chart.defaults.color='rgba(255,255,255,0.38)';
+        Chart.defaults.borderColor='rgba(255,255,255,0.07)';
+        Chart.defaults.font.family="'Outfit', sans-serif";
+
+        // CA mensuel année
+        const mois=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+        const caByMonth=Array(12).fill(0);
+        transports.forEach(t=>{ const m=new Date(t.created_at).getMonth(); caByMonth[m]+=(parseFloat(t.price_chf)||0); });
+
+        if(charts.ca) charts.ca.destroy();
+        charts.ca=new Chart(document.getElementById('chartCA'),{
+            type:'bar',
+            data:{labels:mois,datasets:[{label:'CA CHF',data:caByMonth.map(v=>parseFloat(v.toFixed(2))),backgroundColor:'rgba(34,197,94,0.6)',borderRadius:6,borderSkipped:false}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(255,255,255,0.05)'},min:0}}}
+        });
+
+        // Frais par catégorie
+        const catFrais={Carburant:0,Leasing:0,Assurance:0,Entretien:0,Réparations:0,Divers:0};
+        fraisList.forEach(f=>{
+            catFrais.Carburant  += parseFloat(f.carburant_chf||0);
+            catFrais.Leasing    += parseFloat(f.leasing_chf||0);
+            catFrais.Assurance  += parseFloat(f.assurance_chf||0);
+            catFrais.Entretien  += parseFloat(f.entretien_chf||0);
+            catFrais.Réparations+= parseFloat(f.reparations_chf||0);
+            catFrais.Divers     += parseFloat(f.divers_chf||0);
+        });
+        if(charts.frais) charts.frais.destroy();
+        charts.frais=new Chart(document.getElementById('chartFrais'),{
+            type:'doughnut',
+            data:{labels:Object.keys(catFrais),datasets:[{data:Object.values(catFrais),backgroundColor:['rgba(245,158,11,0.7)','rgba(59,130,246,0.7)','rgba(168,85,247,0.7)','rgba(34,197,94,0.7)','rgba(232,49,26,0.7)','rgba(255,255,255,0.2)'],borderWidth:0,hoverOffset:4}]},
+            options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{boxWidth:10,padding:8}}}}
+        });
+    }
+
+    /* ── CA CLIENT ── */
+    function renderCAClient() {
+        const tbody=document.getElementById('caClientTable');
+        const byClient={};
+        transports.forEach(t=>{
+            const eid=t.entreprise_id||'__inconnu';
+            if(!byClient[eid]) byClient[eid]={nb:0,ca:0};
+            byClient[eid].nb++;
+            byClient[eid].ca+=parseFloat(t.price_chf)||0;
+        });
+        const total=Object.values(byClient).reduce((s,v)=>s+v.ca,0);
+        const sorted=Object.entries(byClient).sort((a,b)=>b[1].ca-a[1].ca);
+        tbody.innerHTML=sorted.map(([eid,v])=>{
+            const ent=entreprises.find(e=>e.id===eid);
+            const pct=total>0?(v.ca/total*100).toFixed(1):0;
+            const marge=v.ca*0.25; // estimation 25%
+            return `<tr>
+                <td><strong>${ent?.nom||'Client inconnu'}</strong></td>
+                <td>${v.nb}</td>
+                <td style="font-weight:700;color:var(--green)">${v.ca.toFixed(2)} CHF</td>
+                <td><div style="display:flex;align-items:center;gap:8px;"><div style="height:4px;width:${Math.round(pct)}px;max-width:100px;background:var(--blue);border-radius:100px;"></div>${pct}%</div></td>
+                <td style="color:var(--green)">≈ ${marge.toFixed(2)} CHF</td>
+            </tr>`;
+        }).join('')||`<tr><td colspan="5"><div class="empty"><div class="empty-ico">📊</div><div class="empty-txt">Aucun transport cette année</div></div></td></tr>`;
+    }
+
+    /* ── CA MOIS ── */
+    function renderCAMois() {
+        const tbody=document.getElementById('caMoisTable');
+        const moisNoms=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const rows=moisNoms.map((nom,i)=>{
+            const mStr=`${selAnnee}-${String(i+1).padStart(2,'0')}`;
+            const trans=transports.filter(t=>{const d=new Date(t.created_at);return d.getFullYear()===selAnnee&&d.getMonth()===i;});
+            const ca=trans.reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
+            const frais=fraisList.filter(f=>f.mois===mStr).reduce((s,f)=>s+(parseFloat(f.carburant_chf||0))+(parseFloat(f.leasing_chf||0))+(parseFloat(f.assurance_chf||0))+(parseFloat(f.entretien_chf||0))+(parseFloat(f.reparations_chf||0))+(parseFloat(f.divers_chf||0)),0);
+            const marge=ca-frais;
+            const margePct=ca>0?(marge/ca*100).toFixed(1):0;
+            return {nom,nb:trans.length,ca,frais,marge,margePct};
+        });
+        tbody.innerHTML=rows.map(r=>`<tr>
+            <td style="font-weight:600">${r.nom}</td>
+            <td>${r.nb}</td>
+            <td style="color:var(--green);font-weight:700">${r.ca.toFixed(2)}</td>
+            <td style="color:var(--red)">${r.frais.toFixed(2)}</td>
+            <td style="color:${r.marge>=0?'var(--green)':'var(--red)'};font-weight:700">${r.marge.toFixed(2)}</td>
+            <td><span class="chip ${r.marge>=0?'green':'red'}">${r.margePct}%</span></td>
+        </tr>`).join('');
+    }
+
+    /* ── KM TABLE ── */
+    function renderKMTable() {
+        const tbody=document.getElementById('kmTable');
+        if(!kmList.length){ tbody.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-ico">🚗</div><div class="empty-txt">Aucun km enregistré<br>L'app chauffeur enregistre les km automatiquement</div></div></td></tr>`; return; }
+        tbody.innerHTML=kmList.slice(0,50).map(k=>{
+            const chauf=chauffeurs.find(c=>c.id===k.chauffeur_id);
+            const veh=vehicules.find(v=>v.id===k.vehicule_id);
+            return `<tr>
+                <td>${new Date(k.date).toLocaleDateString('fr-CH')}</td>
+                <td>${chauf?`${chauf.prenom||''} ${chauf.nom||''}`.trim():'—'}</td>
+                <td><strong>${veh?.immatriculation||'—'}</strong></td>
+                <td style="color:var(--muted2)">${k.km_debut||'—'}</td>
+                <td style="color:var(--muted2)">${k.km_fin||'—'}</td>
+                <td style="font-weight:700;color:var(--yellow)">${k.km_parcourus||0} km</td>
+            </tr>`;
+        }).join('');
+    }
+
+    /* ── FRAIS ── */
+    function populateFraisSelects() {
+        const fv=document.getElementById('fraisVehicule');
+        fv.innerHTML='<option value="">— Véhicule —</option>'+vehicules.map(v=>`<option value="${v.id}">${v.immatriculation}</option>`).join('');
+    }
+
+    window.loadFrais = async function() {
+        const vid=document.getElementById('fraisVehicule').value;
+        const mois=document.getElementById('fraisMois').value;
+        if(!vid||!mois) return;
+        const{data}=await db.from('vehicule_frais').select('*').eq('vehicule_id',vid).eq('mois',mois).maybeSingle();
+        document.getElementById('fCarb').value       = data?.carburant_chf||0;
+        document.getElementById('fLitres').value     = data?.carburant_litres||0;
+        document.getElementById('fLeasing').value    = data?.leasing_chf||0;
+        document.getElementById('fAssurance').value  = data?.assurance_chf||0;
+        document.getElementById('fEntretien').value  = data?.entretien_chf||0;
+        document.getElementById('fReparations').value= data?.reparations_chf||0;
+        document.getElementById('fDivers').value     = data?.divers_chf||0;
+        document.getElementById('fNotes').value      = data?.notes||'';
+        updateFraisTotal();
+    };
+
+    window.loadFraisVehicule = function(vid) {
+        document.getElementById('fraisVehicule').value=vid;
+        // Switch to vehicules tab
+        document.querySelectorAll('.tab,.tab-pane').forEach(x=>x.classList.remove('active'));
+        document.querySelector('[data-tab="vehicules"]').classList.add('active');
+        document.getElementById('pane-vehicules').classList.add('active');
+        loadFrais();
+    };
+
+    ['fCarb','fLitres','fLeasing','fAssurance','fEntretien','fReparations','fDivers'].forEach(id=>{
+        document.getElementById(id).addEventListener('input',updateFraisTotal);
+    });
+
+    function updateFraisTotal() {
+        const total=['fCarb','fLeasing','fAssurance','fEntretien','fReparations','fDivers']
+            .reduce((s,id)=>s+(parseFloat(document.getElementById(id).value)||0),0);
+        document.getElementById('fraisTotal').textContent=`Total : ${total.toFixed(2)} CHF`;
+    }
+
+    window.saveFrais = async function() {
+        const vid=document.getElementById('fraisVehicule').value;
+        const mois=document.getElementById('fraisMois').value;
+        if(!vid){ toast('error','Sélectionnez un véhicule'); return; }
+        showLoad('Sauvegarde…');
+        try {
+            const payload={
+                vehicule_id:vid, mois,
+                carburant_chf:    parseFloat(document.getElementById('fCarb').value)||0,
+                carburant_litres: parseFloat(document.getElementById('fLitres').value)||0,
+                leasing_chf:      parseFloat(document.getElementById('fLeasing').value)||0,
+                assurance_chf:    parseFloat(document.getElementById('fAssurance').value)||0,
+                entretien_chf:    parseFloat(document.getElementById('fEntretien').value)||0,
+                reparations_chf:  parseFloat(document.getElementById('fReparations').value)||0,
+                divers_chf:       parseFloat(document.getElementById('fDivers').value)||0,
+                notes:            document.getElementById('fNotes').value.trim()||null
+            };
+            const{error}=await db.from('vehicule_frais').upsert([payload],{onConflict:'vehicule_id,mois'});
+            if(error) throw error;
+            toast('success','Frais enregistrés ✓');
+            await loadAll();
+        } catch(e){ toast('error',e.message); }
+        finally{ hideLoad(); }
+    };
+
+    /* ── VÉHICULE MODAL ── */
+    window.openModalVehicule = function() {
+        document.getElementById('mVehTitle').textContent='NOUVEAU VÉHICULE';
+        document.getElementById('mVehId').value='';
+        document.getElementById('mImmat').value='';
+        document.getElementById('mMarque').value='';
+        document.getElementById('mModele').value='';
+        document.getElementById('mAnnee').value=new Date().getFullYear();
+        document.getElementById('mChauffeur').value='';
+        document.getElementById('mCoutChauffeurJour').value='0';
+        openModal('modalVehicule');
+    };
+
+    window.editVehicule = function(id) {
+        const v=vehicules.find(x=>x.id===id); if(!v) return;
+        document.getElementById('mVehTitle').textContent='MODIFIER VÉHICULE';
+        document.getElementById('mVehId').value=v.id;
+        document.getElementById('mImmat').value=v.immatriculation||'';
+        document.getElementById('mMarque').value=v.marque||'';
+        document.getElementById('mModele').value=v.modele||'';
+        document.getElementById('mAnnee').value=v.annee||'';
+        document.getElementById('mChauffeur').value=v.chauffeur_id||'';
+        document.getElementById('mCoutChauffeurJour').value = v.cout_chauffeur_jour != null ? v.cout_chauffeur_jour : '0';
+        openModal('modalVehicule');
+    };
+
+    window.saveVehicule = async function() {
+        const immat=document.getElementById('mImmat').value.trim().toUpperCase();
+        if(!immat){ toast('error','Immatriculation requise'); return; }
+        const id=document.getElementById('mVehId').value;
+        const chSel=document.getElementById('mChauffeur').value;
+        const chauffeur_id=chSel&&String(chSel).trim()?String(chSel).trim():null;
+        const payload={
+            immatriculation:immat,
+            marque:document.getElementById('mMarque').value.trim()||null,
+            modele:document.getElementById('mModele').value.trim()||null,
+            annee:parseInt(document.getElementById('mAnnee').value)||null,
+            chauffeur_id,
+            cout_chauffeur_jour: parseFloat(document.getElementById('mCoutChauffeurJour').value) || 0,
+            actif:true
+        };
+        async function trySave(p) {
+            if(id) return db.from('vehicules').update(p).eq('id',id).select('id');
+            return db.from('vehicules').insert([p]).select('id');
+        }
+        showLoad('Sauvegarde…');
+        try {
+            let { error } = await trySave(payload);
+            const errMsg = error ? String(error.message||'') : '';
+            if(error && (errMsg.includes('cout_chauffeur_jour') || errMsg.includes('schema cache') || errMsg.includes('column'))) {
+                const p2={...payload}; delete p2.cout_chauffeur_jour;
+                ({ error } = await trySave(p2));
+                if(!error) {
+                    toast('success','Véhicule enregistré ✓ (ajoutez la colonne cout_chauffeur_jour via dispatch_tour_schema.sql pour le coût/jour)');
+                    window.closeModal('modalVehicule');
+                    await loadAll();
+                    return;
+                }
+            }
+            if(error) throw new Error(error.message || error.code || 'Erreur Supabase');
+            toast('success','Véhicule enregistré ✓');
+            window.closeModal('modalVehicule');
+            await loadAll();
+        } catch(e){ toast('error', e.message || String(e)); }
+        finally{ hideLoad(); }
+    };
+
+    window.deleteVehicule = async function(id) {
+        if(!confirm('Supprimer ce véhicule ?')) return;
+        const { error } = await db.from('vehicules').update({actif:false}).eq('id',id);
+        if(error){ toast('error', error.message || 'Impossible d’archiver'); return; }
+        toast('success','Véhicule archivé');
+        await loadAll();
+    };
+
+    /* ── FRAIS TABLE ── */
+    function renderFraisTable() {
+        const tbody=document.getElementById('fraisTable');
+        const sorted=[...fraisList].sort((a,b)=>b.mois.localeCompare(a.mois));
+        tbody.innerHTML=sorted.map(f=>{
+            const v=vehicules.find(x=>x.id===f.vehicule_id);
+            const total=(parseFloat(f.carburant_chf||0)+parseFloat(f.leasing_chf||0)+parseFloat(f.assurance_chf||0)+parseFloat(f.entretien_chf||0)+parseFloat(f.reparations_chf||0)+parseFloat(f.divers_chf||0));
+            return `<tr>
+                <td>${f.mois}</td>
+                <td><strong>${v?.immatriculation||'—'}</strong></td>
+                <td style="color:var(--yellow)">${fmtCHF(f.carburant_chf)}</td>
+                <td>${fmtCHF(f.leasing_chf)}</td>
+                <td>${fmtCHF(f.assurance_chf)}</td>
+                <td>${fmtCHF(f.entretien_chf)}</td>
+                <td style="color:var(--red)">${fmtCHF(f.reparations_chf)}</td>
+                <td>${fmtCHF(f.divers_chf)}</td>
+                <td style="font-weight:700;color:var(--orange)">${total.toFixed(2)}</td>
+            </tr>`;
+        }).join('')||`<tr><td colspan="9"><div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Aucun frais saisi</div></div></td></tr>`;
+    }
+
+    /* ── EXPORT CSV ── */
+    window.exportCSV = function() {
+        const H=['Mois','Véhicule','Km','CA CHF','Frais CHF','Marge CHF','Marge %'];
+        const rows=vehicules.map(v=>{
+            const mois=`${selAnnee}-${String(selMois).padStart(2,'0')}`;
+            const km=kmList.filter(k=>k.vehicule_id===v.id&&k.date>=mois+'-01').reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
+            const frais=fraisList.find(f=>f.vehicule_id===v.id&&f.mois===mois);
+            const fraisT=frais?[(frais.carburant_chf||0),(frais.leasing_chf||0),(frais.assurance_chf||0),(frais.entretien_chf||0),(frais.reparations_chf||0),(frais.divers_chf||0)].reduce((s,n)=>s+parseFloat(n||0),0):0;
+            const ca=transports.filter(t=>t.driver_id===v.chauffeur_id).reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
+            const marge=ca-fraisT;
+            return [mois,v.immatriculation,km.toFixed(0),ca.toFixed(2),fraisT.toFixed(2),marge.toFixed(2),ca>0?(marge/ca*100).toFixed(1)+'%':''];
+        });
+        const csv=[H,...rows].map(r=>r.join(';')).join('\n');
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
+        a.download=`finances-colixo-${selAnnee}-${String(selMois).padStart(2,'0')}.csv`;
+        a.click();
+    };
+
+    /* ── AUTH ── */
+    async function init() {
+        const{data:{session}}=await db.auth.getSession();
+        if(!session){window.location.href='../login/index.html';return;}
+        const{data:user}=await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
+        if(!user||!['admin','super_admin'].includes(user.role)){await db.auth.signOut();window.location.href='../login/index.html';return;}
+        if(user){
+            document.getElementById('sbAv').textContent=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
+            document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
+        }
+        document.getElementById('btnLogout').addEventListener('click',async()=>{await db.auth.signOut();window.location.href='../login/index.html';});
+        // Populate chauffeur select in modal
+        const{data:ch}=await db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur');
+        document.getElementById('mChauffeur').innerHTML='<option value="">— Aucun —</option>'+(ch||[]).map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        initPeriods();
+        await loadAll();
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>

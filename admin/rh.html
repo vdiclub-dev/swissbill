@@ -1,0 +1,2243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <title>RH — Chauffeurs &amp; congés | Colixo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <style>
+        :root {
+            --red:     #e8311a;
+            --red-dark:#c0280f;
+            --red-glow:rgba(232,49,26,0.2);
+            --night:   #0a0a0f;
+            --night2:  #111118;
+            --night3:  #18181f;
+            --surface: #1e1e28;
+            --border:  rgba(255,255,255,0.07);
+            --border2: rgba(255,255,255,0.13);
+            --white:   #ffffff;
+            --muted:   rgba(255,255,255,0.38);
+            --muted2:  rgba(255,255,255,0.6);
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --yellow:  #f59e0b;
+            --orange:  #f97316;
+            --purple:  #a855f7;
+            --sidebar: 220px;
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; }
+        body { font-family:'Outfit',sans-serif; background:var(--night); color:var(--white); display:flex; }
+
+        /* ── SIDEBAR ── */
+        .sidebar { width:var(--sidebar); flex-shrink:0; background:var(--night2); border-right:1px solid var(--border); display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; z-index:100; }
+        .sidebar-logo { padding:20px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; text-decoration:none; }
+        .logo-mark { width:34px; height:34px; background:var(--red); border-radius:9px; display:grid; place-items:center; font-size:15px; flex-shrink:0; }
+        .logo-text { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; color:var(--white); }
+        .logo-text em { color:var(--red); font-style:normal; }
+        .nav-section { padding:14px 12px 5px; font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--muted); }
+        .nav-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; margin:2px 8px; font-size:13px; font-weight:500; color:var(--muted2); cursor:pointer; transition:all 0.2s; text-decoration:none; border:1px solid transparent; }
+        .nav-item i { width:16px; text-align:center; font-size:14px; }
+        .nav-item:hover { background:var(--night3); color:var(--white); }
+        .nav-item.active { background:rgba(232,49,26,0.1); color:var(--white); border-color:rgba(232,49,26,0.2); }
+        .nav-item.active i { color:var(--red); }
+        .sidebar-footer { margin-top:auto; padding:12px 8px; border-top:1px solid var(--border); }
+        .user-chip { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:var(--night3); }
+        .user-avatar { width:30px; height:30px; background:var(--red); border-radius:8px; display:grid; place-items:center; font-family:'Bebas Neue',cursive; font-size:13px; flex-shrink:0; }
+        .user-name { font-size:12px; font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .btn-logout { background:none; border:none; cursor:pointer; color:var(--muted); font-size:13px; transition:color 0.2s; padding:4px; }
+        .btn-logout:hover { color:var(--red); }
+
+        /* ── MAIN ── */
+        .main { margin-left:var(--sidebar); flex:1; display:flex; flex-direction:column; min-height:100vh; }
+        .topbar { background:var(--night2); border-bottom:1px solid var(--border); padding:0 32px; min-height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; flex-wrap:wrap; gap:12px; }
+        .page-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
+        .page-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+        .topbar-right { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        .toolbar-select { background:var(--night3); border:1px solid var(--border2); border-radius:9px; padding:8px 14px; color:var(--white); font-family:'Outfit',sans-serif; font-size:13px; cursor:pointer; }
+        .toolbar-select:focus { outline:none; border-color:var(--red); }
+        .toolbar-bar { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
+        .filter-input { background:var(--night3); border:1px solid var(--border2); border-radius:9px; padding:8px 14px; color:var(--white); font-family:'Outfit',sans-serif; font-size:13px; }
+        .filter-input:focus { outline:none; border-color:var(--red); }
+        .search-input { background:var(--surface); border:1px solid var(--border2); border-radius:9px; padding:8px 14px; color:var(--white); font-family:'Outfit',sans-serif; font-size:13px; width:min(100%,240px); }
+        .search-input:focus { outline:none; border-color:var(--red); }
+        .search-input::placeholder { color:rgba(255,255,255,0.25); }
+        .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+        /* ── BUTTONS ── */
+        .btn { font-family:'Outfit',sans-serif; font-weight:600; font-size:13px; padding:8px 18px; border-radius:9px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s; text-decoration:none; white-space:nowrap; }
+        .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .btn-red { background:var(--red); color:var(--white); }
+        .btn-red:hover { background:var(--red-dark); }
+        .btn-green { background:var(--green); color:var(--night); font-weight:700; }
+        .btn-green:hover { filter:brightness(1.1); }
+        .btn-sm { padding:6px 12px; font-size:12px; border-radius:7px; }
+
+        /* ── TABS ── */
+        .tabs { display:flex; gap:0; border-bottom:1px solid var(--border); padding:0 32px; background:var(--night2); flex-shrink:0; }
+        .tab { padding:14px 20px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:all 0.2s; display:flex; align-items:center; gap:8px; }
+        .tab:hover { color:var(--muted2); }
+        .tab.active { color:var(--white); border-bottom-color:var(--red); }
+        .tab-badge { background:var(--red); color:var(--white); font-size:10px; font-weight:700; padding:1px 6px; border-radius:100px; }
+
+        /* ── CONTENT ── */
+        .content { padding:28px 32px; flex:1; overflow-y:auto; }
+        .tab-pane { display:none; }
+        .tab-pane.active { display:block; }
+
+        /* ── KPI GRID ── */
+        .kpi-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
+        .kpi { background:var(--night2); border:1px solid var(--border2); border-radius:16px; padding:20px; transition:all 0.3s; }
+        .kpi:hover { transform:translateY(-2px); }
+        .kpi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .kpi-icon { width:36px; height:36px; border-radius:9px; display:grid; place-items:center; font-size:16px; }
+        .kpi-icon.red    { background:rgba(232,49,26,0.12); color:var(--red); }
+        .kpi-icon.green  { background:rgba(34,197,94,0.12);  color:var(--green); }
+        .kpi-icon.blue   { background:rgba(59,130,246,0.12); color:var(--blue); }
+        .kpi-icon.yellow { background:rgba(245,158,11,0.12); color:var(--yellow); }
+        .kpi-icon.purple { background:rgba(168,85,247,0.12); color:var(--purple); }
+        .kpi-val { font-family:'Bebas Neue',cursive; font-size:34px; letter-spacing:1px; line-height:1; margin-bottom:4px; }
+        .kpi-lbl { font-size:12px; color:var(--muted); }
+
+        /* ── CARDS ── */
+        .card { background:var(--night2); border:1px solid var(--border2); border-radius:18px; overflow:hidden; margin-bottom:20px; }
+        .card-head { padding:18px 22px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+        .card-title { font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:1px; }
+        .card-title-note { font-family:'Outfit',sans-serif; font-size:11px; font-weight:500; color:var(--muted); letter-spacing:0; margin-left:6px; }
+
+        /* ── Formulaire d'embauche (cadre légal CH) ── */
+        .fe-toolbar { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; align-items:center; }
+        .fe-legal {
+            background:rgba(59,130,246,0.08);
+            border:1px solid rgba(59,130,246,0.25);
+            border-radius:14px;
+            padding:16px 18px;
+            margin-bottom:22px;
+            font-size:13px;
+            line-height:1.55;
+            color:var(--muted2);
+        }
+        .fe-legal strong { color:var(--white); display:block; margin-bottom:8px; font-size:12px; letter-spacing:0.5px; text-transform:uppercase; }
+        .fe-legal ul { margin:8px 0 0 1.1em; }
+        .fe-legal li { margin-bottom:4px; }
+        .fe-section {
+            background:var(--night2);
+            border:1px solid var(--border2);
+            border-radius:16px;
+            padding:20px 22px;
+            margin-bottom:18px;
+        }
+        .fe-section h3 {
+            font-family:'Bebas Neue',cursive;
+            font-size:18px;
+            letter-spacing:1px;
+            color:var(--white);
+            margin-bottom:14px;
+            padding-bottom:10px;
+            border-bottom:1px solid var(--border);
+        }
+        .fe-section .hint { font-size:12px; color:var(--muted); margin:-8px 0 14px; line-height:1.45; }
+        .fe-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px 16px; }
+        .fe-grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px 16px; }
+        .fe-field { margin-bottom:0; }
+        .fe-field label { display:block; font-size:11px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+        .fe-field input, .fe-field select, .fe-field textarea {
+            width:100%;
+            padding:10px 12px;
+            background:var(--surface);
+            border:1.5px solid var(--border2);
+            border-radius:10px;
+            font-family:'Outfit',sans-serif;
+            font-size:14px;
+            color:var(--white);
+        }
+        .fe-field input:focus, .fe-field select:focus, .fe-field textarea:focus { outline:none; border-color:var(--red); }
+        .fe-field textarea { min-height:72px; resize:vertical; }
+        .fe-field-full { grid-column:1/-1; }
+        .fe-check { display:flex; align-items:flex-start; gap:10px; margin-top:12px; font-size:13px; color:var(--muted2); line-height:1.45; }
+        .fe-check input { width:auto; margin-top:3px; flex-shrink:0; }
+        .fe-refusal {
+            margin-top:20px;
+            padding:14px 16px;
+            border-radius:12px;
+            background:rgba(232,49,26,0.06);
+            border:1px solid rgba(232,49,26,0.2);
+            font-size:12px;
+            color:var(--muted2);
+            line-height:1.5;
+        }
+        .fe-refusal strong { color:var(--red); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; }
+        @media(max-width:900px) {
+            .fe-grid, .fe-grid3 { grid-template-columns:1fr; }
+        }
+        @media print {
+            body.print-embauche .sidebar,
+            body.print-embauche .topbar,
+            body.print-embauche .tabs,
+            body.print-embauche .fe-toolbar,
+            body.print-embauche .btn-logout { display:none !important; }
+            body.print-embauche .main { margin-left:0 !important; }
+            body.print-embauche .content { padding:16px !important; }
+            body.print-embauche .tab-pane { display:none !important; }
+        body.print-salaire aside.sidebar,
+        body.print-salaire div.main { display:none !important; }
+        #printSalaireWrap { display:none; }
+        body.print-salaire #printSalaireWrap {
+            display:block !important; position:fixed; inset:0; z-index:99999; background:#fff; color:#111;
+            padding:28px 32px; overflow:auto; font-family:'Outfit',system-ui,sans-serif; font-size:14px; line-height:1.45;
+        }
+            body.print-embauche #pane-embauche { display:block !important; }
+            body.print-embauche { background:#fff !important; color:#111 !important; }
+            body.print-embauche .fe-section,
+            body.print-embauche .fe-legal { background:#fff !important; border-color:#ccc !important; color:#111 !important; }
+            body.print-embauche .fe-field input,
+            body.print-embauche .fe-field select,
+            body.print-embauche .fe-field textarea { border:1px solid #999 !important; color:#111 !important; background:#f9f9f9 !important; }
+            body.print-embauche .fe-section h3,
+            body.print-embauche .fe-legal strong,
+            body.print-embauche .fe-refusal strong { color:#000 !important; }
+        }
+        body.print-salaire #printSalaireWrap .print-fs-doc {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 40px 36px 48px;
+            border: 1px solid #d4d4d4;
+            border-radius: 2px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        body.print-salaire #printSalaireWrap .print-fs-title {
+            font-family: 'Bebas Neue', 'Outfit', system-ui, sans-serif;
+            font-size: 26px;
+            letter-spacing: 2px;
+            color: #111;
+            margin: 0 0 4px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid #111;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-sub {
+            text-align: center;
+            font-size: 13px;
+            color: #444;
+            margin: 0 0 20px;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-addr-grid {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-addr-cell {
+            display: table-cell;
+            width: 50%;
+            padding: 14px 16px;
+            vertical-align: top;
+            border-right: 1px solid #e5e5e5;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-addr-cell:last-child { border-right: none; text-align: right; }
+        body.print-salaire #printSalaireWrap .print-fs-addr-cell .lbl {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-table td {
+            padding: 9px 8px;
+            border-bottom: 1px solid #e8e8e8;
+            vertical-align: middle;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-table td:last-child {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-table tr.fs-muted td { color: #555; font-size: 12px; }
+        body.print-salaire #printSalaireWrap .print-fs-table tr.fs-net td {
+            border-top: 2px solid #111;
+            border-bottom: none;
+            font-size: 17px;
+            font-weight: 700;
+            padding-top: 14px;
+            color: #111;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-iban {
+            font-size: 13px;
+            padding: 12px 14px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 16px;
+        }
+        body.print-salaire #printSalaireWrap .print-fs-foot {
+            font-size: 11px;
+            color: #888;
+            margin-top: 28px;
+            padding-top: 12px;
+            border-top: 1px solid #ddd;
+        }
+        .card-body { padding:0; }
+        .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
+        .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-bottom:20px; }
+
+        /* ── TABLE ── */
+        .tbl { width:100%; border-collapse:collapse; }
+        .tbl th { padding:11px 18px; text-align:left; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); background:var(--night3); }
+        .tbl td { padding:13px 18px; border-top:1px solid var(--border); font-size:13px; }
+        .tbl tr:hover td { background:rgba(255,255,255,0.02); }
+        .cell-user { display:flex; align-items:center; gap:10px; }
+        .avatar { width:32px; height:32px; border-radius:9px; display:grid; place-items:center; font-family:'Bebas Neue',cursive; font-size:13px; flex-shrink:0; background:rgba(34,197,94,0.15); color:var(--green); }
+        .cell-main { font-weight:600; font-size:13px; }
+        .cell-sub  { font-size:11px; color:var(--muted); margin-top:1px; }
+
+        /* Chips */
+        .chip { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:100px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+        .chip.green  { background:rgba(34,197,94,0.12);  color:var(--green);  border:1px solid rgba(34,197,94,0.25); }
+        .chip.yellow { background:rgba(245,158,11,0.12); color:var(--yellow); border:1px solid rgba(245,158,11,0.25); }
+        .chip.red    { background:rgba(232,49,26,0.12);  color:var(--red);    border:1px solid rgba(232,49,26,0.25); }
+        .chip.blue   { background:rgba(59,130,246,0.12); color:var(--blue);   border:1px solid rgba(59,130,246,0.25); }
+        .chip.muted  { background:rgba(255,255,255,0.05);color:var(--muted);  border:1px solid var(--border2); }
+
+        /* Progress bar */
+        .prog { height:5px; background:var(--border2); border-radius:100px; overflow:hidden; margin-top:4px; }
+        .prog-fill { height:100%; border-radius:100px; transition:width 0.5s; }
+
+        /* ── CHAUFFEUR DETAIL ── */
+        .driver-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+        .driver-stat { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:16px; text-align:center; }
+        .ds-val { font-family:'Bebas Neue',cursive; font-size:28px; letter-spacing:1px; color:var(--white); }
+        .ds-val em { font-style:normal; color:var(--red); font-size:14px; font-family:'Outfit',sans-serif; }
+        .ds-lbl { font-size:11px; color:var(--muted); margin-top:4px; }
+
+        /* Calendar heatmap */
+        .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+        .cal-day { aspect-ratio:1; border-radius:4px; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:9px; color:var(--muted); cursor:default; transition:transform 0.2s; }
+        .cal-day:hover { transform:scale(1.2); }
+        .cal-day.worked  { background:rgba(34,197,94,0.6);  color:var(--white); }
+        .cal-day.absent  { background:rgba(232,49,26,0.4);  color:var(--white); }
+        .cal-day.conge   { background:rgba(59,130,246,0.5); color:var(--white); }
+        .cal-day.today   { border:2px solid var(--red); }
+        .cal-labels { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:4px; }
+        .cal-label { font-size:9px; color:var(--muted); text-align:center; font-weight:700; letter-spacing:0.5px; }
+
+        /* ── CONGES TABLE ── */
+        .conge-actions { display:flex; gap:6px; }
+
+        /* ── MODAL ── */
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:500; align-items:center; justify-content:center; padding:20px; }
+        .modal.open { display:flex; }
+        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:24px; padding:36px; width:100%; max-width:480px; box-shadow:0 40px 100px rgba(0,0,0,0.6); animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes boxIn { from{opacity:0;transform:scale(0.94) translateY(16px)} to{opacity:1;transform:none} }
+        .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+        .modal-title { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:1px; }
+        .modal-close { width:32px; height:32px; background:var(--surface); border:none; border-radius:50%; cursor:pointer; display:grid; place-items:center; font-size:14px; color:var(--muted); transition:all 0.2s; }
+        .modal-close:hover { background:var(--border2); color:var(--white); }
+        .field { margin-bottom:14px; }
+        .field label { display:block; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+        .field input, .field select, .field textarea { width:100%; padding:11px 14px; background:var(--surface); border:1.5px solid var(--border2); border-radius:10px; font-family:'Outfit',sans-serif; font-size:14px; color:var(--white); transition:border-color 0.2s; }
+        .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:var(--red); }
+        .field select option { background:var(--night3); }
+        .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .modal-actions { display:flex; gap:10px; margin-top:20px; }
+        .modal-actions .btn { flex:1; justify-content:center; padding:12px; }
+
+        /* Fiche de salaire : forme rectangulaire + liste employé lisible */
+        .modal-box.modal-salaire {
+            max-width: 640px;
+            border-radius: 10px;
+            max-height: min(92vh, 920px);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .sal-form-sheet {
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            padding: 14px 16px 16px;
+            margin-bottom: 16px;
+            background: rgba(0,0,0,0.22);
+        }
+        .sal-form-sheet .field:last-child { margin-bottom: 0; }
+        select.sal-employe-select {
+            min-height: 48px !important;
+            font-size: 15px !important;
+            font-weight: 500;
+            cursor: pointer !important;
+            width: 100% !important;
+            padding: 12px 14px !important;
+            background: var(--surface) !important;
+            color: var(--white) !important;
+            border: 2px solid var(--border2) !important;
+            border-radius: 8px !important;
+            box-sizing: border-box;
+        }
+        select.sal-employe-select:focus {
+            border-color: var(--red) !important;
+            outline: none;
+        }
+        select.sal-employe-select:disabled {
+            opacity: 0.65;
+            cursor: not-allowed !important;
+        }
+        #salEmployeHint { margin-top: 8px; font-size: 12px; color: var(--muted2); line-height: 1.4; }
+
+        /* ── CONFIRM ── */
+        .confirm-box { background:var(--night3); border:1px solid rgba(232,49,26,0.25); border-radius:24px; padding:36px; width:100%; max-width:360px; text-align:center; animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+        .confirm-ico { font-size:36px; margin-bottom:14px; }
+        .confirm-title { font-family:'Bebas Neue',cursive; font-size:22px; margin-bottom:8px; }
+        .confirm-text  { font-size:14px; color:var(--muted); margin-bottom:24px; line-height:1.6; }
+        .confirm-actions { display:flex; gap:10px; }
+
+        /* ── TOAST ── */
+        .toast { position:fixed; top:18px; right:18px; padding:12px 18px; border-radius:10px; display:flex; align-items:center; gap:10px; font-size:13px; font-weight:500; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .toast.show { transform:translateX(0); }
+        .toast.success .t-ico { color:var(--green); }
+        .toast.error   .t-ico { color:var(--red); }
+        .toast.info    .t-ico { color:var(--blue); }
+        .t-ico { font-size:14px; }
+
+        /* ── LOADER ── */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; }
+        .loader.on { display:grid; }
+        .spin { width:40px; height:40px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+
+        .empty-state { padding:60px 20px; text-align:center; }
+        .empty-ico { font-size:36px; opacity:0.15; margin-bottom:12px; }
+        .empty-txt { font-size:14px; color:var(--muted); }
+
+        /* ── RESPONSIVE ── */
+        @media(max-width:1200px) { .kpi-grid { grid-template-columns:repeat(3,1fr); } .driver-cards { grid-template-columns:1fr 1fr; } }
+        @media(max-width:900px)  { .sidebar { width:60px; } .logo-text,.nav-item span,.nav-section,.user-name { display:none; } .main { margin-left:60px; } .content { padding:16px; } .kpi-grid { grid-template-columns:repeat(2,1fr); } .grid2,.grid3 { grid-template-columns:1fr; } .tabs { padding:0 16px; overflow-x:auto; flex-wrap:nowrap; } }
+    </style>
+</head>
+<body>
+
+<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<div class="loader" id="loader"><div class="spin"></div></div>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+    <a href="dashboard.html" class="sidebar-logo">
+        <div class="logo-mark">🚚</div>
+        <div class="logo-text">Coli<em>xo</em></div>
+    </a>
+    <div class="nav-section">Navigation</div>
+    <a href="dashboard.html"     class="nav-item"><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span></a>
+    <a href="dispatch.html"      class="nav-item"><i class="fas fa-map-marked-alt"></i> <span>Dispatch</span></a>
+    <a href="new-transport.html" class="nav-item"><i class="fas fa-plus-circle"></i> <span>Nouveau transport</span></a>
+    <a href="../commandes-client.html" class="nav-item"><i class="fas fa-inbox"></i> <span>Commandes clients</span></a>
+    <div class="nav-section">Admin</div>
+    <a href="users.html"         class="nav-item"><i class="fas fa-users"></i> <span>Utilisateurs</span></a>
+    <a href="finances.html"     class="nav-item"><i class="fas fa-chart-line"></i> <span>Finances</span></a>
+    <a href="rh.html"            class="nav-item active"><i class="fas fa-id-badge"></i> <span>RH</span></a>
+    <a href="tarification.html"  class="nav-item"><i class="fas fa-tags"></i> <span>Tarification</span></a>
+    <a href="analytics.html"     class="nav-item"><i class="fas fa-chart-bar"></i> <span>Analytiques</span></a>
+    <a href="facturation.html"   class="nav-item"><i class="fas fa-file-invoice-dollar"></i> <span>Facturation</span></a>
+    <div class="sidebar-footer">
+        <div class="user-chip">
+            <div class="user-avatar" id="sideAvatar">SA</div>
+            <div class="user-name"   id="sideName">Admin</div>
+            <button class="btn-logout" id="btnLogout"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+    </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+    <header class="topbar">
+        <div>
+            <div class="page-title">RESSOURCES HUMAINES</div>
+            <div class="page-sub" id="monthLabel">—</div>
+        </div>
+        <div class="topbar-right">
+            <select id="monthSelect" class="toolbar-select" aria-label="Mois"></select>
+            <button type="button" class="btn btn-ghost" onclick="exportRH()"><i class="fas fa-download"></i> Export CSV</button>
+            <button type="button" class="btn btn-red" onclick="openModalRHParams()"><i class="fas fa-sliders-h"></i> Paramètres</button>
+        </div>
+    </header>
+
+    <!-- ── TABS ── -->
+    <div class="tabs">
+        <div class="tab active" data-tab="overview"><i class="fas fa-chart-pie"></i> Vue globale</div>
+        <div class="tab" data-tab="pointages"><i class="fas fa-clock"></i> Pointages</div>
+        <div class="tab" data-tab="conges"><i class="fas fa-calendar-alt"></i> Congés <span class="tab-badge" id="badgeConges">0</span></div>
+        <div class="tab" data-tab="fiches"><i class="fas fa-id-card"></i> Fiches chauffeurs</div>
+        <div class="tab" data-tab="salaires"><i class="fas fa-money-check-alt"></i> Fiches de salaire</div>
+        <div class="tab" data-tab="embauche"><i class="fas fa-file-signature"></i> Formulaire embauche</div>
+    </div>
+
+    <div class="content">
+
+        <!-- ══ VUE GLOBALE ══ -->
+        <div class="tab-pane active" id="pane-overview">
+
+            <!-- KPIs -->
+            <div class="kpi-grid">
+                <div class="kpi">
+                    <div class="kpi-top"><div class="kpi-icon green"><i class="fas fa-users"></i></div></div>
+                    <div class="kpi-val" id="kpiChauffeurs">—</div>
+                    <div class="kpi-lbl">Chauffeurs actifs</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-top"><div class="kpi-icon blue"><i class="fas fa-clock"></i></div></div>
+                    <div class="kpi-val" id="kpiHeures">—</div>
+                    <div class="kpi-lbl">Heures ce mois</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-top"><div class="kpi-icon orange"><i class="fas fa-plus-circle"></i></div></div>
+                    <div class="kpi-val" id="kpiSupp">—</div>
+                    <div class="kpi-lbl">Heures supplémentaires</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-top"><div class="kpi-icon yellow"><i class="fas fa-calendar-times"></i></div></div>
+                    <div class="kpi-val" id="kpiAbsences">—</div>
+                    <div class="kpi-lbl">Jours congés (mois)</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-top"><div class="kpi-icon purple"><i class="fas fa-umbrella-beach"></i></div></div>
+                    <div class="kpi-val" id="kpiCongesEnAttente">—</div>
+                    <div class="kpi-lbl">Congés en attente</div>
+                </div>
+            </div>
+
+            <!-- Tableau récap chauffeurs -->
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">RÉCAPITULATIF PAR CHAUFFEUR</div>
+                    <input type="search" id="searchDrivers" class="search-input" placeholder="Rechercher un chauffeur…" autocomplete="off" oninput="filterDriverTable(this.value)">
+                </div>
+                <div class="card-body table-scroll">
+                    <table class="tbl">
+                        <thead>
+                            <tr>
+                                <th>Chauffeur</th>
+                                <th>Jours travaillés</th>
+                                <th>Heures totales</th>
+                                <th>Heures supp.</th>
+                                <th>Solde vacances</th>
+                                <th>Congés en attente</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="driverSummaryTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Graphique heures par semaine -->
+            <div class="grid2">
+                <div class="card">
+                    <div class="card-head"><div class="card-title">HEURES / PÉRIODE<span class="card-title-note">mois sélectionné</span></div></div>
+                    <div style="padding:20px;"><canvas id="chartHeures" style="height:200px;"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-head"><div class="card-title">RÉPARTITION CONGÉS<span class="card-title-note">approuvés, mois</span></div></div>
+                    <div style="padding:20px;"><canvas id="chartAbsences" style="height:200px;"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ POINTAGES ══ -->
+        <div class="tab-pane" id="pane-pointages">
+            <div class="toolbar-bar">
+                <select id="filterDriverPt" class="toolbar-select" onchange="loadPointages()" aria-label="Chauffeur">
+                    <option value="">Tous les chauffeurs</option>
+                </select>
+                <input type="date" id="filterDatePt" class="filter-input" onchange="loadPointages()" aria-label="Date">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('filterDatePt').value='';loadPointages()"><i class="fas fa-times"></i> Réinitialiser</button>
+            </div>
+            <div class="card">
+                <div class="card-body table-scroll">
+                    <table class="tbl">
+                        <thead>
+                            <tr>
+                                <th>Chauffeur</th>
+                                <th>Date</th>
+                                <th>Début</th>
+                                <th>Pause</th>
+                                <th>Reprise</th>
+                                <th>Fin</th>
+                                <th>Heures</th>
+                                <th>Supp.</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pointagesTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ CONGÉS ══ -->
+        <div class="tab-pane" id="pane-conges">
+            <!-- En attente -->
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-head">
+                    <div class="card-title">DEMANDES EN ATTENTE</div>
+                    <span class="chip yellow" id="badgeAttente">0 demande</span>
+                </div>
+                <div class="card-body table-scroll">
+                    <table class="tbl">
+                        <thead>
+                            <tr><th>Chauffeur</th><th>Type</th><th>Période</th><th>Jours</th><th>Note</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="congesAttente"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Historique -->
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">HISTORIQUE CONGÉS</div>
+                    <select id="filterDriverCg" class="toolbar-select" style="font-size:12px;padding:6px 12px;" onchange="loadConges()" aria-label="Filtrer par chauffeur">
+                        <option value="">Tous les chauffeurs</option>
+                    </select>
+                </div>
+                <div class="card-body table-scroll">
+                    <table class="tbl">
+                        <thead>
+                            <tr><th>Chauffeur</th><th>Type</th><th>Période</th><th>Jours</th><th>Statut</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="congesHistorique"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ FICHES ══ -->
+        <div class="tab-pane" id="pane-fiches">
+            <div class="grid3" id="fichesGrid"></div>
+        </div>
+
+        <!-- ══ FICHES DE SALAIRE ══ -->
+        <div class="tab-pane" id="pane-salaires">
+            <div class="fe-legal" style="border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.06);">
+                <strong style="color:var(--white);">Suisse — cadre indicatif</strong>
+                Vous pouvez enregistrer <strong>une fois par employé</strong> les taux (%) appliqués au salaire brut ; chaque fiche mensuelle les reprend automatiquement (modifiable à la main). Les taux légaux varient selon l’âge, le canton et le barème : ce module sert à <strong>produire une fiche et une trace interne</strong>, pas à remplacer la déclaration officielle ou le conseil d’un expert.
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">FICHES DU MOIS <span class="card-title-note" id="salaireMonthNote">—</span></div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" class="btn btn-ghost" onclick="openModalParamSalaireEmp()"><i class="fas fa-percent"></i> Taux par employé</button>
+                        <button type="button" class="btn btn-green" onclick="openSalaireModal(null)"><i class="fas fa-plus"></i> Nouvelle fiche</button>
+                    </div>
+                </div>
+                <div class="card-body table-scroll">
+                    <table class="tbl">
+                        <thead>
+                            <tr><th>Employé</th><th>Rôle</th><th>Brut CHF</th><th>Net CHF</th><th>App</th><th></th></tr>
+                        </thead>
+                        <tbody id="salaireTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ FORMULAIRE EMBAUCHE (données licites — Suisse) ══ -->
+        <div class="tab-pane" id="pane-embauche">
+            <div class="fe-toolbar">
+                <button type="button" class="btn btn-ghost" onclick="resetEmbaucheForm()"><i class="fas fa-undo"></i> Réinitialiser</button>
+                <button type="button" class="btn btn-ghost" onclick="printEmbaucheForm()"><i class="fas fa-print"></i> Imprimer / PDF</button>
+                <button type="button" class="btn btn-red" onclick="exportEmbaucheJSON()"><i class="fas fa-file-export"></i> Exporter JSON</button>
+            </div>
+
+            <div class="fe-legal">
+                <strong>Cadre légal (rappel — Suisse)</strong>
+                Ce formulaire évite les questions <em>interdites ou à risque</em> en entretien d’embauche (loi fédérale sur l’égalité entre femmes et hommes, jurisprudence, LPD nLPD).
+                <ul>
+                    <li>Ne pas poser : grossesse, projet d’enfant, religion, syndicat, orientation sexuelle, origine « ethnique », santé générale ou handicap hors lien direct avec l’exercice du poste.</li>
+                    <li>Examen médical / aptitude : réservé au médecin du travail ou aux cas prévus par la loi (ex. conducteurs professionnels), pas un questionnaire santé libre avant décision.</li>
+                    <li>Extrait du casier judiciaire : uniquement si la loi l’autorise pour le poste ; en pratique souvent <strong>après</strong> une proposition conditionnelle d’embauche.</li>
+                    <li>Les données sont collectées pour la procédure de recrutement ; le candidat peut demander accès et rectification (LPD).</li>
+                    <li><strong>État civil, enfants, N° AVS des ayants droit :</strong> utiles pour les <strong>déclarations AVS / LPP / allocations familiales</strong> auprès de la caisse de compensation ; à traiter à des fins <strong>uniquement administratives et postérieures à l’embauche</strong>, sans influence sur la décision de recrutement.</li>
+                </ul>
+            </div>
+
+            <form id="formEmbauche" autocomplete="on">
+
+                <div class="fe-section">
+                    <h3>1 · Identité &amp; N° AVS (assurance-vieillesse)</h3>
+                    <p class="hint">Nom, prénom, sexe et date de naissance tels que sur les documents officiels. Le numéro AVS (13 chiffres) est nécessaire pour la déclaration du salaire et des cotisations en Suisse.</p>
+                    <div class="fe-grid">
+                        <div class="fe-field"><label for="emb_nom">Nom de famille</label><input id="emb_nom" name="nom" required autocomplete="family-name"></div>
+                        <div class="fe-field"><label for="emb_prenom">Prénom(s)</label><input id="emb_prenom" name="prenom" required autocomplete="given-name"></div>
+                        <div class="fe-field">
+                            <label for="emb_sexe">Sexe (mention administrative / AVS)</label>
+                            <select id="emb_sexe" name="sexe" required>
+                                <option value="">— Choisir —</option>
+                                <option value="F">Féminin</option>
+                                <option value="M">Masculin</option>
+                                <option value="X">X (non binaire, selon état civil)</option>
+                            </select>
+                        </div>
+                        <div class="fe-field"><label for="emb_naissance">Date de naissance</label><input id="emb_naissance" name="date_naissance" type="date" required autocomplete="bday"></div>
+                        <div class="fe-field"><label for="emb_lieu_naissance">Lieu de naissance</label><input id="emb_lieu_naissance" name="lieu_naissance" placeholder="Ville, pays" required></div>
+                        <div class="fe-field"><label for="emb_nationalite">Nationalité(s)</label><input id="emb_nationalite" name="nationalite" placeholder="Ex. Suisse, F, …" required></div>
+                        <div class="fe-field fe-field-full">
+                            <label for="emb_avs">N° AVS / AHV (13 chiffres, format 756.xxxx.xxxx.xx)</label>
+                            <input id="emb_avs" name="avs" inputmode="numeric" autocomplete="off" placeholder="756.1234.5678.97 ou 13 chiffres" required title="Numéro AVS à 13 chiffres (souvent avec points)">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>2 · Adresse &amp; téléphones</h3>
+                    <div class="fe-grid">
+                        <div class="fe-field fe-field-full"><label for="emb_rue">Rue et n°</label><input id="emb_rue" name="rue" required autocomplete="street-address"></div>
+                        <div class="fe-field"><label for="emb_npa">NPA</label><input id="emb_npa" name="npa" required autocomplete="postal-code"></div>
+                        <div class="fe-field"><label for="emb_localite">Localité</label><input id="emb_localite" name="localite" required autocomplete="address-level2"></div>
+                        <div class="fe-field"><label for="emb_pays">Pays</label><input id="emb_pays" name="pays" value="Suisse" autocomplete="country-name"></div>
+                        <div class="fe-field"><label for="emb_tel">Téléphone principal (portable ou fixe)</label><input id="emb_tel" name="tel" type="tel" required autocomplete="tel"></div>
+                        <div class="fe-field"><label for="emb_tel2">Téléphone secondaire (facultatif)</label><input id="emb_tel2" name="tel_secondaire" type="tel" autocomplete="tel"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_email">E-mail</label><input id="emb_email" name="email" type="email" required autocomplete="email"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>3 · État civil, conjoint(e) &amp; enfants (allocations familiales)</h3>
+                    <p class="hint">Ces renseignements servent aux déclarations auprès de la <strong>caisse de compensation</strong> et aux <strong>allocations familiales</strong>. Remplir même si l’embauche n’est pas encore actée, si vous souhaitez accélérer l’inscription. Laisser vide ce qui ne vous concerne pas.</p>
+                    <div class="fe-grid">
+                        <div class="fe-field fe-field-full">
+                            <label for="emb_etat_civil">État civil</label>
+                            <select id="emb_etat_civil" name="etat_civil">
+                                <option value="">— Choisir —</option>
+                                <option value="celibataire">Célibataire</option>
+                                <option value="marie">Marié(e)</option>
+                                <option value="partenariat">Partenariat enregistré</option>
+                                <option value="divorce">Divorcé(e)</option>
+                                <option value="veuf">Veuf / veuve</option>
+                                <option value="separe">Séparé(e)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <h4 style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px;">Conjoint(e) ou partenaire enregistré (facultatif)</h4>
+                    <div class="fe-grid">
+                        <div class="fe-field"><label for="emb_conj_nom">Nom</label><input id="emb_conj_nom" name="conjoint_nom" autocomplete="off"></div>
+                        <div class="fe-field"><label for="emb_conj_prenom">Prénom</label><input id="emb_conj_prenom" name="conjoint_prenom" autocomplete="off"></div>
+                        <div class="fe-field"><label for="emb_conj_sexe">Sexe (admin.)</label>
+                            <select id="emb_conj_sexe" name="conjoint_sexe"><option value="">—</option><option value="F">F</option><option value="M">M</option><option value="X">X</option></select>
+                        </div>
+                        <div class="fe-field"><label for="emb_conj_ddn">Date de naissance</label><input id="emb_conj_ddn" name="conjoint_date_naissance" type="date"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_conj_avs">N° AVS du/de la conjoint(e)</label><input id="emb_conj_avs" name="conjoint_avs" placeholder="756.…" inputmode="numeric"></div>
+                    </div>
+                    <h4 style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px;">Enfants à charge (nom, prénom, sexe, date de naissance, N° AVS)</h4>
+                    <p class="hint" style="margin-top:-4px;">Un numéro AVS par enfant dès qu’il est attribué (déclaration naissance). Jusqu’à 4 lignes.</p>
+                    <div class="fe-grid" style="margin-bottom:10px;">
+                        <div class="fe-field"><label>Enfant 1 — Nom</label><input name="enfant1_nom"></div>
+                        <div class="fe-field"><label>Prénom</label><input name="enfant1_prenom"></div>
+                        <div class="fe-field"><label>Sexe</label><select name="enfant1_sexe"><option value="">—</option><option value="F">F</option><option value="M">M</option><option value="X">X</option></select></div>
+                        <div class="fe-field"><label>Date de naissance</label><input name="enfant1_date_naissance" type="date"></div>
+                        <div class="fe-field fe-field-full"><label>N° AVS enfant</label><input name="enfant1_avs" placeholder="756.…" inputmode="numeric"></div>
+                    </div>
+                    <div class="fe-grid" style="margin-bottom:10px;">
+                        <div class="fe-field"><label>Enfant 2 — Nom</label><input name="enfant2_nom"></div>
+                        <div class="fe-field"><label>Prénom</label><input name="enfant2_prenom"></div>
+                        <div class="fe-field"><label>Sexe</label><select name="enfant2_sexe"><option value="">—</option><option value="F">F</option><option value="M">M</option><option value="X">X</option></select></div>
+                        <div class="fe-field"><label>Date de naissance</label><input name="enfant2_date_naissance" type="date"></div>
+                        <div class="fe-field fe-field-full"><label>N° AVS enfant</label><input name="enfant2_avs" placeholder="756.…" inputmode="numeric"></div>
+                    </div>
+                    <div class="fe-grid" style="margin-bottom:10px;">
+                        <div class="fe-field"><label>Enfant 3 — Nom</label><input name="enfant3_nom"></div>
+                        <div class="fe-field"><label>Prénom</label><input name="enfant3_prenom"></div>
+                        <div class="fe-field"><label>Sexe</label><select name="enfant3_sexe"><option value="">—</option><option value="F">F</option><option value="M">M</option><option value="X">X</option></select></div>
+                        <div class="fe-field"><label>Date de naissance</label><input name="enfant3_date_naissance" type="date"></div>
+                        <div class="fe-field fe-field-full"><label>N° AVS enfant</label><input name="enfant3_avs" placeholder="756.…" inputmode="numeric"></div>
+                    </div>
+                    <div class="fe-grid">
+                        <div class="fe-field"><label>Enfant 4 — Nom</label><input name="enfant4_nom"></div>
+                        <div class="fe-field"><label>Prénom</label><input name="enfant4_prenom"></div>
+                        <div class="fe-field"><label>Sexe</label><select name="enfant4_sexe"><option value="">—</option><option value="F">F</option><option value="M">M</option><option value="X">X</option></select></div>
+                        <div class="fe-field"><label>Date de naissance</label><input name="enfant4_date_naissance" type="date"></div>
+                        <div class="fe-field fe-field-full"><label>N° AVS enfant</label><input name="enfant4_avs" placeholder="756.…" inputmode="numeric"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>4 · Autorisation de travail en Suisse</h3>
+                    <p class="hint">Légitime pour vérifier l’aptitude à occuper l’emploi (Ordonnance sur l’admission à la pratique d’une activité lucrative).</p>
+                    <div class="fe-grid">
+                        <div class="fe-field fe-field-full">
+                            <label for="emb_statut_travail">Statut</label>
+                            <select id="emb_statut_travail" name="statut_travail" required>
+                                <option value="">— Choisir —</option>
+                                <option value="ch">Citoyen(ne) suisse / résident(e) avec droit au travail</option>
+                                <option value="ue_ae">Ressortissant(e) UE / AELE avec libre circulation</option>
+                                <option value="permis_b">Permis B (résident)</option>
+                                <option value="permis_l">Permis L (court séjour)</option>
+                                <option value="permis_g">Permis G (frontalier)</option>
+                                <option value="permis_ci">Carte de légitimation / autre titre</option>
+                                <option value="demande">Demande de permis en cours</option>
+                                <option value="autre">Autre (préciser en remarques)</option>
+                            </select>
+                        </div>
+                        <div class="fe-field"><label for="emb_permis_no">N° du titre / permis (si applicable)</label><input id="emb_permis_no" name="permis_no"></div>
+                        <div class="fe-field"><label for="emb_permis_fin">Valable jusqu’au</label><input id="emb_permis_fin" name="permis_fin" type="date"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>5 · Permis de conduire &amp; activité de conduite</h3>
+                    <p class="hint">Pertinent pour chauffeur / livreur. Pas de question santé ici : l’aptitude médicale relève du cadre légal spécifique.</p>
+                    <div class="fe-grid">
+                        <div class="fe-field fe-field-full">
+                            <label>Catégories détenues</label>
+                            <div class="fe-grid3" style="margin-top:8px;">
+                                <label class="fe-check"><input type="checkbox" name="permis_cat" value="B"> B (véhicules légers)</label>
+                                <label class="fe-check"><input type="checkbox" name="permis_cat" value="C"> C (poids lourds)</label>
+                                <label class="fe-check"><input type="checkbox" name="permis_cat" value="C1"> C1</label>
+                                <label class="fe-check"><input type="checkbox" name="permis_cat" value="CE"> CE (ensemble)</label>
+                                <label class="fe-check"><input type="checkbox" name="permis_cat" value="D"> D (transport personnes)</label>
+                                <label class="fe-check"><input type="checkbox" name="permis_cat" value="BE"> BE (remorque)</label>
+                            </div>
+                        </div>
+                        <div class="fe-field"><label for="emb_permis_conduite_depuis">1ère délivrance cat. pertinente</label><input id="emb_permis_conduite_depuis" name="permis_conduite_depuis" type="date"></div>
+                        <div class="fe-field"><label for="emb_permis_conduite_valid">Permis valable jusqu’au</label><input id="emb_permis_conduite_valid" name="permis_conduite_valid" type="date"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_infractions">Condamnations ou retraits de permis liés à la circulation (déclaration sur l’honneur)</label><textarea id="emb_infractions" name="infractions" placeholder="Indiquer « néant » ou décrire factuellement (dates, décisions)."></textarea></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>6 · Formation &amp; langues</h3>
+                    <div class="fe-grid">
+                        <div class="fe-field fe-field-full">
+                            <label for="emb_scolarite">Scolarité / formation la plus élevée</label>
+                            <select id="emb_scolarite" name="scolarite">
+                                <option value="">—</option>
+                                <option value="oblig">École obligatoire</option>
+                                <option value="second2">Secondaire II (gymnase, école de métiers, maturité professionnelle…)</option>
+                                <option value="tertiaire">Tertiaire (école sup., HES, université…)</option>
+                                <option value="cfa">CFC / apprentissage complété</option>
+                                <option value="autre">Autre (préciser)</option>
+                            </select>
+                        </div>
+                        <div class="fe-field fe-field-full"><label for="emb_formations">Formations professionnelles, certificats (FPA, cours sécurité, CACES, etc.)</label><textarea id="emb_formations" name="formations"></textarea></div>
+                        <div class="fe-field"><label for="emb_lang_fr">Français</label><select id="emb_lang_fr" name="lang_fr"><option value="">—</option><option value="A1">A1</option><option value="A2">A2</option><option value="B1">B1</option><option value="B2">B2</option><option value="C1">C1</option><option value="C2">C2 / langue maternelle</option></select></div>
+                        <div class="fe-field"><label for="emb_lang_de">Allemand</label><select id="emb_lang_de" name="lang_de"><option value="">—</option><option value="A1">A1</option><option value="A2">A2</option><option value="B1">B1</option><option value="B2">B2</option><option value="C1">C1</option><option value="C2">C2</option></select></div>
+                        <div class="fe-field"><label for="emb_lang_en">Anglais</label><select id="emb_lang_en" name="lang_en"><option value="">—</option><option value="A1">A1</option><option value="A2">A2</option><option value="B1">B1</option><option value="B2">B2</option><option value="C1">C1</option><option value="C2">C2</option></select></div>
+                        <div class="fe-field"><label for="emb_lang_autres">Autres langues</label><input id="emb_lang_autres" name="lang_autres" placeholder="Ex. italien courant"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>7 · Parcours professionnel (3 derniers emplois)</h3>
+                    <p class="hint">Limiter aux faits utiles au poste. Éviter les questions sur la vie privée non liée au travail.</p>
+                    <div class="fe-grid">
+                        <div class="fe-field fe-field-full"><label>Emploi 1 (le plus récent)</label></div>
+                        <div class="fe-field"><label for="emb_e1_employeur">Employeur</label><input id="emb_e1_employeur" name="e1_employeur"></div>
+                        <div class="fe-field"><label for="emb_e1_periode">Période (de — à)</label><input id="emb_e1_periode" name="e1_periode" placeholder="ex. 01.2022 – 06.2024"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_e1_fonction">Fonction / tâches</label><input id="emb_e1_fonction" name="e1_fonction"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_e1_depart">Motif de départ (factuel)</label><input id="emb_e1_depart" name="e1_depart" placeholder="Ex. fin de CDD, démission, licenciement économique"></div>
+                    </div>
+                    <div class="fe-grid" style="margin-top:16px;">
+                        <div class="fe-field fe-field-full"><label>Emploi 2</label></div>
+                        <div class="fe-field"><label for="emb_e2_employeur">Employeur</label><input id="emb_e2_employeur" name="e2_employeur"></div>
+                        <div class="fe-field"><label for="emb_e2_periode">Période</label><input id="emb_e2_periode" name="e2_periode"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_e2_fonction">Fonction</label><input id="emb_e2_fonction" name="e2_fonction"></div>
+                    </div>
+                    <div class="fe-grid" style="margin-top:16px;">
+                        <div class="fe-field fe-field-full"><label>Emploi 3</label></div>
+                        <div class="fe-field"><label for="emb_e3_employeur">Employeur</label><input id="emb_e3_employeur" name="e3_employeur"></div>
+                        <div class="fe-field"><label for="emb_e3_periode">Période</label><input id="emb_e3_periode" name="e3_periode"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_e3_fonction">Fonction</label><input id="emb_e3_fonction" name="e3_fonction"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>8 · Références professionnelles (avec accord des personnes)</h3>
+                    <div class="fe-grid">
+                        <div class="fe-field"><label for="emb_ref1_nom">Réf. 1 — Nom</label><input id="emb_ref1_nom" name="ref1_nom"></div>
+                        <div class="fe-field"><label for="emb_ref1_ent">Entreprise</label><input id="emb_ref1_ent" name="ref1_ent"></div>
+                        <div class="fe-field"><label for="emb_ref1_tel">Téléphone / e-mail</label><input id="emb_ref1_tel" name="ref1_contact"></div>
+                        <div class="fe-field"><label for="emb_ref2_nom">Réf. 2 — Nom</label><input id="emb_ref2_nom" name="ref2_nom"></div>
+                        <div class="fe-field"><label for="emb_ref2_ent">Entreprise</label><input id="emb_ref2_ent" name="ref2_ent"></div>
+                        <div class="fe-field"><label for="emb_ref2_tel">Téléphone / e-mail</label><input id="emb_ref2_tel" name="ref2_contact"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>9 · Disponibilité, mobilité &amp; conditions</h3>
+                    <div class="fe-grid">
+                        <div class="fe-field"><label for="emb_dispo">Disponible à partir du</label><input id="emb_dispo" name="dispo_depuis" type="date"></div>
+                        <div class="fe-field">
+                            <label for="emb_temps">Rythme souhaité</label>
+                            <select id="emb_temps" name="rythme">
+                                <option value="">—</option>
+                                <option value="100">100 %</option>
+                                <option value="80_90">80–90 %</option>
+                                <option value="50_70">50–70 %</option>
+                                <option value="discuter">À discuter</option>
+                            </select>
+                        </div>
+                        <div class="fe-field fe-field-full"><label for="emb_zones">Zones géographiques acceptées (livraisons)</label><input id="emb_zones" name="zones" placeholder="Ex. Genève, Vaud, Valais…"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_vehicule">Véhicule personnel utilisable pro. (si pertinent)</label><input id="emb_vehicule" name="vehicule_perso" placeholder="Type / ou « non »"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_salaire">Prétentions salariales annuelles brutes (facultatif)</label><input id="emb_salaire" name="pretention_salaire" placeholder="CHF … ou « selon grille »"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>10 · Obligations utiles à la planification (Suisse)</h3>
+                    <p class="hint">Le service militaire et la protection civile peuvent impacter le planning ; ce n’est pas une question discriminatoire au sens de l’égalité homme-femme lorsqu’elle vise l’organisation du travail.</p>
+                    <div class="fe-grid">
+                        <div class="fe-field fe-field-full">
+                            <label for="emb_armee">Êtes-vous soumis(e) à des obligations de service (armée, protection civile, service civil) en Suisse ?</label>
+                            <select id="emb_armee" name="oblig_service_ch">
+                                <option value="">—</option>
+                                <option value="non">Non / non concerné(e)</option>
+                                <option value="oui">Oui (des jours peuvent être planifiés)</option>
+                                <option value="exempt">Exempté(e) / dispense</option>
+                            </select>
+                        </div>
+                        <div class="fe-field fe-field-full"><label for="emb_armee_detail">Précisions (dates connues, statut)</label><textarea id="emb_armee_detail" name="oblig_service_detail" placeholder="Facultatif"></textarea></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>11 · Personne à prévenir en cas d’urgence (sur le lieu de travail)</h3>
+                    <div class="fe-grid">
+                        <div class="fe-field"><label for="emb_urg_nom">Nom</label><input id="emb_urg_nom" name="urg_nom"></div>
+                        <div class="fe-field"><label for="emb_urg_lien">Lien</label><input id="emb_urg_lien" name="urg_lien" placeholder="Conjoint(e), parent, ami…"></div>
+                        <div class="fe-field"><label for="emb_urg_tel">Téléphone</label><input id="emb_urg_tel" name="urg_tel" type="tel"></div>
+                    </div>
+                </div>
+
+                <div class="fe-section">
+                    <h3>12 · Déclarations &amp; consentement</h3>
+                    <label class="fe-check"><input type="checkbox" name="decl_exact" value="1" required> Je certifie que les renseignements fournis sont exacts et complets à ma connaissance.</label>
+                    <label class="fe-check"><input type="checkbox" name="decl_ldpd" value="1" required> J’accepte que mes données personnelles soient traitées aux fins du présent recrutement conformément à la politique de confidentialité de l’employeur (LPD).</label>
+                    <label class="fe-check"><input type="checkbox" name="decl_refs" value="1"> J’atteste avoir obtenu l’accord des personnes nommées comme références pour être contactées.</label>
+                    <div class="fe-grid" style="margin-top:18px;">
+                        <div class="fe-field"><label for="emb_sign_lieu">Fait à</label><input id="emb_sign_lieu" name="sign_lieu" placeholder="Localité"></div>
+                        <div class="fe-field"><label for="emb_sign_date">Date</label><input id="emb_sign_date" name="sign_date" type="date"></div>
+                        <div class="fe-field fe-field-full"><label for="emb_sign_nom">Nom et prénom (pour signature électronique ou manuscrite sur document imprimé)</label><input id="emb_sign_nom" name="sign_nom"></div>
+                    </div>
+                </div>
+
+                <div class="fe-refusal">
+                    <strong>Ne pas utiliser à des fins discriminatoires (liste de contrôle RH)</strong>
+                    L’état civil et les données sur les enfants ci-dessus sont réservées aux <strong>déclarations sociales / allocations familiales</strong>, pas à la notation du candidat. Ne pas poser en entretien : grossesse, projet d’enfant, contraception · Religion, convictions · Appartenance syndicale · Santé / handicap hors lien avec les tâches essentielles · Orientation sexuelle · « Origine ethnique » · situation financière détaillée sans lien avec le poste.
+                </div>
+
+            </form>
+        </div>
+
+    </div><!-- /content -->
+</div><!-- /main -->
+
+<div id="printSalaireWrap" aria-hidden="true"></div>
+
+<!-- ═══ MODAL FICHE SALAIRE ═══ -->
+<div id="modalSalaire" class="modal">
+    <div class="modal-box modal-salaire">
+        <div class="modal-head">
+            <div class="modal-title" id="salaireModalTitle">FICHE DE SALAIRE</div>
+            <button type="button" class="modal-close" onclick="closeModal('modalSalaire')">✕</button>
+        </div>
+        <input type="hidden" id="salId">
+        <div class="sal-form-sheet">
+            <p style="font-size:12px;margin:0 0 12px;color:var(--muted2);">Période : <strong id="salPeriodeLabel">—</strong> (mois en haut de page)</p>
+            <div class="field">
+                <label for="salEmploye">Employé <span style="color:var(--red);">*</span></label>
+                <select id="salEmploye" class="sal-employe-select" name="salEmploye" autocomplete="off" aria-label="Choisir l’employé"></select>
+                <p id="salEmployeHint" style="display:none;">Aucun employé actif (rôles chauffeur ou magasinier). Créez ou activez un utilisateur dans <a href="users.html" style="color:var(--red);">Utilisateurs</a>.</p>
+            </div>
+        </div>
+        <div class="field"><label>Employeur (libellé sur la fiche)</label><input type="text" id="salEmployeur" value="Colixo" placeholder="Raison sociale"></div>
+        <div class="field"><label>Adresse employeur</label><textarea id="salEmployeurAdr" rows="2" placeholder="Rue, NPA, localité…" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);resize:vertical;"></textarea></div>
+        <div class="field"><label>Adresse employé (sur la fiche)</label><textarea id="salEmployeAdr" rows="2" placeholder="Rue, NPA, localité… (prérempli depuis « Taux par employé » si renseigné)" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);resize:vertical;"></textarea></div>
+        <div class="field"><label>Date du bulletin / paiement</label><input type="date" id="salDateBulletin"></div>
+        <div class="field"><label>Salaire brut CHF</label>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input type="number" id="salBrut" min="0" step="0.01" placeholder="0.00" style="flex:1;min-width:120px;">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="applyTauxFromEmployeParams()" title="Recalcule les lignes à partir des % enregistrés pour cet employé">Appliquer les taux %</button>
+            </div>
+            <p style="font-size:11px;color:var(--muted2);margin:6px 0 0;">Les charges sont calculées sur le <strong>brut</strong> via « Taux par employé » (ou saisie manuelle). Le <strong>% affiché</strong> = montant ÷ brut (taux effectif sur cette fiche).</p>
+        </div>
+        <p style="font-size:11px;color:var(--muted2);margin:0 0 8px;font-weight:600;">Charges sociales (déduites du brut)</p>
+        <div class="field-row">
+            <div class="field"><label>AVS / AI / APG <span id="salPctAvs" style="font-weight:400;color:var(--muted);">(—)</span></label><input type="number" id="salAvs" min="0" step="0.01" value="0"></div>
+            <div class="field"><label>AC <span id="salPctAc" style="font-weight:400;color:var(--muted);">(—)</span></label><input type="number" id="salAc" min="0" step="0.01" value="0"></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>LPP <span id="salPctLpp" style="font-weight:400;color:var(--muted);">(—)</span></label><input type="number" id="salLpp" min="0" step="0.01" value="0"></div>
+            <div class="field"><label>Impôt source <span id="salPctIs" style="font-weight:400;color:var(--muted);">(—)</span></label><input type="number" id="salIs" min="0" step="0.01" value="0"></div>
+        </div>
+        <div class="field"><label>Autres déductions <span id="salPctAutres" style="font-weight:400;color:var(--muted);">(—)</span></label><input type="number" id="salAutres" min="0" step="0.01" value="0"></div>
+        <div id="salRecapCharges" style="font-size:12px;color:var(--muted2);margin:4px 0 10px;padding:8px 10px;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid var(--border2);">
+            <div>Total déductions (charges) : <strong id="salValTotalDed" style="color:var(--white);">0.00</strong> CHF</div>
+            <div style="margin-top:4px;">Après charges : <strong id="salValApresCharges" style="color:var(--white);">0.00</strong> CHF</div>
+        </div>
+        <p style="font-size:11px;color:var(--muted2);margin:0 0 8px;font-weight:600;">Ajouts optionnels (hors calcul des % ci-dessus)</p>
+        <p style="font-size:11px;color:var(--muted2);margin:-4px 0 8px;">Allocations familiales, remboursement de frais, prime / bonus chauffeur : laissez à 0 si non applicable.</p>
+        <div class="field-row">
+            <div class="field"><label>Allocations familiales</label><input type="number" id="salAlloc" min="0" step="0.01" value="0" placeholder="0"></div>
+            <div class="field"><label>Remboursement de frais</label><input type="number" id="salRemb" min="0" step="0.01" value="0" placeholder="0"></div>
+        </div>
+        <div class="field"><label>Prime / autres (ex. bon chauffeur)</label><input type="number" id="salPrimes" min="0" step="0.01" value="0" placeholder="0"></div>
+        <div id="salRecapAjouts" style="font-size:12px;color:var(--muted2);margin:4px 0 10px;padding:8px 10px;background:rgba(34,197,94,0.08);border-radius:8px;border:1px solid rgba(34,197,94,0.25);">
+            Total ajouts optionnels : <strong id="salValTotalAjouts" style="color:var(--green);">0.00</strong> CHF
+        </div>
+        <div class="field"><label>Net à payer CHF</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <input type="number" id="salNet" min="0" step="0.01" readonly style="flex:1;opacity:0.95;">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="computeNetSalaire()">Recalculer</button>
+            </div>
+            <p style="font-size:11px;color:var(--muted2);margin:6px 0 0;">Net = brut − charges + ajouts optionnels.</p>
+        </div>
+        <div class="field"><label>IBAN (versement du net)</label><input type="text" id="salIban" inputmode="text" autocomplete="off" placeholder="CH00 0000 0000 0000 0000 0" style="font-family:ui-monospace,monospace;"></div>
+        <div class="field"><label>Notes (facultatif)</label><textarea id="salNotes" rows="2" placeholder="Prime, remarque…" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);resize:vertical;"></textarea></div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-green" onclick="saveSalaire()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalSalaire')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL TAUX PAR EMPLOYÉ ═══ -->
+<div id="modalParamSalaireEmp" class="modal">
+    <div class="modal-box" style="max-width:520px;">
+        <div class="modal-head">
+            <div class="modal-title">TAUX PAR EMPLOYÉ (% DU BRUT)</div>
+            <button type="button" class="modal-close" onclick="closeModal('modalParamSalaireEmp')">✕</button>
+        </div>
+        <p style="font-size:12px;margin-bottom:12px;color:var(--muted2);">Saisie unique par personne. Sur chaque fiche : montant ≈ salaire brut × taux ÷ 100 (plus le montant fixe « autres » si renseigné).</p>
+        <div class="field"><label>Employé</label>
+            <select id="paramSalEmploye" onchange="onParamSalEmployeChange()" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);"></select>
+        </div>
+        <div class="field"><label>Employeur (défaut sur les nouvelles fiches)</label><input type="text" id="paramEmpNom" value="Colixo" placeholder="Raison sociale"></div>
+        <div class="field"><label>Adresse employeur (défaut sur les fiches)</label><textarea id="paramEmpAdr" rows="2" placeholder="Rue, NPA, localité…" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);resize:vertical;"></textarea></div>
+        <div class="field"><label>Adresse employé (défaut)</label><textarea id="paramEmpAdrSal" rows="2" placeholder="Pour préremplir la fiche" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);resize:vertical;"></textarea></div>
+        <div class="field"><label>IBAN versement (défaut)</label><input type="text" id="paramIban" placeholder="CH…" style="font-family:ui-monospace,monospace;width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);"></div>
+        <div class="field-row">
+            <div class="field"><label>AVS / AI / APG (%)</label><input type="number" id="paramTauxAvs" min="0" step="0.001" value="0"></div>
+            <div class="field"><label>AC (%)</label><input type="number" id="paramTauxAc" min="0" step="0.001" value="0"></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>LPP (%)</label><input type="number" id="paramTauxLpp" min="0" step="0.001" value="0"></div>
+            <div class="field"><label>Impôt à la source (%)</label><input type="number" id="paramTauxIs" min="0" step="0.001" value="0"></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Autres déductions (% du brut)</label><input type="number" id="paramTauxAutres" min="0" step="0.001" value="0"></div>
+            <div class="field"><label>Autres (fixe CHF / mois)</label><input type="number" id="paramFixeAutres" min="0" step="0.01" value="0"></div>
+        </div>
+        <div class="field"><label>Commentaire (facultatif)</label><input type="text" id="paramSalComment" placeholder="Réf. barème, caisse…"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-green" onclick="saveParamSalaireEmp()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalParamSalaireEmp')">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL SOLDE ═══ -->
+<div id="modalSolde" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">MODIFIER SOLDE</div>
+            <button class="modal-close" onclick="closeModal('modalSolde')">✕</button>
+        </div>
+        <input type="hidden" id="soldeDriverId">
+        <div class="field"><label>Chauffeur</label><input type="text" id="soldeDriverName" readonly style="opacity:0.6;"></div>
+        <div class="field-row">
+            <div class="field"><label>Solde vacances (jours)</label><input type="number" id="soldeVac" min="0" step="0.5"></div>
+            <div class="field"><label>Jours compensation</label><input type="number" id="soldeComp" min="0" step="0.5"></div>
+        </div>
+        <div class="field"><label>Heures supplémentaires</label><input type="number" id="soldeHSupp" min="0" step="0.25"></div>
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="saveSolde()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalSolde')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL PARAMS ═══ -->
+<div id="modalParams" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">PARAMÈTRES RH</div>
+            <button class="modal-close" onclick="closeModal('modalParams')">✕</button>
+        </div>
+        <div class="field"><label>Heures/jour standard</label><input type="number" id="paramHeuresJour" value="8.5" min="1" max="12" step="0.5"></div>
+        <div class="field"><label>Jours vacances annuels</label><input type="number" id="paramJoursVac" value="20" min="10" max="30"></div>
+        <div class="field"><label>Taux heure supplémentaire (%)</label><input type="number" id="paramTauxSupp" value="25" min="0" max="100"></div>
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="saveParams()"><i class="fas fa-save"></i> Sauvegarder</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalParams')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL FICHE DÉTAIL ═══ -->
+<div id="modalFiche" class="modal">
+    <div class="modal-box" style="max-width:600px;">
+        <div class="modal-head">
+            <div class="modal-title" id="ficheTitle">FICHE CHAUFFEUR</div>
+            <button class="modal-close" onclick="closeModal('modalFiche')">✕</button>
+        </div>
+        <div id="ficheContent"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="exportFiche()"><i class="fas fa-download"></i> Export PDF</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalFiche')">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL CONFIRM ═══ -->
+<div id="modalConfirm" class="modal">
+    <div class="confirm-box">
+        <div class="confirm-ico" id="confirmIco">❓</div>
+        <div class="confirm-title" id="confirmTitle">CONFIRMER</div>
+        <div class="confirm-text"  id="confirmText">Êtes-vous sûr ?</div>
+        <div class="confirm-actions">
+            <button class="btn btn-green" id="confirmYes" style="flex:1;justify-content:center;">Confirmer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalConfirm')" style="flex:1;justify-content:center;">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    if (!window.SUPABASE_CONFIG) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
+        return;
+    }
+    const db = window.SUPABASE_CLIENT;
+
+    /* ── State ── */
+    let chauffeurs = [], employesSalaire = [], pointages = [], conges = [], soldes = [], fichesSalaire = [];
+    let paramSalaireByEmp = new Map();
+    let currentMonth, currentYear;
+    let charts = {};
+
+    /* ── Helpers ── */
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function toast(type, msg) {
+        clearTimeout(toastTimer);
+        toastEl.className = 'toast ' + type + ' show';
+        document.getElementById('toastIco').textContent = type==='success'?'✓':type==='error'?'✕':'ℹ';
+        document.getElementById('toastTxt').textContent = msg;
+        toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 4000);
+    }
+    const loaderEl = document.getElementById('loader');
+    const showLoad = () => loaderEl.classList.add('on');
+    const hideLoad = () => loaderEl.classList.remove('on');
+    const fmt = ts => ts ? new Date(ts).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const fmtDate = d => d ? new Date(d).toLocaleDateString('fr-CH') : '—';
+
+    /* ── Modals ── */
+    function openModal(id)  { const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
+    window.closeModal = function(id) { const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} };
+    document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if(e.target===m) window.closeModal(m.id); }));
+    document.addEventListener('keydown', e => { if(e.key==='Escape') document.querySelectorAll('.modal.open').forEach(m=>window.closeModal(m.id)); });
+
+    /* ── Tabs ── */
+    document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
+            t.classList.add('active');
+            document.getElementById('pane-'+t.dataset.tab)?.classList.add('active');
+            if(t.dataset.tab==='pointages') loadPointages();
+            if(t.dataset.tab==='conges')    loadConges();
+            if(t.dataset.tab==='fiches')    renderFiches();
+            if(t.dataset.tab==='salaires') renderFichesSalaire();
+        });
+    });
+
+    /* ── Month selector ── */
+    function initMonthSelector() {
+        const sel = document.getElementById('monthSelect');
+        const now = new Date();
+        const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        for(let i=0; i<6; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+            const opt = document.createElement('option');
+            opt.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            opt.textContent = `${months[d.getMonth()]} ${d.getFullYear()}`;
+            if(i===0) opt.selected = true;
+            sel.appendChild(opt);
+        }
+        currentMonth = now.getMonth()+1;
+        currentYear  = now.getFullYear();
+        sel.addEventListener('change', () => {
+            const [y,m] = sel.value.split('-');
+            currentYear=parseInt(y,10); currentMonth=parseInt(m,10);
+            updateMonthLabel();
+            loadAll();
+        });
+        updateMonthLabel();
+    }
+
+    function updateMonthLabel() {
+        const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const el = document.getElementById('monthLabel');
+        if (el) el.textContent = `${months[currentMonth - 1]} ${currentYear} · données filtrées sur cette période`;
+    }
+
+    /* ── AUTH ── */
+    async function init() {
+        const { data:{session} } = await db.auth.getSession();
+        if(!session) { window.location.href='../login/index.html'; return; }
+        const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
+        if(!user || !['admin','super_admin'].includes(user.role)) {
+            await db.auth.signOut();
+            window.location.href='../login/index.html';
+            return;
+        }
+        if(user) {
+            const initials=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
+            document.getElementById('sideAvatar').textContent=initials;
+            document.getElementById('sideName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
+        }
+        document.getElementById('btnLogout').addEventListener('click', async()=>{ await db.auth.signOut(); window.location.href='../login/index.html'; });
+        initMonthSelector();
+        ['salAvs','salAc','salLpp','salIs','salAutres','salAlloc','salRemb','salPrimes'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', function () { window.computeNetSalaire(); });
+        });
+        const salBrutEl = document.getElementById('salBrut');
+        if (salBrutEl) salBrutEl.addEventListener('input', function () {
+            if (!document.getElementById('salId').value.trim()) window.applyTauxFromEmployeParams();
+            window.computeNetSalaire();
+        });
+        const salEmployeEl = document.getElementById('salEmploye');
+        if (salEmployeEl) salEmployeEl.addEventListener('change', function () {
+            if (!document.getElementById('salId').value.trim()) {
+                const eid = this.value;
+                const p = paramSalaireByEmp.get(eid);
+                if (p && p.employeur_nom) document.getElementById('salEmployeur').value = p.employeur_nom;
+                if (p && p.employeur_adresse) document.getElementById('salEmployeurAdr').value = p.employeur_adresse;
+                if (p && p.employe_adresse) document.getElementById('salEmployeAdr').value = p.employe_adresse;
+                if (p && p.iban) document.getElementById('salIban').value = p.iban;
+                window.applyTauxFromEmployeParams();
+            }
+            window.computeNetSalaire();
+        });
+        await loadAll();
+    }
+
+    /* ── LOAD ALL ── */
+    async function loadAll() {
+        showLoad();
+        const monthStart = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+        const monthEnd   = new Date(currentYear, currentMonth, 0).toISOString().slice(0,10);
+
+        const [
+            { data: empl },
+            { data: pts   },
+            { data: cgs   },
+            { data: slds  },
+            fsQ
+        ] = await Promise.all([
+            db.from('utilisateurs').select('*').in('role',['chauffeur','magasinier']).eq('actif',true),
+            db.from('pointages').select('*').gte('date',monthStart).lte('date',monthEnd).order('date',{ascending:false}),
+            db.from('conges').select('*').order('created_at',{ascending:false}),
+            db.from('soldes_rh').select('*'),
+            db.from('rh_fiches_salaire').select('*').eq('annee',currentYear).eq('mois',currentMonth).order('created_at',{ascending:false})
+        ]);
+
+        const allEm = empl||[];
+        chauffeurs = allEm.filter(u=>u.role==='chauffeur');
+        employesSalaire = allEm;
+        fichesSalaire = (!fsQ.error && fsQ.data) ? fsQ.data : [];
+        if(fsQ.error) console.warn('rh_fiches_salaire:', fsQ.error.message||fsQ.error);
+        let psQ = { data: [], error: null };
+        if (allEm.length) {
+            psQ = await db.from('rh_employe_parametres_salaire').select('*').in('employe_id', allEm.map(u => u.id));
+        }
+        if (psQ.error) console.warn('rh_employe_parametres_salaire:', psQ.error.message || psQ.error);
+        paramSalaireByEmp = new Map((psQ.data || []).map(p => [p.employe_id, p]));
+        pointages  = pts  ||[];
+        conges     = cgs  ||[];
+        soldes     = slds ||[];
+
+        // Populate driver selects
+        populateDriverSelects();
+        renderKPIs();
+        renderDriverSummary();
+        renderCharts();
+        renderCongesAttente();
+
+        const pending = conges.filter(c=>c.statut==='en_attente').length;
+        document.getElementById('badgeConges').textContent = pending;
+        document.getElementById('badgeAttente').textContent = `${pending} demande${pending>1?'s':''}`;
+
+        renderFichesSalaire();
+        hideLoad();
+    }
+
+    function populateDriverSelects() {
+        const opts = chauffeurs.map(c=>`<option value="${c.id}">${(c.prenom||'').trim()} ${(c.nom||'').trim()}</option>`).join('');
+        document.getElementById('filterDriverPt').innerHTML = '<option value="">Tous les chauffeurs</option>' + opts;
+        document.getElementById('filterDriverCg').innerHTML = '<option value="">Tous les chauffeurs</option>' + opts;
+    }
+
+    function congeOverlapsMonth(c) {
+        if (!c.date_debut) return false;
+        const mStart = new Date(currentYear, currentMonth - 1, 1);
+        const mEnd = new Date(currentYear, currentMonth, 0, 23, 59, 59);
+        const d0 = new Date(String(c.date_debut).slice(0, 10) + 'T12:00:00');
+        const d1 = new Date(String(c.date_fin || c.date_debut).slice(0, 10) + 'T12:00:00');
+        if (isNaN(d0.getTime()) || isNaN(d1.getTime())) return false;
+        return d0 <= mEnd && d1 >= mStart;
+    }
+
+    /* ── KPIs ── */
+    function renderKPIs() {
+        const totalH    = pointages.reduce((s,p)=>s+(parseFloat(p.heures_travaillees)||0),0);
+        const totalSupp = pointages.reduce((s,p)=>s+(parseFloat(p.heures_supp)||0),0);
+        const absences  = conges.filter(c=>c.statut==='approuve' && congeOverlapsMonth(c)).reduce((s,c)=>s+(parseFloat(c.nb_jours)||0),0);
+        const pending   = conges.filter(c=>c.statut==='en_attente').length;
+
+        document.getElementById('kpiChauffeurs').textContent        = chauffeurs.length;
+        document.getElementById('kpiHeures').textContent            = `${totalH.toFixed(0)}h`;
+        document.getElementById('kpiSupp').textContent              = `${totalSupp.toFixed(1)}h`;
+        document.getElementById('kpiAbsences').textContent          = Number.isInteger(absences) ? String(absences) : absences.toFixed(1);
+        document.getElementById('kpiCongesEnAttente').textContent   = pending;
+    }
+
+    /* ── DRIVER SUMMARY TABLE ── */
+    function renderDriverSummary(filter='') {
+        const list = filter ? chauffeurs.filter(c=>(c.nom||'').toLowerCase().includes(filter)||(c.prenom||'').toLowerCase().includes(filter)) : chauffeurs;
+        const tbody = document.getElementById('driverSummaryTable');
+        if(!list.length) {
+            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-ico">👤</div><div class="empty-txt">Aucun chauffeur</div></div></td></tr>`;
+            return;
+        }
+        tbody.innerHTML = list.map(c => {
+            const pts       = pointages.filter(p=>p.driver_id===c.id);
+            const joursWork = pts.filter(p=>p.heures_travaillees>0).length;
+            const heures    = pts.reduce((s,p)=>s+(parseFloat(p.heures_travaillees)||0),0);
+            const supp      = pts.reduce((s,p)=>s+(parseFloat(p.heures_supp)||0),0);
+            const solde     = soldes.find(s=>s.driver_id===c.id);
+            const vacances  = solde?.solde_vacances??20;
+            const cgsAtt    = conges.filter(g=>g.driver_id===c.id&&g.statut==='en_attente').length;
+            const pct       = Math.min(100, (joursWork / 22) * 100);
+            const initials  = ((c.prenom?.[0]||'')+(c.nom?.[0]||'')).toUpperCase();
+
+            return `<tr>
+                <td><div class="cell-user">
+                    <div class="avatar">${initials}</div>
+                    <div><div class="cell-main">${c.prenom||''} ${c.nom||''}</div><div class="cell-sub">${c.email||'—'}</div></div>
+                </div></td>
+                <td>
+                    <div style="font-weight:600">${joursWork}j</div>
+                    <div class="prog"><div class="prog-fill" style="width:${pct}%;background:var(--green)"></div></div>
+                </td>
+                <td style="font-weight:600">${heures.toFixed(1)}h</td>
+                <td>${supp>0?`<span style="color:var(--orange);font-weight:600">+${supp.toFixed(1)}h</span>`:'<span style="color:var(--muted)">0h</span>'}</td>
+                <td>
+                    <span style="font-weight:600">${vacances}j</span>
+                    <div class="prog"><div class="prog-fill" style="width:${Math.min(100,vacances/25*100)}%;background:var(--blue)"></div></div>
+                </td>
+                <td>${cgsAtt>0?`<span class="chip yellow">${cgsAtt} en attente</span>`:'<span class="chip muted">—</span>'}</td>
+                <td><div style="display:flex;gap:6px;">
+                    <button class="btn btn-ghost btn-sm" onclick="showFiche('${c.id}')"><i class="fas fa-id-card"></i></button>
+                    <button class="btn btn-ghost btn-sm" onclick="openSoldeModal('${c.id}','${c.prenom||''} ${c.nom||''}')"><i class="fas fa-edit"></i></button>
+                </div></td>
+            </tr>`;
+        }).join('');
+    }
+
+    window.filterDriverTable = function(q) { renderDriverSummary(q.toLowerCase()); };
+
+    /* ── CHARTS ── */
+    function renderCharts() {
+        Chart.defaults.color = 'rgba(255,255,255,0.38)';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+        Chart.defaults.font.family = "'Outfit', sans-serif";
+
+        // Heures par semaine (découpage du mois sélectionné en 5 plages de 7 jours)
+        const dim = new Date(currentYear, currentMonth, 0).getDate();
+        const labels = [], data = [];
+        for (let w = 0; w < 5; w++) {
+            const startD = w * 7 + 1;
+            const endD = Math.min((w + 1) * 7, dim);
+            if (startD > dim) break;
+            const h = pointages.filter(p => {
+                const parts = (p.date || '').split('-');
+                if (parts.length < 3) return false;
+                const py = parseInt(parts[0], 10), pm = parseInt(parts[1], 10), pd = parseInt(parts[2], 10);
+                if (py !== currentYear || pm !== currentMonth) return false;
+                return pd >= startD && pd <= endD;
+            }).reduce((s, p) => s + (parseFloat(p.heures_travaillees) || 0), 0);
+            labels.push(`J${startD}–${endD}`);
+            data.push(parseFloat(h.toFixed(1)));
+        }
+        if(charts.heures) charts.heures.destroy();
+        charts.heures = new Chart(document.getElementById('chartHeures'), {
+            type:'bar',
+            data:{ labels, datasets:[{ label:'Heures', data, backgroundColor:'rgba(59,130,246,0.7)', borderRadius:6, borderSkipped:false }] },
+            options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false}}, y:{grid:{color:'rgba(255,255,255,0.05)'},min:0} } }
+        });
+
+        // Absences donut (congés approuvés qui chevauchent le mois affiché)
+        const types = { vacances:0, maladie:0, compensation:0, autre:0 };
+        conges.filter(c => c.statut === 'approuve' && congeOverlapsMonth(c)).forEach(c => {
+            const t = c.type;
+            if (types[t] !== undefined) types[t] += (parseFloat(c.nb_jours) || 1);
+        });
+        if(charts.absences) charts.absences.destroy();
+        charts.absences = new Chart(document.getElementById('chartAbsences'), {
+            type:'doughnut',
+            data:{
+                labels:['Vacances','Maladie','Compensation','Autre'],
+                datasets:[{ data:Object.values(types), backgroundColor:['rgba(59,130,246,0.7)','rgba(232,49,26,0.7)','rgba(245,158,11,0.7)','rgba(168,85,247,0.7)'], borderWidth:0, hoverOffset:4 }]
+            },
+            options:{ responsive:true, maintainAspectRatio:false, cutout:'65%', plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8}}} }
+        });
+    }
+
+    /* ── POINTAGES TABLE ── */
+    window.loadPointages = function() {
+        const driverId = document.getElementById('filterDriverPt').value;
+        const dateVal  = document.getElementById('filterDatePt').value;
+        let list = [...pointages];
+        if(driverId) list = list.filter(p=>p.driver_id===driverId);
+        if(dateVal)  list = list.filter(p=>p.date===dateVal);
+
+        const tbody = document.getElementById('pointagesTable');
+        if(!list.length) {
+            tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-ico">🕐</div><div class="empty-txt">Aucun pointage</div></div></td></tr>`;
+            return;
+        }
+        tbody.innerHTML = list.map(p => {
+            const c = chauffeurs.find(x=>x.id===p.driver_id);
+            const name = c ? `${c.prenom||''} ${c.nom||''}` : '—';
+            const h  = parseFloat(p.heures_travaillees)||0;
+            const hs = parseFloat(p.heures_supp)||0;
+            const statut = p.statut==='termine'?'<span class="chip green">Terminé</span>':p.statut==='en_cours'?'<span class="chip blue">En cours</span>':p.statut==='pause'?'<span class="chip yellow">Pause</span>':'<span class="chip muted">—</span>';
+            return `<tr>
+                <td><div class="cell-user">
+                    <div class="avatar" style="font-size:11px;">${name.trim().split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2)}</div>
+                    <div class="cell-main">${name}</div>
+                </div></td>
+                <td style="color:var(--muted2)">${fmtDate(p.date)}</td>
+                <td style="color:var(--green)">${fmt(p.debut_travail)}</td>
+                <td style="color:var(--yellow)">${fmt(p.debut_pause)}</td>
+                <td style="color:var(--blue)">${fmt(p.fin_pause)}</td>
+                <td style="color:var(--red)">${fmt(p.fin_travail)}</td>
+                <td><strong>${h.toFixed(2)}h</strong></td>
+                <td>${hs>0?`<span style="color:var(--orange);font-weight:600">+${hs.toFixed(2)}h</span>`:'—'}</td>
+                <td>${statut}</td>
+            </tr>`;
+        }).join('');
+    };
+
+    /* ── CONGÉS ── */
+    window.loadConges = function() {
+        const driverId = document.getElementById('filterDriverCg').value;
+        const typeLabel = { vacances:'🏖️ Vacances', maladie:'🤒 Maladie', compensation:'⚖️ Compensation', autre:'📌 Autre' };
+
+        // En attente
+        const attente = conges.filter(c=>c.statut==='en_attente');
+        const tbodyA  = document.getElementById('congesAttente');
+        tbodyA.innerHTML = attente.length ? attente.map(c => {
+            const ch = chauffeurs.find(x=>x.id===c.driver_id);
+            const name = ch ? `${ch.prenom||''} ${ch.nom||''}` : '—';
+            return `<tr>
+                <td><div class="cell-user"><div class="avatar">${name.trim().slice(0,2).toUpperCase()}</div><div class="cell-main">${name}</div></div></td>
+                <td>${typeLabel[c.type]||c.type}</td>
+                <td style="color:var(--muted2)">${fmtDate(c.date_debut)} → ${fmtDate(c.date_fin)}</td>
+                <td><strong>${c.nb_jours||'?'}</strong> j</td>
+                <td style="color:var(--muted);font-size:12px;">${c.note||'—'}</td>
+                <td>
+                    <div class="conge-actions">
+                        <button class="btn btn-green btn-sm" onclick="approuverConge('${c.id}')"><i class="fas fa-check"></i> Approuver</button>
+                        <button class="btn btn-sm" style="background:rgba(232,49,26,0.15);color:var(--red);border:1px solid rgba(232,49,26,0.3);" onclick="refuserConge('${c.id}')"><i class="fas fa-times"></i> Refuser</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="6"><div class="empty-state"><div class="empty-ico">✅</div><div class="empty-txt">Aucune demande en attente</div></div></td></tr>`;
+
+        // Historique
+        let hist = conges.filter(c=>c.statut!=='en_attente');
+        if(driverId) hist = hist.filter(c=>c.driver_id===driverId);
+        const tbodyH = document.getElementById('congesHistorique');
+        tbodyH.innerHTML = hist.length ? hist.map(c => {
+            const ch = chauffeurs.find(x=>x.id===c.driver_id);
+            const name = ch ? `${ch.prenom||''} ${ch.nom||''}` : '—';
+            const stChip = c.statut==='approuve'?'<span class="chip green">Approuvé</span>':'<span class="chip red">Refusé</span>';
+            return `<tr>
+                <td><div class="cell-user"><div class="avatar">${name.trim().slice(0,2).toUpperCase()}</div><div class="cell-main">${name}</div></div></td>
+                <td>${typeLabel[c.type]||c.type}</td>
+                <td style="color:var(--muted2)">${fmtDate(c.date_debut)} → ${fmtDate(c.date_fin)}</td>
+                <td><strong>${c.nb_jours||'?'}</strong> j</td>
+                <td>${stChip}</td>
+                <td><button class="btn btn-ghost btn-sm" onclick="deleteConge('${c.id}')"><i class="fas fa-trash"></i></button></td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="6"><div class="empty-state"><div class="empty-ico">📅</div><div class="empty-txt">Aucun historique</div></div></td></tr>`;
+    };
+
+    /* ── APPROUVER / REFUSER CONGÉ ── */
+    window.approuverConge = async function(id) {
+        const c = conges.find(x=>x.id===id);
+        if(!c) return;
+        showLoad();
+        try {
+            const { error } = await db.from('conges').update({statut:'approuve'}).eq('id',id);
+            if(error) throw error;
+            // Déduire du solde vacances
+            if(c.type==='vacances'||c.type==='compensation') {
+                const col = c.type==='vacances' ? 'solde_vacances' : 'jours_comp';
+                const s = soldes.find(x=>x.driver_id===c.driver_id);
+                if(s) {
+                    const newVal = Math.max(0, (s[col]||0)-(c.nb_jours||0));
+                    await db.from('soldes_rh').update({[col]:newVal}).eq('driver_id',c.driver_id);
+                }
+            }
+            toast('success','Congé approuvé ✓');
+            await loadAll();
+            loadConges();
+        } catch(e) { toast('error',e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.refuserConge = function(id) {
+        document.getElementById('confirmIco').textContent   = '❌';
+        document.getElementById('confirmTitle').textContent = 'REFUSER LE CONGÉ';
+        document.getElementById('confirmText').textContent  = 'Cette demande sera marquée comme refusée.';
+        document.getElementById('confirmYes').onclick = async () => {
+            showLoad();
+            try {
+                const { error } = await db.from('conges').update({statut:'refuse'}).eq('id',id);
+                if(error) throw error;
+                toast('info','Congé refusé');
+                closeModal('modalConfirm');
+                await loadAll(); loadConges();
+            } catch(e) { toast('error',e.message); }
+            finally { hideLoad(); }
+        };
+        openModal('modalConfirm');
+    };
+
+    window.deleteConge = function(id) {
+        document.getElementById('confirmIco').textContent   = '🗑️';
+        document.getElementById('confirmTitle').textContent = 'SUPPRIMER';
+        document.getElementById('confirmText').textContent  = 'Supprimer cet enregistrement ?';
+        document.getElementById('confirmYes').onclick = async () => {
+            showLoad();
+            try {
+                const { error: delErr } = await db.from('conges').delete().eq('id',id);
+                if (delErr) throw delErr;
+                toast('success','Supprimé');
+                closeModal('modalConfirm');
+                await loadAll(); loadConges();
+            } catch(e) { toast('error',e.message); }
+            finally { hideLoad(); }
+        };
+        openModal('modalConfirm');
+    };
+
+    /* ── SOLDE MODAL ── */
+    window.openSoldeModal = function(driverId, name) {
+        const s = soldes.find(x=>x.driver_id===driverId)||{solde_vacances:20,jours_comp:0,heures_supp_total:0};
+        document.getElementById('soldeDriverId').value  = driverId;
+        document.getElementById('soldeDriverName').value= name;
+        document.getElementById('soldeVac').value        = s.solde_vacances||20;
+        document.getElementById('soldeComp').value       = s.jours_comp||0;
+        document.getElementById('soldeHSupp').value      = s.heures_supp_total||0;
+        openModal('modalSolde');
+    };
+
+    window.saveSolde = async function() {
+        const driverId = document.getElementById('soldeDriverId').value;
+        const vac  = parseFloat(document.getElementById('soldeVac').value)||0;
+        const comp = parseFloat(document.getElementById('soldeComp').value)||0;
+        const supp = parseFloat(document.getElementById('soldeHSupp').value)||0;
+        showLoad();
+        try {
+            const { error } = await db.from('soldes_rh').upsert([{
+                driver_id:driverId, solde_vacances:vac, jours_comp:comp, heures_supp_total:supp
+            }],{onConflict:'driver_id'});
+            if(error) throw error;
+            toast('success','Solde mis à jour ✓');
+            closeModal('modalSolde');
+            await loadAll();
+        } catch(e) { toast('error',e.message); }
+        finally { hideLoad(); }
+    };
+
+    /* ── FICHE CHAUFFEUR ── */
+    window.showFiche = function(driverId) {
+        const c   = chauffeurs.find(x=>x.id===driverId);
+        if(!c) return;
+        const pts  = pointages.filter(p=>p.driver_id===driverId);
+        const cgs  = conges.filter(g=>g.driver_id===driverId);
+        const s    = soldes.find(x=>x.driver_id===driverId)||{};
+        const totalH    = pts.reduce((sum,p)=>sum+(parseFloat(p.heures_travaillees)||0),0);
+        const totalSupp = pts.reduce((sum,p)=>sum+(parseFloat(p.heures_supp)||0),0);
+        const joursWork = pts.filter(p=>p.heures_travaillees>0).length;
+        const name  = `${c.prenom||''} ${c.nom||''}`.trim();
+
+        document.getElementById('ficheTitle').textContent = `FICHE — ${name.toUpperCase()}`;
+        document.getElementById('ficheContent').innerHTML = `
+            <!-- Stats -->
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+                <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--green)">${joursWork}</div>
+                    <div style="font-size:11px;color:var(--muted)">Jours travaillés</div>
+                </div>
+                <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--blue)">${totalH.toFixed(1)}h</div>
+                    <div style="font-size:11px;color:var(--muted)">Heures totales</div>
+                </div>
+                <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--orange)">${totalSupp.toFixed(1)}h</div>
+                    <div style="font-size:11px;color:var(--muted)">Heures supp.</div>
+                </div>
+                <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;">
+                    <div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--purple)">${s.solde_vacances||20}j</div>
+                    <div style="font-size:11px;color:var(--muted)">Solde vacances</div>
+                </div>
+            </div>
+            <!-- Derniers pointages -->
+            <div style="font-family:'Bebas Neue',cursive;font-size:14px;letter-spacing:1px;color:var(--muted2);margin-bottom:10px;">DERNIERS POINTAGES</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="background:var(--night3);">
+                    <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;">Date</th>
+                    <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;">Début</th>
+                    <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;">Fin</th>
+                    <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;">Heures</th>
+                    <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;">Supp.</th>
+                </tr></thead>
+                <tbody>
+                    ${pts.slice(0,8).map(p=>`
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:8px 12px;color:var(--muted2)">${fmtDate(p.date)}</td>
+                        <td style="padding:8px 12px;color:var(--green)">${fmt(p.debut_travail)}</td>
+                        <td style="padding:8px 12px;color:var(--red)">${fmt(p.fin_travail)}</td>
+                        <td style="padding:8px 12px;font-weight:600">${(parseFloat(p.heures_travaillees)||0).toFixed(2)}h</td>
+                        <td style="padding:8px 12px;color:var(--orange)">${parseFloat(p.heures_supp||0)>0?'+'+parseFloat(p.heures_supp).toFixed(2)+'h':'—'}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+        openModal('modalFiche');
+    };
+
+    /* ── FICHES GRID ── */
+    function renderFiches() {
+        const grid = document.getElementById('fichesGrid');
+        if(!chauffeurs.length) {
+            grid.innerHTML = `<div style="grid-column:1/-1"><div class="empty-state"><div class="empty-ico">👤</div><div class="empty-txt">Aucun chauffeur</div></div></div>`;
+            return;
+        }
+        grid.innerHTML = chauffeurs.map(c => {
+            const pts    = pointages.filter(p=>p.driver_id===c.id);
+            const h      = pts.reduce((s,p)=>s+(parseFloat(p.heures_travaillees)||0),0);
+            const supp   = pts.reduce((s,p)=>s+(parseFloat(p.heures_supp)||0),0);
+            const s      = soldes.find(x=>x.driver_id===c.id)||{};
+            const name   = `${c.prenom||''} ${c.nom||''}`.trim();
+            const initials = name.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
+            return `<div class="card" style="cursor:pointer;" onclick="showFiche('${c.id}')">
+                <div style="padding:24px;text-align:center;border-bottom:1px solid var(--border);">
+                    <div style="width:56px;height:56px;background:rgba(34,197,94,0.15);color:var(--green);border-radius:14px;display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:22px;margin:0 auto 12px;">${initials}</div>
+                    <div style="font-weight:700;font-size:15px;">${name}</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:3px;">${c.email||'—'}</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);">
+                    <div style="background:var(--night2);padding:14px 10px;text-align:center;">
+                        <div style="font-family:'Bebas Neue',cursive;font-size:20px;">${h.toFixed(0)}h</div>
+                        <div style="font-size:10px;color:var(--muted);">Ce mois</div>
+                    </div>
+                    <div style="background:var(--night2);padding:14px 10px;text-align:center;">
+                        <div style="font-family:'Bebas Neue',cursive;font-size:20px;color:var(--orange);">${supp.toFixed(1)}h</div>
+                        <div style="font-size:10px;color:var(--muted);">Supp.</div>
+                    </div>
+                    <div style="background:var(--night2);padding:14px 10px;text-align:center;">
+                        <div style="font-family:'Bebas Neue',cursive;font-size:20px;color:var(--blue);">${s.solde_vacances??20}j</div>
+                        <div style="font-size:10px;color:var(--muted);">Vacances</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    /* ── CONGÉS ATTENTE (pour overview) ── */
+    function renderCongesAttente() {
+        const pending = conges.filter(c=>c.statut==='en_attente').length;
+        document.getElementById('badgeConges').textContent = pending;
+    }
+
+    /* ── FICHES DE SALAIRE ── */
+    function escHtml(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    }
+    function fmtCHF(n) {
+        return (parseFloat(n) || 0).toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderFichesSalaire() {
+        const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const el = document.getElementById('salaireMonthNote');
+        if (el) el.textContent = months[currentMonth - 1] + ' ' + currentYear;
+        const tb = document.getElementById('salaireTable');
+        if (!tb) return;
+        if (!fichesSalaire.length) {
+            tb.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-ico">📋</div><div class="empty-txt">Aucune fiche pour ce mois. Créez-en une ou exécutez <code>rh_fiches_salaire_schema.sql</code> et <code>rh_employe_parametres_salaire_schema.sql</code> dans Supabase (SQL Editor) si les tables manquent.</div></div></td></tr>';
+            return;
+        }
+        tb.innerHTML = fichesSalaire.map(f => {
+            const emp = employesSalaire.find(e => e.id === f.employe_id);
+            const name = emp ? `${emp.prenom || ''} ${emp.nom || ''}`.trim() : '—';
+            const role = emp && emp.role === 'magasinier' ? 'Magasinier' : 'Chauffeur';
+            const isChauffeur = emp && emp.role === 'chauffeur';
+            return `<tr>
+                <td>${escHtml(name)}</td>
+                <td>${role}</td>
+                <td>${fmtCHF(f.salaire_brut)}</td>
+                <td style="font-weight:700;color:var(--green);">${fmtCHF(f.net_a_payer)}</td>
+                <td style="text-align:center;">
+                    ${isChauffeur ? `<button type="button" class="btn btn-ghost btn-sm" onclick="sendFicheToDriverApp('${f.id}')" title="Notifier l’app chauffeur"><i class="fas fa-mobile-alt"></i></button>` : '<span style="color:var(--muted);font-size:11px;">—</span>'}
+                </td>
+                <td>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="openSalaireModal('${f.id}')"><i class="fas fa-edit"></i></button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="printFicheSalaire('${f.id}')"><i class="fas fa-print"></i></button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="deleteFicheSalaire('${f.id}')"><i class="fas fa-trash" style="color:var(--red)"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function populateSalEmployeSelect() {
+        const sel = document.getElementById('salEmploye');
+        const hint = document.getElementById('salEmployeHint');
+        if (!sel) return;
+        const opts = employesSalaire.map(e => {
+            const label = `${e.prenom || ''} ${e.nom || ''}`.trim() || e.email || e.id;
+            return `<option value="${e.id}">${escHtml(label)}</option>`;
+        }).join('');
+        sel.innerHTML = '<option value="">— Choisir un employé —</option>' + opts;
+        if (hint) hint.style.display = employesSalaire.length ? 'none' : 'block';
+    }
+
+    function populateParamSalEmployeSelect() {
+        const sel = document.getElementById('paramSalEmploye');
+        if (!sel) return;
+        const opts = employesSalaire.map(e => {
+            const label = `${e.prenom || ''} ${e.nom || ''}`.trim() || e.email || e.id;
+            return `<option value="${e.id}">${escHtml(label)}</option>`;
+        }).join('');
+        sel.innerHTML = '<option value="">— Choisir —</option>' + opts;
+    }
+
+    window.applyTauxFromEmployeParams = function () {
+        const eid = document.getElementById('salEmploye').value;
+        const brut = parseFloat(document.getElementById('salBrut').value) || 0;
+        const p = paramSalaireByEmp.get(eid);
+        if (!eid || !p) return;
+        const pct = x => parseFloat(x) || 0;
+        const r = n => (Math.round(n * 100) / 100).toFixed(2);
+        if (!brut) {
+            document.getElementById('salAvs').value = r(0);
+            document.getElementById('salAc').value = r(0);
+            document.getElementById('salLpp').value = r(0);
+            document.getElementById('salIs').value = r(0);
+            document.getElementById('salAutres').value = r(0);
+            computeNetSalaire();
+            return;
+        }
+        const b = brut;
+        document.getElementById('salAvs').value = r(b * pct(p.taux_avs_ai_apg_pct) / 100);
+        document.getElementById('salAc').value = r(b * pct(p.taux_ac_pct) / 100);
+        document.getElementById('salLpp').value = r(b * pct(p.taux_lpp_pct) / 100);
+        document.getElementById('salIs').value = r(b * pct(p.taux_impot_source_pct) / 100);
+        document.getElementById('salAutres').value = r(b * pct(p.taux_autres_pct) / 100 + pct(p.autres_deduction_fixe_chf));
+        computeNetSalaire();
+    };
+
+    window.onParamSalEmployeChange = function () {
+        const eid = document.getElementById('paramSalEmploye').value;
+        if (!eid) {
+            document.getElementById('paramTauxAvs').value = '0';
+            document.getElementById('paramTauxAc').value = '0';
+            document.getElementById('paramTauxLpp').value = '0';
+            document.getElementById('paramTauxIs').value = '0';
+            document.getElementById('paramTauxAutres').value = '0';
+            document.getElementById('paramFixeAutres').value = '0';
+            document.getElementById('paramEmpNom').value = 'Colixo';
+            document.getElementById('paramEmpAdr').value = '';
+            document.getElementById('paramEmpAdrSal').value = '';
+            document.getElementById('paramIban').value = '';
+            document.getElementById('paramSalComment').value = '';
+            return;
+        }
+        const p = paramSalaireByEmp.get(eid);
+        if (!p) {
+            document.getElementById('paramTauxAvs').value = '0';
+            document.getElementById('paramTauxAc').value = '0';
+            document.getElementById('paramTauxLpp').value = '0';
+            document.getElementById('paramTauxIs').value = '0';
+            document.getElementById('paramTauxAutres').value = '0';
+            document.getElementById('paramFixeAutres').value = '0';
+            document.getElementById('paramEmpNom').value = 'Colixo';
+            document.getElementById('paramEmpAdr').value = '';
+            document.getElementById('paramEmpAdrSal').value = '';
+            document.getElementById('paramIban').value = '';
+            document.getElementById('paramSalComment').value = '';
+            return;
+        }
+        document.getElementById('paramEmpAdr').value = p.employeur_adresse || '';
+        document.getElementById('paramEmpAdrSal').value = p.employe_adresse || '';
+        document.getElementById('paramIban').value = p.iban || '';
+        document.getElementById('paramTauxAvs').value = p.taux_avs_ai_apg_pct ?? 0;
+        document.getElementById('paramTauxAc').value = p.taux_ac_pct ?? 0;
+        document.getElementById('paramTauxLpp').value = p.taux_lpp_pct ?? 0;
+        document.getElementById('paramTauxIs').value = p.taux_impot_source_pct ?? 0;
+        document.getElementById('paramTauxAutres').value = p.taux_autres_pct ?? 0;
+        document.getElementById('paramFixeAutres').value = p.autres_deduction_fixe_chf ?? 0;
+        document.getElementById('paramEmpNom').value = p.employeur_nom || 'Colixo';
+        document.getElementById('paramSalComment').value = p.commentaire || '';
+    };
+
+    window.openModalParamSalaireEmp = function () {
+        populateParamSalEmployeSelect();
+        const sel = document.getElementById('paramSalEmploye');
+        if (!sel) return;
+        if (sel.options.length > 1) sel.selectedIndex = 1;
+        else sel.selectedIndex = 0;
+        window.onParamSalEmployeChange();
+        openModal('modalParamSalaireEmp');
+    };
+
+    window.saveParamSalaireEmp = async function () {
+        const eid = document.getElementById('paramSalEmploye').value;
+        if (!eid) { toast('error', 'Choisissez un employé'); return; }
+        const row = {
+            employe_id: eid,
+            taux_avs_ai_apg_pct: parseFloat(document.getElementById('paramTauxAvs').value) || 0,
+            taux_ac_pct: parseFloat(document.getElementById('paramTauxAc').value) || 0,
+            taux_lpp_pct: parseFloat(document.getElementById('paramTauxLpp').value) || 0,
+            taux_impot_source_pct: parseFloat(document.getElementById('paramTauxIs').value) || 0,
+            taux_autres_pct: parseFloat(document.getElementById('paramTauxAutres').value) || 0,
+            autres_deduction_fixe_chf: parseFloat(document.getElementById('paramFixeAutres').value) || 0,
+            employeur_nom: document.getElementById('paramEmpNom').value.trim() || 'Colixo',
+            employeur_adresse: document.getElementById('paramEmpAdr').value.trim() || null,
+            employe_adresse: document.getElementById('paramEmpAdrSal').value.trim() || null,
+            iban: document.getElementById('paramIban').value.replace(/\s/g, '').trim() || null,
+            commentaire: document.getElementById('paramSalComment').value.trim() || null,
+            updated_at: new Date().toISOString()
+        };
+        showLoad();
+        try {
+            const { error } = await db.from('rh_employe_parametres_salaire').upsert(row, { onConflict: 'employe_id' });
+            if (error) throw error;
+            paramSalaireByEmp.set(eid, row);
+            closeModal('modalParamSalaireEmp');
+            toast('success', 'Taux enregistrés pour cet employé');
+        } catch (e) {
+            const msg = String(e.message || e || '').toLowerCase();
+            if (msg.includes('relation') || msg.includes('does not exist') || msg.includes('schema cache')) {
+                toast('error', 'Exécutez rh_employe_parametres_salaire_schema.sql dans Supabase (SQL Editor).');
+            } else {
+                toast('error', e.message || String(e));
+            }
+        } finally {
+            hideLoad();
+        }
+    };
+
+    const RH_LS_EMP_ADR = 'colixo_rh_employeur_adresse';
+
+    function lastDayOfMonthStr(y, m) {
+        return new Date(y, m, 0).toISOString().slice(0, 10);
+    }
+
+    function nl2brEscaped(s) {
+        if (s == null || s === '') return '';
+        return String(s).split('\n').map(function (line) { return escHtml(line); }).join('<br>');
+    }
+
+    /** HTML du bulletin (impression + même structure que l’app chauffeur) */
+    function buildFicheSalaireDocumentHtml(f, name) {
+        const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const brut = parseFloat(f.salaire_brut) || 0;
+        const pctTxt = function (amt) {
+            if (!brut || brut <= 0) return '';
+            const p = (parseFloat(amt) || 0) / brut * 100;
+            return ' <span style="color:#666;font-size:11px;">(' + p.toFixed(3).replace(/\.?0+$/, '') + ' % du brut)</span>';
+        };
+        const avs = parseFloat(f.cc_avs_ai_apg) || 0;
+        const ac = parseFloat(f.cc_ac) || 0;
+        const lpp = parseFloat(f.cc_lpp) || 0;
+        const is = parseFloat(f.impot_source) || 0;
+        const aut = parseFloat(f.autres_deductions) || 0;
+        const sumDed = avs + ac + lpp + is + aut;
+        const alloc = parseFloat(f.allocations_familiales_chf) || 0;
+        const remb = parseFloat(f.remboursement_frais_chf) || 0;
+        const primes = parseFloat(f.primes_autres_chf) || 0;
+        const sumAj = alloc + remb + primes;
+        const apres = brut - sumDed;
+        let optRows = '';
+        if (alloc > 0) optRows += '<tr><td>Allocations familiales</td><td>+ ' + fmtCHF(alloc) + '</td></tr>';
+        if (remb > 0) optRows += '<tr><td>Remboursement de frais</td><td>+ ' + fmtCHF(remb) + '</td></tr>';
+        if (primes > 0) optRows += '<tr><td>Prime / autres</td><td>+ ' + fmtCHF(primes) + '</td></tr>';
+        const emprAdrHtml = nl2brEscaped(f.employeur_adresse);
+        const empAdrHtml = nl2brEscaped(f.employe_adresse);
+        const dateBulletinTxt = f.date_bulletin
+            ? new Date(String(f.date_bulletin).slice(0, 10) + 'T12:00:00').toLocaleDateString('fr-CH')
+            : '—';
+        const ibanRaw = (f.iban_versement && String(f.iban_versement).replace(/\s/g, '')) || '';
+        const ibanDisp = ibanRaw ? escHtml(ibanRaw.replace(/(.{4})/g, '$1 ').trim()) : '';
+        return `
+            <h1 class="print-fs-title">Fiche de salaire</h1>
+            <p class="print-fs-sub">Date du bulletin : <strong>${escHtml(dateBulletinTxt)}</strong> · Période : ${escHtml(months[f.mois - 1] + ' ' + f.annee)}</p>
+            <div class="print-fs-addr-grid">
+                <div class="print-fs-addr-cell">
+                    <div class="lbl">Employeur</div>
+                    <div>${escHtml(f.employeur_nom || '—')}</div>
+                    <div style="margin-top:8px;color:#333;">${emprAdrHtml || '<span style="color:#999;">—</span>'}</div>
+                </div>
+                <div class="print-fs-addr-cell">
+                    <div class="lbl">Employé</div>
+                    <div>${escHtml(name)}</div>
+                    <div style="margin-top:8px;color:#333;">${empAdrHtml || '<span style="color:#999;">—</span>'}</div>
+                </div>
+            </div>
+            <table class="print-fs-table">
+                <tr><td>Salaire brut</td><td>${fmtCHF(f.salaire_brut)} CHF</td></tr>
+                <tr><td>AVS / AI / APG (part sal.)${pctTxt(avs)}</td><td>− ${fmtCHF(f.cc_avs_ai_apg)}</td></tr>
+                <tr><td>AC (part sal.)${pctTxt(ac)}</td><td>− ${fmtCHF(f.cc_ac)}</td></tr>
+                <tr><td>LPP (part sal.)${pctTxt(lpp)}</td><td>− ${fmtCHF(f.cc_lpp)}</td></tr>
+                <tr><td>Impôt à la source${pctTxt(is)}</td><td>− ${fmtCHF(f.impot_source)}</td></tr>
+                <tr><td>Autres déductions${pctTxt(aut)}</td><td>− ${fmtCHF(f.autres_deductions)}</td></tr>
+                <tr class="fs-muted"><td><em>Total charges</em></td><td><em>− ${fmtCHF(sumDed)}</em></td></tr>
+                <tr class="fs-muted"><td><em>Après charges</em></td><td><em>${fmtCHF(apres)} CHF</em></td></tr>
+                ${optRows}
+                ${sumAj > 0 ? '<tr class="fs-muted"><td><em>Total ajouts optionnels</em></td><td><em>+ ' + fmtCHF(sumAj) + '</em></td></tr>' : ''}
+                <tr class="fs-net"><td>Net à payer</td><td>${fmtCHF(f.net_a_payer)} CHF</td></tr>
+            </table>
+            ${ibanDisp ? '<div class="print-fs-iban"><strong>Versement sur IBAN</strong><br><span style="font-family:ui-monospace,monospace;letter-spacing:0.02em;">' + ibanDisp + '</span></div>' : ''}
+            ${f.notes ? '<p style="font-size:12px;color:#555;line-height:1.5;">' + escHtml(f.notes) + '</p>' : ''}
+            <p class="print-fs-foot">Document Colixo — à rapprocher des bulletins officiels.</p>`;
+    }
+
+    function fmtPctDuBrut(brut, amt) {
+        if (!brut || brut <= 0) return '(—)';
+        const p = (amt / brut) * 100;
+        const s = p.toFixed(3).replace(/\.?0+$/, '');
+        return '(' + s + ' % du brut)';
+    }
+
+    window.computeNetSalaire = function () {
+        const brut = parseFloat(document.getElementById('salBrut').value) || 0;
+        const avs = parseFloat(document.getElementById('salAvs').value) || 0;
+        const ac = parseFloat(document.getElementById('salAc').value) || 0;
+        const lpp = parseFloat(document.getElementById('salLpp').value) || 0;
+        const is = parseFloat(document.getElementById('salIs').value) || 0;
+        const aut = parseFloat(document.getElementById('salAutres').value) || 0;
+        const alloc = parseFloat(document.getElementById('salAlloc').value) || 0;
+        const remb = parseFloat(document.getElementById('salRemb').value) || 0;
+        const primes = parseFloat(document.getElementById('salPrimes').value) || 0;
+        const sumDed = avs + ac + lpp + is + aut;
+        const sumAj = alloc + remb + primes;
+        const net = brut - sumDed + sumAj;
+        document.getElementById('salNet').value = net.toFixed(2);
+        document.getElementById('salPctAvs').textContent = fmtPctDuBrut(brut, avs);
+        document.getElementById('salPctAc').textContent = fmtPctDuBrut(brut, ac);
+        document.getElementById('salPctLpp').textContent = fmtPctDuBrut(brut, lpp);
+        document.getElementById('salPctIs').textContent = fmtPctDuBrut(brut, is);
+        document.getElementById('salPctAutres').textContent = fmtPctDuBrut(brut, aut);
+        const elDed = document.getElementById('salValTotalDed');
+        const elApres = document.getElementById('salValApresCharges');
+        const elAj = document.getElementById('salValTotalAjouts');
+        if (elDed) elDed.textContent = sumDed.toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (elApres) elApres.textContent = (brut - sumDed).toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (elAj) elAj.textContent = sumAj.toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    window.openSalaireModal = function (id) {
+        const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        document.getElementById('salPeriodeLabel').textContent = months[currentMonth - 1] + ' ' + currentYear;
+        populateSalEmployeSelect();
+        document.getElementById('salBrut').value = '';
+        document.getElementById('salAvs').value = '0';
+        document.getElementById('salAc').value = '0';
+        document.getElementById('salLpp').value = '0';
+        document.getElementById('salIs').value = '0';
+        document.getElementById('salAutres').value = '0';
+        document.getElementById('salAlloc').value = '0';
+        document.getElementById('salRemb').value = '0';
+        document.getElementById('salPrimes').value = '0';
+        document.getElementById('salNotes').value = '';
+        document.getElementById('salNet').value = '0';
+        document.getElementById('salEmployeur').value = 'Colixo';
+        document.getElementById('salEmployeurAdr').value = '';
+        document.getElementById('salEmployeAdr').value = '';
+        document.getElementById('salIban').value = '';
+        try {
+            const ls = localStorage.getItem(RH_LS_EMP_ADR);
+            if (ls) document.getElementById('salEmployeurAdr').value = ls;
+        } catch (e) { /* ignore */ }
+        document.getElementById('salDateBulletin').value = lastDayOfMonthStr(currentYear, currentMonth);
+        document.getElementById('salId').value = '';
+        document.getElementById('salaireModalTitle').textContent = id ? 'MODIFIER FICHE DE SALAIRE' : 'NOUVELLE FICHE DE SALAIRE';
+        if (id) {
+            const f = fichesSalaire.find(x => x.id === id);
+            if (!f) { toast('error', 'Fiche introuvable'); return; }
+            document.getElementById('salId').value = f.id;
+            document.getElementById('salEmployeur').value = f.employeur_nom || 'Colixo';
+            document.getElementById('salEmployeurAdr').value = f.employeur_adresse || '';
+            document.getElementById('salEmployeAdr').value = f.employe_adresse || '';
+            document.getElementById('salDateBulletin').value = f.date_bulletin ? String(f.date_bulletin).slice(0, 10) : lastDayOfMonthStr(currentYear, currentMonth);
+            document.getElementById('salIban').value = f.iban_versement || '';
+            document.getElementById('salEmploye').value = f.employe_id;
+            document.getElementById('salBrut').value = f.salaire_brut != null ? f.salaire_brut : '';
+            document.getElementById('salAvs').value = f.cc_avs_ai_apg != null ? f.cc_avs_ai_apg : 0;
+            document.getElementById('salAc').value = f.cc_ac != null ? f.cc_ac : 0;
+            document.getElementById('salLpp').value = f.cc_lpp != null ? f.cc_lpp : 0;
+            document.getElementById('salIs').value = f.impot_source != null ? f.impot_source : 0;
+            document.getElementById('salAutres').value = f.autres_deductions != null ? f.autres_deductions : 0;
+            document.getElementById('salAlloc').value = f.allocations_familiales_chf != null ? f.allocations_familiales_chf : 0;
+            document.getElementById('salRemb').value = f.remboursement_frais_chf != null ? f.remboursement_frais_chf : 0;
+            document.getElementById('salPrimes').value = f.primes_autres_chf != null ? f.primes_autres_chf : 0;
+            document.getElementById('salNet').value = (parseFloat(f.net_a_payer) || 0).toFixed(2);
+            document.getElementById('salNotes').value = f.notes || '';
+        }
+        const salEmp = document.getElementById('salEmploye');
+        if (salEmp) {
+            if (id) {
+                salEmp.disabled = true;
+            } else {
+                salEmp.disabled = false;
+                salEmp.removeAttribute('disabled');
+            }
+        }
+        computeNetSalaire();
+        openModal('modalSalaire');
+    };
+
+    window.saveSalaire = async function () {
+        const eid = document.getElementById('salEmploye').value;
+        if (!eid) { toast('error', 'Choisissez un employé'); return; }
+        computeNetSalaire();
+        const payload = {
+            employe_id: eid,
+            annee: currentYear,
+            mois: currentMonth,
+            employeur_nom: document.getElementById('salEmployeur').value.trim() || 'Colixo',
+            employeur_adresse: document.getElementById('salEmployeurAdr').value.trim() || null,
+            employe_adresse: document.getElementById('salEmployeAdr').value.trim() || null,
+            date_bulletin: document.getElementById('salDateBulletin').value || null,
+            iban_versement: document.getElementById('salIban').value.replace(/\s/g, '').trim() || null,
+            salaire_brut: parseFloat(document.getElementById('salBrut').value) || 0,
+            cc_avs_ai_apg: parseFloat(document.getElementById('salAvs').value) || 0,
+            cc_ac: parseFloat(document.getElementById('salAc').value) || 0,
+            cc_lpp: parseFloat(document.getElementById('salLpp').value) || 0,
+            impot_source: parseFloat(document.getElementById('salIs').value) || 0,
+            autres_deductions: parseFloat(document.getElementById('salAutres').value) || 0,
+            allocations_familiales_chf: parseFloat(document.getElementById('salAlloc').value) || 0,
+            remboursement_frais_chf: parseFloat(document.getElementById('salRemb').value) || 0,
+            primes_autres_chf: parseFloat(document.getElementById('salPrimes').value) || 0,
+            net_a_payer: parseFloat(document.getElementById('salNet').value) || 0,
+            notes: document.getElementById('salNotes').value.trim() || null,
+            updated_at: new Date().toISOString()
+        };
+        const sid = document.getElementById('salId').value.trim();
+        showLoad();
+        try {
+            const { data: { session } } = await db.auth.getSession();
+            if (!sid) {
+                payload.created_by = session && session.user ? session.user.id : null;
+                const { error } = await db.from('rh_fiches_salaire').insert([payload]);
+                if (error) {
+                    if (String(error.message || '').toLowerCase().includes('duplicate') || error.code === '23505') {
+                        toast('error', 'Une fiche existe déjà pour cet employé et ce mois. Ouvrez-la depuis le tableau pour la modifier.');
+                    } else throw error;
+                }
+            } else {
+                const { error } = await db.from('rh_fiches_salaire').update(payload).eq('id', sid);
+                if (error) throw error;
+            }
+            closeModal('modalSalaire');
+            try {
+                const adr = document.getElementById('salEmployeurAdr').value.trim();
+                if (adr) localStorage.setItem(RH_LS_EMP_ADR, adr);
+            } catch (e) { /* ignore */ }
+            toast('success', 'Fiche enregistrée');
+            await loadAll();
+        } catch (e) {
+            toast('error', e.message || String(e));
+        } finally {
+            hideLoad();
+        }
+    };
+
+    window.deleteFicheSalaire = async function (fid) {
+        if (!fid || !confirm('Supprimer cette fiche de salaire ?')) return;
+        showLoad();
+        try {
+            const { error } = await db.from('rh_fiches_salaire').delete().eq('id', fid);
+            if (error) throw error;
+            toast('success', 'Supprimé');
+            await loadAll();
+        } catch (e) {
+            toast('error', e.message || String(e));
+        } finally {
+            hideLoad();
+        }
+    };
+
+    window.sendFicheToDriverApp = async function (fid) {
+        const f = fichesSalaire.find(x => x.id === fid);
+        if (!f) { toast('error', 'Fiche introuvable'); return; }
+        const emp = employesSalaire.find(e => e.id === f.employe_id);
+        if (!emp || emp.role !== 'chauffeur') {
+            toast('info', 'L’envoi sur l’app concerne les chauffeurs (Colixo Driver).');
+            return;
+        }
+        const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const periode = months[f.mois - 1] + ' ' + f.annee;
+        const net = fmtCHF(f.net_a_payer);
+        showLoad();
+        try {
+            const { error } = await db.from('notifications').insert([{
+                user_id: f.employe_id,
+                title: 'Fiche de salaire disponible',
+                body: periode + ' — Net à payer : ' + net + ' CHF. Ouvrez Mon espace RH → Fiches de salaire.',
+                data: JSON.stringify({ fiche_salaire_id: f.id }),
+                read: false
+            }]);
+            if (error) throw error;
+            toast('success', 'Notification envoyée sur l’app chauffeur');
+        } catch (e) {
+            const msg = String(e.message || e || '').toLowerCase();
+            if (msg.includes('policy') || msg.includes('permission') || msg.includes('row-level')) {
+                toast('error', 'Droits insuffisants sur la table notifications (RLS). Vérifiez les politiques Supabase.');
+            } else {
+                toast('error', e.message || String(e));
+            }
+        } finally {
+            hideLoad();
+        }
+    };
+
+    window.printFicheSalaire = function (fid) {
+        const f = fichesSalaire.find(x => x.id === fid);
+        if (!f) { toast('error', 'Fiche introuvable'); return; }
+        const emp = employesSalaire.find(e => e.id === f.employe_id);
+        const name = emp ? `${emp.prenom || ''} ${emp.nom || ''}`.trim() : '—';
+        const wrap = document.getElementById('printSalaireWrap');
+        wrap.innerHTML = '<div class="print-fs-doc">' + buildFicheSalaireDocumentHtml(f, name) + '</div>';
+        document.body.classList.add('print-salaire');
+        window.print();
+        setTimeout(function () { document.body.classList.remove('print-salaire'); }, 600);
+    };
+
+    /* ── PARAMS ── */
+    const RH_PARAMS_KEY = 'colixo_rh_params_v1';
+    window.openModalRHParams = function() {
+        try {
+            const raw = localStorage.getItem(RH_PARAMS_KEY);
+            if (raw) {
+                const p = JSON.parse(raw);
+                if (p.heuresJour != null) document.getElementById('paramHeuresJour').value = p.heuresJour;
+                if (p.joursVac != null) document.getElementById('paramJoursVac').value = p.joursVac;
+                if (p.tauxSupp != null) document.getElementById('paramTauxSupp').value = p.tauxSupp;
+            }
+        } catch (e) { /* ignore */ }
+        openModal('modalParams');
+    };
+    window.saveParams = function() {
+        const heuresJour = parseFloat(document.getElementById('paramHeuresJour').value) || 8.5;
+        const joursVac = parseInt(document.getElementById('paramJoursVac').value, 10) || 20;
+        const tauxSupp = parseFloat(document.getElementById('paramTauxSupp').value) || 25;
+        try {
+            localStorage.setItem(RH_PARAMS_KEY, JSON.stringify({ heuresJour, joursVac, tauxSupp }));
+        } catch (e) { /* ignore */ }
+        toast('success', 'Paramètres enregistrés sur cet appareil');
+        closeModal('modalParams');
+    };
+
+    /* ── EXPORT ── */
+    window.exportRH = function() {
+        const headers = ['Chauffeur','Email','Jours travaillés','Heures totales','Heures supp','Solde vacances'];
+        const rows = chauffeurs.map(c => {
+            const pts  = pointages.filter(p=>p.driver_id===c.id);
+            const h    = pts.reduce((s,p)=>s+(parseFloat(p.heures_travaillees)||0),0);
+            const supp = pts.reduce((s,p)=>s+(parseFloat(p.heures_supp)||0),0);
+            const jours= pts.filter(p=>p.heures_travaillees>0).length;
+            const s    = soldes.find(x=>x.driver_id===c.id)||{};
+            return [`${c.prenom||''} ${c.nom||''}`.trim(), c.email||'', jours, h.toFixed(2), supp.toFixed(2), s.solde_vacances||20];
+        });
+        const csv = [headers,...rows].map(r=>r.join(',')).join('\n');
+        const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `rh-colixo-${currentYear}-${String(currentMonth).padStart(2,'0')}.csv`;
+        a.click();
+    };
+
+    window.exportFiche = function() { toast('info','Export PDF — à implémenter'); };
+
+    /* ── Formulaire embauche ── */
+    window.resetEmbaucheForm = function () {
+        var f = document.getElementById('formEmbauche');
+        if (f) { f.reset(); toast('info', 'Formulaire réinitialisé'); }
+    };
+
+    window.printEmbaucheForm = function () {
+        document.body.classList.add('print-embauche');
+        window.print();
+        setTimeout(function () { document.body.classList.remove('print-embauche'); }, 800);
+    };
+
+    window.exportEmbaucheJSON = function () {
+        var form = document.getElementById('formEmbauche');
+        if (!form) return;
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            toast('error', 'Veuillez remplir les champs obligatoires');
+            return;
+        }
+        var obj = {};
+        var fd = new FormData(form);
+        fd.forEach(function (v, k) {
+            if (Object.prototype.hasOwnProperty.call(obj, k)) {
+                if (Array.isArray(obj[k])) obj[k].push(v);
+                else obj[k] = [obj[k], v];
+            } else {
+                obj[k] = v;
+            }
+        });
+        obj._export_meta = { type: 'colixo_formulaire_embauche', version: 1, exported_at: new Date().toISOString() };
+        var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'formulaire-embauche-' + new Date().toISOString().slice(0, 10) + '.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast('success', 'Fichier JSON téléchargé');
+    };
+
+    /* ── INIT ── */
+    init();
+})();
+</script>
+</body>
+</html>

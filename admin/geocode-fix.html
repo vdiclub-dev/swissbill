@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <title>Géocodage | Colixo Dispatch</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <style>
+        :root {
+            --red:#e8311a; --night:#0a0a0f; --night2:#111118; --night3:#18181f;
+            --surface:#1e1e28; --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+            --white:#ffffff; --muted:rgba(255,255,255,0.38); --muted2:rgba(255,255,255,0.6);
+            --green:#22c55e; --blue:#3b82f6; --yellow:#f59e0b; --orange:#f97316;
+        }
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);min-height:100vh;padding:32px;}
+        .topbar{display:flex;align-items:center;gap:12px;margin-bottom:32px;}
+        .logo{display:flex;align-items:center;gap:8px;font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;text-decoration:none;color:var(--white);}
+        .logo-mark{width:32px;height:32px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-size:15px;}
+        .logo em{color:var(--red);font-style:normal;}
+        .page-title{font-family:'Bebas Neue',cursive;font-size:28px;letter-spacing:2px;margin-bottom:6px;}
+        .page-sub{font-size:14px;color:var(--muted);margin-bottom:32px;}
+        .card{background:var(--night2);border:1px solid var(--border2);border-radius:18px;padding:28px;margin-bottom:20px;max-width:700px;}
+        .card-title{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;margin-bottom:16px;display:flex;align-items:center;gap:10px;}
+        .btn{font-family:'Outfit',sans-serif;font-weight:700;font-size:14px;padding:12px 24px;border-radius:10px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s;}
+        .btn-red{background:var(--red);color:var(--white);}
+        .btn-red:hover{filter:brightness(1.1);}
+        .btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border2);}
+        .btn-ghost:hover{color:var(--white);}
+        .btn:disabled{opacity:0.5;cursor:not-allowed;}
+        .progress-bar{height:6px;background:var(--border2);border-radius:100px;overflow:hidden;margin:12px 0;}
+        .progress-fill{height:100%;background:var(--green);border-radius:100px;transition:width 0.3s;width:0%;}
+        .log{background:var(--night3);border-radius:12px;padding:14px;max-height:300px;overflow-y:auto;font-size:12px;font-family:monospace;line-height:1.8;}
+        .log::-webkit-scrollbar{width:3px;}
+        .log::-webkit-scrollbar-thumb{background:var(--border2);}
+        .log-line{margin-bottom:2px;}
+        .log-line.ok{color:var(--green);}
+        .log-line.skip{color:var(--muted);}
+        .log-line.err{color:var(--orange);}
+        .log-line.info{color:var(--blue);}
+        .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+        .stat{background:var(--night3);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;}
+        .stat-val{font-family:'Bebas Neue',cursive;font-size:28px;letter-spacing:1px;}
+        .stat-lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+        .result-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--night3);margin-bottom:6px;font-size:13px;}
+        .result-ico{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;font-size:11px;flex-shrink:0;}
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <a href="dashboard.html" class="logo"><div class="logo-mark">🚚</div>Colixo <em>Dispatch</em></a>
+</div>
+
+<div class="page-title">GÉOCODAGE DES ADRESSES</div>
+<div class="page-sub">Met à jour les coordonnées GPS de tous les transports sans coordonnées.</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat"><div class="stat-val" id="statTotal" style="color:var(--white)">—</div><div class="stat-lbl">Total transports</div></div>
+    <div class="stat"><div class="stat-val" id="statManquant" style="color:var(--orange)">—</div><div class="stat-lbl">Sans coordonnées</div></div>
+    <div class="stat"><div class="stat-val" id="statOk" style="color:var(--green)">0</div><div class="stat-lbl">Géocodés</div></div>
+    <div class="stat"><div class="stat-val" id="statEchec" style="color:var(--red)">0</div><div class="stat-lbl">Échoués</div></div>
+</div>
+
+<!-- Actions -->
+<div class="card">
+    <div class="card-title"><i class="fas fa-satellite" style="color:var(--blue)"></i> Géocodage automatique</div>
+    <p style="font-size:13px;color:var(--muted2);margin-bottom:16px;line-height:1.6;">
+        Ce script va parcourir tous les transports sans coordonnées GPS et les géocoder via Nominatim (OpenStreetMap).<br>
+        <strong style="color:var(--yellow)">⏱ Durée estimée :</strong> <span id="dureeEstimee">—</span> (1 requête/seconde max)
+    </p>
+    <div style="display:flex;gap:10px;">
+        <button class="btn btn-red" id="btnStart" onclick="startGeocoding()">
+            <i class="fas fa-play"></i> Démarrer le géocodage
+        </button>
+        <button class="btn btn-ghost" id="btnStop" onclick="stopGeocoding()" disabled>
+            <i class="fas fa-stop"></i> Arrêter
+        </button>
+        <a href="dispatch.html" class="btn btn-ghost"><i class="fas fa-map"></i> Retour dispatch</a>
+    </div>
+
+    <!-- Progress -->
+    <div style="margin-top:20px;display:none;" id="progressSection">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+            <span id="progressLabel">En cours…</span>
+            <span id="progressPct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+</div>
+
+<!-- Log -->
+<div class="card">
+    <div class="card-title"><i class="fas fa-terminal" style="color:var(--muted2)"></i> Journal</div>
+    <div class="log" id="logEl">En attente…</div>
+</div>
+
+<!-- Résultats -->
+<div class="card" id="resultsCard" style="display:none;">
+    <div class="card-title"><i class="fas fa-check-circle" style="color:var(--green)"></i> Résultats</div>
+    <div id="resultsList"></div>
+</div>
+
+<script>
+(function() {
+    if(!window.SUPABASE_CONFIG) { document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>'; return; }
+    const db = window.SUPABASE_CLIENT;
+
+    let stopFlag = false;
+    let orders   = [];
+    let statOk   = 0;
+    let statEchec= 0;
+
+    const logEl = document.getElementById('logEl');
+
+    function log(msg, type='info') {
+        const line = document.createElement('div');
+        line.className = 'log-line ' + type;
+        line.textContent = `[${new Date().toLocaleTimeString('fr-CH')}] ${msg}`;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function geocode(addr) {
+        if(!addr) return null;
+        try {
+            const r = await fetch(
+                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr+', Suisse')}&format=json&limit=1`,
+                { headers: { 'Accept-Language':'fr', 'User-Agent':'ColixoDispatch/1.0' } }
+            );
+            const d = await r.json();
+            if(d[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon), display: d[0].display_name };
+        } catch(e) { log('Erreur réseau: ' + e.message, 'err'); }
+        return null;
+    }
+
+    async function loadOrders() {
+        const { data } = await db.from('transport_orders_simple')
+            .select('id, order_number, pickup_address, delivery_address, pickup_lat, pickup_lng, delivery_lat, delivery_lng')
+            .order('created_at', { ascending: false });
+        orders = data || [];
+
+        const total    = orders.length;
+        const manquant = orders.filter(o => !o.pickup_lat || !o.delivery_lat).length;
+
+        document.getElementById('statTotal').textContent    = total;
+        document.getElementById('statManquant').textContent = manquant;
+        document.getElementById('dureeEstimee').textContent = `~${Math.ceil(manquant * 1.2 / 60)} min (${manquant} adresses)`;
+
+        log(`${total} transports chargés — ${manquant} sans coordonnées`, 'info');
+        return manquant;
+    }
+
+    window.startGeocoding = async function() {
+        stopFlag = false;
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled  = false;
+        document.getElementById('progressSection').style.display = 'block';
+        document.getElementById('resultsCard').style.display = 'none';
+        logEl.innerHTML = '';
+        statOk = 0; statEchec = 0;
+        document.getElementById('statOk').textContent    = 0;
+        document.getElementById('statEchec').textContent = 0;
+
+        await loadOrders();
+        const toProcess = orders.filter(o => !o.pickup_lat || !o.delivery_lat);
+
+        if(!toProcess.length) {
+            log('✅ Tous les transports ont déjà des coordonnées !', 'ok');
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStop').disabled  = true;
+            return;
+        }
+
+        log(`Début du géocodage — ${toProcess.length} transports à traiter`, 'info');
+        const results = [];
+
+        for(let i = 0; i < toProcess.length; i++) {
+            if(stopFlag) { log('⛔ Arrêté par l\'utilisateur', 'err'); break; }
+
+            const o = toProcess[i];
+            const pct = Math.round((i / toProcess.length) * 100);
+            document.getElementById('progressFill').style.width  = pct + '%';
+            document.getElementById('progressPct').textContent   = pct + '%';
+            document.getElementById('progressLabel').textContent = `${i+1}/${toProcess.length} — ${o.order_number||o.id.slice(0,8)}`;
+
+            const updates = {};
+            let pickupOk = false, deliveryOk = false;
+
+            // Géocoder pickup si manquant
+            if(!o.pickup_lat && o.pickup_address) {
+                log(`🔍 Pickup: ${o.pickup_address.slice(0,50)}…`, 'info');
+                const c = await geocode(o.pickup_address);
+                if(c) {
+                    updates.pickup_lat = c.lat;
+                    updates.pickup_lng = c.lng;
+                    pickupOk = true;
+                    log(`  ✓ Pickup → ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`, 'ok');
+                } else {
+                    log(`  ✗ Pickup non trouvé`, 'err');
+                }
+                await new Promise(r=>setTimeout(r,1100)); // Nominatim 1/sec
+                if(stopFlag) break;
+            } else {
+                pickupOk = true;
+            }
+
+            // Géocoder delivery si manquant
+            if(!o.delivery_lat && o.delivery_address) {
+                log(`🔍 Delivery: ${o.delivery_address.slice(0,50)}…`, 'info');
+                const c = await geocode(o.delivery_address);
+                if(c) {
+                    updates.delivery_lat = c.lat;
+                    updates.delivery_lng = c.lng;
+                    deliveryOk = true;
+                    log(`  ✓ Delivery → ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`, 'ok');
+                } else {
+                    log(`  ✗ Delivery non trouvé`, 'err');
+                }
+                await new Promise(r=>setTimeout(r,1100));
+                if(stopFlag) break;
+            } else {
+                deliveryOk = true;
+            }
+
+            // Sauvegarder si des coordonnées ont été trouvées
+            if(Object.keys(updates).length) {
+                const { error } = await db.from('transport_orders_simple').update(updates).eq('id', o.id);
+                if(error) {
+                    log(`  ❌ Erreur sauvegarde: ${error.message}`, 'err');
+                    statEchec++;
+                } else {
+                    log(`  💾 ${o.order_number||o.id.slice(0,8)} sauvegardé ✓`, 'ok');
+                    statOk++;
+                    results.push({ order: o, ok: true, pickup: pickupOk, delivery: deliveryOk });
+                }
+            } else if(!o.pickup_lat && !o.delivery_lat) {
+                statEchec++;
+                results.push({ order: o, ok: false });
+            }
+
+            document.getElementById('statOk').textContent    = statOk;
+            document.getElementById('statEchec').textContent = statEchec;
+        }
+
+        // Terminé
+        document.getElementById('progressFill').style.width  = '100%';
+        document.getElementById('progressPct').textContent   = '100%';
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled  = true;
+
+        log(`\n✅ TERMINÉ — ${statOk} géocodés, ${statEchec} échecs`, 'ok');
+
+        // Afficher résultats
+        if(results.length) {
+            document.getElementById('resultsCard').style.display = 'block';
+            document.getElementById('resultsList').innerHTML = results.map(r => `
+                <div class="result-row">
+                    <div class="result-ico" style="background:${r.ok?'rgba(34,197,94,0.15)':'rgba(232,49,26,0.15)'};color:${r.ok?'var(--green)':'var(--red)'}">
+                        <i class="fas fa-${r.ok?'check':'times'}"></i>
+                    </div>
+                    <span style="font-weight:600;min-width:140px;">${r.order.order_number||r.order.id.slice(0,8)}</span>
+                    <span style="color:var(--muted);font-size:12px;flex:1;">${r.order.delivery_address?.slice(0,50)||'—'}</span>
+                    <span style="font-size:11px;color:${r.ok?'var(--green)':'var(--muted)'}">
+                        ${r.ok?`📍 ${r.pickup?'pickup ✓':'pickup ✗'} · ${r.delivery?'delivery ✓':'delivery ✗'}`:'Non trouvé'}
+                    </span>
+                </div>`).join('');
+        }
+    };
+
+    window.stopGeocoding = function() {
+        stopFlag = true;
+        document.getElementById('btnStop').disabled = true;
+    };
+
+    // Charger les stats au démarrage
+    loadOrders();
+})();
+</script>
+</body>
+</html>
