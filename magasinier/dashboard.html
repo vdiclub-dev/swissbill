@@ -1409,16 +1409,30 @@
                     transportsData.data?.forEach(transport => {
                         const key = transport.destinataire_nom + '|' + transport.destinataire_tel;
                         if (!allResults.find(r => r.key === key)) {
+                            // Parser l'adresse complète si disponible
+                            let pickupStreet = '', pickupPostal = '', pickupCity = '';
+                            
+                            if (transport.pickup_address) {
+                                const addressParts = transport.pickup_address.split(',');
+                                pickupStreet = addressParts[0] || '';
+                                if (addressParts[1]) {
+                                    const npaCity = addressParts[1].trim();
+                                    const npaCityParts = npaCity.split(' ');
+                                    pickupPostal = npaCityParts[0] || '';
+                                    pickupCity = npaCityParts.slice(1).join(' ') || '';
+                                }
+                            }
+                            
                             allResults.push({
                                 key: key,
                                 name: transport.destinataire_nom,
                                 phone: transport.destinataire_tel,
-                                pickupStreet: '', // Pas de structuration dans les anciens transports
-                                pickupPostal: '',
-                                pickupCity: '',
-                                deliveryStreet: '',
-                                deliveryPostal: '',
-                                deliveryCity: '',
+                                pickupStreet: pickupStreet,
+                                pickupPostal: pickupPostal,
+                                pickupCity: pickupCity,
+                                deliveryStreet: pickupStreet, // Même adresse pour livraison par défaut
+                                deliveryPostal: pickupPostal,
+                                deliveryCity: pickupCity,
                                 source: 'transport'
                             });
                         }
@@ -1462,11 +1476,17 @@
                                 deliveryPostal: client.deliveryPostal,
                                 deliveryCity: client.deliveryCity
                             }).replace(/"/g, '&quot;')})">
-                                <div class="search-result-name">${client.name} ${client.source === 'address' ? '📍' : ''}</div>
-                                <div class="search-result-phone">📞 ${client.phone}</div>
-                                <div class="search-result-address">
-                                    📍 ${client.pickupStreet || ''} ${client.pickupPostal || ''} ${client.pickupCity || ''}
+                                <div class="search-result-name">
+                                    <strong>${client.name}</strong> ${client.source === 'address' ? '📍' : '📦'}
                                 </div>
+                                <div class="search-result-phone">📞 ${client.phone}</div>
+                                ${client.pickupStreet || client.pickupPostal || client.pickupCity ? `
+                                    <div class="search-result-address">
+                                        <strong>📍 Enlèvement:</strong><br>
+                                        ${client.pickupStreet || 'Non spécifié'}<br>
+                                        ${client.pickupPostal || ''} ${client.pickupCity || ''}
+                                    </div>
+                                ` : '<div class="search-result-address">📍 Adresse non disponible</div>'}
                             </div>
                         `).join('');
                     }
@@ -1500,14 +1520,18 @@
             // Remplir les adresses structurées si disponibles
             if (client.pickupStreet) {
                 document.getElementById('pickupStreet').value = client.pickupStreet;
+                console.log('Rue enlèvement:', client.pickupStreet);
             }
             if (client.pickupPostal) {
                 document.getElementById('pickupPostal').value = client.pickupPostal;
+                console.log('NPA enlèvement:', client.pickupPostal);
             }
             if (client.pickupCity) {
                 document.getElementById('pickupCity').value = client.pickupCity;
+                console.log('Ville enlèvement:', client.pickupCity);
             }
             
+            // Remplir aussi l'adresse de livraison par défaut
             if (client.deliveryStreet) {
                 document.getElementById('deliveryStreet').value = client.deliveryStreet;
             }
@@ -1522,7 +1546,30 @@
             document.getElementById('clientSearchResults').classList.remove('active');
             document.getElementById('clientSearch').value = client.name;
             
-            // Afficher un message de confirmation
+            // Afficher un message de confirmation visible
+            const confirmationDiv = document.createElement('div');
+            confirmationDiv.style.cssText = `
+                background: #22c55e;
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+                margin: 10px 0;
+                text-align: center;
+                font-weight: bold;
+            `;
+            confirmationDiv.innerHTML = `✅ Client sélectionné : <strong>${client.name}</strong>`;
+            
+            // Insérer après le champ de recherche
+            const searchContainer = document.getElementById('clientSearch').parentElement;
+            searchContainer.appendChild(confirmationDiv);
+            
+            // Supprimer après 3 secondes
+            setTimeout(() => {
+                if (confirmationDiv.parentElement) {
+                    confirmationDiv.remove();
+                }
+            }, 3000);
+            
             console.log('Client sélectionné avec succès:', client.name);
         };
 
