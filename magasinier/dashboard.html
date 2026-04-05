@@ -1352,18 +1352,21 @@
             
             searchTimeout = setTimeout(async () => {
                 try {
+                    // Utiliser l'entreprise_id du magasinier ou fallback sur son ID
+                    const entrepriseId = currentUser.entreprise_id || currentUser.id;
+                    
                     // Rechercher dans les transports existants ET dans les adresses clients (tous ceux de la même entreprise)
                     const [transportsData, addressesData] = await Promise.all([
                         db
                             .from('transport_orders_simple')
                             .select('destinataire_nom, destinataire_tel, pickup_address, delivery_address')
-                            .eq('entreprise_id', currentUser.entreprise_id) // Tous les transports de l'entreprise
+                            .eq('entreprise_id', entrepriseId) // Tous les transports de l'entreprise
                             .or(`destinataire_nom.ilike.%${query}%,destinataire_tel.ilike.%${query}%`)
                             .limit(10),
                         db
                             .from('client_addresses')
                             .select('nom, telephone, adresse, npa, ville, entreprise_id')
-                            .eq('entreprise_id', currentUser.entreprise_id) // Tous les clients de l'entreprise
+                            .eq('entreprise_id', entrepriseId) // Tous les clients de l'entreprise
                             .or(`nom.ilike.%${query}%,telephone.ilike.%${query}%`)
                             .limit(10)
                     ]);
@@ -1730,7 +1733,7 @@
             
             const formData = {
                 order_number: 'MAG-' + Date.now(),
-                entreprise_id: currentUser.id,
+                entreprise_id: currentUser.entreprise_id || currentUser.id, // Utiliser entreprise_id si disponible, sinon l'ID du magasinier
                 pickup_address: `${document.getElementById('pickupStreet').value}, ${document.getElementById('pickupPostal').value} ${document.getElementById('pickupCity').value}`,
                 delivery_address: `${document.getElementById('deliveryStreet').value}, ${document.getElementById('deliveryPostal').value} ${document.getElementById('deliveryCity').value}`,
                 destinataire_nom: document.getElementById('clientName').value,
