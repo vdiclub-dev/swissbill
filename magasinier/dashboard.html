@@ -1337,7 +1337,7 @@
             document.getElementById('totalWeight').value = totalWeight.toFixed(2);
         }
 
-        // Recherche rapide de clients (toutes les adresses, pas seulement celles du magasinier)
+        // Recherche rapide de clients (uniquement ceux enregistrés par ce magasinier)
         let searchTimeout;
         document.getElementById('clientSearch')?.addEventListener('input', function(e) {
             clearTimeout(searchTimeout);
@@ -1352,25 +1352,26 @@
             
             searchTimeout = setTimeout(async () => {
                 try {
-                    // Rechercher dans les transports existants ET dans toutes les adresses clients (sans filtre client_id)
+                    // Rechercher dans les transports existants ET dans les adresses clients (uniquement ceux du magasinier)
                     const [transportsData, addressesData] = await Promise.all([
                         db
                             .from('transport_orders_simple')
                             .select('destinataire_nom, destinataire_tel, pickup_address, delivery_address')
+                            .eq('entreprise_id', currentUser.id) // Uniquement les transports de ce magasinier
                             .or(`destinataire_nom.ilike.%${query}%,destinataire_tel.ilike.%${query}%`)
                             .limit(10),
                         db
                             .from('client_addresses')
-                            .select('nom, telephone, adresse, npa, ville')
+                            .select('nom, telephone, adresse, npa, ville, created_by')
+                            .eq('created_by', currentUser.id) // Uniquement les adresses créées par ce magasinier
                             .or(`nom.ilike.%${query}%,telephone.ilike.%${query}%`)
-                            // SANS FILTRE client_id pour voir tous les clients
                             .limit(10)
                     ]);
                     
                     // Combiner les résultats
                     const allResults = [];
                     
-                    // Ajouter les clients des transports
+                    // Ajouter les clients des transports de ce magasinier uniquement
                     transportsData.data?.forEach(transport => {
                         const key = transport.destinataire_nom + '|' + transport.destinataire_tel;
                         if (!allResults.find(r => r.key === key)) {
@@ -1389,7 +1390,7 @@
                         }
                     });
                     
-                    // Ajouter les adresses de TOUS les clients (pas seulement celles du magasinier)
+                    // Ajouter les adresses des clients créées par ce magasinier uniquement
                     addressesData.data?.forEach(address => {
                         const key = address.nom + '|' + address.telephone;
                         const existing = allResults.find(r => r.key === key);
