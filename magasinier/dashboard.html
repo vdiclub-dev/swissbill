@@ -1337,7 +1337,7 @@
             document.getElementById('totalWeight').value = totalWeight.toFixed(2);
         }
 
-        // Recherche rapide de clients
+        // Recherche rapide de clients (même table que portal client)
         let searchTimeout;
         document.getElementById('clientSearch')?.addEventListener('input', function(e) {
             clearTimeout(searchTimeout);
@@ -1352,17 +1352,17 @@
             
             searchTimeout = setTimeout(async () => {
                 try {
-                    // Rechercher dans les transports existants ET dans la table clients
-                    const [transportsData, clientsData] = await Promise.all([
+                    // Rechercher dans les transports existants ET dans les adresses clients (même table que portal)
+                    const [transportsData, addressesData] = await Promise.all([
                         db
                             .from('transport_orders_simple')
-                            .select('destinataire_nom, phone, pickup_street, pickup_postal, pickup_city, delivery_street, delivery_postal, delivery_city')
-                            .or(`destinataire_nom.ilike.%${query}%,phone.ilike.%${query}%`)
+                            .select('destinataire_nom, destinataire_tel, pickup_address, delivery_address')
+                            .or(`destinataire_nom.ilike.%${query}%,destinataire_tel.ilike.%${query}%`)
                             .limit(10),
                         db
-                            .from('clients')
-                            .select('name, phone, pickup_street, pickup_postal, pickup_city, delivery_street, delivery_postal, delivery_city')
-                            .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
+                            .from('client_addresses')
+                            .select('nom, telephone, adresse, npa, ville')
+                            .or(`nom.ilike.%${query}%,telephone.ilike.%${query}%`)
                             .limit(10)
                     ]);
                     
@@ -1371,49 +1371,43 @@
                     
                     // Ajouter les clients des transports
                     transportsData.data?.forEach(transport => {
-                        const key = transport.destinataire_nom + '|' + transport.phone;
+                        const key = transport.destinataire_nom + '|' + transport.destinataire_tel;
                         if (!allResults.find(r => r.key === key)) {
                             allResults.push({
                                 key: key,
                                 name: transport.destinataire_nom,
-                                phone: transport.phone,
-                                pickupStreet: transport.pickup_street,
-                                pickupPostal: transport.pickup_postal,
-                                pickupCity: transport.pickup_city,
-                                deliveryStreet: transport.delivery_street,
-                                deliveryPostal: transport.delivery_postal,
-                                deliveryCity: transport.delivery_city,
+                                phone: transport.destinataire_tel,
+                                pickupStreet: '', // Pas de structuration dans les anciens transports
+                                pickupPostal: '',
+                                pickupCity: '',
+                                deliveryStreet: '',
+                                deliveryPostal: '',
+                                deliveryCity: '',
                                 source: 'transport'
                             });
                         }
                     });
                     
-                    // Ajouter les clients enregistrés
-                    clientsData.data?.forEach(client => {
-                        const key = client.name + '|' + client.phone;
+                    // Ajouter les adresses des clients (même table que portal)
+                    addressesData.data?.forEach(address => {
+                        const key = address.nom + '|' + address.telephone;
                         const existing = allResults.find(r => r.key === key);
                         if (!existing) {
+                            // Parser l'adresse complète
+                            const addressParts = (address.adresse || '').split(',');
+                            const street = addressParts[0] || '';
+                            
                             allResults.push({
                                 key: key,
-                                name: client.name,  // Utiliser 'name' pour les clients enregistrés
-                                phone: client.phone,
-                                pickupStreet: client.pickup_street,
-                                pickupPostal: client.pickup_postal,
-                                pickupCity: client.pickup_city,
-                                deliveryStreet: client.delivery_street,
-                                deliveryPostal: client.delivery_postal,
-                                deliveryCity: client.delivery_city,
-                                source: 'client'
-                            });
-                        } else {
-                            // Mettre à jour avec les données les plus complètes
-                            Object.assign(existing, {
-                                pickupStreet: existing.pickupStreet || client.pickup_street,
-                                pickupPostal: existing.pickupPostal || client.pickup_postal,
-                                pickupCity: existing.pickupCity || client.pickup_city,
-                                deliveryStreet: existing.deliveryStreet || client.delivery_street,
-                                deliveryPostal: existing.deliveryPostal || client.delivery_postal,
-                                deliveryCity: existing.deliveryCity || client.delivery_city
+                                name: address.nom,
+                                phone: address.telephone,
+                                pickupStreet: street,
+                                pickupPostal: address.npa || '',
+                                pickupCity: address.ville || '',
+                                deliveryStreet: street,
+                                deliveryPostal: address.npa || '',
+                                deliveryCity: address.ville || '',
+                                source: 'address'
                             });
                         }
                     });
@@ -1432,7 +1426,7 @@
                                 deliveryPostal: client.deliveryPostal,
                                 deliveryCity: client.deliveryCity
                             }).replace(/"/g, '&quot;')})">
-                                <div class="search-result-name">${client.name} ${client.source === 'client' ? '✓' : ''}</div>
+                                <div class="search-result-name">${client.name} ${client.source === 'address' ? '📍' : ''}</div>
                                 <div class="search-result-phone">${client.phone}</div>
                                 <div class="search-result-address">${client.pickupStreet || ''} ${client.pickupPostal || ''} ${client.pickupCity || ''}</div>
                             </div>
@@ -1521,31 +1515,54 @@
             }
         };
 
-        // Fonction pour trouver l'adresse du client
+        // Fonction pour trouver l'adresse du client (même table que portal)
         async function findClientAddress(name, phone) {
             try {
-                // Chercher d'abord dans la table clients
-                const { data: clientData, error: clientError } = await db
-                    .from('clients')
-                    .select('pickup_street, pickup_postal, pickup_city')
-                    .eq('phone', phone)
-                    .single();
+                // Chercher dans les adresses clients (même table que portal)
+                const { data: addressData, error: addressError } = await db
+                    .from('client_addresses')
+                    .select('adresse, npa, ville')
+                    .eq('telephone', phone)
+                    .eq('nom', name)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
 
-                if (!clientError && clientData) {
-                    return clientData;
+                if (!addressError && addressData && addressData.length > 0) {
+                    const address = addressData[0];
+                    // Parser l'adresse pour extraire la rue
+                    const addressParts = (address.adresse || '').split(',');
+                    const street = addressParts[0] || '';
+                    
+                    return {
+                        pickup_street: street,
+                        pickup_postal: address.npa || '',
+                        pickup_city: address.ville || ''
+                    };
                 }
 
-                // Si pas trouvé, chercher dans les transports
+                // Si pas trouvé, chercher dans les transports anciens
                 const { data: transportData, error: transportError } = await db
                     .from('transport_orders_simple')
-                    .select('pickup_street, pickup_postal, pickup_city')
-                    .eq('phone', phone)
+                    .select('pickup_address')
+                    .eq('destinataire_tel', phone)
                     .eq('destinataire_nom', name)
                     .order('created_at', { ascending: false })
                     .limit(1);
 
                 if (!transportError && transportData && transportData.length > 0) {
-                    return transportData[0];
+                    const address = transportData[0].pickup_address || '';
+                    const addressParts = address.split(',');
+                    const street = addressParts[0] || '';
+                    const npaCity = addressParts[1] || '';
+                    const npaCityParts = npaCity.trim().split(' ');
+                    const postal = npaCityParts[0] || '';
+                    const city = npaCityParts.slice(1).join(' ') || '';
+                    
+                    return {
+                        pickup_street: street,
+                        pickup_postal: postal,
+                        pickup_city: city
+                    };
                 }
 
                 return null;
