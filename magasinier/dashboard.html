@@ -634,6 +634,61 @@
             transform: scale(1.1);
         }
         
+        .client-search {
+            position: relative;
+        }
+        
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .search-results.active {
+            display: block;
+        }
+        
+        .search-result-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.2s ease;
+        }
+        
+        .search-result-item:hover {
+            background: var(--light);
+        }
+        
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .search-result-name {
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 4px;
+        }
+        
+        .search-result-phone {
+            font-size: 14px;
+            color: var(--gray);
+        }
+        
+        .search-result-address {
+            font-size: 12px;
+            color: var(--gray);
+            margin-top: 4px;
+        }
+        
         .btn-primary {
             width: 100%;
             padding: 16px 32px;
@@ -810,6 +865,15 @@
             </div>
             <div class="modal-body">
                 <form id="newTransportForm">
+                    <!-- Section Client avec recherche rapide -->
+                    <div class="form-group">
+                        <label class="form-label">Recherche rapide du client</label>
+                        <div class="client-search">
+                            <input type="text" class="form-input" id="clientSearch" placeholder="Tapez le nom ou téléphone du client...">
+                            <div id="clientSearchResults" class="search-results"></div>
+                        </div>
+                    </div>
+                    
                     <div class="form-group">
                         <label class="form-label">Nom du client</label>
                         <input type="text" class="form-input" id="clientName" required placeholder="Nom du client">
@@ -820,6 +884,7 @@
                         <input type="tel" class="form-input" id="clientPhone" required placeholder="+41 XX XXX XX XX">
                     </div>
                     
+                    <!-- Adresses -->
                     <div class="form-group">
                         <label class="form-label">Adresse d'enlèvement</label>
                         <div class="address-form">
@@ -842,24 +907,7 @@
                         </div>
                     </div>
                     
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">Poids (kg)</label>
-                            <input type="number" class="form-input" id="weight" required placeholder="0.0" step="0.1">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Type de marchandise</label>
-                            <select class="form-input" id="merchandiseType" required>
-                                <option value="">Sélectionnez...</option>
-                                <option value="colis">Colis</option>
-                                <option value="palette">Palette</option>
-                                <option value="document">Document</option>
-                                <option value="autre">Autre</option>
-                            </select>
-                        </div>
-                    </div>
-                    
+                    <!-- Colis (maintenant en premier) -->
                     <div class="form-group">
                         <label class="form-label">Gestion des colis</label>
                         <div id="colisContainer">
@@ -882,6 +930,24 @@
                         </button>
                     </div>
                     
+                    <!-- Type de marchandise et poids (maintenant après les colis) -->
+                    <div class="form-group">
+                        <label class="form-label">Type de marchandise</label>
+                        <select class="form-input" id="merchandiseType" required>
+                            <option value="">Sélectionnez...</option>
+                            <option value="colis">Colis</option>
+                            <option value="palette">Palette</option>
+                            <option value="document">Document</option>
+                            <option value="autre">Autre</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Poids total calculé</label>
+                        <input type="number" class="form-input" id="totalWeight" readonly placeholder="Calculé automatiquement" style="background: var(--light);">
+                    </div>
+                    
+                    <!-- Champs restants -->
                     <div class="form-group">
                         <label class="form-label">Description</label>
                         <textarea class="form-input" id="description" rows="3" placeholder="Description détaillée de la marchandise..."></textarea>
@@ -1116,13 +1182,14 @@
                 </div>
                 <div class="form-row">
                     <input type="text" class="form-input colis-reference" placeholder="Référence du colis" required>
-                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required>
+                    <input type="number" class="form-input colis-weight" placeholder="Poids (kg)" step="0.1" required onchange="updateTotalWeight()">
                 </div>
                 <input type="text" class="form-input colis-description" placeholder="Description du contenu">
             `;
             
             container.appendChild(newColis);
             updateRemoveButtons();
+            updateTotalWeight();
         };
 
         window.removeColis = function(button) {
@@ -1130,6 +1197,7 @@
             colisItem.remove();
             updateColisNumbers();
             updateRemoveButtons();
+            updateTotalWeight();
         };
 
         function updateColisNumbers() {
@@ -1166,6 +1234,106 @@
             
             return colisData;
         }
+
+        function updateTotalWeight() {
+            const colisData = getColisData();
+            const totalWeight = colisData.reduce((sum, colis) => sum + colis.poids, 0);
+            document.getElementById('totalWeight').value = totalWeight.toFixed(2);
+        }
+
+        // Recherche rapide de clients
+        let searchTimeout;
+        document.getElementById('clientSearch')?.addEventListener('input', function(e) {
+            clearTimeout(searchTimeout);
+            const query = e.target.value.trim();
+            const resultsDiv = document.getElementById('clientSearchResults');
+            
+            if (query.length < 2) {
+                resultsDiv.classList.remove('active');
+                resultsDiv.innerHTML = '';
+                return;
+            }
+            
+            searchTimeout = setTimeout(async () => {
+                try {
+                    // Rechercher dans les transports existants
+                    const { data: transports, error } = await db
+                        .from('transport_orders_simple')
+                        .select('destinataire_nom, client_phone, pickup_street, pickup_postal, pickup_city, delivery_street, delivery_postal, delivery_city')
+                        .or(`destinataire_nom.ilike.%${query}%,client_phone.ilike.%${query}%`)
+                        .limit(10);
+                    
+                    if (error) throw error;
+                    
+                    // Créer un dictionnaire de clients uniques
+                    const clientsMap = new Map();
+                    transports?.forEach(transport => {
+                        const key = transport.destinataire_nom + '|' + transport.client_phone;
+                        if (!clientsMap.has(key)) {
+                            clientsMap.set(key, {
+                                name: transport.destinataire_nom,
+                                phone: transport.client_phone,
+                                pickupStreet: transport.pickup_street,
+                                pickupPostal: transport.pickup_postal,
+                                pickupCity: transport.pickup_city,
+                                deliveryStreet: transport.delivery_street,
+                                deliveryPostal: transport.delivery_postal,
+                                deliveryCity: transport.delivery_city
+                            });
+                        }
+                    });
+                    
+                    const uniqueClients = Array.from(clientsMap.values());
+                    
+                    if (uniqueClients.length === 0) {
+                        resultsDiv.innerHTML = '<div class="search-result-item">Aucun client trouvé</div>';
+                    } else {
+                        resultsDiv.innerHTML = uniqueClients.map(client => `
+                            <div class="search-result-item" onclick="selectClient(${JSON.stringify(client).replace(/"/g, '&quot;')})">
+                                <div class="search-result-name">${client.name}</div>
+                                <div class="search-result-phone">${client.phone}</div>
+                                <div class="search-result-address">${client.pickupStreet || ''} ${client.pickupPostal || ''} ${client.pickupCity || ''}</div>
+                            </div>
+                        `).join('');
+                    }
+                    
+                    resultsDiv.classList.add('active');
+                    
+                } catch (error) {
+                    console.error('Erreur recherche client:', error);
+                }
+            }, 300);
+        });
+
+        // Sélection d'un client
+        window.selectClient = function(client) {
+            document.getElementById('clientName').value = client.name;
+            document.getElementById('clientPhone').value = client.phone;
+            
+            // Remplir les adresses si disponibles
+            if (client.pickupStreet) {
+                document.getElementById('pickupStreet').value = client.pickupStreet;
+                document.getElementById('pickupPostal').value = client.pickupPostal || '';
+                document.getElementById('pickupCity').value = client.pickupCity || '';
+            }
+            
+            if (client.deliveryStreet) {
+                document.getElementById('deliveryStreet').value = client.deliveryStreet;
+                document.getElementById('deliveryPostal').value = client.deliveryPostal || '';
+                document.getElementById('deliveryCity').value = client.deliveryCity || '';
+            }
+            
+            // Fermer les résultats
+            document.getElementById('clientSearchResults').classList.remove('active');
+            document.getElementById('clientSearch').value = '';
+        };
+
+        // Fermer les résultats au clic ailleurs
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.client-search')) {
+                document.getElementById('clientSearchResults').classList.remove('active');
+            }
+        });
 
         window.logout = async function() {
             await db.auth.signOut();
@@ -1249,8 +1417,16 @@
             }
         });
 
-        // Initialize
+        // Initialisation
         checkAuth();
+        
+        // Ajouter l'événement onchange pour le premier colis
+        document.addEventListener('DOMContentLoaded', function() {
+            const firstColisWeight = document.querySelector('.colis-weight');
+            if (firstColisWeight) {
+                firstColisWeight.addEventListener('change', updateTotalWeight);
+            }
+        });
     })();
     </script>
 </body>
