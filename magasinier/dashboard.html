@@ -1454,7 +1454,97 @@
             // Fermer les résultats
             document.getElementById('clientSearchResults').classList.remove('active');
             document.getElementById('clientSearch').value = '';
+            
+            // Vérifier le type d'enlèvement et remplir automatiquement
+            checkPickupType();
         };
+
+        // Vérifier et remplir l'adresse selon le type d'enlèvement
+        window.checkPickupType = function() {
+            const pickupType = document.querySelector('input[name="pickupType"]:checked').value;
+            const pickupStreet = document.getElementById('pickupStreet');
+            const pickupPostal = document.getElementById('pickupPostal');
+            const pickupCity = document.getElementById('pickupCity');
+            
+            if (pickupType === 'client') {
+                // Remplir avec l'adresse du client (si disponible)
+                const clientName = document.getElementById('clientName').value.trim();
+                const clientPhone = document.getElementById('clientPhone').value.trim();
+                
+                if (clientName && clientPhone) {
+                    // Chercher l'adresse du client dans la base
+                    findClientAddress(clientName, clientPhone).then(clientData => {
+                        if (clientData && clientData.pickup_street) {
+                            pickupStreet.value = clientData.pickup_street;
+                            pickupPostal.value = clientData.pickup_postal || '';
+                            pickupCity.value = clientData.pickup_city || '';
+                        }
+                    });
+                }
+            } else {
+                // Vider les champs pour enlèvement extérieur
+                if (!pickupStreet.hasAttribute('data-manual')) {
+                    pickupStreet.value = '';
+                    pickupPostal.value = '';
+                    pickupCity.value = '';
+                }
+            }
+        };
+
+        // Fonction pour trouver l'adresse du client
+        async function findClientAddress(name, phone) {
+            try {
+                // Chercher d'abord dans la table clients
+                const { data: clientData, error: clientError } = await db
+                    .from('clients')
+                    .select('pickup_street, pickup_postal, pickup_city')
+                    .eq('phone', phone)
+                    .single();
+
+                if (!clientError && clientData) {
+                    return clientData;
+                }
+
+                // Si pas trouvé, chercher dans les transports
+                const { data: transportData, error: transportError } = await db
+                    .from('transport_orders_simple')
+                    .select('pickup_street, pickup_postal, pickup_city')
+                    .eq('client_phone', phone)
+                    .eq('destinataire_nom', name)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (!transportError && transportData && transportData.length > 0) {
+                    return transportData[0];
+                }
+
+                return null;
+            } catch (error) {
+                console.error('Erreur recherche adresse client:', error);
+                return null;
+            }
+        }
+
+        // Marquer les champs comme modifiés manuellement
+        document.getElementById('pickupStreet')?.addEventListener('input', function() {
+            this.setAttribute('data-manual', 'true');
+        });
+
+        document.getElementById('pickupPostal')?.addEventListener('input', function() {
+            document.getElementById('pickupStreet').setAttribute('data-manual', 'true');
+        });
+
+        document.getElementById('pickupCity')?.addEventListener('input', function() {
+            document.getElementById('pickupStreet').setAttribute('data-manual', 'true');
+        });
+
+        // Écouter les changements de type d'enlèvement
+        document.addEventListener('DOMContentLoaded', function() {
+            const pickupTypeRadios = document.querySelectorAll('input[name="pickupType"]');
+            pickupTypeRadios.forEach(radio => {
+                radio.addEventListener('change', checkPickupType);
+            });
+        });
 
         // Enregistrement automatique d'un nouveau client
         window.registerNewClient = async function() {
