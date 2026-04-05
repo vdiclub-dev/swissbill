@@ -51,7 +51,7 @@ window.SUPABASE_CONFIG = {
 // Brimot — envoi d'emails : si la facturation est sur un domaine sans PHP (ex. GitHub Pages),
 // mettez l'URL absolue de send_mail.php sur l'hébergement qui exécute le PHP (ex. LWS).
 // Exemple : window.BRIMOT_SEND_MAIL_URL = 'https://votredomaine.ch/admin/brimot/send_mail.php';
-if (typeof window.BRIMOT_SEND_MAIL_URL === 'undefined') window.BRIMOT_SEND_MAIL_URL = 'https://colixo.lws-hosting.com/admin/brimot/send_mail.php';
+if (typeof window.BRIMOT_SEND_MAIL_URL === 'undefined') window.BRIMOT_SEND_MAIL_URL = 'https://www.colixo.ch/admin/brimot/send_mail.php';
 
 /** Stockage session auth : localStorage → sessionStorage → mémoire (Edge « Tracking Prevention », Safari strict, etc.). */
 function colixoAuthStorage() {
