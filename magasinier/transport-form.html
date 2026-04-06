@@ -459,20 +459,23 @@
         document.addEventListener('DOMContentLoaded', async function() {
             try {
                 // Vérifier la session
-                const { data: { session } } = await supabase.auth.getSession();
+                const { data: { session } } = await db.auth.getSession();
                 if (!session) {
                     window.location.href = '../login/index.html';
                     return;
                 }
                 
                 // Charger l'utilisateur
-                const { data: user } = await supabase
+                const { data: user } = await db
                     .from('utilisateurs')
                     .select('*')
                     .eq('id', session.user.id)
                     .single();
                 
                 currentUser = user;
+                
+                // Charger l'adresse d'enlèvement automatiquement
+                await loadPickupAddress();
                 
                 // Initialiser les événements
                 initEventListeners();
@@ -482,6 +485,45 @@
                 alert('Erreur lors du chargement');
             }
         });
+        
+        async function loadPickupAddress() {
+            if (!currentUser) return;
+            
+            try {
+                // Récupérer l'adresse de l'entreprise/du magasinier
+                if (currentUser.entreprise_id && currentUser.entreprise_id !== currentUser.id) {
+                    // Utilisateur d'entreprise → charger l'adresse de l'entreprise
+                    const { data: entreprise } = await db
+                        .from('entreprises')
+                        .select('adresse, npa, ville')
+                        .eq('id', currentUser.entreprise_id)
+                        .single();
+                    
+                    if (entreprise) {
+                        document.getElementById('pickupAddress').value = entreprise.adresse || '';
+                        document.getElementById('pickupNpa').value = entreprise.npa || '';
+                        document.getElementById('pickupVille').value = entreprise.ville || '';
+                    }
+                } else {
+                    // Utilisateur individuel → charger son adresse
+                    const { data: addresses } = await db
+                        .from('client_addresses')
+                        .select('adresse, npa, ville')
+                        .eq('created_by', currentUser.id)
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    
+                    if (addresses && addresses.length > 0) {
+                        const addr = addresses[0];
+                        document.getElementById('pickupAddress').value = addr.adresse || '';
+                        document.getElementById('pickupNpa').value = addr.npa || '';
+                        document.getElementById('pickupVille').value = addr.ville || '';
+                    }
+                }
+            } catch (error) {
+                console.error('Erreur chargement adresse enlèvement:', error);
+            }
+        }
         
         function initEventListeners() {
             // Formulaire
