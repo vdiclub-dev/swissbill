@@ -1,5 +1,5 @@
 // ============================================================
-//  config.js — Configuration Supabase pour Léman-Courses
+//  config.js — Configuration Supabase pour Colixo
 //  ⚠️  Ne jamais committer ce fichier dans un dépôt public !
 // ============================================================
 

@@ -4,7 +4,7 @@
 
 ### Project overview
 
-Colixo / Léman-Courses is a static web application (HTML/CSS/JS) for a transport & logistics dispatch platform. There is **no build step, no package manager, and no bundler**. The backend is entirely Supabase (cloud-hosted BaaS).
+Colixo is a static web application (HTML/CSS/JS) for a transport & logistics dispatch platform. There is **no build step, no package manager, and no bundler**. The backend is entirely Supabase (cloud-hosted BaaS).
 
 ### Running the dev server
 

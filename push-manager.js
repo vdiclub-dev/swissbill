@@ -71,7 +71,7 @@ async function showLocalNotification(title, body, options = {}) {
         icon:    '/icon-192.png',
         badge:   '/icon-72.png',
         vibrate: [200, 100, 200],
-        tag:     options.tag  || 'leman-notif',
+        tag:     options.tag  || 'colixo-notif',
         data:    options.data || {},
         requireInteraction: options.requireInteraction || false
     });
@@ -108,4 +108,4 @@ async function notifyDriver(driverId, title, body, data = {}) {
     } catch(e) {}
 })();
 
-window.LémanPush = { registerSW, subscribePush, showLocalNotification, notifyDriver };
+window.ColixoPush = { registerSW, subscribePush, showLocalNotification, notifyDriver };
