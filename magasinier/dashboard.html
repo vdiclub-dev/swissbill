@@ -1551,17 +1551,53 @@
 
         // Fonctions globales pour la modale
         window.showNewTransportModal = function() {
-            // Ouvrir le formulaire unifié dans une nouvelle fenêtre
-            const formWindow = window.open('transport-form.html', 'newTransport', 'width=800,height=900,scrollbars=yes,resizable=yes');
+            // Créer une modale avec iframe pour utiliser le contexte du dashboard
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
             
-            // Écouter la fermeture pour recharger les données
-            const checkClosed = setInterval(() => {
-                if (formWindow.closed) {
-                    clearInterval(checkClosed);
+            const iframe = document.createElement('iframe');
+            iframe.src = 'transport-form.html';
+            iframe.style.cssText = `
+                width: 90%;
+                max-width: 800px;
+                height: 90%;
+                max-height: 900px;
+                border: none;
+                border-radius: 12px;
+                box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+            `;
+            
+            modal.appendChild(iframe);
+            document.body.appendChild(modal);
+            
+            // Fermer au clic sur le fond
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
                     loadStats();
                     loadTransports();
                 }
-            }, 1000);
+            });
+            
+            // Écouter les messages de l'iframe
+            window.addEventListener('message', function(event) {
+                if (event.data === 'closeTransportForm') {
+                    document.body.removeChild(modal);
+                    loadStats();
+                    loadTransports();
+                }
+            });
         };
 
         window.hideNewTransportModal = function() {
