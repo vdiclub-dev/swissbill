@@ -3,14 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
     <title>Nouveau Transport | Colixo Dispatch</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../config.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
     <style>
         :root {
             --red:      #e8311a;
@@ -627,9 +631,14 @@
         const { data: { session } } = await db.auth.getSession();
         if (!session) { window.location.replace('../index.html'); return; }
         const { data: user } = await db.from('utilisateurs').select('role').eq('id', session.user.id).single();
-        if (!user || !['admin','super_admin'].includes(user.role)) {
+        if (!user || !['admin','super_admin','magasinier'].includes(user.role)) {
             await db.auth.signOut();
             window.location.replace('../index.html');
+        }
+        
+        // Masquer les prix pour les magasiniers
+        if (user.role === 'magasinier') {
+            hidePricesForMagasinier();
         }
     })();
 
@@ -664,9 +673,14 @@
     }
     function hideLoader() { loaderEl.classList.remove('on'); }
 
-    /* ── Date ── */
-    const now = new Date();
-    document.getElementById('orderDate').textContent = now.toLocaleDateString('fr-CH', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+    /* ── Hide prices for magasiniers ── */
+    function hidePricesForMagasinier() {
+        // Masquer la carte de prix complète
+        const priceCard = document.getElementById('priceCard');
+        if (priceCard) {
+            priceCard.style.display = 'none';
+        }
+    }
 
     /* ── Generate order number ── */
     async function generateOrderNumber() {
@@ -901,6 +915,12 @@
 
     /* ── PRICING ENGINE ── */
     function calculatePrice() {
+        // Vérifier si c'est un magasinier pour masquer les prix
+        const priceCard = document.getElementById('priceCard');
+        if (priceCard && priceCard.style.display === 'none') {
+            return; // Ne pas calculer si masqué pour magasinier
+        }
+        
         if (!routeData) return;
         const BASE    = 18;
         const PER_KM  = 1.80;

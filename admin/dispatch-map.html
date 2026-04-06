@@ -1,20 +1,23 @@
 <!DOCTYPE html>
-<!-- Colixo-DISPATCH-MAP-V3 -->
+<!-- colixo-build:20260419 | Colixo-DISPATCH-MAP-V6 -->
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Carte Dispatch | Colixo</title>
+    <title>Carte — Colixo Dispatch</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../config.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         html, body { width:100%; height:100%; overflow:hidden; background:#0a0a0f; }
+        .shell { display:flex; flex-direction:column; height:100vh; min-height:0; }
         :root {
             --red:#e8311a; --night:#0a0a0f; --night2:#111118; --night3:#18181f;
             --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
@@ -23,15 +26,48 @@
         }
         body { font-family:'Outfit',sans-serif; color:var(--white); }
 
+        /* TRANSPORTS — 3 colonnes pleine largeur, au-dessus du pied de page (stats) */
+        .transports-strip {
+            flex:0 0 auto;
+            display:grid;
+            grid-template-columns:repeat(3, minmax(0, 1fr));
+            grid-template-rows:minmax(160px, 1fr);
+            gap:10px;
+            min-height:200px;
+            max-height:min(42vh, 380px);
+            padding:10px 14px 12px;
+            border-top:1px solid var(--border2);
+            background:rgba(10,10,15,0.98);
+            z-index:5;
+        }
+        .transport-col {
+            min-width:0;
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+            overflow-y:auto;
+            overflow-x:hidden;
+            padding-right:4px;
+        }
+        .transport-col::-webkit-scrollbar { width:6px; }
+        .transport-col::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+        .transports-strip .tb2 {
+            width:100%;
+            max-width:none;
+            min-width:0;
+            flex:0 0 auto;
+        }
+
         /* MAP */
-        #map { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1; }
+        .map-wrap { flex:1; min-height:0; position:relative; z-index:1; }
+        #map { position:absolute; inset:0; width:100%; height:100%; z-index:1; }
         .leaflet-tile { filter:brightness(0.85) saturate(0.6) invert(1) hue-rotate(180deg); }
         .leaflet-container { background:#0a0a0f; }
         .leaflet-control-zoom { display:none; }
 
         /* TOPBAR */
         .topbar {
-            position:fixed; top:0; left:0; right:0; height:52px; z-index:1000;
+            flex:0 0 52px; position:relative; z-index:1000;
             background:rgba(10,10,15,0.9); backdrop-filter:blur(16px);
             border-bottom:1px solid var(--border2);
             display:flex; align-items:center; padding:0 20px; gap:12px;
@@ -47,7 +83,7 @@
 
         /* STATS BAR */
         .stats-bar {
-            position:fixed; bottom:0; left:0; right:0; height:52px; z-index:1000;
+            flex:0 0 52px; position:relative; z-index:1000;
             background:rgba(10,10,15,0.9); backdrop-filter:blur(16px);
             border-top:1px solid var(--border2);
             display:flex; align-items:center;
@@ -57,9 +93,9 @@
         .si-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; line-height:1; }
         .si-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:2px; }
 
-        /* CONTROLS */
+        /* CONTROLS (dans .map-wrap) */
         .ctrl {
-            position:fixed; top:64px; right:12px; z-index:1000;
+            position:absolute; top:12px; right:12px; z-index:1000;
             display:flex; flex-direction:column; gap:5px;
         }
         .cb {
@@ -77,7 +113,7 @@
 
         /* LEGEND */
         .legend {
-            position:fixed; bottom:64px; right:12px; z-index:1000;
+            position:absolute; bottom:12px; right:12px; z-index:1000;
             background:rgba(17,17,24,0.92); backdrop-filter:blur(10px);
             border:1px solid var(--border2); border-radius:10px;
             padding:10px 14px;
@@ -86,14 +122,6 @@
         .lr:last-child { margin:0; }
         .ldot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 
-        /* TOURS PANEL */
-        .tours-panel {
-            position:fixed; top:64px; left:12px; z-index:1000;
-            max-height:calc(100vh - 130px); overflow-y:auto;
-            display:flex; flex-direction:column; gap:6px;
-            pointer-events:none;
-        }
-        .tours-panel::-webkit-scrollbar { display:none; }
         .tb2 {
             background:rgba(17,17,24,0.92); backdrop-filter:blur(10px);
             border:1px solid var(--border2); border-radius:10px;
@@ -108,7 +136,7 @@
 
         /* PROGRESS */
         .geo-progress {
-            display:none; position:fixed; bottom:64px; left:50%; transform:translateX(-50%);
+            display:none; position:absolute; bottom:64px; left:50%; transform:translateX(-50%);
             background:rgba(17,17,24,0.96); backdrop-filter:blur(16px);
             border:1px solid var(--border2); border-radius:12px;
             padding:14px 24px; z-index:1001; min-width:300px; text-align:center;
@@ -120,7 +148,7 @@
 
         /* TOAST */
         .toast {
-            position:fixed; top:64px; left:50%; transform:translateX(-50%) translateY(-60px);
+            position:absolute; top:12px; left:50%; transform:translateX(-50%) translateY(-60px);
             padding:10px 18px; border-radius:100px; font-size:13px; font-weight:600;
             background:var(--night3); border:1px solid var(--border2);
             box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:2000;
@@ -130,12 +158,19 @@
         .toast.success { background:rgba(34,197,94,0.15); border-color:rgba(34,197,94,0.3); color:var(--green); }
         .toast.info    { background:rgba(59,130,246,0.15); border-color:rgba(59,130,246,0.3); color:var(--blue); }
         .toast.error   { background:rgba(232,49,26,0.15);  border-color:rgba(232,49,26,0.3);  color:var(--red); }
+
+        @media (max-width: 768px) {
+            .transports-strip {
+                grid-template-columns:1fr;
+                grid-template-rows:auto;
+                max-height:min(55vh, 480px);
+            }
+        }
     </style>
 </head>
 <body>
 
-<div class="toast" id="toast"></div>
-
+<div class="shell">
 <!-- TOPBAR -->
 <header class="topbar">
     <div class="logo"><div class="logo-mark">🚚</div>Colixo<em>-Dispatch</em></div>
@@ -144,6 +179,8 @@
 </header>
 
 <!-- MAP -->
+<div class="map-wrap">
+<div class="toast" id="toast"></div>
 <div id="map"></div>
 
 <!-- CONTROLS -->
@@ -165,14 +202,19 @@
     <div class="lr"><div class="ldot" style="background:var(--green)"></div>Livré</div>
 </div>
 
-<!-- TOURS PANEL -->
-<div class="tours-panel" id="toursPanel"></div>
-
 <!-- GEO PROGRESS -->
 <div class="geo-progress" id="geoProgress">
     <div class="gp-title"><i class="fas fa-satellite"></i> GÉOCODAGE</div>
     <div class="gp-bar-wrap"><div class="gp-bar" id="geoBar"></div></div>
     <div class="gp-label" id="geoLabel">Initialisation…</div>
+</div>
+</div>
+
+<!-- TRANSPORTS — 3 colonnes, pleine largeur, au-dessus du pied de page -->
+<div class="transports-strip" aria-label="Transports actifs">
+    <div class="transport-col" id="transportCol0"></div>
+    <div class="transport-col" id="transportCol1"></div>
+    <div class="transport-col" id="transportCol2"></div>
 </div>
 
 <!-- STATS BAR -->
@@ -183,6 +225,7 @@
     <div class="si"><div class="si-val" id="sPlanned" style="color:var(--blue)">0</div><div class="si-lbl">Planifiés</div></div>
     <div class="si"><div class="si-val" id="sTransit" style="color:var(--purple)">0</div><div class="si-lbl">En route</div></div>
     <div class="si"><div class="si-val" id="sDone"    style="color:var(--green)">0</div><div class="si-lbl">Livrés</div></div>
+</div>
 </div>
 
 <script>
@@ -202,6 +245,16 @@
     const geoCache = {};
     const SC = { pending:'#f59e0b', planned:'#3b82f6', urgent:'#f97316', in_transit:'#a855f7', delivered:'#22c55e' };
     const shortAddr = a => a ? a.split(',').slice(0,2).join(',').trim() : '—';
+    /** Vue par défaut : Suisse entière */
+    const CH_BOUNDS = [[45.82, 5.96], [47.81, 10.49]];
+    const CH_CENTER = [46.82, 8.23];
+
+    function esc(s) {
+        if(s == null || s === '') return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
 
     /* ── Clock ── */
     setInterval(() => {
@@ -220,8 +273,9 @@
     }
 
     /* ── Map ── */
-    const map = L.map('map', {zoomControl:false, attributionControl:false}).setView([46.7785, 6.6409], 9);
+    const map = L.map('map', {zoomControl:false, attributionControl:false}).setView(CH_CENTER, 8);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
+    try { map.fitBounds(CH_BOUNDS, {padding:[16,16]}); } catch(e) {}
 
     // Force resize after window load
     window.addEventListener('load', () => {
@@ -286,8 +340,45 @@
             mks[o.id] = mg;
         });
 
-        if(bounds.length > 1) { try { map.fitBounds(bounds, {padding:[60,60]}); } catch(e){} }
+        if(bounds.length > 1) { try { map.fitBounds(bounds, {padding:[50,50]}); } catch(e){} }
+        else { try { map.fitBounds(CH_BOUNDS, {padding:[16,16]}); } catch(e){} }
         renderStats();
+        renderTransportColumns();
+    }
+
+    function focusOrder(o) {
+        const pts = [];
+        if(o.pickup_lat && o.pickup_lng) pts.push([o.pickup_lat, o.pickup_lng]);
+        if(o.delivery_lat && o.delivery_lng) pts.push([o.delivery_lat, o.delivery_lng]);
+        if(pts.length === 1) map.setView(pts[0], Math.max(map.getZoom(), 12));
+        else if(pts.length === 2) map.fitBounds(pts, {padding:[72,72], maxZoom:14});
+        else toast('info', 'Pas encore de GPS pour ce transport');
+    }
+
+    function renderTransportColumns() {
+        const ids = ['transportCol0','transportCol1','transportCol2'];
+        const cols = ids.map(id => document.getElementById(id));
+        const active = allOrders.filter(o => o.status !== 'delivered');
+        cols.forEach(c => { c.innerHTML = ''; });
+        const chauf = window._chauffeurs || [];
+        active.forEach((o, i) => {
+            const color = SC[o.priority==='urgent'?'urgent':(o.status||'pending')] || SC.pending;
+            const div = document.createElement('div');
+            div.className = 'tb2';
+            div.title = (o.order_number || '') + ' — cliquer pour centrer';
+            div.onclick = () => focusOrder(o);
+            let chauffeur = '';
+            if(o.driver_id) {
+                const u = chauf.find(x => x.id === o.driver_id);
+                if(u) chauffeur = [u.prenom, u.nom].filter(Boolean).join(' ').trim();
+            }
+            div.innerHTML =
+                '<div class="tb2-name"><span class="tb2-dot" style="background:' + color + '"></span>' + esc(o.order_number || '—') + '</div>' +
+                '<div class="tb2-info">📍 ' + esc(shortAddr(o.pickup_address)) + '</div>' +
+                '<div class="tb2-info">🏁 ' + esc(shortAddr(o.delivery_address)) + '</div>' +
+                (chauffeur ? '<div class="tb2-meta">' + esc(chauffeur) + '</div>' : '');
+            cols[i % 3].appendChild(div);
+        });
     }
 
     /* ── Stats ── */
@@ -304,7 +395,8 @@
     window.fitAll = function() {
         const b = [[46.7785,6.6409]];
         allOrders.forEach(o=>{if(o.pickup_lat)b.push([o.pickup_lat,o.pickup_lng]);if(o.delivery_lat)b.push([o.delivery_lat,o.delivery_lng]);});
-        if(b.length>1) map.fitBounds(b, {padding:[60,60]});
+        if(b.length>1) map.fitBounds(b, {padding:[50,50]});
+        else { try { map.fitBounds(CH_BOUNDS, {padding:[16,16]}); } catch(e){} }
     };
 
     /* ── Routes ── */

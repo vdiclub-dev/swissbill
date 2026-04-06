@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS brimot_clients (
     telephone   text,
     website     text,
     adresse     text,           -- Rue et numéro (ex: Route de Berne 14)
+    adresse_ligne2 text,        -- Complément (boîte, étage, bâtiment…)
     npa         text,           -- Code postal (ex: 1010) — OBLIGATOIRE pour QR
     ville       text,           -- Ville (ex: Lausanne)   — OBLIGATOIRE pour QR
     pays        text DEFAULT 'CH',
@@ -27,6 +28,7 @@ ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS npa      text;
 ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS pays     text DEFAULT 'CH';
 ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS civilite text;   -- M. / Mme / Société
 ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS website  text;
+ALTER TABLE brimot_clients ADD COLUMN IF NOT EXISTS adresse_ligne2 text;
 
 -- ── Produits / Services ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS brimot_produits (
@@ -62,9 +64,18 @@ CREATE TABLE IF NOT EXISTS brimot_factures (
     montant_tva     numeric(12,2) DEFAULT 0,
     montant_ttc     numeric(12,2) DEFAULT 0,
     notes           text,
+    paiement_echelonne boolean DEFAULT false,
+    acompte_pct     numeric(5,2) DEFAULT 0,
+    nb_paiements    integer DEFAULT 1,
+    frequence_paiement text DEFAULT 'mensuel',
     created_at      timestamptz DEFAULT now(),
     updated_at      timestamptz DEFAULT now()
 );
+ALTER TABLE brimot_factures ADD COLUMN IF NOT EXISTS paiement_echelonne boolean DEFAULT false;
+ALTER TABLE brimot_factures ADD COLUMN IF NOT EXISTS acompte_pct numeric(5,2) DEFAULT 0;
+ALTER TABLE brimot_factures ADD COLUMN IF NOT EXISTS nb_paiements integer DEFAULT 1;
+ALTER TABLE brimot_factures ADD COLUMN IF NOT EXISTS frequence_paiement text DEFAULT 'mensuel';
+ALTER TABLE brimot_factures ADD COLUMN IF NOT EXISTS email_envoye_at timestamptz;
 
 -- ── Lignes de facture ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS brimot_lignes (

@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
     <title>Facture — Brimot Nettoyage</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- QR Code Swiss Payment Standard — fichier local (évite blocage CDN) -->
@@ -255,56 +259,6 @@ function fmtDateIntervention(d) {
     if (isNaN(parsed.getTime())) return '';
     return fmtDate(parsed.toISOString().slice(0, 10));
 }
-var SB_META_PREFIX = '##SBMETA##';
-function parseMetaTaggedNotes(rawText) {
-    var raw = String(rawText || '');
-    var lines = raw.split(/\r?\n/);
-    var textLines = [];
-    var meta = {};
-    lines.forEach(function(line) {
-        var trimmed = String(line || '').trim();
-        if (!trimmed.startsWith(SB_META_PREFIX)) {
-            textLines.push(line);
-            return;
-        }
-        var payload = trimmed.slice(SB_META_PREFIX.length).trim();
-        var idx = payload.indexOf('=');
-        if (idx <= 0) return;
-        var key = payload.slice(0, idx).trim();
-        var val = payload.slice(idx + 1).trim();
-        if (key && val) meta[key] = val;
-    });
-    return { text: textLines.join('\n').trim(), meta: meta };
-}
-function parseAddressString(rawAddress) {
-    var txt = String(rawAddress || '').trim();
-    if (!txt) return { address: '', postal: '', city: '', country: 'CH' };
-    var parts = txt.split(',');
-    if (parts.length === 1) return { address: txt, postal: '', city: '', country: 'CH' };
-    var address = parts[0].trim();
-    var cityPart = parts.slice(1).join(',').trim();
-    var m = cityPart.match(/(\d{4,6})\s+(.+)/);
-    if (m) return { address: address, postal: m[1].trim(), city: m[2].trim(), country: 'CH' };
-    return { address: address, postal: '', city: cityPart, country: 'CH' };
-}
-function addressLabel(addrObj) {
-    var a = addrObj || {};
-    return [a.address || '', [a.postal || '', a.city || ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-}
-function getFactureInterventionAddress(f, c) {
-    var parsed = parseMetaTaggedNotes((f && f.notes) || '');
-    var raw = String((parsed.meta || {}).intervention || '').trim();
-    if (raw) return parseAddressString(raw);
-    return {
-        address: (c && c.adresse) || '',
-        postal: (c && c.npa) || '',
-        city: (c && c.ville) || '',
-        country: ((c && c.pays) || 'CH')
-    };
-}
-function getFactureDisplayNotes(f) {
-    return parseMetaTaggedNotes((f && f.notes) || '').text || '';
-}
 
 /* ─── Lire les donnees depuis le hash ─── */
 function getDataFromHash() {
@@ -320,12 +274,80 @@ function getDataFromHash() {
     }
 }
 
+function buildPaiementPlanData(ttc, acomptePctRaw, nbPaiementsRaw) {
+    var total = Number(ttc || 0);
+    var acomptePct = Math.min(100, Math.max(0, Number(acomptePctRaw || 0)));
+    var nbPaiements = Math.max(1, parseInt(nbPaiementsRaw || 1, 10));
+    var acompteMontant = Number((total * acomptePct / 100).toFixed(2));
+    var reste = Number((total - acompteMontant).toFixed(2));
+    var unitaire = nbPaiements > 0 ? Number((reste / nbPaiements).toFixed(2)) : 0;
+    var dernier = Number((reste - unitaire * (nbPaiements - 1)).toFixed(2));
+    return { acomptePct: acomptePct, acompteMontant: acompteMontant, nbPaiements: nbPaiements, unitaire: unitaire, dernier: dernier };
+}
+
+function buildPaiementScheduleLines(f) {
+    if (!f || !f.paiement_echelonne) return [];
+    var plan = buildPaiementPlanData(f.montant_ttc || 0, f.acompte_pct || 0, f.nb_paiements || 1);
+    var freq = f.frequence_paiement || 'mensuel';
+    var baseDate = f.echeance ? new Date(f.echeance + 'T12:00:00') : new Date();
+    if (Number.isNaN(baseDate.getTime())) return [];
+    var lines = [];
+    lines.push('Acompte (' + plan.acomptePct + '%) : ' + plan.acompteMontant.toFixed(2) + ' CHF (a la commande)');
+    for (var i = 0; i < plan.nbPaiements; i++) {
+        var d = new Date(baseDate);
+        if (freq === 'hebdo') d.setDate(d.getDate() + (i * 7));
+        else if (freq === 'bimensuel') d.setDate(d.getDate() + (i * 14));
+        else d.setMonth(d.getMonth() + i);
+        var montant = i === plan.nbPaiements - 1 ? plan.dernier : plan.unitaire;
+        lines.push('Paiement ' + (i + 1) + '/' + plan.nbPaiements + ' : ' + montant.toFixed(2) + ' CHF - echeance ' + fmtDate(d.toISOString()));
+    }
+    return lines;
+}
+
+function buildPaiementScheduleData(f) {
+    if (!f) return [];
+    if (!f.paiement_echelonne) {
+        return [{
+            idx: 1,
+            label: 'Paiement unique',
+            amount: Number(f.montant_ttc || 0),
+            dateText: f.echeance ? fmtDate(f.echeance) : '',
+            msg: ('Facture ' + (f.numero || '')).trim().slice(0, 140),
+            refSeed: (f.numero || f.id || 'FAC') + '01'
+        }];
+    }
+    var plan = buildPaiementPlanData(f.montant_ttc || 0, f.acompte_pct || 0, f.nb_paiements || 1);
+    var freq = f.frequence_paiement || 'mensuel';
+    var baseDate = f.echeance ? new Date(f.echeance + 'T12:00:00') : new Date();
+    var rows = [{
+        idx: 1,
+        label: 'Acompte ' + plan.acomptePct + '%',
+        amount: Number(plan.acompteMontant || 0),
+        dateText: 'a la commande',
+        msg: ('Facture ' + (f.numero || '') + ' - Acompte').slice(0, 140),
+        refSeed: (f.numero || f.id || 'FAC') + '01'
+    }];
+    for (var i = 0; i < plan.nbPaiements; i++) {
+        var d = new Date(baseDate);
+        if (freq === 'hebdo') d.setDate(d.getDate() + (i * 7));
+        else if (freq === 'bimensuel') d.setDate(d.getDate() + (i * 14));
+        else d.setMonth(d.getMonth() + i);
+        var amount = i === plan.nbPaiements - 1 ? plan.dernier : plan.unitaire;
+        rows.push({
+            idx: i + 2,
+            label: 'Paiement ' + (i + 1) + '/' + plan.nbPaiements,
+            amount: Number(amount || 0),
+            dateText: fmtDate(d.toISOString()),
+            msg: ('Facture ' + (f.numero || '') + ' - Echeance ' + (i + 1) + '/' + plan.nbPaiements).slice(0, 140),
+            refSeed: (f.numero || f.id || 'FAC') + String(i + 2).padStart(2, '0')
+        });
+    }
+    return rows.filter(function(r){ return r.amount > 0; });
+}
+
 /* ─── Rendu facture ─── */
 function renderInvoice(f, lignes) {
     var c = f.brimot_clients || {};
-    var debAddr = getFactureInterventionAddress(f, c);
-    var worksiteLabel = addressLabel(debAddr);
-    var visibleNotes = getFactureDisplayNotes(f);
     var isDevis = f.type === 'devis';
     var color   = isDevis ? '#f59e0b' : '#0ea5e9';
     var title   = isDevis ? 'DEVIS' : 'FACTURE';
@@ -358,12 +380,18 @@ function renderInvoice(f, lignes) {
     if (c.nom)      addrClient += '<div class="cname">' + esc(c.nom) + '</div>';
     if (c.contact)  addrClient += '<div class="cline">' + esc(c.contact) + '</div>';
     if (c.adresse)  addrClient += '<div class="cline">' + esc(c.adresse) + '</div>';
+    if (c.adresse_ligne2) addrClient += '<div class="cline">' + esc(c.adresse_ligne2) + '</div>';
     if (c.npa || c.ville) addrClient += '<div class="cline">' + esc([c.npa, c.ville].filter(Boolean).join(' ')) + '</div>';
     if (c.pays && c.pays !== 'CH') addrClient += '<div class="cline">' + esc(c.pays) + '</div>';
 
     var ht  = Number(f.montant_ht  || 0);
     var tva = Number(f.montant_tva || 0);
     var ttc = Number(f.montant_ttc || 0);
+    var paiementEchelonne = !!f.paiement_echelonne;
+    var scheduleLines = buildPaiementScheduleLines(f);
+    var scheduleHtml = scheduleLines.length
+        ? '<div class="notes-box"><strong>Echeancier :</strong><br>' + scheduleLines.map(function(x){ return esc(x); }).join('<br>') + '</div>'
+        : '';
 
     var echeanceHtml = (!isDevis && f.echeance)
         ? '<br>Echeance : <strong style="color:#e8311a;">' + fmtDate(f.echeance) + '</strong>'
@@ -401,7 +429,6 @@ function renderInvoice(f, lignes) {
         '</div>' +
         // Objet
         (f.objet ? '<div class="inv-objet"><strong>Objet :</strong> ' + esc(f.objet) + '</div>' : '') +
-        (worksiteLabel ? '<div class="inv-objet"><strong>Adresse d\'intervention :</strong> ' + esc(worksiteLabel) + '</div>' : '') +
         // Tableau
         '<table class="lines">' +
           '<thead><tr>' +
@@ -419,7 +446,8 @@ function renderInvoice(f, lignes) {
           '<div class="tot ttc-row"><span class="lbl" style="color:' + color + ';">TOTAL TTC</span><span class="val" style="color:' + color + ';">' + ttc.toFixed(2) + ' CHF</span></div>' +
         '</div>' +
         (f.conditions ? '<div class="cond-box">Conditions : <strong>' + esc(f.conditions) + '</strong> &mdash; IBAN : ' + IBAN_BRIMOT + '</div>' : '') +
-        (visibleNotes ? '<div class="notes-box">' + esc(visibleNotes) + '</div>' : '') +
+        (paiementEchelonne ? scheduleHtml : '') +
+        (f.notes ? '<div class="notes-box">' + esc(f.notes) + '</div>' : '') +
         '<div class="inv-footer">' +
           esc(NOM_BRIMOT) + ' &mdash; ' + esc(RUE_BR) + ', ' + esc(NPA_BR) + ' ' + esc(VILLE_BR) +
           ' &mdash; ' + esc(MAIL_BR) +
@@ -435,9 +463,9 @@ async function renderQRBill(f, lignes) {
     var creditorAddr = splitStreetAndBuilding(RUE_BR);
     var debtorAddr = splitStreetAndBuilding(c.adresse || '');
     var ibanClean  = IBAN_BRIMOT.replace(/\s/g, '');
-    var montantCHF = Number(f.montant_ttc || 0).toFixed(2);
     var debNom   = c.nom     || '';
-    var debRue   = debtorAddr.street || c.adresse || '';
+    var l2qr = (c.adresse_ligne2 || '').trim();
+    var debRue   = [debtorAddr.street || c.adresse || '', l2qr].filter(Boolean).join(' ').trim().slice(0, 70);
     var debNo    = debtorAddr.building || '';
     var debNpa   = c.npa     || '';
     var debVille = c.ville   || '';
@@ -456,109 +484,74 @@ async function renderQRBill(f, lignes) {
         var check = (10 - carry) % 10;
         return digits + check;
     }
-    var qrRef = buildQRRef(f.numero || f.id || ('FAC-' + new Date().getFullYear() + '-0001'));
-
-    // Generer le QR (format SPC norme SIX — message + EPD au bon ordre)
-    var qrDataUrl = '';
-    try {
+    var parts = buildPaiementScheduleData(f);
+    var htmlParts = [];
+    for (var p = 0; p < parts.length; p++) {
+        var part = parts[p];
+        var partAmountCHF = Number(part.amount || 0).toFixed(2);
+        var partMsg = (part.msg || msgLibre).slice(0, 140);
+        var partRef = buildQRRef(part.refSeed || (f.numero || f.id || ('FAC-' + new Date().getFullYear() + '-0001')));
         var hasAddr = !!(debNom && debNpa && debVille);
-        var qrLines = [
-            'SPC',         // 1  Header
-            '0200',        // 2  Version (compatible scanner bank apps)
-            '1',           // 3  Coding UTF-8
-            ibanClean,     // 4  IBAN
-            'S',           // 5  Creditor AddrType S=structured
-            NOM_BRIMOT,    // 6  Creditor Name
-            (creditorAddr.street || RUE_BR).slice(0, 70), // 7  Creditor StrtNm
-            (creditorAddr.building || '').slice(0, 16),   // 8  Creditor BldgNb
-            NPA_BR,        // 9  Creditor PstCd
-            VILLE_BR,      // 10 Creditor TwnNm
-            'CH',          // 11 Creditor Ctry
-            '',            // 12 UltimateCreditor AddrType
-            '',            // 13 UltimateCreditor Name
-            '',            // 14 UltimateCreditor StrtNm
-            '',            // 15 UltimateCreditor BldgNb
-            '',            // 16 UltimateCreditor PstCd
-            '',            // 17 UltimateCreditor TwnNm
-            '',            // 18 UltimateCreditor Ctry
-            montantCHF,    // 19 Amount
-            'CHF',         // 20 Currency
-            hasAddr ? 'S' : '',        // 21 UltimateDebtor AddrType
-            hasAddr ? debNom : '',     // 22 UltimateDebtor Name
-            hasAddr ? debRue : '',     // 23 UltimateDebtor StrtNm
-            hasAddr ? debNo : '',      // 24 UltimateDebtor BldgNb
-            hasAddr ? debNpa : '',     // 25 UltimateDebtor PstCd
-            hasAddr ? debVille : '',   // 26 UltimateDebtor TwnNm
-            hasAddr ? debPays : '',    // 27 UltimateDebtor Ctry
-            'QRR',         // 28 RmtInfTp — QR-IBAN PostFinance exige QRR
-            qrRef,         // 29 Reference 27 chiffres
-            msgLibre,      // 30 Unstructured message
-            'EPD',         // 31 Trailer
-            ''             // 32 AltPmtInf
-        ];
-        qrDataUrl = await QRCode.toDataURL(qrLines.join('\n'), {
-            errorCorrectionLevel: 'M', width: 298, margin: 0,
-            color: { dark: '#000000', light: '#ffffff' }
-        });
-    } catch (e) {
-        console.warn('QR error:', e);
-    }
+        var qrDataUrl = '';
+        try {
+            var qrLines = [
+                'SPC','0200','1',ibanClean,'S',
+                NOM_BRIMOT,(creditorAddr.street || RUE_BR).slice(0, 70),(creditorAddr.building || '').slice(0, 16),NPA_BR,VILLE_BR,'CH',
+                '','','','','','','',
+                partAmountCHF,'CHF',
+                hasAddr ? 'S' : '', hasAddr ? debNom : '', hasAddr ? debRue : '', hasAddr ? debNo : '', hasAddr ? debNpa : '', hasAddr ? debVille : '', hasAddr ? debPays : '',
+                'QRR', partRef, partMsg, 'EPD', ''
+            ];
+            qrDataUrl = await QRCode.toDataURL(qrLines.join('\n'), {
+                errorCorrectionLevel: 'M', width: 298, margin: 0,
+                color: { dark: '#000000', light: '#ffffff' }
+            });
+        } catch (e) {
+            console.warn('QR error:', e);
+        }
 
-    var qrImg = qrDataUrl
-        ? '<div class="bv-qr-wrap">' +
-          '<img src="' + qrDataUrl + '" alt="QR Swiss Payment">' +
-          '<div class="bv-cross"><div class="bv-cross-inner"><div class="bv-cross-v"></div><div class="bv-cross-h"></div></div></div>' +
-          '</div>'
-        : '<div style="width:180px;height:180px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;font-size:11px;color:#999;border-radius:4px;">QR indisponible</div>';
+        var qrImg = qrDataUrl
+            ? '<div class="bv-qr-wrap">' +
+              '<img src="' + qrDataUrl + '" alt="QR Swiss Payment">' +
+              '<div class="bv-cross"><div class="bv-cross-inner"><div class="bv-cross-v"></div><div class="bv-cross-h"></div></div></div>' +
+              '</div>'
+            : '<div style="width:180px;height:180px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;font-size:11px;color:#999;border-radius:4px;">QR indisponible</div>';
 
-    var html =
-        '<div class="bv-cut">' +
-          '<div class="bv-cut-line"></div>' +
-          '<span>&#9986;</span>' +
-          '<div class="bv-cut-line"></div>' +
-        '</div>' +
-        '<div class="bv-body">' +
-
-          // RECU
-          '<div class="bv-receipt">' +
-            '<div class="bv-section-title">Recu</div>' +
-            '<div class="bv-lbl">Compte / Payable a</div>' +
-            '<div class="bv-val-sm">' + ibanClean + '<br>' + esc(NOM_BRIMOT) + '<br>' + esc(RUE_BR) + '<br>' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '</div>' +
-            '<div class="bv-lbl">Reference</div>' +
-            '<div class="bv-val-sm">' + esc(qrRef) + '</div>' +
-            '<div class="bv-lbl">Paye par</div>' +
-            '<div class="bv-val-sm">' + esc(debNom) + (debRue ? '<br>' + esc(debRue) : '') + '<br>' + esc(debNpa) + ' ' + esc(debVille) + '</div>' +
-            '<div class="bv-receipt-bot">' +
-              '<div><div class="bv-lbl">Montant</div><div class="bv-val-bold">' + montantCHF + '</div></div>' +
-              '<div><div class="bv-lbl">Monnaie</div><div class="bv-val-sm">CHF</div></div>' +
-            '</div>' +
-            '<div><div class="bv-lbl" style="font-size:7px;">Point de depot</div><div class="bv-accept-box"></div></div>' +
-          '</div>' +
-
-          // SECTION PAIEMENT
-          '<div class="bv-payment">' +
-            '<div class="bv-section-title">Section de paiement</div>' +
-            '<div class="bv-pay-top">' +
-              '<div class="bv-qr-col">' + qrImg +
-                '<div class="bv-cur-amt">' +
-                  '<div><div class="bv-lbl">Monnaie</div><div class="bv-val-bold">CHF</div></div>' +
-                  '<div><div class="bv-lbl">Montant</div><div class="bv-val-bold">' + montantCHF + '</div></div>' +
+        htmlParts.push(
+            '<div class="bv-cut"><div class="bv-cut-line"></div><span>&#9986;</span><div class="bv-cut-line"></div></div>' +
+            '<div class="bv-body">' +
+              '<div class="bv-receipt">' +
+                '<div class="bv-section-title">Recu - ' + esc(part.label || 'Paiement') + '</div>' +
+                '<div class="bv-lbl">Compte / Payable a</div>' +
+                '<div class="bv-val-sm">' + ibanClean + '<br>' + esc(NOM_BRIMOT) + '<br>' + esc(RUE_BR) + '<br>' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '</div>' +
+                '<div class="bv-lbl">Reference</div><div class="bv-val-sm">' + esc(partRef) + '</div>' +
+                '<div class="bv-lbl">Paye par</div>' +
+                '<div class="bv-val-sm">' + esc(debNom) + (c.adresse ? '<br>' + esc(c.adresse) : '') + (c.adresse_ligne2 ? '<br>' + esc(c.adresse_ligne2) : '') + '<br>' + esc(debNpa) + ' ' + esc(debVille) + '</div>' +
+                '<div class="bv-receipt-bot"><div><div class="bv-lbl">Montant</div><div class="bv-val-bold">' + partAmountCHF + '</div></div><div><div class="bv-lbl">Monnaie</div><div class="bv-val-sm">CHF</div></div></div>' +
+                '<div><div class="bv-lbl" style="font-size:7px;">Point de depot</div><div class="bv-accept-box"></div></div>' +
+              '</div>' +
+              '<div class="bv-payment">' +
+                '<div class="bv-section-title">Section de paiement - ' + esc(part.label || 'Paiement') + '</div>' +
+                '<div class="bv-pay-top">' +
+                  '<div class="bv-qr-col">' + qrImg +
+                    '<div class="bv-cur-amt"><div><div class="bv-lbl">Monnaie</div><div class="bv-val-bold">CHF</div></div><div><div class="bv-lbl">Montant</div><div class="bv-val-bold">' + partAmountCHF + '</div></div></div>' +
+                  '</div>' +
+                  '<div class="bv-info-col">' +
+                    '<div class="bv-lbl">Compte / Payable a</div>' +
+                    '<div class="bv-val">' + ibanClean + '<br>' + esc(NOM_BRIMOT) + '<br>' + esc(RUE_BR) + '<br>' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '</div>' +
+                    '<div class="bv-lbl" style="margin-top:8px;">Reference</div><div class="bv-val">' + esc(partRef) + '</div>' +
+                    '<div class="bv-lbl" style="margin-top:8px;">Informations</div><div class="bv-val">' + esc(partMsg) + '</div>' +
+                    (part.dateText ? '<div class="bv-lbl" style="margin-top:8px;">Echeance</div><div class="bv-val">' + esc(part.dateText) + '</div>' : '') +
+                    (f.objet ? '<div class="bv-lbl" style="margin-top:8px;">Objet</div><div class="bv-val">' + esc(f.objet) + '</div>' : '') +
+                    '<div class="bv-lbl" style="margin-top:8px;">Paye par</div>' +
+                    '<div class="bv-val">' + esc(debNom) + (c.adresse ? '<br>' + esc(c.adresse) : '') + (c.adresse_ligne2 ? '<br>' + esc(c.adresse_ligne2) : '') + '<br>' + esc(debNpa) + ' ' + esc(debVille) + '</div>' +
+                  '</div>' +
                 '</div>' +
               '</div>' +
-              '<div class="bv-info-col">' +
-                '<div class="bv-lbl">Compte / Payable a</div>' +
-                '<div class="bv-val">' + ibanClean + '<br>' + esc(NOM_BRIMOT) + '<br>' + esc(RUE_BR) + '<br>' + esc(NPA_BR) + ' ' + esc(VILLE_BR) + '</div>' +
-                '<div class="bv-lbl" style="margin-top:8px;">Référence</div>' +
-                '<div class="bv-val">' + esc(qrRef) + '</div>' +
-                '<div class="bv-lbl" style="margin-top:8px;">Informations</div><div class="bv-val">' + esc(msgLibre) + '</div>' +
-                (f.objet ? '<div class="bv-lbl" style="margin-top:8px;">Objet</div><div class="bv-val">' + esc(f.objet) + '</div>' : '') +
-                '<div class="bv-lbl" style="margin-top:8px;">Paye par</div>' +
-                '<div class="bv-val">' + esc(debNom) + (debRue ? '<br>' + esc(debRue) : '') + '<br>' + esc(debNpa) + ' ' + esc(debVille) + '</div>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
-
-        '</div>';
+            '</div>'
+        );
+    }
+    var html = htmlParts.join('<div style="height:10mm;"></div>');
 
     document.getElementById('bvPage').innerHTML = html;
     document.getElementById('sepBar').style.display = 'flex';

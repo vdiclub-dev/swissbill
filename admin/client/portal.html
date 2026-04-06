@@ -3,11 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portail Client | Colixo</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <title>Portail expéditeur | Colixo</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../../config.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260419"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -212,18 +216,11 @@
 <div class="toast" id="toast"></div>
 <div class="loader" id="loader"><div class="spin"></div></div>
 
-<!-- LOGIN -->
-<div class="screen active" id="screenLogin">
+<!-- Gate : sans session → redirection vers /login (connexion unique) -->
+<div class="screen active" id="screenGate">
     <div class="login-screen">
-        <div class="login-box">
-            <div class="login-logo"><div class="mark">🚚</div><div class="login-title">PORTAIL CLIENT</div><div class="login-sub">Colixo — Espace expéditeur</div></div>
-            <div class="field"><label>Email</label><input type="email" id="lEmail" placeholder="votre@email.ch"></div>
-            <div class="field"><label>Mot de passe</label><input type="password" id="lPwd" placeholder="••••••••"></div>
-            <button class="btn-login" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> Accéder</button>
-            <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--muted);">
-                Pas encore de compte ?
-                <button onclick="showScreen('Register')" style="background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;">Créer un compte</button>
-            </div>
+        <div class="login-box" style="text-align:center;">
+            <div class="login-logo"><div class="mark">🚚</div><div class="login-title">COLIXO</div><div class="login-sub">Chargement…</div></div>
         </div>
     </div>
 </div>
@@ -232,7 +229,7 @@
 <div class="screen" id="screenRegister">
     <div class="login-screen" style="align-items:flex-start;padding-top:40px;">
         <div class="login-box" style="max-width:480px;">
-            <div class="login-logo"><div class="mark">🚚</div><div class="login-title">CRÉER UN COMPTE</div><div class="login-sub">Colixo — Espace expéditeur</div></div>
+            <div class="login-logo"><div class="mark">🚚</div><div class="login-title">CRÉER MON ESPACE</div><div class="login-sub">Quelques infos sur votre entreprise, puis vous commandez.</div></div>
 
             <!-- ÉTAPES -->
             <div class="register-steps">
@@ -252,7 +249,8 @@
                 <div class="field"><label>Téléphone entreprise</label><input type="tel" id="rTelEntreprise" placeholder="+41 21 000 00 00"></div>
                 <button class="btn-login" onclick="regNext(1)">Suivant <i class="fas fa-arrow-right"></i></button>
                 <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);">
-                    Déjà un compte ? <button onclick="showScreen('Login')" style="background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;">Se connecter</button>
+                    Déjà un compte ?
+                    <a href="/login/index.html?portal=client&amp;next=%2Fadmin%2Fclient%2Fportal.html" style="color:var(--red);font-weight:700;text-decoration:none;font-family:'Outfit',sans-serif;font-size:13px;">Se connecter</a>
                 </div>
             </div>
 
@@ -553,6 +551,8 @@
 (function(){
     if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">config.js manquant</div>';return;}
     const db = window.SUPABASE_CLIENT;
+    const h = window.colixoHref || function (p) { return p; };
+    const CLIENT_LOGIN_URL = h('/login/index.html?portal=client&next=' + encodeURIComponent('/admin/client/portal.html'));
 
     let client=null, clientEntreprise=null, clientTarif=null;
     let selectedService='normal', nightDelivery=false;
@@ -560,6 +560,7 @@
     let currentOrderId=null;
     let saveAddressEnabled = false;
     let savedAddresses = [];
+    let currentUserRole = null;
 
     function toast(msg){const t=document.getElementById('toast');t.innerHTML=msg;t.className='toast show';setTimeout(()=>t.classList.remove('show'),3000);}
     function showLoad(){document.getElementById('loader').classList.add('on');}
@@ -572,6 +573,31 @@
     window.closeModal=closeModal;
 
     function fmt(v){return parseFloat(v||0).toFixed(2);}
+
+    // Masquer les prix pour les magasiniers
+    function hidePricesForMagasinier() {
+        if (currentUserRole === 'magasinier') {
+            // Masquer les éléments de tarif
+            const tarifElements = document.querySelectorAll('.tarif-price, .svc-price, .tarif-box, .service-price');
+            tarifElements.forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // Masquer les sections de prix
+            const priceSections = document.querySelectorAll('.pricing-section, .tarif-section');
+            priceSections.forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // Masquer les textes contenant des prix
+            const priceTexts = document.querySelectorAll('[id*="price"], [class*="price"]');
+            priceTexts.forEach(el => {
+                if (el.textContent.includes('CHF') || el.textContent.includes('€')) {
+                    el.style.display = 'none';
+                }
+            });
+        }
+    }
 
     async function loadClientTarif() {
         if(!client || !client.entreprise_id) return;
@@ -871,44 +897,11 @@
         updateTotalPrice();
     };
 
-    window.doLogin = async function() {
-        const email = document.getElementById('lEmail').value.trim();
-        const pwd = document.getElementById('lPwd').value;
-        if(!email || !pwd) { toast('Email et mot de passe requis'); return; }
-        showLoad();
-        try {
-            const { data, error } = await db.auth.signInWithPassword({ email, password: pwd });
-            if(error) throw error;
-            const { data: user } = await db.from('utilisateurs').select('*').eq('id', data.user.id).single();
-            if(!user || user.role !== 'client') throw new Error('Compte client non trouvé');
-            client = user;
-            if(client.entreprise_id) {
-                const { data: ent } = await db.from('entreprises').select('*').eq('id', client.entreprise_id).single();
-                clientEntreprise = ent;
-            }
-            const name = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client';
-            document.getElementById('clientAv').textContent = name[0].toUpperCase();
-            document.getElementById('clientName').textContent = name;
-            document.getElementById('departAddr').innerHTML = clientEntreprise
-                ? `<strong>${clientEntreprise.nom || ''}</strong><br>${clientEntreprise.adresse || ''}, ${clientEntreprise.npa || ''} ${clientEntreprise.ville || ''}`
-                : 'Adresse non définie';
-            document.getElementById('portalSub').textContent = `${clientEntreprise?.nom || name} — ${new Date().toLocaleDateString('fr-CH')}`;
-            await loadClientTarif();
-            await loadSavedAddresses();
-            showScreen('Portal');
-            renderColis();
-            loadOrders();
-            initPickupToggle();
-            // Afficher onglet équipe uniquement pour les admins
-            if(client.role === 'client') {
-                document.getElementById('tabTeam').style.display = 'block';
-                loadTeam();
-            }
-        } catch(e) { toast(e.message); }
-        finally { hideLoad(); }
+    window.doLogout = async function() {
+        await db.auth.signOut();
+        client = null;
+        window.location.href = CLIENT_LOGIN_URL;
     };
-
-    window.doLogout = async function() { await db.auth.signOut(); client = null; showScreen('Login'); };
 
     // ══════════════════════════════════
     //  INSCRIPTION
@@ -1293,6 +1286,7 @@
         if(!ts) return '';
         return new Date(ts).toLocaleString('fr-CH', {
             day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit',
+            hour12:false,
             timeZone:'Europe/Zurich'
         });
     }
@@ -1366,7 +1360,7 @@
         if(st === 'in_transit' && o.picked_up_at) {
             const pickupDate = new Date(o.picked_up_at);
             const todayStr = pickupDate.toLocaleDateString('fr-CH', {timeZone:'Europe/Zurich'});
-            etaHtml = `<div class="tracking-eta"><i class="fas fa-clock"></i> En route depuis ${pickupDate.toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'})}</div>`;
+            etaHtml = `<div class="tracking-eta"><i class="fas fa-clock"></i> En route depuis ${pickupDate.toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/Zurich'})}</div>`;
         }
 
         const timelineHtml = steps.map((s, i) => `
@@ -1398,7 +1392,7 @@
             <div class="tracking-header">
                 <div>
                     <div class="tracking-num">${o.order_number || o.id.slice(0,8)}</div>
-                    <div class="tracking-date">${new Date(o.created_at).toLocaleDateString('fr-CH')}</div>
+                    <div class="tracking-date">${new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'})}</div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
                     <span style="font-size:11px;padding:4px 10px;border-radius:100px;background:rgba(255,255,255,0.05);color:${stColor};border:1px solid ${stColor}40;">${stLabel}</span>
@@ -1515,7 +1509,7 @@
             : '';
 
         const deliveredFmt = isDelivered && o.delivered_at
-            ? new Date(o.delivered_at).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'})
+            ? new Date(o.delivered_at).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/Zurich'})
             : null;
 
         return `<div class="order-card" style="${isDelivered?'border-color:rgba(34,197,94,0.3);':adm==='refused'?'border-color:rgba(232,49,26,0.3);':''}">
@@ -1588,7 +1582,7 @@
         if(qty === 1) {
             // Remplir le modal (comportement existant)
             document.getElementById('etiq-num').textContent = o.order_number || o.id.slice(0,8);
-            document.getElementById('etiq-date').textContent = new Date(o.created_at).toLocaleDateString('fr-CH');
+            document.getElementById('etiq-date').textContent = new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'});
             const svcEl = document.getElementById('etiq-service');
             svcEl.textContent = (o.service_type||'normal').toUpperCase();
             svcEl.style.background = svcColors[o.service_type] || '#3b82f6';
@@ -1634,7 +1628,7 @@
         const instrHtml = o.instructions ? `<div style="background:#fff8e1;border:1.5px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#7c5a00;">⚠️ <strong>Instructions :</strong> ${o.instructions}</div>` : '';
         const expHtml = (o.pickup_address||'—').replace(/·/g,'<br>').replace(/ - /g,'<br>');
         const destHtml = `<div style="font-size:14px;font-weight:700;">${o.destinataire_nom||''}</div><div style="font-size:12px;margin-top:4px;">${o.delivery_address||''}</div>${o.destinataire_tel?`<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${o.destinataire_tel}</div>`:''}`;
-        const dateStr = new Date(o.created_at).toLocaleDateString('fr-CH');
+        const dateStr = new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'});
 
         // Générer les QR en base64 de façon asynchrone
         showLoad();
@@ -1767,7 +1761,7 @@
 
         const content = document.getElementById('preuveContent');
         const btnDl   = document.getElementById('btnDlPreuve');
-        const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : null;
+        const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false}) : null;
         const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
 
         const photoData = delivery?.photo_data || null;
@@ -1827,7 +1821,7 @@
     window.downloadPreuvePDF = function() {
         if(!_preuveData) return;
         const { o, delivery } = _preuveData;
-        const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+        const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false}) : '—';
         const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
         const photoData = delivery?.photo_data || null;
         const sigData   = delivery?.signature_data || null;
@@ -1936,7 +1930,7 @@
         const sigSrc   = delivery?.signature_data || preuve?.signature_url || null;
         const noteChauf = delivery?.note_livraison || null;
 
-        const fmt = d => d ? new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+        const fmt = d => d ? new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/Zurich'}) : '—';
         const findEv = types => events?.find(e => types.includes(e.event_type));
         const evPickup   = findEv(['picked_up','pickup','enleve','enlevement','collected']);
         const evDelivery = findEv(['delivered','livre','livraison','complete']);
@@ -2009,7 +2003,7 @@
             ${noteChauf ? `<div style="margin-top:10px;background:#fff8e1;border-radius:8px;padding:10px;font-size:12px;"><strong>Note livreur :</strong> ${noteChauf}</div>` : ''}
             ` : '<div style="margin-top:12px;padding:12px;background:#fff8e1;border-radius:8px;font-size:12px;color:#7c5a00;">⏳ Preuves de livraison non encore disponibles</div>'}
 
-            <div class="footer">Colixo SA · info@colixo.ch · Document généré le ${new Date().toLocaleString('fr-CH')} · Bon de livraison officiel</div>
+            <div class="footer">Colixo SA · info@colixo.ch · Document généré le ${new Date().toLocaleString('fr-CH',{hour12:false,timeZone:'Europe/Zurich'})} · Bon de livraison officiel</div>
         </div>
         <div style="text-align:center;margin-top:20px;"><button onclick="window.print()" style="padding:10px 24px;background:#e8311a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Imprimer / PDF</button></div>
         </body></html>`);
@@ -2018,33 +2012,45 @@
 
     async function checkSession() {
         const { data: { session } } = await db.auth.getSession();
-        if(session) {
-            const { data: user } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
-            if(user && user.role === 'client') {
-                client = user;
-                if(user.entreprise_id) {
-                    const { data: ent } = await db.from('entreprises').select('*').eq('id', user.entreprise_id).single();
-                    clientEntreprise = ent;
-                }
-                await loadClientTarif();
-                await loadSavedAddresses();
-                showScreen('Portal');
-                renderColis();
-                loadOrders();
-                initPickupToggle();
-                if(user.role === 'client') {
-                    document.getElementById('tabTeam').style.display = 'block';
-                    loadTeam();
-                }
-                const name = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client';
-                document.getElementById('clientAv').textContent = name[0].toUpperCase();
-                document.getElementById('clientName').textContent = name;
-                document.getElementById('departAddr').innerHTML = clientEntreprise
-                    ? `<strong>${clientEntreprise.nom || ''}</strong><br>${clientEntreprise.adresse || ''}, ${clientEntreprise.npa || ''} ${clientEntreprise.ville || ''}`
-                    : 'Adresse non définie';
-                document.getElementById('portalSub').textContent = `${clientEntreprise?.nom || name} — ${new Date().toLocaleDateString('fr-CH')}`;
+        const wantRegister = new URLSearchParams(window.location.search).get('register') === '1';
+
+        if (!session) {
+            if (wantRegister) {
+                showScreen('Register');
+                return;
             }
+            window.location.replace(CLIENT_LOGIN_URL);
+            return;
         }
+
+        const { data: user } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
+        if (!user || (user.role !== 'client' && user.role !== 'magasinier')) {
+            window.location.href = h('/login/index.html');
+            return;
+        }
+
+        client = user;
+        currentUserRole = user.role;
+        if (user.entreprise_id) {
+            const { data: ent } = await db.from('entreprises').select('*').eq('id', user.entreprise_id).single();
+            clientEntreprise = ent;
+        }
+        await loadClientTarif();
+        hidePricesForMagasinier();
+        await loadSavedAddresses();
+        showScreen('Portal');
+        renderColis();
+        loadOrders();
+        initPickupToggle();
+        document.getElementById('tabTeam').style.display = 'block';
+        loadTeam();
+        const name = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client';
+        document.getElementById('clientAv').textContent = name[0].toUpperCase();
+        document.getElementById('clientName').textContent = name;
+        document.getElementById('departAddr').innerHTML = clientEntreprise
+            ? `<strong>${clientEntreprise.nom || ''}</strong><br>${clientEntreprise.adresse || ''}, ${clientEntreprise.npa || ''} ${clientEntreprise.ville || ''}`
+            : 'Adresse non définie';
+        document.getElementById('portalSub').textContent = `${clientEntreprise?.nom || name} — ${new Date().toLocaleDateString('fr-CH')}`;
     }
     checkSession();
 })();

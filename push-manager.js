@@ -4,19 +4,24 @@
 
 const VAPID_PUBLIC_KEY = 'BOKiPuVJhpBqbIOH-5zjqUEFtx5VJ0HBHTtXrm5dIb-b7qDeJLXuEZph6wYgx1BCQ6qe-dGDyrRATUar4QS-lgg';
 
-// ── Désinscrire l'ancien SW et réinscrire le nouveau ──
+// ── Enregistrer / mettre à jour le SW (ne pas tout unregister : ça laisse un trou sans worker actif) ──
 async function registerSW() {
     if (!('serviceWorker' in navigator)) return null;
     try {
-        // Désinscrire TOUS les anciens SW
-        const regs = await navigator.serviceWorker.getRegistrations();
-        for(const reg of regs) {
-            await reg.unregister();
-            console.log('[Push] Ancien SW désinscrit:', reg.scope);
+        var v = (typeof window.COLIXO_ASSET_VERSION !== 'undefined') ? window.COLIXO_ASSET_VERSION : '1';
+        var reg = await navigator.serviceWorker.register('/sw.js?v=' + encodeURIComponent(v), { scope: '/' });
+        await reg.update();
+        await reg.ready;
+        // Attendre explicitement le script actif (PushManager.subscribe exige un SW actif)
+        var tries = 0;
+        while (!reg.active && tries < 60) {
+            await new Promise(function (r) { setTimeout(r, 50); });
+            tries++;
         }
-        // Réinscrire le nouveau
-        const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-        console.log('[Push] Nouveau SW enregistré:', reg.scope);
+        if (!reg.active) {
+            console.warn('[Push] Pas de worker actif après enregistrement');
+        }
+        console.log('[Push] SW prêt:', reg.scope, reg.active ? 'actif' : 'inactif');
         return reg;
     } catch(e) {
         console.error('[Push] Erreur SW:', e);
@@ -36,7 +41,7 @@ async function subscribePush(userId) {
     if (permission !== 'granted') return null;
 
     const reg = await registerSW();
-    if (!reg) return null;
+    if (!reg || !reg.active) return null;
 
     try {
         let sub = await reg.pushManager.getSubscription();
@@ -47,7 +52,7 @@ async function subscribePush(userId) {
             });
         }
 
-        if (window.SUPABASE_CLIENT && userId) {
+        if (window.SUPABASE_CLIENT && userId && sub) {
             await window.SUPABASE_CLIENT.from('push_subscriptions').upsert([{
                 user_id:    userId,
                 endpoint:   sub.endpoint,

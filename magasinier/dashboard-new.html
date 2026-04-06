@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Gestion Magasin | Colixo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <style>
+        :root {
+            --red: #e8311a;
+            --red-dark: #c71612;
+            --blue: #3b82f6;
+            --green: #22c55e;
+            --yellow: #f59e0b;
+            --orange: #f97316;
+            --dark: #0f0f1e;
+            --dark2: #1a1a2e;
+            --dark3: #25254d;
+            --border: rgba(255,255,255,0.08);
+            --white: #ffffff;
+            --gray: rgba(255,255,255,0.6);
+            --gray-light: rgba(255,255,255,0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--dark2) 100%);
+            color: var(--white);
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* TOPBAR */
+        .topbar {
+            background: var(--dark2);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--orange), var(--red));
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            font-size: 18px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: var(--gray);
+            font-size: 16px;
+        }
+
+        .btn-icon:hover {
+            background: rgba(247,151,22,0.1);
+            border-color: rgba(247,151,22,0.2);
+            color: var(--orange);
+        }
+
+        .content {
+            padding: 32px;
+            flex: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* STATUS BANNER */
+        .status-banner {
+            background: linear-gradient(135deg, rgba(247,151,22,0.15), rgba(245,158,11,0.15));
+            border: 1px solid rgba(245,158,11,0.2);
+            border-radius: 16px;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-info {
+            flex: 1;
+        }
+
+        .status-info h3 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .status-info p {
+            font-size: 13px;
+            color: var(--gray);
+        }
+
+        .status-action {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, var(--orange), var(--red));
+            color: var(--white);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(247,151,22,0.3);
+        }
+
+        /* STATS GRID */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--orange), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-icon {
+            width: 44px;
+            height: 44px;
+            background: rgba(247,151,22,0.15);
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            font-size: 20px;
+            margin-bottom: 16px;
+        }
+
+        .stat-num {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-lbl {
+            font-size: 12px;
+            color: var(--gray-light);
+        }
+
+        /* GRIDS */
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .grid3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        /* CARD */
+        .card {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-head {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .card-body {
+            padding: 20px 24px;
+            flex: 1;
+        }
+
+        /* ITEMS LIST */
+        .item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+
+        .item:hover {
+            background: rgba(255,255,255,0.04);
+            border-color: rgba(247,151,22,0.2);
+        }
+
+        .item-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(247,151,22,0.1);
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .item-content {
+            flex: 1;
+        }
+
+        .item-main {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        .item-sub {
+            font-size: 11px;
+            color: var(--gray-light);
+        }
+
+        .item-action {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-sm {
+            padding: 6px 10px;
+            background: rgba(247,151,22,0.1);
+            border: none;
+            border-radius: 6px;
+            color: var(--orange);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 11px;
+            transition: all 0.3s;
+        }
+
+        .btn-sm:hover {
+            background: rgba(247,151,22,0.2);
+        }
+
+        /* PROGRESS */
+        .progress {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--orange), var(--red));
+            border-radius: 10px;
+        }
+
+        /* BADGE */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 100px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            background: rgba(34,197,94,0.15);
+            color: var(--green);
+        }
+
+        .badge.warning {
+            background: rgba(245,158,11,0.15);
+            color: var(--yellow);
+        }
+
+        .badge.danger {
+            background: rgba(232,49,26,0.15);
+            color: var(--red);
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1024px) {
+            .grid3 {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .grid2 {
+                grid-template-columns: 1fr;
+            }
+
+            .status-banner {
+                flex-direction: column;
+                gap: 16px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                padding: 16px;
+            }
+
+            .topbar {
+                padding: 12px 16px;
+            }
+
+            .page-title {
+                font-size: 18px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .grid3 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="logo">📦</div>
+            <div class="page-title">GESTION MAGASIN</div>
+        </div>
+        <div class="topbar-right">
+            <button class="btn-icon" title="Notifications">
+                <i class="fas fa-bell"></i>
+            </button>
+            <button class="btn-icon" title="Paramètres">
+                <i class="fas fa-cog"></i>
+            </button>
+            <button class="btn-icon" title="Déconnexion">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+        <!-- STATUS BANNER -->
+        <div class="status-banner">
+            <div class="status-info">
+                <h3>Tâches Urgentes</h3>
+                <p>8 transports à emballer avant 16h • 3 vérifications de qualité en attente</p>
+            </div>
+            <div class="status-action">
+                <button class="btn">
+                    <i class="fas fa-check"></i> Vue d'ensemble
+                </button>
+            </div>
+        </div>
+
+        <!-- STATS -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📦</div>
+                <div class="stat-num">48</div>
+                <div class="stat-lbl">Colis à traiter</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">✓</div>
+                <div class="stat-num">156</div>
+                <div class="stat-lbl">Traités aujourd'hui</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-num">3</div>
+                <div class="stat-lbl">Contrôles qualité</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-num">98.5%</div>
+                <div class="stat-lbl">Qualité moyenne</div>
+            </div>
+        </div>
+
+        <!-- MAIN GRID -->
+        <div class="grid2">
+            <!-- TRANSPORTS À EMBALLER -->
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">À Emballer (8)</div>
+                    <span style="font-size: 12px; color: var(--yellow);">⚠️ Urgent</span>
+                </div>
+                <div class="card-body">
+                    <div class="item">
+                        <div class="item-icon">📦</div>
+                        <div class="item-content">
+                            <div class="item-main">#TRA001 - Corp SA</div>
+                            <div class="item-sub">24 kg • 8 colis • Échéance: 14h</div>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 75%;"></div>
+                            </div>
+                        </div>
+                        <div class="item-action">
+                            <button class="btn-sm">Emballer</button>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                        <div class="item-icon">📦</div>
+                        <div class="item-content">
+                            <div class="item-main">#TRA002 - Média Plus</div>
+                            <div class="item-sub">15 kg • 5 colis • Échéance: 15h</div>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 40%;"></div>
+                            </div>
+                        </div>
+                        <div class="item-action">
+                            <button class="btn-sm">Emballer</button>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                        <div class="item-icon">🏭</div>
+                        <div class="item-content">
+                            <div class="item-main">#TRA003 - Shop Vaud</div>
+                            <div class="item-sub">8 kg • 3 colis • Échéance: 16h</div>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 0%;"></div>
+                            </div>
+                        </div>
+                        <div class="item-action">
+                            <button class="btn-sm">Emballer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QUALITY CHECK -->
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">Contrôle Qualité</div>
+                    <span style="font-size: 12px; color: var(--green);">✓ 98.5%</span>
+                </div>
+                <div class="card-body">
+                    <div class="item">
+                        <div class="item-icon">🔍</div>
+                        <div class="item-content">
+                            <div class="item-main">Vérification Colis #001-005</div>
+                            <div class="item-sub">En revue • 3 colis checkés</div>
+                        </div>
+                        <span class="badge">✓ OK</span>
+                    </div>
+
+                    <div class="item">
+                        <div class="item-icon">⚠️</div>
+                        <div class="item-content">
+                            <div class="item-main">Anomalie Colis #156</div>
+                            <div class="item-sub">Remplissage incomplet • À corriger</div>
+                        </div>
+                        <span class="badge danger">! Urgent</span>
+                    </div>
+
+                    <div class="item">
+                        <div class="item-icon">✓</div>
+                        <div class="item-content">
+                            <div class="item-main">Lot #COM-789</div>
+                            <div class="item-sub">12 colis • 100% conformes</div>
+                        </div>
+                        <span class="badge">✓ Validé</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STOCK & INVENTORY -->
+        <div class="grid3">
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">Stock Emballages</div>
+                </div>
+                <div class="card-body">
+                    <div class="item">
+                        <div class="item-icon">📦</div>
+                        <div class="item-content">
+                            <div class="item-main">Boîtes S</div>
+                            <div class="item-sub">245 / 500 unités</div>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 49%;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                        <div class="item-icon">📦</div>
+                        <div class="item-content">
+                            <div class="item-main">Boîtes M</div>
+                            <div class="item-sub">180 / 500 unités</div>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 36%;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                        <div class="item-icon">⚠️</div>
+                        <div class="item-content">
+                            <div class="item-main">Boîtes L</div>
+                            <div class="item-sub">45 / 300 unités</div>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 15%; background: var(--red);"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">Temps Moyen</div>
+                </div>
+                <div class="card-body">
+                    <div style="padding: 16px 0; text-align: center;">
+                        <div style="font-size: 32px; font-weight: 700; margin-bottom: 8px;">4m 32s</div>
+                        <div style="font-size: 12px; color: var(--gray-light); margin-bottom: 16px;">Par colis emballe</div>
+                        <div style="background: rgba(34,197,94,0.1); padding: 8px; border-radius: 8px; color: var(--green); font-size: 12px; font-weight: 600;">
+                            ↓ 8% vs hier
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">Performance</div>
+                </div>
+                <div class="card-body">
+                    <div style="padding: 16px 0;">
+                        <div style="display: flex; justify-content: space-around; text-align: center;">
+                            <div>
+                                <div style="font-size: 24px; font-weight: 700; margin-bottom: 4px;">156</div>
+                                <div style="font-size: 11px; color: var(--gray-light);">Emballés</div>
+                            </div>
+                            <div style="border-left: 1px solid var(--border);"></div>
+                            <div>
+                                <div style="font-size: 24px; font-weight: 700; margin-bottom: 4px; color: var(--green);">+12%</div>
+                                <div style="font-size: 11px; color: var(--gray-light);">vs lundi</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

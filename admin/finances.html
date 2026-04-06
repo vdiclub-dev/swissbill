@@ -3,13 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
     <title>Gestion Financière | Colixo Dispatch</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../config.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260419"></script>
     <style>
         :root{
             --red:#e8311a;--red-dark:#c0280f;
@@ -130,8 +134,9 @@
         .modal-close:hover{background:var(--border2);color:var(--white);}
         .field{margin-bottom:12px;}
         .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
-        .field input,.field select{width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);}
-        .field input:focus,.field select:focus{outline:none;border-color:var(--red);}
+        .field input,.field select,.field textarea{width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);}
+        .field textarea{min-height:80px;resize:vertical;line-height:1.45;}
+        .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--red);}
         .field select option{background:var(--night3);}
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
         .modal-actions{display:flex;gap:10px;margin-top:20px;}
@@ -175,6 +180,7 @@
     <a href="rh.html"            class="nav-item"><i class="fas fa-users-cog"></i>    <span>Gestion RH</span></a>
     <a href="tarification.html"  class="nav-item"><i class="fas fa-tags"></i>         <span>Tarification</span></a>
     <a href="finances.html"      class="nav-item active"><i class="fas fa-euro-sign"></i> <span>Finances</span></a>
+    <a href="compta-generale.html" class="nav-item"><i class="fas fa-book"></i> <span>Compta générale</span></a>
     <div class="sb-footer">
         <div class="user-chip">
             <div class="user-av" id="sbAv">SA</div>
@@ -201,7 +207,10 @@
         <div class="tab active" data-tab="tableau"><i class="fas fa-tachometer-alt"></i> Tableau de bord</div>
         <div class="tab" data-tab="vehicules"><i class="fas fa-truck"></i> Véhicules & Frais</div>
         <div class="tab" data-tab="ca"><i class="fas fa-chart-line"></i> CA & Marges</div>
+        <div class="tab" data-tab="dispatch"><i class="fas fa-map-marked-alt"></i> Tournées dispatch</div>
         <div class="tab" data-tab="km"><i class="fas fa-route"></i> Km parcourus</div>
+        <div class="tab" data-tab="compta"><i class="fas fa-balance-scale"></i> Comptabilité CH</div>
+        <div class="tab" data-tab="flux"><i class="fas fa-exchange-alt"></i> Journal des flux</div>
     </div>
 
     <div class="content">
@@ -360,6 +369,28 @@
             </div>
         </div>
 
+        <!-- ══ TOURNÉES DISPATCH (snapshots) ══ -->
+        <div class="tab-pane" id="pane-dispatch">
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-head"><div class="card-title">AGRÉGÉ PAR VÉHICULE ET JOUR — MOIS SÉLECTIONNÉ</div></div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Date</th><th>Véhicule</th><th>Chauffeur</th><th>Tournées</th><th>Km</th><th>CA CHF</th><th>Coût</th><th>Marge</th>
+                    </tr></thead>
+                    <tbody id="dispatchAggTable"></tbody>
+                </table>
+            </div>
+            <div class="card">
+                <div class="card-head"><div class="card-title">DÉTAIL SNAPSHOTS (chaque sauvegarde dispatch avec route calculée)</div></div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Date tournée</th><th>Enregistré</th><th>Véhicule</th><th>Chauffeur</th><th>ID tournée</th><th>Km</th><th>Stops</th><th>CA</th><th>Coût</th><th>Marge</th><th>%</th>
+                    </tr></thead>
+                    <tbody id="dispatchSnapsTable"></tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- ══ KM PARCOURUS ══ -->
         <div class="tab-pane" id="pane-km">
             <div class="card">
@@ -373,6 +404,194 @@
             </div>
         </div>
 
+        <!-- ══ COMPTABILITÉ SUISSE MULTI-ENTREPRISE ══ -->
+        <div class="tab-pane" id="pane-compta">
+            <div class="card" style="margin-bottom:16px;border-color:rgba(232,49,26,0.35);">
+                <div style="padding:16px 22px;font-size:13px;line-height:1.55;color:var(--muted2);">
+                    <strong style="color:var(--white);">Colixo</strong> (transport) et <strong style="color:var(--white);">Brimot Nettoyage</strong> : synthèse TVA conforme aux taux suisses en vigueur (8,1 % normal, 2,6 % réduit, 3,8 % hébergement, 0 %).
+                    Les montants <strong>Colixo</strong> sont dérivés du prix transport en considérant le tarif <strong>TTC au taux normal 8,1 %</strong> (HT = TTC ÷ 1,081). Ajustez en fiduciaire si vos factures sont en HT.
+                    Les <strong>Brimot</strong> proviennent des factures en base (montants HT / TVA / TTC déjà saisis).
+                </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px;">
+                <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Entité</span>
+                <select id="comptaEntity" class="period" style="min-width:220px;" onchange="renderComptaCH()">
+                    <option value="both">Colixo + Brimot (consolidé)</option>
+                    <option value="colixo">Colixo — Transport</option>
+                    <option value="brimot">Brimot — Nettoyage</option>
+                </select>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportComptaTvaCSV()"><i class="fas fa-file-csv"></i> Export TVA (CSV)</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportComptaJournalCSV()"><i class="fas fa-book"></i> Journal simplifié (CSV)</button>
+            </div>
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;" id="comptaKpiRow">
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(59,130,246,0.12);color:var(--blue)"><i class="fas fa-coins"></i></div><div class="kpi-val" id="cHT">—</div><div class="kpi-lbl">Total HT CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(245,158,11,0.12);color:var(--yellow)"><i class="fas fa-percent"></i></div><div class="kpi-val" id="cTVA">—</div><div class="kpi-lbl">TVA collectée CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(34,197,94,0.12);color:var(--green)"><i class="fas fa-file-invoice-dollar"></i></div><div class="kpi-val" id="cTTC">—</div><div class="kpi-lbl">Total TTC CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(168,85,247,0.12);color:var(--purple)"><i class="fas fa-list"></i></div><div class="kpi-val" id="cNb">—</div><div class="kpi-lbl">Pièces / lignes</div></div>
+            </div>
+            <div class="grid2">
+                <div class="card">
+                    <div class="card-head"><div class="card-title">TVA PAR TAUX (période sélectionnée)</div></div>
+                    <table class="tbl">
+                        <thead><tr><th>Taux</th><th>Libellé</th><th>Base HT</th><th>TVA</th></tr></thead>
+                        <tbody id="comptaTvaParTaux"></tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <div class="card-head"><div class="card-title">CHARGES VÉHICULES (Colixo) — suivi coûts HT</div></div>
+                    <div style="padding:14px 18px;font-size:12px;color:var(--muted);">Total frais véhicules la période (saisie mensuelle). Pour la déduction TVA, ventilez selon vos factures fournisseurs.</div>
+                    <table class="tbl">
+                        <thead><tr><th>Poste</th><th>Montant CHF</th></tr></thead>
+                        <tbody id="comptaChargesColixo"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-head"><div class="card-title">BRIMOT NETTOYAGE — Factures (période)</div></div>
+                <table class="tbl">
+                    <thead><tr><th>N°</th><th>Date</th><th>Statut</th><th>HT</th><th>TVA</th><th>TTC</th><th>Taux TVA</th></tr></thead>
+                    <tbody id="comptaBrimotTable"></tbody>
+                </table>
+            </div>
+            <div class="card">
+                <div class="card-head"><div class="card-title">COLIXO — Transports (CA TTC 8,1 %)</div></div>
+                <table class="tbl">
+                    <thead><tr><th>N° / Ref</th><th>Date</th><th>Statut</th><th>TTC</th><th>HT</th><th>TVA 8,1%</th></tr></thead>
+                    <tbody id="comptaColixoTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ JOURNAL DES FLUX (saisie entrées / sorties) ══ -->
+        <div class="tab-pane" id="pane-flux">
+            <div class="card" style="margin-bottom:16px;border-color:rgba(34,197,94,0.25);">
+                <div style="padding:16px 22px;font-size:13px;line-height:1.55;color:var(--muted2);">
+                    <strong style="color:var(--white);">Journal de trésorerie</strong> : enregistrez ici chaque mouvement réel (virement, facture payée, salaire, achat, TVA, etc.) pour Colixo ou Brimot.
+                    Ce journal est <strong>indépendant</strong> des transports et factures Brimot automatiques — utile pour une vision complète de la caisse et pour préparer votre compta ou votre fiduciaire.
+                </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px;">
+                <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Période</span>
+                <select id="fluxPeriode" class="period" style="min-width:180px;" onchange="loadJournalFlux()">
+                    <option value="mois">Mois (barre du haut)</option>
+                    <option value="annee">Année entière</option>
+                </select>
+                <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Entité</span>
+                <select id="fluxEntity" class="period" style="min-width:200px;" onchange="renderJournalFlux()">
+                    <option value="both">Colixo + Brimot</option>
+                    <option value="colixo">Colixo</option>
+                    <option value="brimot">Brimot</option>
+                </select>
+                <button type="button" class="btn btn-green btn-sm" onclick="openModalFlux(null)"><i class="fas fa-plus"></i> Nouvelle écriture</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="exportFluxCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="loadJournalFlux()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+            </div>
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(34,197,94,0.12);color:var(--green)"><i class="fas fa-arrow-circle-down"></i></div><div class="kpi-val" id="fluxKin">—</div><div class="kpi-lbl">Entrées CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(232,49,26,0.12);color:var(--red)"><i class="fas fa-arrow-circle-up"></i></div><div class="kpi-val" id="fluxKout">—</div><div class="kpi-lbl">Sorties CHF</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(59,130,246,0.12);color:var(--blue)"><i class="fas fa-equals"></i></div><div class="kpi-val" id="fluxKnet">—</div><div class="kpi-lbl">Solde net période</div></div>
+                <div class="kpi"><div class="kpi-ico" style="background:rgba(168,85,247,0.12);color:var(--purple)"><i class="fas fa-list-ol"></i></div><div class="kpi-val" id="fluxKnb">—</div><div class="kpi-lbl">Écritures</div></div>
+            </div>
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-title">ÉCRITURES — ordre chronologique (solde cumulé après chaque ligne)</div>
+                </div>
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Date</th><th>Société</th><th>Sens</th><th>Montant</th><th>Libellé</th><th>Catégorie</th><th>Compte</th><th>Réf.</th><th>Paiement</th><th>Solde cumulé</th><th></th>
+                    </tr></thead>
+                    <tbody id="fluxTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- MODAL JOURNAL FLUX -->
+<div id="modalFlux" class="modal">
+    <div class="modal-box" style="max-width:580px;">
+        <div class="modal-head">
+            <div class="modal-title" id="fluxModalTitle">NOUVELLE ÉCRITURE</div>
+            <button class="modal-close" onclick="closeModal('modalFlux')">✕</button>
+        </div>
+        <input type="hidden" id="fluxId">
+        <div class="field-row">
+            <div class="field">
+                <label>Société *</label>
+                <select id="fluxEntite">
+                    <option value="colixo">Colixo (transport)</option>
+                    <option value="brimot">Brimot Nettoyage</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Date *</label>
+                <input type="date" id="fluxDate">
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label>Sens *</label>
+                <select id="fluxSens">
+                    <option value="entree">Entrée (encaissement)</option>
+                    <option value="sortie">Sortie (décaissement)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Montant CHF *</label>
+                <input type="number" id="fluxMontant" min="0.01" step="0.01" placeholder="0.00">
+            </div>
+        </div>
+        <div class="field">
+            <label>Libellé *</label>
+            <input type="text" id="fluxLibelle" placeholder="Ex. Paiement facture fournisseur XY">
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label>Catégorie</label>
+                <select id="fluxCategorie">
+                    <option value="">—</option>
+                    <option value="Ventes / prestations">Ventes / prestations</option>
+                    <option value="Achats / fournisseurs">Achats / fournisseurs</option>
+                    <option value="Salaires & charges sociales">Salaires & charges sociales</option>
+                    <option value="Frais généraux">Frais généraux</option>
+                    <option value="TVA">TVA</option>
+                    <option value="Financier (banque, intérêts)">Financier (banque, intérêts)</option>
+                    <option value="Véhicule / carburant">Véhicule / carburant</option>
+                    <option value="Investissement">Investissement</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Compte (plan suisse, optionnel)</label>
+                <input type="text" id="fluxCompte" placeholder="ex. 3200">
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label>Réf. pièce / n° facture</label>
+                <input type="text" id="fluxRef" placeholder="Réf. bancaire, n° facture…">
+            </div>
+            <div class="field">
+                <label>Moyen de paiement</label>
+                <select id="fluxMoyen">
+                    <option value="">—</option>
+                    <option value="Virement">Virement</option>
+                    <option value="QR-facture">QR-facture</option>
+                    <option value="Carte bancaire">Carte bancaire</option>
+                    <option value="Espèces">Espèces</option>
+                    <option value="Autre">Autre</option>
+                </select>
+            </div>
+        </div>
+        <div class="field">
+            <label>Notes internes</label>
+            <textarea id="fluxNotes" placeholder="Détail optionnel…"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-green" type="button" onclick="saveFlux()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" type="button" onclick="closeModal('modalFlux')">Annuler</button>
+        </div>
     </div>
 </div>
 
@@ -398,6 +617,10 @@
                 <option value="">— Aucun —</option>
             </select>
         </div>
+        <div class="field">
+            <label>Coût chauffeur / jour (CHF)</label>
+            <input type="number" id="mCoutChauffeurJour" value="0" step="1" min="0" placeholder="Salaire charges / jour travaillé">
+        </div>
         <div class="modal-actions">
             <button class="btn btn-green" onclick="saveVehicule()"><i class="fas fa-save"></i> Enregistrer</button>
             <button class="btn btn-ghost" onclick="closeModal('modalVehicule')">Annuler</button>
@@ -412,8 +635,12 @@
     const db = window.SUPABASE_CLIENT;
 
     /* ── State ── */
-    let vehicules=[], fraisList=[], kmList=[], transports=[], chauffeurs=[], entreprises=[];
+    let vehicules=[], fraisList=[], kmList=[], transports=[], chauffeurs=[], entreprises=[], dispatchSnaps=[], brimotFactures=[], journalFlux=[];
     let selMois, selAnnee, charts={};
+    let comptaFraisMois=[], comptaTransMois=[];
+    let comptaLast={ entity:'both', periodLabel:'', rowsTva:[], rowsBrimot:[], rowsColixo:[], charges:[], tot:{ ht:0,tva:0,ttc:0,nb:0 } };
+    const COLIXO_TTC_FACTOR = 1.081;
+    const TVA_CH_LIB = { '8.1':'Taux normal 8,1 %', '2.6':'Taux réduit 2,6 %', '3.8':'Hébergement 3,8 %', '0':'0 % / exonéré' };
 
     /* ── Helpers ── */
     const toastEl=document.getElementById('toast');
@@ -427,6 +654,25 @@
     document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) window.closeModal(m.id); }));
     const fmtCHF=n=>parseFloat(n||0).toFixed(2);
     const fmtN  =n=>parseFloat(n||0).toFixed(0);
+    function esc(s){ if(s==null||s==='') return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function normTvaKey(pct){
+        const n=parseFloat(pct);
+        if(isNaN(n)||n<0.01) return '0';
+        if(Math.abs(n-8.1)<0.06) return '8.1';
+        if(Math.abs(n-2.6)<0.06) return '2.6';
+        if(Math.abs(n-3.8)<0.06) return '3.8';
+        return n.toFixed(2);
+    }
+    function colixoTtcSplit(ttc){
+        const t=parseFloat(ttc)||0;
+        const ht=t/COLIXO_TTC_FACTOR;
+        const tva=t-ht;
+        return { ttc:t, ht, tva };
+    }
+    function brimotComptaOk(f){
+        if(!f||f.type==='devis') return false;
+        return f.statut==='facture'||f.statut==='payee';
+    }
 
     /* ── TABS ── */
     document.querySelectorAll('.tab').forEach(t=>{
@@ -434,6 +680,8 @@
             document.querySelectorAll('.tab,.tab-pane').forEach(x=>x.classList.remove('active'));
             t.classList.add('active');
             document.getElementById('pane-'+t.dataset.tab)?.classList.add('active');
+            if(t.dataset.tab==='compta') renderComptaCH();
+            if(t.dataset.tab==='flux') loadJournalFlux();
         });
     });
 
@@ -475,17 +723,22 @@
         const aEnd   = `${selAnnee}-12-31`;
 
         const [
-            {data:vehs}, {data:frais}, {data:km}, {data:trans}, {data:chauf}, {data:ents}
+            {data:vehs}, {data:frais}, {data:km}, {data:trans}, {data:chauf}, {data:ents}, snapQ, brimotQ
         ] = await Promise.all([
             db.from('vehicules').select('*').eq('actif',true),
             db.from('vehicule_frais').select('*').order('mois',{ascending:false}),
             db.from('vehicule_km').select('*').gte('date',aStart).lte('date',aEnd).order('date',{ascending:false}),
             db.from('transport_orders_simple').select('*').gte('created_at',aStart+'T00:00:00').lte('created_at',aEnd+'T23:59:59'),
             db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur'),
-            db.from('entreprises').select('id,nom')
+            db.from('entreprises').select('id,nom'),
+            db.from('dispatch_tour_snapshots').select('*').gte('tour_planned_date',mStart).lte('tour_planned_date',mEnd).order('created_at',{ascending:false}),
+            db.from('brimot_factures').select('*').gte('date_facture',mStart).lte('date_facture',mEnd)
         ]);
 
         vehicules=vehs||[]; fraisList=frais||[]; kmList=km||[]; transports=trans||[]; chauffeurs=chauf||[]; entreprises=ents||[];
+        dispatchSnaps = (!snapQ.error && snapQ.data) ? snapQ.data : [];
+        brimotFactures = (!brimotQ.error && brimotQ.data) ? brimotQ.data : [];
+        if(brimotQ.error) console.warn('Brimot factures (compta):', brimotQ.error.message||brimotQ.error);
 
         // Frais du mois sélectionné
         const fraisMois = fraisList.filter(f=>f.mois===`${selAnnee}-${String(selMois).padStart(2,'0')}`);
@@ -502,10 +755,359 @@
         renderCAClient();
         renderCAMois();
         renderKMTable();
+        renderDispatchTables();
         populateFraisSelects();
+        comptaFraisMois=fraisMois; comptaTransMois=transMois;
+        renderComptaCH();
+        await loadJournalFlux();
 
         document.getElementById('caAnneeTitle').textContent=selAnnee;
         hideLoad();
+    };
+
+    /* ── COMPTABILITÉ CH MULTI-ENTREPRISE ── */
+    function renderComptaCH(){
+        const entity=(document.getElementById('comptaEntity')||{}).value||'both';
+        const periodLabel=`${selAnnee}-${String(selMois).padStart(2,'0')}`;
+        const fraisMois=comptaFraisMois||[];
+        const transMois=comptaTransMois||[];
+        const brimotRows=(brimotFactures||[]).filter(brimotComptaOk);
+
+        const buckets=new Map();
+        function addBucket(key,ht,tva){
+            const k=normTvaKey(key==='8.1'?8.1:key);
+            if(!buckets.has(k)) buckets.set(k,{ rate:k, ht:0, tva:0 });
+            const b=buckets.get(k);
+            b.ht+=ht; b.tva+=tva;
+        }
+
+        let sumHt=0, sumTva=0, sumTtc=0, nb=0;
+
+        if(entity==='colixo'||entity==='both'){
+            for(const t of transMois){
+                const { ttc, ht, tva }=colixoTtcSplit(t.price_chf);
+                sumHt+=ht; sumTva+=tva; sumTtc+=ttc; nb+=1;
+                addBucket('8.1',ht,tva);
+            }
+        }
+        if(entity==='brimot'||entity==='both'){
+            for(const f of brimotRows){
+                const ht=parseFloat(f.montant_ht)||0;
+                const tva=parseFloat(f.montant_tva)||0;
+                const ttc=parseFloat(f.montant_ttc)||0;
+                sumHt+=ht; sumTva+=tva; sumTtc+=ttc; nb+=1;
+                addBucket(f.tva_pct,ht,tva);
+            }
+        }
+
+        const rowsTva=[...buckets.entries()].map(([k,v])=>({
+            taux:k,
+            lib:TVA_CH_LIB[k]||`${k} %`,
+            ht:v.ht,
+            tva:v.tva
+        })).sort((a,b)=>parseFloat(b.taux)-parseFloat(a.taux));
+
+        const charges=[];
+        if(entity==='colixo'||entity==='both'){
+            const posts=[
+                ['Carburant',fraisMois.reduce((s,f)=>s+(parseFloat(f.carburant_chf)||0),0)],
+                ['Leasing',fraisMois.reduce((s,f)=>s+(parseFloat(f.leasing_chf)||0),0)],
+                ['Assurance',fraisMois.reduce((s,f)=>s+(parseFloat(f.assurance_chf)||0),0)],
+                ['Entretien',fraisMois.reduce((s,f)=>s+(parseFloat(f.entretien_chf)||0),0)],
+                ['Réparations',fraisMois.reduce((s,f)=>s+(parseFloat(f.reparations_chf)||0),0)],
+                ['Divers',fraisMois.reduce((s,f)=>s+(parseFloat(f.divers_chf)||0),0)]
+            ];
+            for(const [label,val] of posts) if(val>0.005) charges.push({ label, val });
+        }
+
+        comptaLast={ entity, periodLabel, rowsTva, rowsBrimot:brimotRows, rowsColixo:transMois, charges, tot:{ ht:sumHt,tva:sumTva,ttc:sumTtc,nb } };
+
+        const el=id=>document.getElementById(id);
+        if(el('cHT')) el('cHT').textContent=sumHt.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('cTVA')) el('cTVA').textContent=sumTva.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('cTTC')) el('cTTC').textContent=sumTtc.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('cNb')) el('cNb').textContent=String(nb);
+
+        const tbTva=document.getElementById('comptaTvaParTaux');
+        if(tbTva){
+            if(!rowsTva.length) tbTva.innerHTML='<tr><td colspan="4"><div class="empty"><div class="empty-txt">Aucune base TVA pour cette période / entité</div></div></td></tr>';
+            else tbTva.innerHTML=rowsTva.map(r=>`<tr>
+                <td>${esc(r.taux)} %</td>
+                <td style="color:var(--muted2)">${esc(r.lib)}</td>
+                <td>${r.ht.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${r.tva.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            </tr>`).join('');
+        }
+
+        const tbCh=document.getElementById('comptaChargesColixo');
+        if(tbCh){
+            if(entity==='brimot') tbCh.innerHTML='<tr><td colspan="2" style="color:var(--muted);">Non applicable (entité Brimot seule)</td></tr>';
+            else if(!charges.length) tbCh.innerHTML='<tr><td colspan="2"><div class="empty"><div class="empty-txt">Aucun frais véhicule ce mois</div></div></td></tr>';
+            else tbCh.innerHTML=charges.map(c=>`<tr><td>${esc(c.label)}</td><td>${c.val.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join('');
+        }
+
+        const tbB=document.getElementById('comptaBrimotTable');
+        if(tbB){
+            const show=entity==='brimot'||entity==='both';
+            if(!show) tbB.innerHTML='<tr><td colspan="7" style="color:var(--muted);">Masqué — sélectionnez Brimot ou consolidé</td></tr>';
+            else if(!brimotRows.length) tbB.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-txt">Aucune facture Brimot (facturée / payée) sur la période</div></div></td></tr>';
+            else tbB.innerHTML=brimotRows.map(f=>`<tr>
+                <td>${esc(f.numero||'—')}</td>
+                <td>${esc(f.date_facture||'—')}</td>
+                <td>${esc(f.statut||'—')}</td>
+                <td>${(parseFloat(f.montant_ht)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${(parseFloat(f.montant_tva)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${(parseFloat(f.montant_ttc)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${esc(String(f.tva_pct??'—'))} %</td>
+            </tr>`).join('');
+        }
+
+        const tbC=document.getElementById('comptaColixoTable');
+        if(tbC){
+            const show=entity==='colixo'||entity==='both';
+            if(!show) tbC.innerHTML='<tr><td colspan="6" style="color:var(--muted);">Masqué — sélectionnez Colixo ou consolidé</td></tr>';
+            else if(!transMois.length) tbC.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-txt">Aucun transport ce mois (création dans la période)</div></div></td></tr>';
+            else tbC.innerHTML=transMois.map(t=>{
+                const ref=esc(t.order_number||t.id?.slice(0,8)||'—');
+                const d=t.created_at?new Date(t.created_at).toLocaleDateString('fr-CH'):'—';
+                const { ttc, ht, tva }=colixoTtcSplit(t.price_chf);
+                return `<tr>
+                    <td>${ref}</td>
+                    <td>${d}</td>
+                    <td>${esc(t.status||'—')}</td>
+                    <td>${ttc.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                    <td>${ht.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                    <td>${tva.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                </tr>`;
+            }).join('');
+        }
+    }
+    window.renderComptaCH=renderComptaCH;
+
+    function downloadCsv(filename, lines){
+        const csv=lines.join('\n');
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
+        a.download=filename;
+        a.click();
+    }
+    window.exportComptaTvaCSV=function(){
+        const { entity, periodLabel, rowsTva, tot }=comptaLast;
+        const H=['Période','Entité','Taux_%','Libellé_taux','Base_HT_CHF','TVA_CHF'];
+        const entLabel=entity==='both'?'Colixo+Brimot':entity==='colixo'?'Colixo':'Brimot';
+        const rows=rowsTva.map(r=>[periodLabel,entLabel,r.taux,String(r.lib||'').replace(/;/g,','),r.ht.toFixed(2),r.tva.toFixed(2)].join(';'));
+        const sum=[periodLabel,entLabel,'TOTAL','',tot.ht.toFixed(2),tot.tva.toFixed(2)].join(';');
+        downloadCsv(`compta-tva-ch-${entLabel}-${periodLabel}.csv`,[H.join(';'),...rows,sum]);
+        toast('success','Export TVA téléchargé');
+    };
+    window.exportComptaJournalCSV=function(){
+        const { entity, periodLabel, rowsBrimot, rowsColixo, tot }=comptaLast;
+        const entLabel=entity==='both'?'Colixo+Brimot':entity==='colixo'?'Colixo':'Brimot';
+        const H=['Période','Société','Date','Référence','Libellé','Compte_suggéré','HT','TVA','TTC','Taux_TVA'];
+        const out=[H.join(';')];
+        if(entity==='colixo'||entity==='both'){
+            for(const t of rowsColixo||[]){
+                const { ttc, ht, tva }=colixoTtcSplit(t.price_chf);
+                const d=t.created_at?t.created_at.slice(0,10):'';
+                const ref=(t.order_number||t.id||'').toString().replace(/;/g,',');
+                out.push([periodLabel,'Colixo Transport',d,ref,'Vente transport','3200 / 2200',ht.toFixed(2),tva.toFixed(2),ttc.toFixed(2),'8.1'].join(';'));
+            }
+        }
+        if(entity==='brimot'||entity==='both'){
+            for(const f of rowsBrimot||[]){
+                if(!brimotComptaOk(f)) continue;
+                const d=f.date_facture||'';
+                const ref=(f.numero||f.id||'').toString().replace(/;/g,',');
+                const ht=parseFloat(f.montant_ht)||0, tva=parseFloat(f.montant_tva)||0, ttc=parseFloat(f.montant_ttc)||0;
+                out.push([periodLabel,'Brimot Nettoyage',d,ref,'Vente nettoyage','3200 / 2200',ht.toFixed(2),tva.toFixed(2),ttc.toFixed(2),String(f.tva_pct||'')].join(';'));
+            }
+        }
+        out.push([periodLabel,entLabel,'','','TOTAL PÉRIODE','',tot.ht.toFixed(2),tot.tva.toFixed(2),tot.ttc.toFixed(2),''].join(';'));
+        downloadCsv(`compta-journal-simplifie-${entLabel}-${periodLabel}.csv`,out);
+        toast('success','Export journal téléchargé');
+    };
+
+    /* ── JOURNAL DES FLUX (saisie manuelle entrées / sorties) ── */
+    function getFluxDateBounds(){
+        const scope=(document.getElementById('fluxPeriode')||{}).value||'mois';
+        const sm=parseInt(document.getElementById('selPeriod').value,10)||selMois;
+        const sa=parseInt(document.getElementById('selAnnee').value,10)||selAnnee;
+        if(scope==='annee') return { d1:`${sa}-01-01`, d2:`${sa}-12-31` };
+        const mStart=`${sa}-${String(sm).padStart(2,'0')}-01`;
+        const mEnd=new Date(sa,sm,0).toISOString().slice(0,10);
+        return { d1:mStart, d2:mEnd };
+    }
+    async function loadJournalFlux(){
+        const { d1, d2 }=getFluxDateBounds();
+        const q=await db.from('compta_journal_flux').select('*').gte('date_mouvement',d1).lte('date_mouvement',d2).order('date_mouvement',{ascending:true}).order('created_at',{ascending:true});
+        journalFlux=(!q.error&&q.data)?q.data:[];
+        if(q.error) console.warn('Journal flux:',q.error.message||q.error);
+        renderJournalFlux();
+    }
+    window.loadJournalFlux=loadJournalFlux;
+
+    function renderJournalFlux(){
+        const entity=(document.getElementById('fluxEntity')||{}).value||'both';
+        let rows=(journalFlux||[]).filter(r=>entity==='both'||r.entite===entity);
+        rows.sort((a,b)=>{
+            const da=String(a.date_mouvement), db=String(b.date_mouvement);
+            if(da!==db) return da.localeCompare(db);
+            return String(a.created_at||'').localeCompare(String(b.created_at||''));
+        });
+        let cum=0;
+        const withBal=rows.map(r=>{
+            const amt=parseFloat(r.montant_chf)||0;
+            if(r.sens==='entree') cum+=amt; else cum-=amt;
+            return { ...r, _cum:cum };
+        });
+        let sumIn=0, sumOut=0;
+        rows.forEach(r=>{
+            const amt=parseFloat(r.montant_chf)||0;
+            if(r.sens==='entree') sumIn+=amt; else sumOut+=amt;
+        });
+        const net=sumIn-sumOut;
+        const el=id=>document.getElementById(id);
+        if(el('fluxKin')) el('fluxKin').textContent=sumIn.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('fluxKout')) el('fluxKout').textContent=sumOut.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(el('fluxKnet')){
+            el('fluxKnet').textContent=net.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+            el('fluxKnet').style.color=net>=0?'var(--green)':'var(--red)';
+        }
+        if(el('fluxKnb')) el('fluxKnb').textContent=String(rows.length);
+
+        const tb=document.getElementById('fluxTable');
+        if(!tb) return;
+        if(!withBal.length){
+            tb.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-txt">Aucune écriture sur cette période. Exécutez le script SQL <code>compta_journal_flux_schema.sql</code> dans Supabase si la table n’existe pas encore, puis « Nouvelle écriture ».</div></div></td></tr>';
+            return;
+        }
+        const entLabel=e=>e==='colixo'?'Colixo':'Brimot';
+        const sensLabel=s=>s==='entree'?'Entrée':'Sortie';
+        tb.innerHTML=withBal.map(r=>{
+            const colSens=r.sens==='entree'?'var(--green)':'var(--red)';
+            return `<tr>
+                <td>${esc(r.date_mouvement||'')}</td>
+                <td>${entLabel(r.entite)}</td>
+                <td style="color:${colSens};font-weight:600">${sensLabel(r.sens)}</td>
+                <td style="font-weight:600">${(parseFloat(r.montant_chf)||0).toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td>${esc(r.libelle||'')}</td>
+                <td style="color:var(--muted2)">${esc(r.categorie||'')}</td>
+                <td style="font-family:monospace;font-size:12px">${esc(r.compte_comptable||'')}</td>
+                <td style="font-size:12px">${esc(r.reference_piece||'')}</td>
+                <td style="font-size:12px">${esc(r.moyen_paiement||'')}</td>
+                <td style="font-weight:600;color:var(--blue)">${r._cum.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td style="white-space:nowrap">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="openModalFlux('${r.id}')"><i class="fas fa-edit"></i></button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="deleteFlux('${r.id}')"><i class="fas fa-trash" style="color:var(--red)"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    window.openModalFlux=function(id){
+        document.getElementById('fluxModalTitle').textContent=id?'MODIFIER ÉCRITURE':'NOUVELLE ÉCRITURE';
+        document.getElementById('fluxId').value=id||'';
+        if(!id){
+            document.getElementById('fluxEntite').value='colixo';
+            document.getElementById('fluxDate').value=new Date().toISOString().slice(0,10);
+            document.getElementById('fluxSens').value='entree';
+            document.getElementById('fluxMontant').value='';
+            document.getElementById('fluxLibelle').value='';
+            document.getElementById('fluxCategorie').value='';
+            document.getElementById('fluxCompte').value='';
+            document.getElementById('fluxRef').value='';
+            document.getElementById('fluxMoyen').value='';
+            document.getElementById('fluxNotes').value='';
+        } else {
+            const row=journalFlux.find(x=>x.id===id);
+            if(!row){ toast('error','Écriture introuvable'); return; }
+            document.getElementById('fluxEntite').value=row.entite||'colixo';
+            document.getElementById('fluxDate').value=String(row.date_mouvement||'').slice(0,10);
+            document.getElementById('fluxSens').value=row.sens||'entree';
+            document.getElementById('fluxMontant').value=row.montant_chf!=null?String(row.montant_chf):'';
+            document.getElementById('fluxLibelle').value=row.libelle||'';
+            document.getElementById('fluxCategorie').value=row.categorie||'';
+            document.getElementById('fluxCompte').value=row.compte_comptable||'';
+            document.getElementById('fluxRef').value=row.reference_piece||'';
+            document.getElementById('fluxMoyen').value=row.moyen_paiement||'';
+            document.getElementById('fluxNotes').value=row.notes||'';
+        }
+        openModal('modalFlux');
+    };
+
+    window.saveFlux=async function(){
+        const id=document.getElementById('fluxId').value.trim();
+        const entite=document.getElementById('fluxEntite').value;
+        const date_mouvement=document.getElementById('fluxDate').value;
+        const sens=document.getElementById('fluxSens').value;
+        const montant_chf=parseFloat(document.getElementById('fluxMontant').value);
+        const libelle=document.getElementById('fluxLibelle').value.trim();
+        if(!date_mouvement||!libelle||!(montant_chf>0)){ toast('error','Date, libellé et montant valides requis'); return; }
+        const payload={
+            entite,
+            date_mouvement,
+            sens,
+            montant_chf,
+            libelle,
+            categorie: document.getElementById('fluxCategorie').value||null,
+            compte_comptable: document.getElementById('fluxCompte').value.trim()||null,
+            reference_piece: document.getElementById('fluxRef').value.trim()||null,
+            moyen_paiement: document.getElementById('fluxMoyen').value||null,
+            notes: document.getElementById('fluxNotes').value.trim()||null,
+            updated_at: new Date().toISOString()
+        };
+        showLoad('Enregistrement…');
+        try{
+            const { data: { session } }=await db.auth.getSession();
+            if(id){
+                const { error }=await db.from('compta_journal_flux').update(payload).eq('id',id);
+                if(error) throw error;
+                toast('success','Écriture mise à jour');
+            } else {
+                payload.created_by=session?.user?.id??null;
+                const { error }=await db.from('compta_journal_flux').insert([payload]);
+                if(error) throw error;
+                toast('success','Écriture créée');
+            }
+            closeModal('modalFlux');
+            await loadJournalFlux();
+        } catch(e){ toast('error', e.message||String(e)); }
+        finally{ hideLoad(); }
+    };
+
+    window.deleteFlux=async function(fid){
+        if(!fid||!confirm('Supprimer cette écriture ?')) return;
+        showLoad('Suppression…');
+        try{
+            const { error }=await db.from('compta_journal_flux').delete().eq('id',fid);
+            if(error) throw error;
+            toast('success','Supprimé');
+            await loadJournalFlux();
+        } catch(e){ toast('error', e.message||String(e)); }
+        finally{ hideLoad(); }
+    };
+
+    window.exportFluxCSV=function(){
+        const entity=(document.getElementById('fluxEntity')||{}).value||'both';
+        const { d1, d2 }=getFluxDateBounds();
+        let rows=(journalFlux||[]).filter(r=>entity==='both'||r.entite===entity);
+        rows.sort((a,b)=>{
+            const da=String(a.date_mouvement), db=String(b.date_mouvement);
+            if(da!==db) return da.localeCompare(db);
+            return String(a.created_at||'').localeCompare(String(b.created_at||''));
+        });
+        let cum=0;
+        const H=['Date','Société','Sens','Montant_CHF','Libellé','Catégorie','Compte','Référence','Moyen_paiement','Notes','Solde_cumulé_CHF'];
+        const lines=[H.join(';')];
+        for(const r of rows){
+            const amt=parseFloat(r.montant_chf)||0;
+            if(r.sens==='entree') cum+=amt; else cum-=amt;
+            const soc=r.entite==='colixo'?'Colixo':'Brimot';
+            const sens=r.sens==='entree'?'entree':'sortie';
+            lines.push([r.date_mouvement,soc,sens,amt.toFixed(2),String(r.libelle||'').replace(/;/g,','),String(r.categorie||'').replace(/;/g,','),String(r.compte_comptable||''),String(r.reference_piece||'').replace(/;/g,','),String(r.moyen_paiement||''),String(r.notes||'').replace(/\r?\n/g,' ').replace(/;/g,','),cum.toFixed(2)].join(';'));
+        }
+        downloadCsv(`journal-flux-${d1}_${d2}.csv`,lines);
+        toast('success','Export téléchargé');
     };
 
     /* ── KPIs ── */
@@ -563,6 +1165,83 @@
                 </div>
             </div>`;
         }).join('');
+    }
+
+    /* ── DISPATCH SNAPSHOTS ── */
+    function renderDispatchTables() {
+        const aggBody = document.getElementById('dispatchAggTable');
+        const detBody = document.getElementById('dispatchSnapsTable');
+        if (!aggBody || !detBody) return;
+
+        const byKey = new Map();
+        for (const s of dispatchSnaps) {
+            const vid = s.vehicle_id || 'null';
+            const d = s.tour_planned_date;
+            const did = s.driver_id || '';
+            const k = `${vid}|${d}|${did}`;
+            if (!byKey.has(k)) {
+                byKey.set(k, {
+                    vehicle_id: s.vehicle_id,
+                    tour_planned_date: d,
+                    driver_id: s.driver_id,
+                    n: 0,
+                    km: 0,
+                    rev: 0,
+                    cost: 0
+                });
+            }
+            const row = byKey.get(k);
+            row.n += 1;
+            row.km += parseFloat(s.total_km) || 0;
+            row.rev += parseFloat(s.revenue_chf) || 0;
+            row.cost += parseFloat(s.cost_chf) || 0;
+        }
+        const aggRows = [...byKey.values()].sort((a, b) => String(b.tour_planned_date).localeCompare(String(a.tour_planned_date)));
+        if (!aggRows.length) {
+            aggBody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-ico">🗺️</div><div class="empty-txt">Aucun snapshot ce mois.<br>Dans Dispatch, calculez la route puis « Sauver » (script SQL <code>dispatch_tour_schema.sql</code> requis).</div></div></td></tr>`;
+        } else {
+            aggBody.innerHTML = aggRows.map(r => {
+                const v = vehicules.find(x => x.id === r.vehicle_id);
+                const ch = chauffeurs.find(c => c.id === r.driver_id);
+                const mar = r.rev - r.cost;
+                const marCol = mar >= 0 ? 'var(--green)' : 'var(--red)';
+                return `<tr>
+                    <td>${r.tour_planned_date || '—'}</td>
+                    <td><strong>${v?.immatriculation || '—'}</strong></td>
+                    <td>${ch ? `${ch.prenom||''} ${ch.nom||''}`.trim() : '—'}</td>
+                    <td>${r.n}</td>
+                    <td style="color:var(--yellow)">${r.km.toFixed(1)}</td>
+                    <td style="color:var(--green)">${fmtCHF(r.rev)}</td>
+                    <td style="color:var(--orange)">${fmtCHF(r.cost)}</td>
+                    <td style="color:${marCol};font-weight:700">${fmtCHF(mar)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        if (!dispatchSnaps.length) {
+            detBody.innerHTML = `<tr><td colspan="11"><div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Pas encore d’historique.</div></div></td></tr>`;
+        } else {
+            detBody.innerHTML = dispatchSnaps.map(s => {
+                const v = vehicules.find(x => x.id === s.vehicle_id);
+                const ch = chauffeurs.find(c => c.id === s.driver_id);
+                const created = s.created_at ? new Date(s.created_at).toLocaleString('fr-CH', { timeZone: 'Europe/Zurich', hour12: false }) : '—';
+                const m = parseFloat(s.margin_chf) || 0;
+                const mCol = m >= 0 ? 'var(--green)' : 'var(--red)';
+                return `<tr>
+                    <td>${s.tour_planned_date || '—'}</td>
+                    <td style="font-size:11px;color:var(--muted)">${created}</td>
+                    <td><strong>${v?.immatriculation || '—'}</strong></td>
+                    <td>${ch ? `${ch.prenom||''} ${ch.nom||''}`.trim() : '—'}</td>
+                    <td style="font-size:11px;font-family:monospace">${(s.tour_id || '').slice(0, 18)}</td>
+                    <td>${(parseFloat(s.total_km)||0).toFixed(1)}</td>
+                    <td>${s.nb_stops ?? '—'}</td>
+                    <td style="color:var(--green)">${fmtCHF(s.revenue_chf)}</td>
+                    <td style="color:var(--orange)">${fmtCHF(s.cost_chf)}</td>
+                    <td style="color:${mCol};font-weight:600">${fmtCHF(s.margin_chf)}</td>
+                    <td>${Number(s.margin_pct || 0).toFixed(1)}%</td>
+                </tr>`;
+            }).join('');
+        }
     }
 
     /* ── VEH RESULT TABLE ── */
@@ -770,6 +1449,7 @@
         document.getElementById('mModele').value='';
         document.getElementById('mAnnee').value=new Date().getFullYear();
         document.getElementById('mChauffeur').value='';
+        document.getElementById('mCoutChauffeurJour').value='0';
         openModal('modalVehicule');
     };
 
@@ -782,6 +1462,7 @@
         document.getElementById('mModele').value=v.modele||'';
         document.getElementById('mAnnee').value=v.annee||'';
         document.getElementById('mChauffeur').value=v.chauffeur_id||'';
+        document.getElementById('mCoutChauffeurJour').value = v.cout_chauffeur_jour != null ? v.cout_chauffeur_jour : '0';
         openModal('modalVehicule');
     };
 
@@ -789,28 +1470,47 @@
         const immat=document.getElementById('mImmat').value.trim().toUpperCase();
         if(!immat){ toast('error','Immatriculation requise'); return; }
         const id=document.getElementById('mVehId').value;
+        const chSel=document.getElementById('mChauffeur').value;
+        const chauffeur_id=chSel&&String(chSel).trim()?String(chSel).trim():null;
         const payload={
             immatriculation:immat,
             marque:document.getElementById('mMarque').value.trim()||null,
             modele:document.getElementById('mModele').value.trim()||null,
             annee:parseInt(document.getElementById('mAnnee').value)||null,
-            chauffeur_id:document.getElementById('mChauffeur').value||null,
+            chauffeur_id,
+            cout_chauffeur_jour: parseFloat(document.getElementById('mCoutChauffeurJour').value) || 0,
             actif:true
         };
+        async function trySave(p) {
+            if(id) return db.from('vehicules').update(p).eq('id',id).select('id');
+            return db.from('vehicules').insert([p]).select('id');
+        }
         showLoad('Sauvegarde…');
         try {
-            if(id) await db.from('vehicules').update(payload).eq('id',id);
-            else   await db.from('vehicules').insert([payload]);
+            let { error } = await trySave(payload);
+            const errMsg = error ? String(error.message||'') : '';
+            if(error && (errMsg.includes('cout_chauffeur_jour') || errMsg.includes('schema cache') || errMsg.includes('column'))) {
+                const p2={...payload}; delete p2.cout_chauffeur_jour;
+                ({ error } = await trySave(p2));
+                if(!error) {
+                    toast('success','Véhicule enregistré ✓ (ajoutez la colonne cout_chauffeur_jour via dispatch_tour_schema.sql pour le coût/jour)');
+                    window.closeModal('modalVehicule');
+                    await loadAll();
+                    return;
+                }
+            }
+            if(error) throw new Error(error.message || error.code || 'Erreur Supabase');
             toast('success','Véhicule enregistré ✓');
             window.closeModal('modalVehicule');
             await loadAll();
-        } catch(e){ toast('error',e.message); }
+        } catch(e){ toast('error', e.message || String(e)); }
         finally{ hideLoad(); }
     };
 
     window.deleteVehicule = async function(id) {
         if(!confirm('Supprimer ce véhicule ?')) return;
-        await db.from('vehicules').update({actif:false}).eq('id',id);
+        const { error } = await db.from('vehicules').update({actif:false}).eq('id',id);
+        if(error){ toast('error', error.message || 'Impossible d’archiver'); return; }
         toast('success','Véhicule archivé');
         await loadAll();
     };

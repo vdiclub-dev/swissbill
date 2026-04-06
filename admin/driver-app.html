@@ -3,19 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0a0a0f">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Colixo Driver</title>
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../config.js"></script>
-    <script src="../push-manager.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260420"></script>
+    <script src="../push-manager.js?v=20260420"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -56,12 +61,21 @@
         .sb-logo em { color:var(--red); font-style:normal; }
         .sb-right { display:flex; align-items:center; gap:12px; }
         .gps-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); transition:all 0.3s; }
+        .gps-dot.pending { background:var(--yellow); box-shadow:0 0 8px rgba(245,158,11,0.35); animation:gp 1.5s infinite; }
         .gps-dot.on { background:var(--green); box-shadow:0 0 6px var(--green); animation:gp 1.5s infinite; }
         @keyframes gp { 0%,100%{opacity:1}50%{opacity:0.4} }
 
         /* ── SCREENS ── */
-        .screen { display:none; flex:1; flex-direction:column; overflow:hidden; }
+        .screen { display:none; flex:1; flex-direction:column; overflow:hidden; min-height:0; }
         .screen.active { display:flex; }
+        /* Accueil : tout défile (pointage + km/plein + missions) — évite la carte km hors écran sur petit mobile */
+        #screenMissions.screen.active,
+        #screenJournal.screen.active {
+            overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+            padding-bottom:calc(70px + var(--safe-b));
+        }
+        #screenMissions .scroll-list { flex:none; overflow:visible; padding:0 12px 12px; }
+        .journal-block-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; color:var(--orange); margin:18px 14px 10px; }
 
         /* ── LOGIN ── */
         .login-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 24px; }
@@ -115,13 +129,34 @@
         .km-inputs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
         .km-field { display:flex; flex-direction:column; gap:4px; }
         .km-field label { font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); }
-        .km-field input { padding:9px 10px; background:var(--surface); border:1.5px solid var(--border2); border-radius:9px; font-family:'Outfit',sans-serif; font-size:16px; color:var(--white); text-align:center; }
-        .km-field input:focus { outline:none; border-color:var(--green); }
+        .km-field input, .km-field select { padding:9px 10px; background:var(--surface); border:1.5px solid var(--border2); border-radius:9px; font-family:'Outfit',sans-serif; font-size:15px; color:var(--white); text-align:center; }
+        .km-field select { text-align:left; cursor:pointer; }
+        .km-field select option { background:var(--night3); }
+        .km-field input:focus, .km-field select:focus { outline:none; border-color:var(--green); }
+        .km-multi-hint { font-size:11px; color:var(--muted); margin-top:6px; line-height:1.4; }
         .km-total { display:flex; align-items:center; justify-content:space-between; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:9px; padding:8px 12px; }
         .km-total-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; color:var(--green); }
         .km-total-lbl { font-size:11px; color:var(--muted2); }
         .km-save { width:100%; padding:10px; background:var(--green); color:var(--night); border:none; border-radius:9px; font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; cursor:pointer; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; }
         .km-save:active { transform:scale(0.98); }
+        .km-divider { height:1px; background:var(--border2); margin:14px 0 10px; }
+        .plein-title { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--orange); margin-bottom:8px; }
+
+        /* Page frais */
+        .frais-screen { flex:1; overflow-y:auto; padding:0 14px 100px; }
+        #screenJournal .frais-screen { flex:none; overflow:visible; padding-left:0; padding-right:0; }
+        .frais-screen::-webkit-scrollbar { display:none; }
+        .frais-intro { font-size:12px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
+        .frais-form-card { background:var(--night3); border:1px solid var(--border2); border-radius:14px; padding:14px; margin-bottom:14px; }
+        .frais-form-title { font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:1px; margin-bottom:12px; color:var(--orange); }
+        .dep-row { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+        .dep-main { flex:1; min-width:0; }
+        .dep-cat { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:0.5px; }
+        .dep-lib { font-size:13px; color:var(--muted2); margin-top:2px; }
+        .dep-amt { font-family:'Bebas Neue',cursive; font-size:20px; color:var(--yellow); white-space:nowrap; }
+        .dep-meta { font-size:11px; color:var(--muted); margin-top:4px; }
+        .dep-del { background:rgba(232,49,26,0.12); border:1px solid rgba(232,49,26,0.3); color:var(--red); border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; flex-shrink:0; }
+        .btn-frais-save { width:100%; padding:12px; background:var(--orange); color:var(--night); border:none; border-radius:10px; font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; cursor:pointer; margin-top:10px; }
         .sr-item { background:var(--night2); padding:12px 8px; text-align:center; }
         .sr-val { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
         .sr-lbl { font-size:10px; color:var(--muted); margin-top:1px; }
@@ -217,6 +252,24 @@
         .ci-status.refuse     { background:rgba(232,49,26,0.15);  color:var(--red); }
         .ci-dates { font-size:12px; color:var(--muted); }
 
+        .fs-card { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:12px 14px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; }
+        .fs-card:active { transform:scale(0.99); }
+        .fs-card-lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+        .fs-card-per { font-family:'Bebas Neue',cursive; font-size:18px; letter-spacing:1px; color:var(--white); margin-top:2px; }
+        .fs-card-net { font-family:'Bebas Neue',cursive; font-size:22px; color:var(--green); white-space:nowrap; }
+        #modalFicheSalaire .modal-box { max-height:90vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+        #modalFicheSalaire .print-fs-doc { background:#16161d; border:1px solid #333; border-radius:8px; padding:18px 14px; }
+        #modalFicheSalaire .print-fs-title { color:#fff; border-color:var(--red); }
+        #modalFicheSalaire .print-fs-sub { color:var(--muted2); }
+        #modalFicheSalaire .print-fs-addr-grid { border-color:#3a3a45; }
+        #modalFicheSalaire .print-fs-addr-cell { border-color:#3a3a45; color:#ddd; }
+        #modalFicheSalaire .print-fs-addr-cell .lbl { color:var(--muted); }
+        #modalFicheSalaire .print-fs-table td { border-color:#2a2a33; color:#e8e8e8; }
+        #modalFicheSalaire .print-fs-table tr.fs-muted td { color:#888 !important; }
+        #modalFicheSalaire .print-fs-table tr.fs-net td { color:#fff !important; border-top-color:#555; }
+        #modalFicheSalaire .print-fs-iban { background:#121218; border-color:#333; color:#ddd; }
+        #modalFicheSalaire .print-fs-foot { border-color:#333; color:#666; }
+
         /* ── CONFIRM DELIVERY ── */
         .confirm-screen { overflow-y:auto; padding:20px 18px calc(20px + var(--safe-b)); }
         .confirm-screen::-webkit-scrollbar { display:none; }
@@ -268,6 +321,7 @@
         .bn-wrap { display:flex; }
         .bn-item { flex:1; padding:11px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; color:var(--muted); transition:color 0.2s; position:relative; }
         .bn-item.active { color:var(--red); }
+        .bn-item.disabled { opacity:0.4; cursor:not-allowed; }
         .bn-item i { font-size:18px; }
         .bn-item span { font-size:9px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; }
         .bn-badge { position:absolute; top:8px; right:calc(50% - 18px); width:16px; height:16px; background:var(--red); border-radius:50%; display:none; place-items:center; font-size:9px; font-weight:700; color:var(--white); }
@@ -294,6 +348,56 @@
         .empty-state { padding:40px 20px; text-align:center; }
         .empty-ico { font-size:40px; opacity:0.15; margin-bottom:12px; }
         .empty-txt { font-size:13px; color:var(--muted); line-height:1.6; }
+
+        /* ═══ PRO VERSION ENHANCEMENTS ═══ */
+        /* ── PROGRESS STATUS BAR ── */
+        .mission-status-bar { display:flex; gap:3px; padding:8px 0; }
+        .mission-status-step { flex:1; height:5px; border-radius:2px; background:var(--border2); transition:all 0.3s ease; }
+        .mission-status-step.done { background:var(--green); }
+        .mission-status-step.active { background:var(--blue); box-shadow:0 0 8px rgba(59,130,246,0.5); }
+        .mission-status-step.pending { background:var(--yellow); opacity:0.4; }
+
+        /* ── OFFLINE INDICATOR ── */
+        .offline-banner { background:rgba(232,49,26,0.12); border-left:3px solid var(--red); border-radius:8px; padding:9px 12px; margin:12px 14px 0; font-size:11px; color:var(--red); display:none; align-items:center; gap:8px; }
+        .offline-banner.show { display:flex; animation:slideIn 0.3s ease; }
+        .offline-dot { width:5px; height:5px; background:var(--red); border-radius:50%; animation:pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
+        @keyframes slideIn { from { transform:translateY(-10px); opacity:0 } to { transform:translateY(0); opacity:1 } }
+
+        /* ── BREADCRUMB NAV ── */
+        .breadcrumb-nav { background:var(--night2); border-bottom:1px solid var(--border); padding:9px 14px; font-size:11px; color:var(--muted); display:flex; align-items:center; gap:8px; font-family:'Outfit',sans-serif; flex-wrap:wrap; }
+        .breadcrumb-nav button { background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:11px; transition:color 0.2s; }
+        .breadcrumb-nav button:active { color:var(--red); }
+        .breadcrumb-nav span { color:var(--border2); }
+
+        /* ── DAILY DASHBOARD CARD ── */
+        .daily-dashboard { background:var(--night3); border:1px solid var(--border2); border-radius:12px; padding:14px; margin:14px 14px 8px 14px; border-left:4px solid var(--blue); }
+        .daily-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; margin-bottom:12px; display:flex; align-items:center; gap:8px; color:var(--white); }
+        .daily-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+        .daily-stat { background:var(--surface); border-radius:9px; padding:11px 8px; text-align:center; border:1px solid rgba(255,255,255,0.05); }
+        .daily-stat-val { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; color:var(--yellow); line-height:1; }
+        .daily-stat-lbl { font-size:8px; color:var(--muted); margin-top:4px; text-transform:uppercase; letter-spacing:0.5px; font-weight:600; }
+        .daily-progress-label { font-size:12px; color:var(--muted2); margin:12px 0 6px; font-weight:600; }
+        .daily-progress-timeline { font-size:11px; color:var(--muted); line-height:1.8; }
+
+        /* ── MISSION QUICK ACTIONS ── */
+        .mission-quick-actions { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+        .quick-action-btn { flex:1; min-width:70px; padding:9px 10px; background:var(--surface); border:1px solid var(--border2); border-radius:8px; font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; cursor:pointer; color:var(--muted2); display:flex; align-items:center; justify-content:center; gap:4px; transition:all 0.2s; }
+        .quick-action-btn:active { background:var(--border2); transform:scale(0.98); }
+        .quick-action-btn.call { color:var(--green); }
+        .quick-action-btn.nav { color:var(--blue); }
+        .quick-action-btn.msg { color:var(--orange); }
+
+        /* ── MISSION ENHANCED INFO ── */
+        .mission-client-info { background:var(--surface); border-radius:9px; padding:10px; margin:8px 0; border-left:2px solid var(--yellow); }
+        .mission-client-name { font-weight:700; font-size:12px; margin-bottom:2px; }
+        .mission-client-phone { font-size:11px; color:var(--blue); cursor:pointer; text-decoration:underline; display:flex; align-items:center; gap:4px; }
+        .mission-client-email { font-size:10px; color:var(--muted); margin-top:2px; }
+
+        /* ── CACHE SYNC STATUS ── */
+        .cache-sync-status { position:fixed; bottom:70px; right:14px; background:var(--night3); border:1px solid var(--border2); border-radius:8px; padding:8px 12px; font-size:10px; color:var(--muted2); display:none; align-items:center; gap:6px; z-index:100; }
+        .cache-sync-status.show { display:flex; }
+        .cache-sync-dot { width:5px; height:5px; background:var(--yellow); border-radius:50%; animation:pulse 1.5s infinite; }
     </style>
 </head>
 <body>
@@ -312,6 +416,13 @@
         </button>
         <button onclick="logout()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;"><i class="fas fa-sign-out-alt"></i></button>
     </div>
+</div>
+
+<!-- ═══ BREADCRUMB NAV ═══ -->
+<div class="breadcrumb-nav" id="breadcrumbNav" style="display:none;background:var(--night2);border-bottom:1px solid var(--border);padding:10px 14px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;font-family:'Outfit',sans-serif;flex-wrap:wrap;">
+    <button onclick="showScreen('missions')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;"><i class="fas fa-home"></i> Accueil</button>
+    <span style="color:var(--border2);">/</span>
+    <span id="breadcrumbLabel">—</span>
 </div>
 
 <!-- Notification dropdown -->
@@ -337,18 +448,80 @@
     </div>
 </div>
 
-<!-- ═══ HOME ═══ -->
-<div class="screen" id="screenHome">
+<!-- ═══ MISSIONS (liste uniquement) ═══ -->
+<div class="screen" id="screenMissions">
+    <div class="offline-banner" id="offlineBanner">
+        <div class="offline-dot"></div>
+        <span>Mode hors ligne — sync auto au reconnect</span>
+    </div>
     <div class="home-header">
         <div class="home-greeting">Bonjour,</div>
-        <div class="home-name" id="homeName">Chauffeur</div>
-        <div class="home-date" id="homeDate"></div>
+        <div class="home-name driver-display-name">Chauffeur</div>
+        <div class="home-date driver-display-date"></div>
     </div>
 
-    <!-- Pointage -->
+    <!-- ═══ DAILY DASHBOARD ═══ -->
+    <div class="daily-dashboard">
+        <div class="daily-title">📊 VOTRE JOURNÉE</div>
+        <div class="daily-grid">
+            <div class="daily-stat">
+                <div class="daily-stat-val" id="dashMissionsTotal">0</div>
+                <div class="daily-stat-lbl">Missions</div>
+            </div>
+            <div class="daily-stat">
+                <div class="daily-stat-val" id="dashMissionsDone">0</div>
+                <div class="daily-stat-lbl">Livrés</div>
+            </div>
+            <div class="daily-stat">
+                <div class="daily-stat-val" id="dashTimeWorked">0h</div>
+                <div class="daily-stat-lbl">Travaillé</div>
+            </div>
+        </div>
+        <div class="daily-progress-label">📍 Progression du jour</div>
+        <div class="mission-status-bar">
+            <div class="mission-status-step active" id="dashStepMorning"></div>
+            <div class="mission-status-step pending" id="dashStepMidday"></div>
+            <div class="mission-status-step pending" id="dashStepAfternoon"></div>
+            <div class="mission-status-step pending" id="dashStepEnd"></div>
+        </div>
+        <div class="daily-progress-timeline">
+            <div>▸ <strong id="dashNextMission">En attente de missions</strong></div>
+        </div>
+    </div>
+
+    <div class="stats-row">
+        <div class="sr-item">
+            <div class="sr-val" id="srMissions" style="color:var(--yellow)">0</div>
+            <div class="sr-lbl">Missions</div>
+        </div>
+        <div class="sr-item">
+            <div class="sr-val" id="srDone" style="color:var(--green)">0</div>
+            <div class="sr-lbl">Livrés</div>
+        </div>
+        <div class="sr-item">
+            <div class="sr-val" id="srHours" style="color:var(--blue)">0h</div>
+            <div class="sr-lbl">Travaillé</div>
+        </div>
+    </div>
+    <p style="font-size:11px;color:var(--muted);text-align:center;padding:0 18px 10px;line-height:1.45;">Pointage, km, plein et autres frais : onglet <strong style="color:var(--muted2);">Journée</strong></p>
+    <div class="section-header">
+        <div class="section-title">MES MISSIONS</div>
+        <button onclick="loadMissions()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;"><i class="fas fa-sync-alt"></i></button>
+    </div>
+    <div class="scroll-list" id="missionsList"></div>
+</div>
+
+<!-- ═══ JOURNÉE : pointage / heures, km, frais ═══ -->
+<div class="screen" id="screenJournal">
+    <div class="home-header">
+        <div class="home-greeting">Bonjour,</div>
+        <div class="home-name driver-display-name">Chauffeur</div>
+        <div class="home-date driver-display-date"></div>
+    </div>
+
     <div class="pointage-card">
         <div class="pc-title">
-            POINTAGE DU JOUR
+            POINTAGE &amp; HEURES
             <span class="pc-status off" id="pcStatus">Non pointé</span>
         </div>
         <div class="pc-times">
@@ -377,28 +550,15 @@
         </div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-row">
-        <div class="sr-item">
-            <div class="sr-val" id="srMissions" style="color:var(--yellow)">0</div>
-            <div class="sr-lbl">Missions</div>
-        </div>
-        <div class="sr-item">
-            <div class="sr-val" id="srDone" style="color:var(--green)">0</div>
-            <div class="sr-lbl">Livrés</div>
-        </div>
-        <div class="sr-item">
-            <div class="sr-val" id="srHours" style="color:var(--blue)">0h</div>
-            <div class="sr-lbl">Travaillé</div>
-        </div>
-    </div>
-
-    <!-- Missions -->
-    <!-- KM JOURNALIERS -->
     <div class="km-card" id="kmCard" style="display:none;">
         <div class="km-title">
             KM DU JOUR
             <span id="kmStatus" class="pc-status off">Non saisi</span>
+        </div>
+        <div class="km-field" id="kmVehWrap" style="display:none;margin-bottom:10px;">
+            <label id="kmVehLabel">Véhicule</label>
+            <select id="kmVehiculeSelect"></select>
+            <div class="km-multi-hint" id="kmVehHint">Un relevé début/fin par véhicule utilisé aujourd’hui.</div>
         </div>
         <div class="km-inputs">
             <div class="km-field">
@@ -414,22 +574,79 @@
             <div class="km-total-lbl">Km parcourus aujourd'hui</div>
             <div class="km-total-val" id="kmTotal">— km</div>
         </div>
+        <div class="km-divider"></div>
+        <div class="plein-title"><i class="fas fa-gas-pump"></i> Plein gasoil (optionnel)</div>
+        <div class="km-inputs">
+            <div class="km-field">
+                <label>Litres</label>
+                <input type="number" id="kmLitres" step="0.1" min="0" placeholder="—" inputmode="decimal">
+            </div>
+            <div class="km-field">
+                <label>Prix à la pompe (CHF/L)</label>
+                <input type="number" id="kmPrixLitre" step="0.001" min="0" placeholder="ex. 1.899" inputmode="decimal">
+            </div>
+        </div>
+        <div class="km-total" style="background:rgba(249,115,22,0.08);border-color:rgba(249,115,22,0.22);margin-top:4px;">
+            <div class="km-total-lbl">Montant du plein</div>
+            <div class="km-total-val" id="kmPleinMontant" style="color:var(--orange);">— CHF</div>
+        </div>
         <button class="km-save" onclick="saveKm()">
-            <i class="fas fa-save"></i> Enregistrer les km
+            <i class="fas fa-save"></i> Enregistrer km &amp; plein
         </button>
     </div>
 
-    <div class="section-header">
-        <div class="section-title">MES MISSIONS</div>
-        <button onclick="loadMissions()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;"><i class="fas fa-sync-alt"></i></button>
+    <div class="journal-block-title"><i class="fas fa-receipt"></i> FRAIS &amp; DÉPENSES</div>
+    <div class="frais-screen" style="padding-top:0;padding-bottom:24px;">
+        <p class="frais-intro" style="margin-left:14px;margin-right:14px;">Péage, parking, repas, autre. Le plein gasoil se saisit dans la section <strong>Km du jour</strong> ci-dessus.</p>
+        <div class="frais-form-card" style="margin-left:14px;margin-right:14px;">
+            <div class="frais-form-title">Nouvelle dépense</div>
+            <div class="km-field" style="margin-bottom:10px;">
+                <label style="font-size:10px;">Date</label>
+                <input type="date" id="fraisDate" style="width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;color:var(--white);font-family:'Outfit',sans-serif;">
+            </div>
+            <div class="km-field" style="margin-bottom:10px;display:none;" id="fraisVehWrap">
+                <label style="font-size:10px;">Véhicule (optionnel)</label>
+                <select id="fraisVehicule" style="width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;color:var(--white);font-family:'Outfit',sans-serif;"></select>
+            </div>
+            <div class="km-field" style="margin-bottom:10px;">
+                <label style="font-size:10px;">Catégorie</label>
+                <select id="fraisCategorie" style="width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;color:var(--white);font-family:'Outfit',sans-serif;">
+                    <option value="peage">Péage / autoroute</option>
+                    <option value="parking">Parking</option>
+                    <option value="repas">Repas</option>
+                    <option value="lavage">Lavage véhicule</option>
+                    <option value="materiel">Matériel / consommables</option>
+                    <option value="autre">Autre</option>
+                </select>
+            </div>
+            <div class="km-field" style="margin-bottom:10px;">
+                <label style="font-size:10px;">Libellé</label>
+                <input type="text" id="fraisLibelle" placeholder="Ex. A9 sortie Nyon" style="width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;color:var(--white);font-family:'Outfit',sans-serif;">
+            </div>
+            <div class="km-inputs">
+                <div class="km-field">
+                    <label>Montant (CHF)</label>
+                    <input type="number" id="fraisMontant" step="0.05" min="0" placeholder="0.00" inputmode="decimal">
+                </div>
+            </div>
+            <div class="km-field" style="margin-top:10px;">
+                <label style="font-size:10px;">Note (optionnel)</label>
+                <textarea id="fraisNotes" rows="2" placeholder="Ticket n°, détail…" style="width:100%;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border2);border-radius:9px;color:var(--white);font-family:'Outfit',sans-serif;resize:none;"></textarea>
+            </div>
+            <button type="button" class="btn-frais-save" onclick="saveChauffeurDepense()"><i class="fas fa-plus-circle"></i> Ajouter la dépense</button>
+        </div>
+        <div class="section-header" style="padding-left:14px;padding-right:14px;">
+            <div class="section-title">MES DÉPENSES RÉCENTES</div>
+            <button onclick="loadChauffeurDepenses()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;"><i class="fas fa-sync-alt"></i></button>
+        </div>
+        <div id="fraisList" style="padding:0 14px;"></div>
     </div>
-    <div class="scroll-list" id="missionsList"></div>
 </div>
 
 <!-- ═══ MAP ═══ -->
 <div class="screen map-screen" id="screenMap">
     <div id="driverMap"></div>
-    <div class="map-back" onclick="showScreen('home')"><i class="fas fa-arrow-left"></i></div>
+    <div class="map-back" onclick="showScreen('missions')"><i class="fas fa-arrow-left"></i></div>
     <div class="map-panel">
         <div class="mp-handle"></div>
         <div class="mp-title" id="mpTitle">TRANSPORT</div>
@@ -488,13 +705,18 @@
             </div>
             <div id="congesList"></div>
         </div>
+
+        <div class="rh-section">
+            <div class="rh-section-title">FICHES DE SALAIRE</div>
+            <div id="fichesSalaireList"></div>
+        </div>
     </div>
 </div>
 
 <!-- ═══ CONFIRM DELIVERY ═══ -->
 <div class="screen" id="screenConfirm">
     <div class="confirm-screen">
-        <div class="confirm-back" onclick="showScreen('home')">
+        <div class="confirm-back" onclick="showScreen('missions')">
             <div class="cb-btn"><i class="fas fa-arrow-left"></i></div>
             <div class="cb-title">CONFIRMER LIVRAISON</div>
         </div>
@@ -521,54 +743,61 @@
     <div class="success-ico">✅</div>
     <div class="success-title">LIVRÉ !</div>
     <div class="success-sub" id="successMsg">Transport confirmé.</div>
-    <button class="btn-home" onclick="showScreen('home')"><i class="fas fa-home"></i> Mes missions</button>
+    <button class="btn-home" onclick="showScreen('missions')"><i class="fas fa-truck"></i> Mes missions</button>
 </div>
 
 <!-- ═══ BOTTOM NAV ═══ -->
 <!-- ═══ SCREEN QR SCANNER ═══ -->
-<div class="screen" id="screenQR">
+<div class="screen" id="screenQr">
     <div class="home-header">
         <div>
             <div class="home-title">SCANNER QR</div>
-            <div class="home-sub">Prise en charge d'un transport</div>
+            <div class="home-sub">Utiliser le scanner de votre téléphone</div>
         </div>
-        <button onclick="showScreen('home')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;padding:8px;"><i class="fas fa-times"></i></button>
+        <button type="button" onclick="showScreen('missions'); stopLiveScanTracks();" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;padding:8px;"><i class="fas fa-times"></i></button>
     </div>
-    <div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:24px 20px;gap:16px;overflow-y:auto;">
+    <div id="screenQrScroll" style="flex:1;display:flex;flex-direction:column;align-items:center;padding:24px 20px calc(88px + var(--safe-b)) 20px;gap:16px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
 
-        <!-- Bouton principal — ouvre l'appareil photo natif -->
-        <div style="width:100%;max-width:340px;">
-            <label id="scanPhotoLabel" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--night3);border:2px dashed var(--red);border-radius:18px;padding:36px 20px;cursor:pointer;transition:all 0.2s;">
-                <div style="width:70px;height:70px;background:rgba(232,49,26,0.12);border-radius:50%;display:grid;place-items:center;font-size:32px;">📷</div>
-                <div style="text-align:center;">
-                    <div style="font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;color:var(--white);">PHOTOGRAPHIER LE QR</div>
-                    <div style="font-size:13px;color:var(--muted);margin-top:4px;">Ouvre l'appareil photo Android</div>
-                </div>
-                <input type="file" id="scanPhotoInput" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)">
-            </label>
+                <!-- Info d'instructions -->
+        <div style="width:100%;max-width:340px;background:rgba(59,130,246,0.12);border-left:3px solid var(--blue);border-radius:10px;padding:14px;text-align:left;">
+            <div style="font-size:12px;color:var(--blue);line-height:1.6;">
+                💡 <strong>Utiliser votre scanner natif :</strong><br>
+                <span style="color:var(--muted2);">1. Ouvrez le scanner de votre téléphone</span><br>
+                <span style="color:var(--muted2);">2. Scannez le code QR</span><br>
+                <span style="color:var(--muted2);">3. Collez le numéro ci-dessous</span>
+            </div>
         </div>
 
-        <!-- Status -->
-        <div id="scanStatus" style="font-size:13px;color:var(--muted2);text-align:center;min-height:20px;"></div>
+        <!-- Bouton Scanner Natif -->
+        <button type="button" onclick="openNativeScanner()" style="width:100%;max-width:340px;padding:16px;background:var(--red);color:var(--white);border:none;border-radius:12px;font-family:'Outfit',sans-serif;font-weight:700;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 6px 24px rgba(232,49,26,0.35);transition:all 0.2s;">
+            <i class="fas fa-qrcode"></i> Ouvrir mon scanner
+        </button>
+
+        <!-- Saisie manuelle du résultat -->
+        <div style="width:100%;max-width:340px;">
+            <label style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:block;">N° ou Code scanné</label>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="qrManual" placeholder="LC-2026-xxxxx ou N° commande"
+                    style="flex:1;padding:12px 14px;background:var(--night3);border:1.5px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);"
+                    onkeydown="if(event.key==='Enter')searchManual()">
+                <button onclick="searchManual()" style="background:var(--red);border:none;border-radius:11px;padding:12px 16px;cursor:pointer;color:white;font-size:15px;font-weight:700;"><i class="fas fa-search"></i></button>
+            </div>
+        </div>
+
+        <!-- Statut de recherche -->
+        <div id="scanStatus" style="font-size:13px;color:var(--muted2);text-align:center;min-height:20px;margin-top:8px;"></div>
 
         <!-- Résultat -->
         <div id="scanResult" style="display:none;width:100%;max-width:340px;"></div>
 
-        <!-- Séparateur -->
-        <div style="width:100%;max-width:340px;display:flex;align-items:center;gap:10px;">
-            <div style="flex:1;height:1px;background:var(--border);"></div>
-            <span style="font-size:11px;color:var(--muted);">OU SAISIR MANUELLEMENT</span>
-            <div style="flex:1;height:1px;background:var(--border);"></div>
+        <!-- Alternative : photo de secours -->
+        <div style="width:100%;max-width:340px;margin-top:16px;padding:14px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;">📸 Alternative : Photo du QR</div>
+            <button type="button" onclick="document.getElementById('scanInputCamera').click()" style="width:100%;padding:11px 12px;background:var(--night3);border:1px solid var(--border2);border-radius:10px;color:var(--muted2);font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+                <i class="fas fa-camera" style="color:var(--blue);"></i> Prendre une photo du QR
+            </button>
+            <input type="file" id="scanInputCamera" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)">
         </div>
-
-        <!-- Saisie manuelle -->
-        <div style="width:100%;max-width:340px;display:flex;gap:8px;">
-            <input type="text" id="qrManual" placeholder="N° commande : LC-2026-xxxxx"
-                style="flex:1;padding:12px 14px;background:var(--night3);border:1.5px solid var(--border2);border-radius:11px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);"
-                onkeydown="if(event.key==='Enter')searchManual()">
-            <button onclick="searchManual()" style="background:var(--red);border:none;border-radius:11px;padding:12px 16px;cursor:pointer;color:white;font-size:15px;"><i class="fas fa-search"></i></button>
-        </div>
-
     </div>
 </div>
 
@@ -576,15 +805,18 @@
     <!-- Canvas caché pour décodage QR -->
     <canvas id="qrCanvas" style="display:none;"></canvas>
     <div class="bn-wrap">
-        <div class="bn-item active" id="bnHome" onclick="showScreen('home')">
-            <i class="fas fa-home"></i><span>Missions</span>
+        <div class="bn-item active" id="bnMissions" onclick="showScreen('missions')">
+            <i class="fas fa-truck"></i><span>Missions</span>
             <div class="bn-badge" id="bnBadge">0</div>
         </div>
         <div class="bn-item" id="bnMap" onclick="showScreen('map')">
             <i class="fas fa-map"></i><span>Carte</span>
         </div>
-        <div class="bn-item" id="bnQR" onclick="openScanner()">
+        <div class="bn-item" id="bnQR" onclick="console.log('CLICK BOUTON QR'); openScanner();">
             <i class="fas fa-qrcode"></i><span>Scanner</span>
+        </div>
+        <div class="bn-item" id="bnJournal" onclick="showScreen('journal')">
+            <i class="fas fa-clipboard-list"></i><span>Journée</span>
         </div>
         <div class="bn-item" id="bnRh" onclick="showScreen('rh')">
             <i class="fas fa-user-clock"></i><span>Mon RH</span>
@@ -623,6 +855,16 @@
     </div>
 </div>
 
+<!-- ═══ MODAL FICHE SALAIRE ═══ -->
+<div class="modal" id="modalFicheSalaire">
+    <div class="modal-box">
+        <div class="modal-handle"></div>
+        <div class="modal-title">FICHE DE SALAIRE</div>
+        <div id="modalFicheSalaireBody"></div>
+        <button type="button" class="btn-cancel" style="width:100%;margin-top:14px;" onclick="closeModal('modalFicheSalaire')">Fermer</button>
+    </div>
+</div>
+
 <script>
 (function () {
     'use strict';
@@ -640,6 +882,47 @@
     let pointage   = null; // today's pointage record
     let gpsWatch   = null;
     let myLat = null, myLng = null;
+    let mySpeedKmh = null;
+    let lastGpsKmLat = null, lastGpsKmLng = null;
+    let lastLivePushAt = 0;
+    const LIVE_PUSH_INTERVAL_MS = 25000;
+
+    function haversineMeters(lat1, lng1, lat2, lng2) {
+        const R = 6371000;
+        const toR = function (d) { return d * Math.PI / 180; };
+        const dLat = toR(lat2 - lat1);
+        const dLng = toR(lng2 - lng1);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+
+    /** Premier lancement de l’app ce jour (CH) — pour la carte admin */
+    function getOrInitDaySessionStartIso() {
+        const d = today();
+        const k = 'colixo_sessstart_' + d;
+        let t = localStorage.getItem(k);
+        if (!t) {
+            t = new Date().toISOString();
+            localStorage.setItem(k, t);
+        }
+        return t;
+    }
+
+    /** Km cumulés aujourd’hui (local), mis à jour à chaque point GPS */
+    function accumulateKmToday(lat, lng) {
+        const d = today();
+        const keyM = 'colixo_km_m_' + d;
+        let m = parseFloat(localStorage.getItem(keyM) || '0') || 0;
+        if (lastGpsKmLat != null && lastGpsKmLng != null) {
+            const delta = haversineMeters(lastGpsKmLat, lastGpsKmLng, lat, lng);
+            if (delta > 4 && delta < 12000) m += delta;
+        }
+        lastGpsKmLat = lat;
+        lastGpsKmLng = lng;
+        localStorage.setItem(keyM, String(m));
+        return m / 1000;
+    }
     let dMap = null, dMarker = null, rLine = null;
     let sigCtx = null, drawing = false, hasSig = false;
     let workTimer = null, workSeconds = 0;
@@ -674,6 +957,96 @@
         return local.toISOString().slice(0,-1) + sign + hh + ':' + mm;
     }
 
+    function driverEscHtml(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    }
+    function driverFmtCHF(n) {
+        return (parseFloat(n) || 0).toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function nl2brDriver(s) {
+        if (s == null || s === '') return '';
+        return String(s).split('\n').map(function (line) { return driverEscHtml(line); }).join('<br>');
+    }
+    function driverFicheDocHtml(f, name) {
+        const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const brut = parseFloat(f.salaire_brut) || 0;
+        const pctTxt = function (amt) {
+            if (!brut || brut <= 0) return '';
+            const p = (parseFloat(amt) || 0) / brut * 100;
+            return ' <span style="color:#888;font-size:11px;">(' + p.toFixed(3).replace(/\.?0+$/, '') + ' % du brut)</span>';
+        };
+        const avs = parseFloat(f.cc_avs_ai_apg) || 0;
+        const ac = parseFloat(f.cc_ac) || 0;
+        const lpp = parseFloat(f.cc_lpp) || 0;
+        const is = parseFloat(f.impot_source) || 0;
+        const aut = parseFloat(f.autres_deductions) || 0;
+        const sumDed = avs + ac + lpp + is + aut;
+        const alloc = parseFloat(f.allocations_familiales_chf) || 0;
+        const remb = parseFloat(f.remboursement_frais_chf) || 0;
+        const primes = parseFloat(f.primes_autres_chf) || 0;
+        const sumAj = alloc + remb + primes;
+        const apres = brut - sumDed;
+        let optRows = '';
+        if (alloc > 0) optRows += '<tr><td>Allocations familiales</td><td>+ ' + driverFmtCHF(alloc) + '</td></tr>';
+        if (remb > 0) optRows += '<tr><td>Remboursement de frais</td><td>+ ' + driverFmtCHF(remb) + '</td></tr>';
+        if (primes > 0) optRows += '<tr><td>Prime / autres</td><td>+ ' + driverFmtCHF(primes) + '</td></tr>';
+        const emprAdrHtml = nl2brDriver(f.employeur_adresse);
+        const empAdrHtml = nl2brDriver(f.employe_adresse);
+        const dateBulletinTxt = f.date_bulletin
+            ? new Date(String(f.date_bulletin).slice(0, 10) + 'T12:00:00').toLocaleDateString('fr-CH')
+            : '—';
+        const ibanRaw = (f.iban_versement && String(f.iban_versement).replace(/\s/g, '')) || '';
+        const ibanDisp = ibanRaw ? driverEscHtml(ibanRaw.replace(/(.{4})/g, '$1 ').trim()) : '';
+        return `
+            <h1 class="print-fs-title">Fiche de salaire</h1>
+            <p class="print-fs-sub">Date du bulletin : <strong>${driverEscHtml(dateBulletinTxt)}</strong> · Période : ${driverEscHtml(months[f.mois - 1] + ' ' + f.annee)}</p>
+            <div class="print-fs-addr-grid">
+                <div class="print-fs-addr-cell">
+                    <div class="lbl">Employeur</div>
+                    <div>${driverEscHtml(f.employeur_nom || '—')}</div>
+                    <div style="margin-top:8px;color:#bbb;">${emprAdrHtml || '<span style="color:#666;">—</span>'}</div>
+                </div>
+                <div class="print-fs-addr-cell">
+                    <div class="lbl">Employé</div>
+                    <div>${driverEscHtml(name)}</div>
+                    <div style="margin-top:8px;color:#bbb;">${empAdrHtml || '<span style="color:#666;">—</span>'}</div>
+                </div>
+            </div>
+            <table class="print-fs-table">
+                <tr><td>Salaire brut</td><td>${driverFmtCHF(f.salaire_brut)} CHF</td></tr>
+                <tr><td>AVS / AI / APG (part sal.)${pctTxt(avs)}</td><td>− ${driverFmtCHF(f.cc_avs_ai_apg)}</td></tr>
+                <tr><td>AC (part sal.)${pctTxt(ac)}</td><td>− ${driverFmtCHF(f.cc_ac)}</td></tr>
+                <tr><td>LPP (part sal.)${pctTxt(lpp)}</td><td>− ${driverFmtCHF(f.cc_lpp)}</td></tr>
+                <tr><td>Impôt à la source${pctTxt(is)}</td><td>− ${driverFmtCHF(f.impot_source)}</td></tr>
+                <tr><td>Autres déductions${pctTxt(aut)}</td><td>− ${driverFmtCHF(f.autres_deductions)}</td></tr>
+                <tr class="fs-muted"><td><em>Total charges</em></td><td><em>− ${driverFmtCHF(sumDed)}</em></td></tr>
+                <tr class="fs-muted"><td><em>Après charges</em></td><td><em>${driverFmtCHF(apres)} CHF</em></td></tr>
+                ${optRows}
+                ${sumAj > 0 ? '<tr class="fs-muted"><td><em>Total ajouts optionnels</em></td><td><em>+ ' + driverFmtCHF(sumAj) + '</em></td></tr>' : ''}
+                <tr class="fs-net"><td>Net à payer</td><td>${driverFmtCHF(f.net_a_payer)} CHF</td></tr>
+            </table>
+            ${ibanDisp ? '<div class="print-fs-iban"><strong>Versement sur IBAN</strong><br><span style="font-family:ui-monospace,monospace;letter-spacing:0.02em;">' + ibanDisp + '</span></div>' : ''}
+            ${f.notes ? '<p style="font-size:12px;color:#aaa;line-height:1.5;">' + driverEscHtml(f.notes) + '</p>' : ''}
+            <p class="print-fs-foot">Document Colixo — à rapprocher des bulletins officiels.</p>`;
+    }
+
+    window.openFicheSalaireModal = async function (ficheId) {
+        if (!driver || !ficheId) return;
+        showLoad();
+        try {
+            const { data: f, error } = await db.from('rh_fiches_salaire').select('*').eq('id', ficheId).single();
+            if (error || !f) { toast('error', 'Fiche introuvable'); return; }
+            if (f.employe_id !== driver.id) { toast('error', 'Accès refusé'); return; }
+            const name = [driver.prenom, driver.nom].filter(Boolean).join(' ').trim() || '—';
+            document.getElementById('modalFicheSalaireBody').innerHTML = '<div class="print-fs-doc">' + driverFicheDocHtml(f, name) + '</div>';
+            openModal('modalFicheSalaire');
+        } catch (e) {
+            toast('error', e.message || String(e));
+        } finally {
+            hideLoad();
+        }
+    };
+
     /* ── Modals ── */
     function openModal(id)  { const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
     function closeModal(id) { const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} }
@@ -681,20 +1054,46 @@
     document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
 
     /* ── Screen nav ── */
-    const NAV_SCREENS = ['home','map','rh'];
+    const NAV_SCREENS = ['missions','map','qr','journal','rh'];
     window.showScreen = function(name) {
+        console.log('[DEBUG] showScreen appelé avec:', name);
+        if (name !== 'qr') stopLiveScanTracks();
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         const el = document.getElementById('screen' + name.charAt(0).toUpperCase() + name.slice(1));
-        if(el) el.classList.add('active');
+        console.log('[DEBUG] Élément trouvé:', el ? 'OUI' : 'NON', 'screen' + name.charAt(0).toUpperCase() + name.slice(1));
+        if(el) {
+            el.classList.add('active');
+            console.log('[DEBUG] Classe active ajoutée à:', el.id);
+        } else {
+            console.error('[DEBUG] Élément screen non trouvé pour:', name);
+        }
         document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
         const bn = document.getElementById('bn' + name.charAt(0).toUpperCase() + name.slice(1));
         if(bn) bn.classList.add('active');
         const showNav = NAV_SCREENS.includes(name);
         document.getElementById('bottomNav').style.display  = showNav ? 'block' : 'none';
         document.getElementById('statusBar').style.display  = name!=='login' ? 'flex' : 'none';
+        
+        // ═══ PRO: Update breadcrumb ═══
+        const breadcrumbLabels = {
+            missions: 'Missions',
+            map: 'Localisation',
+            journal: 'Journée',
+            qr: 'Scanner QR',
+            rh: 'Mon RH'
+        };
+        if (name !== 'login') {
+            updateBreadcrumb(breadcrumbLabels[name] || name);
+        }
+        
         if(name==='map' && !dMap) initMap();
         if(name==='map' && dMap)  setTimeout(()=>dMap.invalidateSize(),100);
-        if(name==='rh') loadRH();
+        if(name==='map' && !curMission) {
+            toast('info', 'Sélectionnez d\'abord une mission pour voir la carte');
+            showScreen('missions');
+            return;
+        }
+        if(name==='journal') initFraisScreen();
     };
 
     /* ── LOGIN ── */
@@ -726,12 +1125,20 @@
 
     function afterLogin() {
         const name = [driver.prenom,driver.nom].filter(Boolean).join(' ')||'Chauffeur';
-        document.getElementById('homeName').textContent = name;
-        document.getElementById('homeDate').textContent = new Date().toLocaleDateString('fr-CH',{weekday:'long',day:'2-digit',month:'long'});
-        showScreen('home');
+        const dateStr = new Date().toLocaleDateString('fr-CH',{weekday:'long',day:'2-digit',month:'long'});
+        document.querySelectorAll('.driver-display-name').forEach(el => { el.textContent = name; });
+        document.querySelectorAll('.driver-display-date').forEach(el => { el.textContent = dateStr; });
+        showScreen('missions');
+        
+        // ═══ PRO VERSION INIT ═══
+        initOfflineMode(); // Activer le mode hors ligne
+        updateDashboard(); // Initialiser le dashboard
+        updateBreadcrumb('Missions');
+        
         loadMissions();
         loadTodayPointage();
         loadVehicule();
+        getOrInitDaySessionStartIso();
         startGPS();
         initNotifications(driver.id);
 
@@ -743,7 +1150,7 @@
         const colisTotal = params.get('total');
 
         if(orderId || orderNum) {
-            // Afficher notification de scan
+            // Afficher notification de scan  
             setTimeout(async () => {
                 toast('info', `📦 QR scanné — chargement du transport…`);
                 // Chercher le transport
@@ -851,73 +1258,339 @@
     let scanInterval = null;
     let scanning = false;
 
+    function clearScanFileInputs() {
+        ['scanInputGallery', 'scanInputCamera'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    }
+
+    /** Arrête caméra + analyse (sans changer d’écran) */
+    window.stopLiveScanTracks = function() {
+        if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+        if (scanStream) {
+            try { scanStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+            scanStream = null;
+        }
+        const v = document.getElementById('qrVideo');
+        if (v) { try { v.srcObject = null; } catch (e2) {} }
+        scanning = false;
+    };
+
+    function ensureGetUserMediaPolyfill() {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) return;
+        if (!navigator.mediaDevices) navigator.mediaDevices = {};
+        navigator.mediaDevices.getUserMedia = function (constraints) {
+            var g = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+            if (!g) return Promise.reject(new Error('getUserMedia indisponible'));
+            return new Promise(function (resolve, reject) {
+                g.call(navigator, constraints, resolve, reject);
+            });
+        };
+    }
+
+    /** Chaîne .catch (sans async/await) : sur Android Chrome le flux reste plus proche du geste utilisateur. */
+    function getCameraStreamWithFallbacks() {
+        ensureGetUserMediaPolyfill();
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            return Promise.reject(new Error('no-api'));
+        }
+        var g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        var attempts = [
+            { video: { facingMode: 'environment' }, audio: false },
+            { video: { facingMode: { ideal: 'environment' } }, audio: false },
+            { video: true, audio: false },
+            { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+            { video: { facingMode: 'user' }, audio: false }
+        ];
+        return attempts.reduce(function (prev, constraint) {
+            return prev.catch(function () { return g(constraint); });
+        }, Promise.reject(new Error('start')));
+    }
+
+    function attachVideoPlayThenScan(video, statusEl) {
+        function startDecodeLoop() {
+            scanning = false;
+            if (scanInterval) clearInterval(scanInterval);
+            scanInterval = setInterval(function () { decodeFrame(); }, 220);
+            if (statusEl) {
+                statusEl.style.color = 'var(--green)';
+                statusEl.textContent = '📷 Caméra active — pointez un QR';
+            }
+            
+            // Vérification spécifique Samsung que la vidéo s'affiche bien
+            setTimeout(function() {
+                console.log('[DEBUG] Video readyState:', video.readyState);
+                console.log('[DEBUG] Video videoWidth:', video.videoWidth);
+                console.log('[DEBUG] Video srcObject:', video.srcObject);
+                
+                if (video.readyState >= 2 && video.videoWidth > 0) {
+                    if (statusEl) {
+                        statusEl.textContent = '✅ Caméra Samsung OK — Scanning actif';
+                    }
+                } else {
+                    if (statusEl) {
+                        statusEl.textContent = '⚠️ Caméra en chargement... patientez';
+                    }
+                    // Forcer le redémarrage de la vidéo pour Samsung
+                    console.log('[DEBUG] Tentative redémarrage vidéo Samsung...');
+                    try {
+                        const stream = video.srcObject;
+                        video.srcObject = null;
+                        setTimeout(() => {
+                            video.srcObject = stream;
+                            video.play().catch(e => console.warn('[DEBUG] Retry play failed:', e));
+                        }, 100);
+                    } catch (e) {
+                        console.warn('[DEBUG] Erreur redémarrage vidéo:', e);
+                    }
+                }
+            }, 2000);
+        }
+        
+        video.defaultMuted = true;
+        video.muted = true;
+        video.setAttribute('muted', '');
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.playsInline = true;
+        
+        // Forcer l'affichage pour Samsung
+        video.style.display = 'block';
+        video.style.visibility = 'visible';
+        video.style.objectFit = 'cover';
+        video.style.background = '#000';
+        video.style.width = '100%';
+        video.style.height = '100%';
+
+        var firstPlay = video.play();
+        if (!firstPlay || typeof firstPlay.then !== 'function') {
+            startDecodeLoop();
+            return Promise.resolve();
+        }
+        return firstPlay
+            .then(function () { startDecodeLoop(); })
+            .catch(function (err) {
+                console.warn('[QR] video.play', err);
+                // Stratégie améliorée pour Samsung
+                if (statusEl) {
+                    statusEl.textContent = '🔄 Tentative démarrage Samsung...';
+                    statusEl.style.color = 'var(--yellow)';
+                }
+                
+                return new Promise(function (resolve) {
+                    var done = false;
+                    function ok() {
+                        if (done) return;
+                        done = true;
+                        resolve();
+                    }
+                    function tryPlay() {
+                        video.play().then(function () {
+                            startDecodeLoop();
+                            ok();
+                        }).catch(function (e) {
+                            console.warn('[QR] Retry play failed:', e);
+                            // Forcer pour Samsung après plusieurs tentatives
+                            if (!done) {
+                                setTimeout(function() {
+                                    video.play().then(function() {
+                                        startDecodeLoop();
+                                        ok();
+                                    }).catch(function() {
+                                        // Dernière tentative: forcer le démarrage
+                                        video.currentTime = 0.1;
+                                        video.play().then(function() {
+                                            startDecodeLoop();
+                                            ok();
+                                        }).catch(function() {
+                                            if (statusEl) {
+                                                statusEl.textContent = '❌ Échec caméra - utilisez "Prendre une photo"';
+                                                statusEl.style.color = 'var(--red)';
+                                            }
+                                            ok();
+                                        });
+                                    });
+                                }, 1000);
+                            }
+                        });
+                    }
+                    video.addEventListener('loadedmetadata', tryPlay, { once: true });
+                    video.addEventListener('canplay', tryPlay, { once: true });
+                    video.addEventListener('loadeddata', tryPlay, { once: true });
+                    requestAnimationFrame(function () { requestAnimationFrame(tryPlay); });
+                    setTimeout(tryPlay, 50);
+                    setTimeout(tryPlay, 200);
+                    setTimeout(function () {
+                        if (!scanInterval) {
+                            toast('error', 'Touchez encore le bouton rouge ou utilisez « Prendre une photo » du QR.');
+                            if (statusEl) {
+                                statusEl.style.color = 'var(--yellow)';
+                                statusEl.textContent = 'Réessayez le bouton rouge ou prenez une photo du QR ci-dessous.';
+                            }
+                        }
+                        ok();
+                    }, 900);
+                });
+            });
+    }
+
+    window.startLiveScan = function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+        var statusEl = document.getElementById('scanStatus');
+        var video = document.getElementById('qrVideo');
+        stopLiveScanTracks();
+        var sr = document.getElementById('scanResult');
+        if (sr) sr.style.display = 'none';
+        if (!video) {
+            if (statusEl) statusEl.textContent = '❌ Vue caméra indisponible';
+            toast('error', 'Élément vidéo manquant.');
+            return;
+        }
+        if (typeof window.isSecureContext !== 'undefined' && !window.isSecureContext) {
+            if (statusEl) {
+                statusEl.style.color = 'var(--red)';
+                statusEl.textContent = 'HTTPS requis pour la caméra.';
+            }
+            toast('error', 'Ouvrez le site en https://');
+            return;
+        }
+        if (statusEl) {
+            statusEl.textContent = '🔄 Initialisation caméra Samsung...';
+            statusEl.style.color = 'var(--yellow)';
+        }
+        
+        // Amélioration pour Samsung: forcer l'affichage vidéo immédiatement
+        video.style.display = 'block';
+        video.style.visibility = 'visible';
+        video.style.background = '#000';
+        
+        getCameraStreamWithFallbacks()
+            .then(function (stream) {
+                scanStream = stream;
+                video.srcObject = stream;
+                
+                // Forcer le démarrage de la vidéo pour Samsung
+                video.play().catch(function(e) {
+                    console.warn('[QR] Erreur play vidéo:', e);
+                    // Forcer le démarrage manuel pour Samsung
+                    setTimeout(function() {
+                        video.play().catch(function(e2) {
+                            console.warn('[QR] Erreur play retry:', e2);
+                        });
+                    }, 500);
+                });
+                
+                return attachVideoPlayThenScan(video, statusEl);
+            })
+            .catch(function (err) {
+                console.warn('[QR] caméra', err);
+                var msg = 'Caméra indisponible — utilisez galerie ou photo ci-dessous.';
+                if (err && err.name === 'NotAllowedError') {
+                    msg = '📱 CAMÉRA REFUSÉE - Solution Samsung: Paramètres → Applications → Chrome → Permissions → Caméra → Autoriser. Redémarrez Chrome.';
+                } else if (err && err.name === 'NotFoundError') {
+                    msg = 'Aucune caméra détectée.';
+                } else if (err && err.name === 'NotReadableError') {
+                    msg = 'Caméra occupée — fermez l\'appareil photo et réessayez.';
+                } else if (err && err.name === 'OverconstrainedError') {
+                    msg = 'Contrainte caméra — prenez une photo du QR ci-dessous.';
+                } else if (err.message === 'no-api') {
+                    msg = 'Navigateur incompatible (HTTPS requis).';
+                }
+                if (statusEl) {
+                    statusEl.style.color = 'var(--red)';
+                    statusEl.textContent = msg;
+                }
+                toast('error', msg);
+            });
+    };
+
     window.openScanner = function() {
+        console.log('[DEBUG] Ouverture du scanner QR simplifié...');
         showScreen('qr');
-        document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
-        document.getElementById('bnQR')?.classList.add('active');
-        document.getElementById('scanResult').style.display = 'none';
-        document.getElementById('scanStatus').textContent = '';
-        // Reset input so same file can be re-selected
-        const inp = document.getElementById('scanPhotoInput');
-        if(inp) inp.value = '';
+    };
+
+    window.openNativeScanner = function() {
+        toast('info', '📱 Ouvrez l\'appareil photo de votre téléphone et scannez le QR code. Copiez le numéro obtenu dans le champ ci-dessous.');
     };
 
     window.stopScan = function() {
-        if(scanInterval) { clearInterval(scanInterval); scanInterval=null; }
-        if(scanStream)   { scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
-        scanning = false;
-        showScreen('home');
+        stopLiveScanTracks();
+        showScreen('missions');
+    };
+
+    window.scanAnotherQR = function() {
+        clearTimeout(window._colixoScanRafaleT);
+        document.getElementById('scanResult').style.display = 'none';
+        document.getElementById('scanStatus').textContent = '';
+        document.getElementById('scanStatus').style.color = 'var(--muted2)';
+        clearScanFileInputs();
+        startLiveScan();
     };
 
     function decodeFrame() {
-        if(scanning) return;
+        if (scanning) return;
         const video  = document.getElementById('qrVideo');
         const canvas = document.getElementById('qrCanvas');
-        if(!video || !video.videoWidth || video.paused) return;
+        if (!video || !canvas || !video.videoWidth || video.readyState < 2) return;
 
         canvas.width  = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0);
 
-        if('BarcodeDetector' in window) {
+        if ('BarcodeDetector' in window) {
             scanning = true;
-            const bd = new BarcodeDetector({formats:['qr_code']});
-            bd.detect(canvas).then(codes => {
-                if(codes.length > 0) {
-                    clearInterval(scanInterval); scanInterval=null;
+            var bd = new BarcodeDetector({ formats: ['qr_code'] });
+            bd.detect(canvas).then(function (codes) {
+                if (codes.length > 0) {
                     handleQRResult(codes[0].rawValue);
-                } else { scanning = false; }
-            }).catch(()=>{ scanning=false; });
-        } else if(window.jsQR) {
-            const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
-            const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'dontInvert'});
-            if(code?.data) {
-                clearInterval(scanInterval); scanInterval=null;
+                } else {
+                    scanning = false;
+                }
+            }).catch(function () { scanning = false; });
+        } else if (window.jsQR) {
+            var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
+            if (code && code.data) {
                 handleQRResult(code.data);
             }
         }
     }
 
     async function handleQRResult(raw) {
-        if(!raw) return;
-        // Stop scanning
-        clearInterval(scanInterval); scanInterval = null;
-        document.getElementById('scanStatus').textContent = '✅ QR Code détecté !';
+        if (!raw) return;
+        clearInterval(scanInterval);
+        scanInterval = null;
+        stopLiveScanTracks();
+        const st = document.getElementById('scanStatus');
+        if (st) {
+            st.style.color = 'var(--green)';
+            st.textContent = '✅ QR détecté !';
+        }
+
+        // Fermer l'overlay Android après scan réussi
+        const androidOverlay = document.getElementById('androidQROverlay');
+        if (androidOverlay) {
+            console.log('[DEBUG] Fermeture automatique overlay Android après scan');
+            setTimeout(() => {
+                androidOverlay.remove();
+                // Retourner à l'écran missions
+                showScreen('missions');
+            }, 1500);
+        }
 
         try {
             const data = JSON.parse(raw);
             const orderId = data.id;
-            if(!orderId) throw new Error('QR invalide');
+            if (!orderId) throw new Error('QR invalide');
 
-            // Charger le transport
-            const { data:order } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
-            if(!order) throw new Error('Transport introuvable');
+            const { data: order } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
+            if (!order) throw new Error('Transport introuvable');
 
             showScanResult(order, data);
-        } catch(e) {
-            // Essayer comme numéro de commande
-            await searchByNum(raw.trim());
+        } catch (e) {
+            await searchByNum(String(raw).trim());
         }
     }
 
@@ -930,6 +1603,7 @@
     // Lire un QR depuis une photo prise avec l'appareil photo
     window.scanFromPhoto = function(input) {
         if(!input.files?.[0]) return;
+        stopLiveScanTracks();
         const el = document.getElementById('scanStatus');
         el.textContent = '🔍 Analyse en cours…';
         el.style.color = 'var(--yellow)';
@@ -968,7 +1642,7 @@
         input.value = ''; // reset pour permettre re-scan
     };
 
-        function tryJsQR(canvas, el) {
+    function tryJsQR(canvas, el) {
         if(!window.jsQR) { el.textContent = '❌ Bibliothèque QR non disponible'; return; }
         const ctx = canvas.getContext('2d');
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -980,8 +1654,7 @@
         } else {
             el.style.color = 'var(--red)';
             el.textContent = '❌ QR non reconnu — rapprochez-vous ou réessayez';
-            el.style.color = 'var(--red)';
-            document.getElementById('scanPhotoInput').value = '';
+            clearScanFileInputs();
         }
     }
 
@@ -991,11 +1664,23 @@
             .or(`order_number.eq.${num},id.eq.${num}`).maybeSingle();
         if(!data) {
             document.getElementById('scanStatus').textContent = '❌ Transport introuvable : ' + num;
-            // Restart scan
-            if(scanStream) scanInterval = setInterval(()=>decodeFrame(), 500);
+            document.getElementById('scanStatus').style.color = 'var(--red)';
+            if (document.getElementById('screenQr')?.classList.contains('active')) startLiveScan();
             return;
         }
         showScanResult(data, {});
+    }
+
+    function scheduleScanRafale() {
+        clearTimeout(window._colixoScanRafaleT);
+        const raf = document.getElementById('scanRafale');
+        if (!raf || !raf.checked) return;
+        window._colixoScanRafaleT = setTimeout(function () {
+            if (document.getElementById('screenQr')?.classList.contains('active')) {
+                toast('info', 'Scan suivant…');
+                scanAnotherQR();
+            }
+        }, 2400);
     }
 
     function showScanResult(o, qrData) {
@@ -1032,9 +1717,11 @@
                         ${o.status!=='delivered'?`<button onclick="confirmPickup('${o.id}')" style="flex:1;padding:11px;background:var(--green);color:var(--night);border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:pointer;"><i class="fas fa-box"></i> Prendre en charge</button>`:''}
                         <button onclick="openOrder('${o.id}')" style="flex:1;padding:11px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;cursor:pointer;"><i class="fas fa-eye"></i> Détails</button>
                     </div>
+                    <button type="button" onclick="scanAnotherQR()" style="width:100%;margin-top:4px;padding:12px;background:rgba(232,49,26,0.15);color:var(--red);border:1px solid rgba(232,49,26,0.35);border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:pointer;"><i class="fas fa-qrcode"></i> Scanner un autre QR</button>
                 </div>
             </div>`;
         document.getElementById('scanStatus').textContent = '';
+        scheduleScanRafale();
     }
 
     // Confirme l'enlèvement d'un colis assigné à CE chauffeur par le dispatch
@@ -1094,35 +1781,115 @@
         else toast('info', 'Allez dans Missions pour voir ce transport');
     };
 
-    /* ── KM JOURNALIERS ── */
-    let vehiculeId = null;
+    /* ── KM JOURNALIERS (plusieurs véhicules / même chauffeur) ── */
+    let driverKmVehicles = [];
+    let kmSelectedVehId = null;
 
-    async function loadVehicule() {
-        if(!driver) return;
-        // Chercher le véhicule assigné au chauffeur
-        const { data } = await db.from('vehicules')
-            .select('*').eq('chauffeur_id', driver.id).eq('actif', true).maybeSingle();
-        if(data) {
-            vehiculeId = data.id;
-            document.getElementById('kmCard').style.display = 'block';
-            // Charger km du jour si déjà saisi
-            const { data:km } = await db.from('vehicule_km')
-                .select('*').eq('vehicule_id', data.id)
-                .eq('date', today()).maybeSingle();
-            if(km) {
-                document.getElementById('kmDebut').value = km.km_debut||'';
-                document.getElementById('kmFin').value   = km.km_fin||'';
-                updateKmTotal();
-                const status = document.getElementById('kmStatus');
-                status.className = 'pc-status work';
-                status.textContent = `${km.km_parcourus||0} km`;
-            }
+    function vehiculeLabelKm(v) {
+        const imm = v.immatriculation || '—';
+        const mm = [v.marque, v.modele].filter(Boolean).join(' ');
+        return mm ? `${imm} · ${mm}` : imm;
+    }
+
+    async function loadKmRowForToday() {
+        if (!kmSelectedVehId) return;
+        document.getElementById('kmDebut').value = '';
+        document.getElementById('kmFin').value = '';
+        document.getElementById('kmLitres').value = '';
+        document.getElementById('kmPrixLitre').value = '';
+        document.getElementById('kmTotal').textContent = '— km';
+        updatePleinMontant();
+        const status = document.getElementById('kmStatus');
+        status.className = 'pc-status off';
+        status.textContent = 'Non saisi';
+        const { data:km } = await db.from('vehicule_km')
+            .select('*').eq('vehicule_id', kmSelectedVehId)
+            .eq('date', today()).maybeSingle();
+        if (km) {
+            document.getElementById('kmDebut').value = km.km_debut ?? '';
+            document.getElementById('kmFin').value = km.km_fin ?? '';
+            if (km.carburant_litres != null) document.getElementById('kmLitres').value = String(km.carburant_litres);
+            if (km.carburant_prix_litre_chf != null) document.getElementById('kmPrixLitre').value = String(km.carburant_prix_litre_chf);
+            updateKmTotal();
+            updatePleinMontant();
+            status.className = 'pc-status work';
+            status.textContent = `${km.km_parcourus ?? 0} km`;
         }
     }
+
+    function updatePleinMontant() {
+        const L = parseFloat(document.getElementById('kmLitres').value) || 0;
+        const p = parseFloat(document.getElementById('kmPrixLitre').value) || 0;
+        const el = document.getElementById('kmPleinMontant');
+        if (L > 0 && p > 0) {
+            const chf = Math.round(L * p * 100) / 100;
+            el.textContent = chf.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, "'") + ' CHF';
+        } else {
+            el.textContent = '— CHF';
+        }
+    }
+
+    async function loadVehicule() {
+        if (!driver) return;
+        driverKmVehicles = [];
+        kmSelectedVehId = null;
+        const sel = document.getElementById('kmVehiculeSelect');
+        const wrap = document.getElementById('kmVehWrap');
+        const card = document.getElementById('kmCard');
+        try {
+            const { data: list, error } = await db.from('vehicules')
+                .select('*').eq('chauffeur_id', driver.id).eq('actif', true).order('immatriculation');
+            if (error) throw error;
+            driverKmVehicles = list || [];
+            if (!driverKmVehicles.length) {
+                card.style.display = 'block';
+                wrap.style.display = 'block';
+                document.getElementById('kmVehLabel').style.display = 'none';
+                sel.style.display = 'none';
+                document.getElementById('kmVehHint').textContent = 'Aucun véhicule assigné. Le dispatch doit vous lier à un ou plusieurs véhicules dans Finances (plusieurs camions = plusieurs fiches véhicule avec le même chauffeur).';
+                document.getElementById('kmVehHint').style.display = 'block';
+                document.getElementById('kmDebut').disabled = true;
+                document.getElementById('kmFin').disabled = true;
+                syncFraisVehiculeSelect();
+                return;
+            }
+            document.getElementById('kmVehLabel').style.display = '';
+            sel.style.display = '';
+            document.getElementById('kmDebut').disabled = false;
+            document.getElementById('kmFin').disabled = false;
+            card.style.display = 'block';
+            sel.innerHTML = driverKmVehicles.map(v => `<option value="${v.id}">${vehiculeLabelKm(v)}</option>`).join('');
+            if (driverKmVehicles.length > 1) {
+                wrap.style.display = 'block';
+                document.getElementById('kmVehLabel').style.display = '';
+                sel.style.display = '';
+                document.getElementById('kmVehHint').style.display = 'block';
+                document.getElementById('kmVehHint').textContent = 'Un relevé début/fin par véhicule utilisé aujourd’hui.';
+            } else {
+                wrap.style.display = 'none';
+            }
+            kmSelectedVehId = driverKmVehicles[0].id;
+            sel.value = kmSelectedVehId;
+            await loadKmRowForToday();
+            syncFraisVehiculeSelect();
+        } catch (e) {
+            console.error('[Driver] loadVehicule', e);
+            card.style.display = 'block';
+            toast('error', 'Véhicules : ' + (e.message || 'erreur'));
+            syncFraisVehiculeSelect();
+        }
+    }
+
+    document.getElementById('kmVehiculeSelect').addEventListener('change', async () => {
+        kmSelectedVehId = document.getElementById('kmVehiculeSelect').value;
+        await loadKmRowForToday();
+    });
 
     // Mise à jour temps réel
     document.getElementById('kmDebut').addEventListener('input', updateKmTotal);
     document.getElementById('kmFin').addEventListener('input', updateKmTotal);
+    document.getElementById('kmLitres').addEventListener('input', updatePleinMontant);
+    document.getElementById('kmPrixLitre').addEventListener('input', updatePleinMontant);
 
     function updateKmTotal() {
         const debut = parseFloat(document.getElementById('kmDebut').value)||0;
@@ -1132,7 +1899,8 @@
     }
 
     window.saveKm = async function() {
-        if(!vehiculeId) { toast('error','Aucun véhicule assigné'); return; }
+        const vid = kmSelectedVehId || document.getElementById('kmVehiculeSelect').value;
+        if(!vid) { toast('error','Aucun véhicule assigné'); return; }
         const debut = parseFloat(document.getElementById('kmDebut').value)||0;
         const fin   = parseFloat(document.getElementById('kmFin').value)||0;
         if(!debut) { toast('error','Entrez le km de début'); return; }
@@ -1141,21 +1909,182 @@
         showLoad();
         try {
             const todayKm = today();
-            const { error } = await db.from('vehicule_km').upsert([{
-                vehicule_id:  vehiculeId,
-                chauffeur_id: driver.id,
-                date:         todayKm,
-                km_debut:     debut,
-                km_fin:       fin||debut
-            }], { onConflict: 'vehicule_id,date' });
-            if(error) throw error;
+            const kmParc = fin > debut ? fin - debut : 0;
+            const litres = parseFloat(document.getElementById('kmLitres').value);
+            const prixL  = parseFloat(document.getElementById('kmPrixLitre').value);
+            let carburant_litres = null;
+            let carburant_prix_litre_chf = null;
+            let carburant_montant_chf = null;
+            if (!Number.isNaN(litres) && litres > 0) {
+                carburant_litres = Math.round(litres * 1000) / 1000;
+                if (!Number.isNaN(prixL) && prixL > 0) {
+                    carburant_prix_litre_chf = Math.round(prixL * 10000) / 10000;
+                    carburant_montant_chf = Math.round(litres * prixL * 100) / 100;
+                }
+            }
+            const row = {
+                vehicule_id:   vid,
+                chauffeur_id:  driver.id,
+                date:          todayKm,
+                km_debut:      debut,
+                km_fin:        fin || debut,
+                km_parcourus:  kmParc,
+                carburant_litres,
+                carburant_prix_litre_chf,
+                carburant_montant_chf
+            };
+            const { error } = await db.from('vehicule_km').upsert([row], { onConflict: 'vehicule_id,date' });
+            if (error) {
+                const em = String(error.message || '');
+                if (em.includes('carburant') || em.includes('schema cache') || em.includes('column')) {
+                    toast('error', 'Colonnes carburant absentes : exécutez le script SQL chauffeur_depenses_schema.sql dans Supabase.');
+                } else {
+                    throw error;
+                }
+                return;
+            }
 
-            const total = fin > debut ? fin - debut : 0;
             const status = document.getElementById('kmStatus');
             status.className = 'pc-status work';
-            status.textContent = `${total} km`;
-            toast('success', `${total} km enregistrés ✓`);
+            status.textContent = `${kmParc} km`;
+            let msg = `${kmParc} km enregistrés ✓`;
+            if (carburant_litres != null && carburant_montant_chf != null) {
+                msg += ` · Plein ${carburant_montant_chf.toFixed(2)} CHF`;
+            } else if (carburant_litres != null) {
+                msg += ` · ${carburant_litres} L (ajoutez le prix/L pour le montant)`;
+            }
+            toast('success', msg);
         } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    const DEP_CAT_LABELS = { peage:'Péage', parking:'Parking', repas:'Repas', lavage:'Lavage', materiel:'Matériel', autre:'Autre' };
+
+    function syncFraisVehiculeSelect() {
+        const wrap = document.getElementById('fraisVehWrap');
+        const sel = document.getElementById('fraisVehicule');
+        if (!wrap || !sel) return;
+        if (driverKmVehicles.length > 1) {
+            wrap.style.display = 'block';
+            sel.innerHTML = '<option value="">— Aucun / plusieurs véhicules —</option>' +
+                driverKmVehicles.map(v => `<option value="${v.id}">${vehiculeLabelKm(v)}</option>`).join('');
+        } else if (driverKmVehicles.length === 1) {
+            wrap.style.display = 'none';
+            sel.innerHTML = `<option value="${driverKmVehicles[0].id}">${vehiculeLabelKm(driverKmVehicles[0])}</option>`;
+        } else {
+            wrap.style.display = 'none';
+            sel.innerHTML = '<option value="">—</option>';
+        }
+    }
+
+    function initFraisScreen() {
+        const d = document.getElementById('fraisDate');
+        if (d && !d.value) d.value = today();
+        syncFraisVehiculeSelect();
+        loadChauffeurDepenses();
+    }
+
+    async function loadChauffeurDepenses() {
+        if (!driver) return;
+        const el = document.getElementById('fraisList');
+        if (!el) return;
+        el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;">Chargement…</div>';
+        const since = new Date();
+        since.setDate(since.getDate() - 90);
+        const sinceStr = since.toISOString().slice(0, 10);
+        const { data, error } = await db.from('chauffeur_depenses')
+            .select('*')
+            .eq('chauffeur_id', driver.id)
+            .gte('date', sinceStr)
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(80);
+        if (error) {
+            const em = String(error.message || '');
+            if (em.includes('chauffeur_depenses') || em.includes('does not exist') || em.includes('schema')) {
+                el.innerHTML = '<div class="empty-state"><div class="empty-txt">Table <code>chauffeur_depenses</code> manquante.<br>Exécutez <strong>chauffeur_depenses_schema.sql</strong> dans Supabase.</div></div>';
+            } else {
+                el.innerHTML = '<div class="empty-state"><div class="empty-txt">' + em + '</div></div>';
+            }
+            return;
+        }
+        if (!data || !data.length) {
+            el.innerHTML = '<div class="empty-state"><div class="empty-ico">📋</div><div class="empty-txt">Aucune dépense enregistrée sur cette période.</div></div>';
+            return;
+        }
+        el.innerHTML = data.map(dep => {
+            const cat = DEP_CAT_LABELS[dep.categorie] || dep.categorie || 'Autre';
+            const lib = (dep.libelle || '—').replace(/</g, '&lt;');
+            const dt = dep.date ? new Date(dep.date + 'T12:00:00').toLocaleDateString('fr-CH') : '—';
+            const notes = dep.notes ? `<div class="dep-meta">${String(dep.notes).replace(/</g, '&lt;').slice(0, 120)}</div>` : '';
+            const amt = Number(dep.montant_chf || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+            return `<div class="dep-row">
+                <div class="dep-main">
+                    <div class="dep-cat">${cat}</div>
+                    <div class="dep-lib">${lib}</div>
+                    <div class="dep-meta">${dt}</div>
+                    ${notes}
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+                    <div class="dep-amt">${amt} CHF</div>
+                    <button type="button" class="dep-del" onclick="deleteChauffeurDepense('${dep.id}')"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    window.loadChauffeurDepenses = loadChauffeurDepenses;
+
+    window.saveChauffeurDepense = async function() {
+        if (!driver) return;
+        const montant = parseFloat(document.getElementById('fraisMontant').value);
+        if (Number.isNaN(montant) || montant <= 0) {
+            toast('error', 'Indiquez un montant valide');
+            return;
+        }
+        const dateVal = document.getElementById('fraisDate').value || today();
+        const cat = document.getElementById('fraisCategorie').value || 'autre';
+        const libelle = document.getElementById('fraisLibelle').value.trim() || null;
+        const notes = document.getElementById('fraisNotes').value.trim() || null;
+        let vehicule_id = null;
+        const fv = document.getElementById('fraisVehicule');
+        if (fv && fv.value) vehicule_id = fv.value;
+        showLoad();
+        try {
+            const { error } = await db.from('chauffeur_depenses').insert([{
+                chauffeur_id: driver.id,
+                vehicule_id,
+                date: dateVal,
+                categorie: cat,
+                libelle,
+                montant_chf: Math.round(montant * 100) / 100,
+                notes
+            }]);
+            if (error) {
+                if (String(error.message).includes('chauffeur_depenses') || String(error.message).includes('does not exist')) {
+                    toast('error', 'Exécutez chauffeur_depenses_schema.sql dans Supabase.');
+                } else {
+                    throw error;
+                }
+                return;
+            }
+            document.getElementById('fraisMontant').value = '';
+            document.getElementById('fraisLibelle').value = '';
+            document.getElementById('fraisNotes').value = '';
+            toast('success', 'Dépense enregistrée ✓');
+            await loadChauffeurDepenses();
+        } catch (e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.deleteChauffeurDepense = async function(id) {
+        if (!id || !confirm('Supprimer cette dépense ?')) return;
+        showLoad();
+        try {
+            const { error } = await db.from('chauffeur_depenses').delete().eq('id', id).eq('chauffeur_id', driver.id);
+            if (error) throw error;
+            toast('success', 'Supprimé');
+            await loadChauffeurDepenses();
+        } catch (e) { toast('error', e.message); }
         finally { hideLoad(); }
     };
 
@@ -1169,6 +2098,9 @@
     /* ── MISSIONS ── */
     window.loadMissions = async function() {
         if(!driver) return;
+        const prevMissionsCount = missions.length;
+        const prevMissionIds = new Set(missions.map(m => m.id));
+        
         // Seules les commandes validées par l'admin (admin_status='accepted') sont visibles
         const { data } = await db.from('transport_orders_simple')
             .select('*').eq('driver_id',driver.id).neq('status','delivered')
@@ -1185,6 +2117,29 @@
         const badge = document.getElementById('bnBadge');
         if(missions.length>0) { badge.textContent=missions.length; badge.classList.add('show'); }
         else badge.classList.remove('show');
+        
+        // ═══ PRO: Detect new missions & notify ═══
+        const newMissions = missions.filter(m => !prevMissionIds.has(m.id));
+        if (newMissions.length > 0) {
+            const msg = newMissions.length === 1 
+                ? `📦 Nouvelle mission: ${newMissions[0].order_number||'#?'} - ${shortAddr(newMissions[0].pickup_address)}`
+                : `📦 ${newMissions.length} NOUVELLES MISSIONS!`;
+            toast('info', msg);
+            
+            // Try push notification if available
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification('Colixo Driver', {
+                        body: msg,
+                        icon: '🚚',
+                        badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="rgba(232,49,26,1)"><path d="M18 18.5a1.5 1.5 0 01-3 0m3-10a1.5 1.5 0 01-3 0M9 6.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/></svg>'
+                    });
+                } catch (e) {
+                    console.warn('[NOTIFY] Push notification error:', e);
+                }
+            }
+        }
+        
         renderMissions();
     };
 
@@ -1192,6 +2147,7 @@
         const el = document.getElementById('missionsList');
         if(!missions.length) {
             el.innerHTML = `<div class="empty-state"><div class="empty-ico">🎉</div><div class="empty-txt">Toutes vos missions sont terminées !<br>Excellent travail.</div></div>`;
+            updateDashboard();
             return;
         }
         const sorted = [...missions].sort((a,b)=>{
@@ -1199,27 +2155,69 @@
             if(b.priority==='urgent'&&a.priority!=='urgent') return 1;
             return new Date(a.created_at)-new Date(b.created_at);
         });
-        el.innerHTML = sorted.map(m => {
+        el.innerHTML = sorted.map((m,idx) => {
             const st = m.priority==='urgent'?'urgent':(m.status||'pending');
             const stl = {pending:'En attente',planned:'Planifié',urgent:'🔥 URGENT',in_transit:'En route'}[st]||st;
             const isTransit = m.status==='in_transit';
-            return `<div class="mission-card ${st}">
+            const isDone = m.status==='delivered';
+            const clientPhone = m.client_phone||m.phone || '';
+            const clientName = m.destinataire_nom || m.client_name || 'Client';
+            const pickupShort = shortAddr(m.pickup_address);
+            const deliveryShort = shortAddr(m.delivery_address);
+            
+            // Barre de progression : pending→planned→in_transit→delivered
+            const progressSteps = [
+                { status: 'pending', label: 'Commandé' },
+                { status: 'planned', label: 'Associé' },
+                { status: 'in_transit', label: 'En route' },
+                { status: 'delivered', label: 'Livré' }
+            ];
+            const currentStepIdx = progressSteps.findIndex(p => p.status === m.status);
+            const progressBar = progressSteps.map((p,i) => {
+                const classes = i < currentStepIdx ? 'done' : i === currentStepIdx ? 'active' : 'pending';
+                return `<div class="mission-status-step ${classes}"></div>`;
+            }).join('');
+
+            return `<div class="mission-card ${st}" style="margin:12px 12px 8px;">
                 <div class="mc-top">
-                    <span class="mc-num">${m.order_number||m.id.slice(0,8)}</span>
+                    <span class="mc-num">#${m.order_number||m.id.slice(0,8)}</span>
                     <span class="mc-badge ${st}">${stl}</span>
                 </div>
-                <div class="mc-stop"><div class="mc-dot p"></div><div class="mc-addr">${shortAddr(m.pickup_address)}</div></div>
-                <div class="mc-stop"><div class="mc-dot d"></div><div class="mc-addr">${shortAddr(m.delivery_address)}</div></div>
+                
+                <!-- ── Barre de progression ── -->
+                <div class="mission-status-bar">${progressBar}</div>
+
+                <!-- ── Client & Contact ── -->
+                <div class="mission-client-info">
+                    <div class="mission-client-name">👤 ${clientName}</div>
+                    ${clientPhone ? `<div class="mission-client-phone"><i class="fas fa-phone"></i> <a href="tel:${clientPhone}" onclick="event.stopPropagation()">${clientPhone}</a></div>` : ''}
+                </div>
+
+                <!-- ── Adresses ── -->
+                <div class="mc-stop"><div class="mc-dot p"></div><div class="mc-addr"><small style="color:var(--muted);">Enlever:</small> ${pickupShort}</div></div>
+                <div class="mc-stop"><div class="mc-dot d"></div><div class="mc-addr"><small style="color:var(--muted);">Livrer à:</small> ${deliveryShort}</div></div>
+
+                <!-- ── Quick Actions ── -->
+                <div class="mission-quick-actions">
+                    ${clientPhone ? `<button class="quick-action-btn call" onclick="event.stopPropagation();callMissionClient('${clientPhone}')"><i class="fas fa-phone-alt"></i> Appeler</button>` : ''}
+                    <button class="quick-action-btn nav" onclick="event.stopPropagation();navMission('${m.id}')"><i class="fas fa-map-marked"></i> GPS</button>
+                    ${!isTransit ? `<button class="quick-action-btn" onclick="event.stopPropagation();startMission('${m.id}')"><i class="fas fa-play-circle"></i> Démarrer</button>` : `<button class="quick-action-btn" onclick="event.stopPropagation();openConfirm('${m.id}')"><i class="fas fa-check-circle"></i> Livrer</button>`}
+                </div>
+
                 <div class="mc-footer">
-                    <button class="mc-btn nav" onclick="event.stopPropagation();navMission('${m.id}')"><i class="fas fa-map"></i> Carte</button>
-                    ${!isTransit
-                        ? `<button class="mc-btn start" onclick="event.stopPropagation();startMission('${m.id}')"><i class="fas fa-play"></i> Démarrer</button>`
-                        : `<button class="mc-btn deliver" onclick="event.stopPropagation();openConfirm('${m.id}')"><i class="fas fa-check"></i> Livrer</button>`
-                    }
+                    <button class="mc-btn nav" onclick="event.stopPropagation();navMission('${m.id}')"><i class="fas fa-map"></i> Détails</button>
+                    ${isDone ? `<span class="mc-btn" style="background:rgba(34,197,94,0.15);color:var(--green);">✓ Livré</span>` : ''}
                 </div>
             </div>`;
         }).join('');
+        updateDashboard();
     }
+
+    // Appeler le client
+    window.callMissionClient = function(phone) {
+        if(!phone) return;
+        window.location.href = 'tel:' + phone;
+    };
 
     function shortAddr(a) {
         if(!a) return '—';
@@ -1254,6 +2252,7 @@
             <div class="mp-stop"><div class="mp-dot p"></div><div class="mp-addr">${shortAddr(curMission.pickup_address)}</div></div>
             <div class="mp-stop"><div class="mp-dot d"></div><div class="mp-addr">${shortAddr(curMission.delivery_address)}</div></div>`;
         document.getElementById('mpDeliverBtn').onclick = () => openConfirm(curMission.id);
+        updateDashboard(); // Update button states
         showScreen('map');
         setTimeout(() => { if(!dMap) initMap(); drawMission(curMission); }, 200);
     };
@@ -1276,9 +2275,25 @@
         }
     }
     window.openGPS = function() {
-        if(!curMission) return;
-        const addr = curMission.status==='in_transit' ? curMission.delivery_address : curMission.pickup_address;
-        window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr||'')}&travelmode=driving`,'_blank');
+        if(!curMission) {
+            toast('info', 'Sélectionnez d\'abord une mission');
+            return;
+        }
+
+        // Utiliser les coordonnées GPS actuelles de l'utilisateur
+        const origin = myLat && myLng ? `${myLat},${myLng}` : '';
+
+        // Adresse de livraison comme destination
+        const destination = curMission.delivery_address || '';
+
+        if(!destination) {
+            toast('error', 'Adresse de livraison manquante');
+            return;
+        }
+
+        // Ouvrir Google Maps avec l'origine (position actuelle) et la destination (adresse de livraison)
+        const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${encodeURIComponent(origin)}` : ''}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+        window.open(url, '_blank');
     };
 
     /* ── POINTAGE ── */
@@ -1347,6 +2362,114 @@
             pcStatus.textContent = 'Journée terminée ✓';
             const ms = new Date(p.fin_travail) - new Date(p.debut_travail);
             updateWorkTimer(Math.floor(ms/1000));
+        }
+    }
+
+    /* ═══ PRO VERSION FUNCTIONS ═══ */
+
+    // ── Dashboard Updates ──
+    function updateDashboard() {
+        if (!missions.length && !pointage) return;
+        const totalMissions = missions.length;
+        const done = missions.filter(m => m.status === 'delivered').length;
+        const hours = pointage ? Math.floor((new Date() - new Date(pointage.debut_travail || Date.now())) / 3600000) : 0;
+        
+        document.getElementById('dashMissionsTotal').textContent = totalMissions;
+        document.getElementById('dashMissionsDone').textContent = done;
+        document.getElementById('dashTimeWorked').textContent = hours + 'h';
+        
+        if (missions.length > 0) {
+            const nextMission = missions[0];
+            const addr = shortAddr(nextMission.pickup_address||nextMission.delivery_address||'—');
+            document.getElementById('dashNextMission').innerHTML = `<strong>${nextMission.order_number||'Mission'}</strong> → ${addr}`;
+        }
+        
+        // Update progress bar based on time of day
+        const hour = new Date().getHours();
+        const dashSteps = ['dashStepMorning', 'dashStepMidday', 'dashStepAfternoon', 'dashStepEnd'];
+        dashSteps.forEach((stepId, idx) => {
+            const stepEl = document.getElementById(stepId);
+            if (!stepEl) return;
+            stepEl.className = 'mission-status-step';
+            if (hour < 12 && idx === 0) stepEl.classList.add('active');
+            else if (hour < 14 && idx === 1) stepEl.classList.add('active');
+            else if (hour < 17 && idx === 2) stepEl.classList.add('active');
+            else if (hour >= 17 && idx === 3) stepEl.classList.add('active');
+            if (hour >= (idx + 1) * 6) stepEl.classList.add('done');
+        });
+        
+        // Update Map button state based on mission selection
+        const mapBtn = document.getElementById('bnMap');
+        if (curMission) {
+            mapBtn.classList.remove('disabled');
+        } else {
+            mapBtn.classList.add('disabled');
+        }
+    }
+
+    // ── Offline Mode ──
+    let isOfflineMode = false;
+    let offlineCache = {};
+
+    function initOfflineMode() {
+        window.addEventListener('online', () => {
+            isOfflineMode = false;
+            document.getElementById('offlineBanner').classList.remove('show');
+            toast('success', '🟢 Connexion rétablie — sync en cours…');
+            syncOfflineData();
+        });
+        window.addEventListener('offline', () => {
+            isOfflineMode = true;
+            document.getElementById('offlineBanner').classList.add('show');
+            toast('info', '🔴 Mode hors ligne — les données seront synchronisées automatiquement');
+        });
+        // Sauvegarder les missions en cache local
+        setInterval(() => {
+            if (missions.length > 0) {
+                try {
+                    localStorage.setItem('colixo_missions_cache_' + (driver?.id || 'unknown'), JSON.stringify({
+                        timestamp: Date.now(),
+                        missions: missions
+                    }));
+                } catch (e) {
+                    console.warn('[OFFLINE] Cache save error:', e);
+                }
+            }
+        }, 30000);
+    }
+
+    function syncOfflineData() {
+        const cacheKey = 'colixo_missions_cache_' + (driver?.id || 'unknown');
+        const cached = localStorage.getItem(cacheKey);
+        if (!cached) return;
+        showLoad();
+        setTimeout(() => {
+            try {
+                const data = JSON.parse(cached);
+                // Recharger les missions depuis le serveur
+                loadMissions().then(() => {
+                    localStorage.removeItem(cacheKey);
+                    hideLoad();
+                    toast('success', '✓ Synchronisation complète');
+                });
+            } catch (e) {
+                hideLoad();
+                console.error('[OFFLINE] Sync error:', e);
+            }
+        }, 1000);
+    }
+
+    // ── Breadcrumb Update ──
+    function updateBreadcrumb(label) {
+        const crumb = document.getElementById('breadcrumbNav');
+        const crumbLabel = document.getElementById('breadcrumbLabel');
+        if (crumb && crumbLabel) {
+            if (label) {
+                crumb.style.display = 'flex';
+                crumbLabel.textContent = label;
+            } else {
+                crumb.style.display = 'none';
+            }
         }
     }
 
@@ -1505,6 +2628,27 @@
                 <div class="ci-dates">${new Date(c.date_debut).toLocaleDateString('fr-CH')} → ${new Date(c.date_fin).toLocaleDateString('fr-CH')} · ${c.nb_jours||'?'} jour(s)</div>
             </div>`).join('')
         : '<div class="empty-state"><div class="empty-ico">📅</div><div class="empty-txt">Aucune demande de congé</div></div>';
+
+        const fsEl = document.getElementById('fichesSalaireList');
+        if (fsEl) {
+            const moFs = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+            const { data: fiches, error: fsErr } = await db.from('rh_fiches_salaire').select('*')
+                .eq('employe_id', driver.id)
+                .order('annee', { ascending: false })
+                .order('mois', { ascending: false })
+                .limit(24);
+            if (fsErr) {
+                fsEl.innerHTML = '<div class="empty-state" style="padding:16px;"><div class="empty-txt" style="font-size:12px;">Fiches indisponibles. Exécutez <code style="font-size:11px;">rh_fiches_salaire_policy_employe_read.sql</code> dans Supabase si besoin.</div></div>';
+            } else if (!fiches?.length) {
+                fsEl.innerHTML = '<div class="empty-state" style="padding:16px;"><div class="empty-txt" style="font-size:12px;">Aucune fiche. L’admin RH peut vous en envoyer une notification depuis son espace.</div></div>';
+            } else {
+                fsEl.innerHTML = fiches.map(function (f) {
+                    const lbl = moFs[f.mois - 1] + ' ' + f.annee;
+                    const net = (parseFloat(f.net_a_payer) || 0).toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    return '<div class="fs-card" role="button" onclick="openFicheSalaireModal(\'' + f.id + '\')"><div><div class="fs-card-lbl">Bulletin</div><div class="fs-card-per">' + driverEscHtml(lbl) + '</div></div><div class="fs-card-net">' + net + ' CHF</div></div>';
+                }).join('');
+            }
+        }
     }
 
     /* ── MODAL CONGÉ ── */
@@ -1552,6 +2696,7 @@
         document.getElementById('photoBtn').style.display='flex';
         document.getElementById('deliveryNote').value='';
         hasSig=false;
+        updateDashboard(); // Update button states
         showScreen('confirm');
         setTimeout(initSig, 150);
     };
@@ -1726,17 +2871,59 @@
         } catch(e) { hideLoad(); toast('error',e.message); }
     };
 
+    /* ── Position serveur (carte admin conducteurs) — throttlé ── */
+    async function pushDriverLivePosition() {
+        if (!driver || !driver.id || myLat == null || myLng == null) return;
+        const now = Date.now();
+        if (lastLivePushAt && (now - lastLivePushAt < LIVE_PUSH_INTERVAL_MS)) return;
+        lastLivePushAt = now;
+        const d = today();
+        const mStored = parseFloat(localStorage.getItem('colixo_km_m_' + d) || '0') || 0;
+        const kmToday = Math.round((mStored / 1000) * 100) / 100;
+        try {
+            const { error } = await db.from('driver_live_positions').upsert({
+                driver_id: driver.id,
+                lat: myLat,
+                lng: myLng,
+                updated_at: new Date().toISOString(),
+                speed_kmh: mySpeedKmh,
+                session_started_at: getOrInitDaySessionStartIso(),
+                km_today: kmToday
+            }, { onConflict: 'driver_id' });
+            if (error) {
+                const em = String(error.message || '');
+                if (!em.includes('does not exist') && !em.includes('schema cache') && !em.includes('speed_kmh')) console.warn('[driver_live_positions]', em);
+            }
+        } catch (e) {
+            console.warn('[driver_live_positions]', e);
+        }
+    }
+
     /* ── GPS ── */
     function startGPS() {
         if(!navigator.geolocation) return;
+        const dot = document.getElementById('gpsDot');
+        dot?.classList.remove('on');
+        dot?.classList.add('pending'); // Animation pendant la demande de permission / première mesure
         gpsWatch = navigator.geolocation.watchPosition(pos => {
             myLat=pos.coords.latitude; myLng=pos.coords.longitude;
-            document.getElementById('gpsDot').classList.add('on');
+            const sp = pos.coords.speed;
+            mySpeedKmh = (sp != null && !isNaN(sp) && sp >= 0) ? Math.round(sp * 3.6 * 10) / 10 : null;
+            accumulateKmToday(myLat, myLng);
+            dot?.classList.remove('pending');
+            dot?.classList.add('on');
             if(dMap&&myLat) {
                 if(dMarker) dMap.removeLayer(dMarker);
                 dMarker=L.marker([myLat,myLng],{icon:L.divIcon({html:`<div style="width:14px;height:14px;background:#f59e0b;border:3px solid white;border-radius:50%;"></div>`,className:'',iconSize:[14,14],iconAnchor:[7,7]})}).addTo(dMap);
             }
-        }, ()=>document.getElementById('gpsDot').classList.remove('on'), {enableHighAccuracy:true,timeout:10000,maximumAge:5000});
+            void pushDriverLivePosition();
+        }, (err) => {
+            dot?.classList.remove('pending');
+            dot?.classList.remove('on');
+            // L'animation "GPS" ne peut pas tourner si la permission est refusée / indisponible.
+            // On explique la raison pour éviter la confusion.
+            toast('error', `GPS indisponible (${err?.code||'?'})`);
+        }, {enableHighAccuracy:true,timeout:10000,maximumAge:5000});
     }
     function stopGPS() { if(gpsWatch) navigator.geolocation.clearWatch(gpsWatch); }
 
@@ -1818,11 +3005,12 @@
         el.innerHTML = notifications.map(n => {
             const data = (() => { try { return JSON.parse(n.data||'{}'); } catch(e){ return {}; } })();
             const orderId = data.order_id || data.orderId || null;
+            const ficheId = data.fiche_salaire_id || null;
             const time = new Date(n.created_at).toLocaleTimeString('fr-CH',{
                 timeZone:'Europe/Zurich', hour:'2-digit', minute:'2-digit'
             });
             return `<div style="padding:10px 12px;border-radius:10px;margin-bottom:4px;background:${n.read?'transparent':'rgba(232,49,26,0.06)'};border:1px solid ${n.read?'transparent':'rgba(232,49,26,0.15)'};cursor:pointer;"
-                onclick="handleNotifClick('${n.id}','${orderId||''}')">
+                onclick="handleNotifClick('${n.id}','${orderId||''}','${ficheId||''}')">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
                     <div style="flex:1;">
                         <div style="font-size:13px;font-weight:600;color:${n.read?'var(--muted2)':'var(--white)'};margin-bottom:2px;">${n.title}</div>
@@ -1837,6 +3025,12 @@
                         <i class="fas fa-truck"></i> Voir la mission
                     </button>
                 </div>`:''}
+                ${ficheId?`<div style="margin-top:6px;">
+                    <button onclick="event.stopPropagation();openFicheFromNotif('${ficheId}')"
+                        style="background:var(--green);color:var(--night);border:none;border-radius:7px;padding:5px 12px;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-money-check-alt"></i> Voir la fiche de salaire
+                    </button>
+                </div>`:''}
             </div>`;
         }).join('');
     }
@@ -1846,12 +3040,22 @@
         if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
     };
 
-    window.handleNotifClick = async function(notifId, orderId) {
+    window.handleNotifClick = async function(notifId, orderId, ficheId) {
         await window.SUPABASE_CLIENT.from('notifications').update({read:true}).eq('id',notifId);
         if(driver) await loadNotifications(driver.id);
-        // Fermer dropdown
         const dd = document.getElementById('notifDropdown');
         if(dd) dd.style.display = 'none';
+        if (ficheId) {
+            showScreen('rh');
+            setTimeout(function () { openFicheSalaireModal(ficheId); }, 250);
+        }
+    };
+
+    window.openFicheFromNotif = function (ficheId) {
+        const dd = document.getElementById('notifDropdown');
+        if (dd) dd.style.display = 'none';
+        showScreen('rh');
+        setTimeout(function () { openFicheSalaireModal(ficheId); }, 250);
     };
 
     window.openMissionById = async function(orderId) {
@@ -1867,7 +3071,7 @@
             mission = data;
         }
         if(mission) {
-            showScreen('home');
+            showScreen('missions');
             setTimeout(() => openMission(mission), 200);
         } else {
             toast('error', 'Mission introuvable');

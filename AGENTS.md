@@ -41,8 +41,19 @@ All authenticated pages require a Supabase session. The Supabase anon key is in 
 - **Tests**: No automated test framework is present.
 - **Build**: No build step — files are served directly as static assets.
 
+### Production hosting (GitHub Pages)
+
+- The live site is served from **this GitHub repository** via **GitHub Pages** (static files from the default branch).
+- The custom domain is configured with the **`CNAME`** file at the repo root (e.g. `www.colixo.ch`). DNS must point to GitHub’s Pages IPs or CNAME target as in [GitHub’s docs](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site).
+- **`_headers`** and **`netlify.toml`** in the repo are **not used by GitHub Pages** (they apply on Netlify or similar hosts only). Cache behaviour for HTML is therefore mostly **browser + any CDN in front** (e.g. Cloudflare).
+- **`config.js`** must be present in the repo and deployed branch so production can load Supabase; scripts use `<script src="config.js?v=…">` and `data-cfasync="false"` where relevant for Cloudflare compatibility.
+
 ### Gotchas
 
+- **Localhost vs domaine** : en `http://localhost:8080` le cache est souvent faible ; sur **`www.colixo.ch`** le navigateur ou un CDN peut garder une ancienne **page HTML** alors que le code dans le dépôt est à jour. Après un `git push`, attendre la fin du déploiement GitHub Pages, puis **rechargement forcé** (Cmd+Shift+R) ou le lien **« Ouvrir sans cache »** sur Dispatch si un bandeau rouge apparaît.
+- **Cache après déploiement** : si « rien ne change » après plusieurs F5, le navigateur ou un CDN (souvent **Cloudflare** devant le domaine) sert encore d’anciens fichiers. Faire un **rechargement forcé** (Cmd+Shift+R / Ctrl+Shift+R), ou **vider le cache** pour le site. Avec Cloudflare : **Caching → Purge Everything** (ou règle « Bypass » pour le HTML). Vérifier dans **Afficher le code source** la présence du commentaire `<!-- colixo-build:… -->` : s’il est absent ou ancien, ce n’est pas la dernière version déployée. Dans la console, `[Colixo] build` doit afficher la même version que dans `config.js`.
+- **Dispatch** (`admin/dispatch.html`) : le fichier racine **`version.json`** (champ `build`) est comparé à l’attribut **`data-colixo-build`** sur `<html>` ; en cas d’écart, une redirection avec `?_cb=` tente de récupérer le nouveau HTML. À chaque déploiement important, incrémenter ensemble **`version.json`**, **`data-colixo-build`** sur dispatch, **`COLIXO_ASSET_VERSION`** dans `config.js` et le `?v=` des scripts dans les HTML. Si Cloudflare **ignore les query strings** pour le cache, purger le CDN reste nécessaire.
+- **GitHub Pages** (URL du type `user.github.io/nom-du-depot/`) : les liens absolus `/login/…` sans préfixe du dépôt cassent. `config.js` définit `COLIXO_BASE_PATH` sur `*.github.io`, corrige les `<a href="/…">` au chargement et expose `colixoHref()` pour les redirections JS. Sur le domaine personnalisé (`www.colixo.ch`), le préfixe reste vide.
 - The app loads external CDN resources (Supabase JS SDK, Leaflet, Chart.js, Google Fonts, Font Awesome). Internet access is required.
 - Push notifications require HTTPS (except on `localhost`).
 - The `send_mail.php` file under `admin/brimot/` requires a PHP runtime — it is only used for the Brimot invoicing email feature and is not needed for core transport functionality.
