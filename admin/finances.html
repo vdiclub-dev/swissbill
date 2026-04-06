@@ -1558,14 +1558,16 @@
     /* ── AUTH ── */
     async function init() {
         const{data:{session}}=await db.auth.getSession();
-        if(!session && !sessionStorage.getItem('colixo_user')){window.location.href='../login/index.html';return;}
-        const{data:user}=await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
-        if(!user||!['admin','super_admin'].includes(user.role)){await db.auth.signOut();window.location.href='../login/index.html';return;}
+        const codeUser=JSON.parse(sessionStorage.getItem('colixo_user')||'null');
+        if(!session && !codeUser){window.location.href='../login/index.html';return;}
+        const userId=session?.user?.id||codeUser?.id;
+        const{data:user}=await db.from('utilisateurs').select('*').eq('id',userId).single();
+        if(!user||!['admin','super_admin'].includes(user.role)){sessionStorage.removeItem('colixo_user');window.location.href='../login/index.html';return;}
         if(user){
             document.getElementById('sbAv').textContent=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
             document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
         }
-        document.getElementById('btnLogout').addEventListener('click',async()=>{await db.auth.signOut();window.location.href='../login/index.html';});
+        document.getElementById('btnLogout').addEventListener('click',async()=>{await db.auth.signOut();sessionStorage.removeItem('colixo_user');window.location.href='../login/index.html';});
         // Populate chauffeur select in modal
         const{data:ch}=await db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur');
         document.getElementById('mChauffeur').innerHTML='<option value="">— Aucun —</option>'+(ch||[]).map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
