@@ -631,9 +631,14 @@
         const { data: { session } } = await db.auth.getSession();
         if (!session) { window.location.replace('../index.html'); return; }
         const { data: user } = await db.from('utilisateurs').select('role').eq('id', session.user.id).single();
-        if (!user || !['admin','super_admin'].includes(user.role)) {
+        if (!user || !['admin','super_admin','magasinier'].includes(user.role)) {
             await db.auth.signOut();
             window.location.replace('../index.html');
+        }
+        
+        // Masquer les prix pour les magasiniers
+        if (user.role === 'magasinier') {
+            hidePricesForMagasinier();
         }
     })();
 
@@ -668,9 +673,31 @@
     }
     function hideLoader() { loaderEl.classList.remove('on'); }
 
-    /* ── Date ── */
-    const now = new Date();
-    document.getElementById('orderDate').textContent = now.toLocaleDateString('fr-CH', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+    /* ── Hide prices for magasiniers ── */
+    function hidePricesForMagasinier() {
+        // Masquer la section de prix complète
+        const priceSection = document.querySelector('.price-section');
+        if (priceSection) {
+            priceSection.style.display = 'none';
+        }
+        
+        // Masquer les éléments de breakdown et total
+        const priceBreakdown = document.getElementById('priceBreakdown');
+        if (priceBreakdown) {
+            priceBreakdown.style.display = 'none';
+        }
+        
+        const priceTotal = document.getElementById('priceTotal');
+        if (priceTotal) {
+            priceTotal.closest('.price-total').style.display = 'none';
+        }
+        
+        // Masquer d'autres éléments liés aux prix
+        const priceElements = document.querySelectorAll('.price-line, .pl-lbl, .pl-val, .pt-val');
+        priceElements.forEach(el => {
+            el.style.display = 'none';
+        });
+    }
 
     /* ── Generate order number ── */
     async function generateOrderNumber() {
