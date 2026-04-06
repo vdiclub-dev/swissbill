@@ -1073,8 +1073,9 @@ window.askDelete = function(type, id, label, table){
 //  INIT ✅
 // ══════════════════════════════════════
 async function init(){
-    const {data:{session}}=await db.auth.getSession();
-    if(!session){window.location.href='../login/index.html';return;}
+   const {data:{session}}=await db.auth.getSession();
+const codeUser = sessionStorage.getItem('colixo_user');
+if(!session && !codeUser){window.location.href='../login/index.html';return;}
     showLoad();
     await loadEntreprises();
     await loadUtilisateurs();
@@ -1087,12 +1088,15 @@ async function init(){
     renderChauffeurs();
     renderTransports();
     // Nom admin
-    const {data:me}=await db.from('utilisateurs').select('prenom,nom').eq('id',session.user.id).single();
+  const userId = session?.user?.id || (codeUser ? JSON.parse(codeUser).id : null);
+if(userId){
+    const {data:me}=await db.from('utilisateurs').select('prenom,nom').eq('id',userId).single();
     if(me){
-        const name=[me.prenom,me.nom].filter(Boolean).join(' ')||session.user.email;
+        const name=[me.prenom,me.nom].filter(Boolean).join(' ')||'Admin';
         document.getElementById('sideName').textContent=name;
-        document.getElementById('sideAvatar').textContent=initials(me.prenom||session.user.email);
+        document.getElementById('sideAvatar').textContent=initials(me.prenom||'A');
     }
+}
     // Realtime commandes
     db.channel('dashboard').on(
         'postgres_changes',
