@@ -560,6 +560,7 @@
     let currentOrderId=null;
     let saveAddressEnabled = false;
     let savedAddresses = [];
+    let currentUserRole = null;
 
     function toast(msg){const t=document.getElementById('toast');t.innerHTML=msg;t.className='toast show';setTimeout(()=>t.classList.remove('show'),3000);}
     function showLoad(){document.getElementById('loader').classList.add('on');}
@@ -572,6 +573,31 @@
     window.closeModal=closeModal;
 
     function fmt(v){return parseFloat(v||0).toFixed(2);}
+
+    // Masquer les prix pour les magasiniers
+    function hidePricesForMagasinier() {
+        if (currentUserRole === 'magasinier') {
+            // Masquer les éléments de tarif
+            const tarifElements = document.querySelectorAll('.tarif-price, .svc-price, .tarif-box, .service-price');
+            tarifElements.forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // Masquer les sections de prix
+            const priceSections = document.querySelectorAll('.pricing-section, .tarif-section');
+            priceSections.forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // Masquer les textes contenant des prix
+            const priceTexts = document.querySelectorAll('[id*="price"], [class*="price"]');
+            priceTexts.forEach(el => {
+                if (el.textContent.includes('CHF') || el.textContent.includes('€')) {
+                    el.style.display = 'none';
+                }
+            });
+        }
+    }
 
     async function loadClientTarif() {
         if(!client || !client.entreprise_id) return;
@@ -1998,17 +2024,19 @@
         }
 
         const { data: user } = await db.from('utilisateurs').select('*').eq('id', session.user.id).single();
-        if (!user || user.role !== 'client') {
+        if (!user || (user.role !== 'client' && user.role !== 'magasinier')) {
             window.location.href = h('/login/index.html');
             return;
         }
 
         client = user;
+        currentUserRole = user.role;
         if (user.entreprise_id) {
             const { data: ent } = await db.from('entreprises').select('*').eq('id', user.entreprise_id).single();
             clientEntreprise = ent;
         }
         await loadClientTarif();
+        hidePricesForMagasinier();
         await loadSavedAddresses();
         showScreen('Portal');
         renderColis();
