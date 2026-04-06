@@ -1118,9 +1118,15 @@
     async function checkSession() {
         await new Promise(r=>setTimeout(r,400));
         const { data:{session} } = await db.auth.getSession();
-        if(!session) return;
-        const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
-        if(user && ['chauffeur','admin','super_admin'].includes(user.role)) { driver=user; afterLogin(); }
+        const codeUser = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
+        if(!session && !codeUser) return;
+        if(session) {
+            const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
+            if(user && ['chauffeur','admin','super_admin'].includes(user.role)) { driver=user; afterLogin(); }
+        } else if(codeUser && ['chauffeur','admin','super_admin'].includes(codeUser.role)) {
+            const { data:user } = await db.from('utilisateurs').select('*').eq('id',codeUser.id).single();
+            if(user) { driver=user; afterLogin(); }
+        }
     }
 
     function afterLogin() {

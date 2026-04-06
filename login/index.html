@@ -115,16 +115,7 @@
             margin-bottom:16px;display:none;text-align:center;
         }
 
-        /* Lien admin discret */
-        .admin-link{text-align:center;margin-top:24px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;}
-        .admin-link a{color:var(--muted);text-decoration:none;transition:color 0.2s;}
-        .admin-link a:hover{color:var(--muted2);}
-
-        /* Panneau admin */
-        .admin-panel{display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--border2);}
-        .admin-panel.visible{display:block;}
-        .back-link{display:block;text-align:center;margin-top:10px;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:none;}
-        .back-link:hover{color:var(--muted2);}
+        /* Toast */
 
         /* Toast */
         .toast{position:fixed;top:20px;right:20px;padding:12px 18px;border-radius:10px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;background:var(--night3);border:1px solid var(--border2);box-shadow:0 12px 40px rgba(0,0,0,0.4);z-index:9999;transform:translateX(calc(100% + 40px));transition:transform 0.4s cubic-bezier(0.4,0,0.2,1);}
@@ -179,28 +170,6 @@
         </button>
     </form>
 
-    <!-- Lien admin discret -->
-    <div class="admin-link">
-        <a href="#" id="showAdminLink">Accès équipe Colixo (admin)</a>
-    </div>
-
-    <!-- ── FORMULAIRE ADMIN (caché par défaut) ── -->
-    <div class="admin-panel" id="adminPanel">
-        <form id="formAdmin">
-            <div class="field">
-                <label>Email</label>
-                <input type="email" id="adminEmail" class="std-field" placeholder="vous@exemple.ch" required autocomplete="email">
-            </div>
-            <div class="field">
-                <label>Mot de passe</label>
-                <input type="password" id="adminPwd" class="std-field" placeholder="••••••••" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn-submit" style="margin-top:8px;">
-                <i class="fas fa-sign-in-alt"></i> Connexion équipe
-            </button>
-        </form>
-        <a href="#" class="back-link" id="hideAdminLink">← Masquer</a>
-    </div>
 </div>
 
 <script>
@@ -242,21 +211,6 @@
         this.value = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
     });
 
-    /* ── Afficher/masquer panneau admin ── */
-    document.getElementById('showAdminLink').addEventListener('click', function (e) {
-        e.preventDefault();
-        clearError();
-        document.getElementById('adminPanel').classList.add('visible');
-        this.style.display = 'none';
-        document.getElementById('adminEmail').focus();
-    });
-    document.getElementById('hideAdminLink').addEventListener('click', function (e) {
-        e.preventDefault();
-        clearError();
-        document.getElementById('adminPanel').classList.remove('visible');
-        document.getElementById('showAdminLink').style.display = 'inline';
-    });
-
     /* ── Redirection selon rôle ── */
     function redirectByRole(role) {
         const routes = {
@@ -269,16 +223,11 @@
         window.location.href = routes[role] || '/admin/client/portal.html';
     }
 
-    /* ── Vérifier session existante (admin connecté) ── */
-    async function checkExistingSession() {
-        try {
-            const { data: { session } } = await db.auth.getSession();
-            if (!session) return;
-            const { data: user } = await db.from('utilisateurs').select('role').eq('id', session.user.id).single();
-            if (user) redirectByRole(user.role);
-        } catch (e) {}
+    /* ── Vérifier session existante (code USR déjà connecté) ── */
+    const existingUser = sessionStorage.getItem('colixo_user');
+    if (existingUser) {
+        try { redirectByRole(JSON.parse(existingUser).role); } catch(e) {}
     }
-    checkExistingSession();
 
     /* ── CONNEXION PAR CODE ── */
     document.getElementById('formCode').addEventListener('submit', async function (e) {
@@ -323,34 +272,6 @@
         }
     });
 
-    /* ── CONNEXION ADMIN (email + mot de passe) ── */
-    document.getElementById('formAdmin').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        clearError();
-
-        const email = document.getElementById('adminEmail').value.trim();
-        const pwd   = document.getElementById('adminPwd').value;
-
-        showLoad();
-        try {
-            const { data, error } = await db.auth.signInWithPassword({ email, password: pwd });
-            if (error) throw error;
-
-            const { data: user } = await db
-                .from('utilisateurs')
-                .select('role')
-                .eq('id', data.user.id)
-                .single();
-
-            const role = user?.role || 'client';
-            toast('success', 'Connexion réussie — redirection…');
-            setTimeout(() => redirectByRole(role), 800);
-
-        } catch (err) {
-            hideLoad();
-            showError('❌ ' + (err.message.includes('Invalid') ? 'Email ou mot de passe incorrect.' : err.message));
-        }
-    });
 
 })();
 </script>
