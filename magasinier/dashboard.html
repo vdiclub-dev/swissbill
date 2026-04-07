@@ -1105,24 +1105,40 @@
 
         async function checkAuth() {
             const { data: { session } } = await db.auth.getSession();
-            if (!session) {
+            var uid = session && session.user ? session.user.id : null;
+            if (!uid) {
+                try {
+                    var rawCu = sessionStorage.getItem('colixo_user');
+                    if (rawCu) {
+                        var parsed = JSON.parse(rawCu);
+                        if (parsed && parsed.id && parsed.role === 'magasinier') {
+                            uid = parsed.id;
+                        }
+                    }
+                } catch (e) {}
+            }
+            if (!uid) {
                 window.location.href = '../login/index.html';
                 return;
             }
 
             const { data: utilisateur } = await db.from('utilisateurs')
-                .select('role, prenom, nom').eq('id', session.user.id).single();
+                .select('id, role, prenom, nom, entreprise_id')
+                .eq('id', uid)
+                .maybeSingle();
 
             if (!utilisateur || utilisateur.role !== 'magasinier') {
-                await db.auth.signOut();
+                try { await db.auth.signOut(); } catch (e) {}
+                try { sessionStorage.removeItem('colixo_user'); } catch (e) {}
                 window.location.href = '../login/index.html';
                 return;
             }
 
             currentUser = {
-                id: session.user.id,
-                email: session.user.email,
-                name: utilisateur.prenom || utilisateur.nom || session.user.email.split('@')[0]
+                id: utilisateur.id,
+                email: session && session.user ? session.user.email : null,
+                name: [utilisateur.prenom, utilisateur.nom].filter(Boolean).join(' ') || 'Magasinier',
+                entreprise_id: utilisateur.entreprise_id
             };
 
             // Update UI
@@ -1906,7 +1922,8 @@
         });
 
         window.logout = async function() {
-            await db.auth.signOut();
+            try { await db.auth.signOut(); } catch (e) {}
+            try { sessionStorage.removeItem('colixo_user'); } catch (e) {}
             window.location.href = '../login/index.html';
         };
 
