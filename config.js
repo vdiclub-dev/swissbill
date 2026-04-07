@@ -159,33 +159,66 @@ if (typeof console !== 'undefined' && console.info) {
 (function colixoGlobalToolbar() {
     if (typeof document === 'undefined' || window.COLIXO_NO_GLOBAL_TOOLBAR) return;
 
-    function homeHref() {
-        if (typeof window.colixoHref === 'function') return window.colixoHref('/index.html');
+    // Retourne le dashboard selon le rôle de l'utilisateur connecté
+    function dashboardHref() {
         var bp = window.COLIXO_BASE_PATH || '';
-        return bp + '/index.html';
+        try {
+            var u = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
+            if (u && u.role) {
+                var routes = {
+                    super_admin: '/admin/dashboard.html',
+                    admin:       '/admin/dashboard.html',
+                    chauffeur:   '/admin/driver-app.html',
+                    magasinier:  '/magasinier/dashboard.html',
+                    client:      '/admin/client/portal.html'
+                };
+                return bp + (routes[u.role] || '/admin/dashboard.html');
+            }
+        } catch(e) {}
+        return bp + '/admin/dashboard.html';
+    }
+
+    function loginHref() {
+        if (typeof window.colixoHref === 'function') return window.colixoHref('/login/index.html');
+        return (window.COLIXO_BASE_PATH || '') + '/login/index.html';
+    }
+
+    // Ne pas afficher sur les pages login et index
+    function shouldHide() {
+        var p = location.pathname;
+        return /\/(login|index)(\/|\.html|$)/i.test(p) || p === '/' || p === '';
     }
 
     function attach() {
         if (document.getElementById('colixo-global-toolbar')) return;
-        var home = homeHref();
+        if (shouldHide()) return;
+
         var wrap = document.createElement('div');
         wrap.id = 'colixo-global-toolbar';
         wrap.setAttribute('role', 'navigation');
         wrap.setAttribute('aria-label', 'Navigation Colixo');
         wrap.innerHTML =
-            '<style>#colixo-global-toolbar{position:fixed;top:12px;right:12px;z-index:99997;display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end;max-width:calc(100vw - 24px);font-family:system-ui,-apple-system,sans-serif;font-size:12px;}' +
-            '#colixo-global-toolbar a,#colixo-global-toolbar button{margin:0;padding:7px 11px;border-radius:9px;text-decoration:none;border:1px solid rgba(255,255,255,0.18);background:rgba(15,15,22,0.92);color:#f4f4f5;cursor:pointer;font:inherit;line-height:1.2;box-shadow:0 4px 20px rgba(0,0,0,0.35);}' +
+            '<style>' +
+            '#colixo-global-toolbar{position:fixed;left:20cm;top:0;height:60px;z-index:99997;display:flex;gap:6px;align-items:center;font-family:system-ui,-apple-system,sans-serif;font-size:12px;}' +
+            '#colixo-global-toolbar a,#colixo-global-toolbar button{margin:0;padding:6px 14px;border-radius:8px;text-decoration:none;border:1px solid rgba(255,255,255,0.14);background:rgba(15,15,22,0.85);color:#f4f4f5;cursor:pointer;font:inherit;line-height:1.2;white-space:nowrap;transition:all 0.2s;}' +
             '#colixo-global-toolbar a:hover,#colixo-global-toolbar button:hover{background:rgba(232,49,26,0.22);border-color:rgba(232,49,26,0.45);color:#fff;}' +
-            '#colixo-global-toolbar .cx-out{border-color:rgba(232,49,26,0.4);background:rgba(232,49,26,0.12);}</style>' +
-            '<a href="' + home + '">Accueil</a>' +
-            '<button type="button" class="cx-out" id="colixo-global-logout">Déconnexion</button>';
+            '#colixo-global-toolbar .cx-out{border-color:rgba(232,49,26,0.35);background:rgba(232,49,26,0.1);color:#ff7a63;}' +
+            '#colixo-global-toolbar .cx-out:hover{background:rgba(232,49,26,0.3);}' +
+            '</style>' +
+            '<a id="colixo-global-home" href="#">⌂ Accueil</a>' +
+            '<button type="button" class="cx-out" id="colixo-global-logout">⏻ Déconnexion</button>';
         document.body.appendChild(wrap);
+
+        // Lien accueil dynamique selon rôle
+        var homeLink = document.getElementById('colixo-global-home');
+        homeLink.href = dashboardHref();
+
         document.getElementById('colixo-global-logout').addEventListener('click', async function () {
             try {
                 if (window.SUPABASE_CLIENT && window.SUPABASE_CLIENT.auth) await window.SUPABASE_CLIENT.auth.signOut();
             } catch (e) {}
             try { sessionStorage.removeItem('colixo_user'); } catch (e) {}
-            window.location.href = home;
+            window.location.href = loginHref();
         });
     }
 
