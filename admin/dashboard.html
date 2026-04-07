@@ -12,7 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260425"></script>
+    <script data-cfasync="false" src="../config.js?v=20260426"></script>
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -387,7 +387,7 @@
             <div class="field"><label>Nom</label><input type="text" id="uNom" placeholder="Dupont"></div>
         </div>
         <div class="field"><label>Téléphone</label><input type="tel" id="uTel" placeholder="+41 79 000 00 00"></div>
-        <div class="field"><label>Code</label><input type="text" id="uCode" placeholder="Réf. interne (optionnel)" maxlength="64" autocomplete="off"></div>
+        <div class="field"><label>Code</label><input type="text" id="uCode" placeholder="Réf. interne — vide = généré auto (ex. CLT-AB12CD)" maxlength="64" autocomplete="off"></div>
         <div class="field-row">
             <div class="field"><label>Rôle</label>
                 <select id="uRole">
@@ -466,6 +466,22 @@ function makeTempClient() {
         window.SUPABASE_CONFIG.key,
         { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
     );
+}
+
+function generateStoredUserCode(role) {
+    var prefixes = { super_admin: 'SA', admin: 'ADM', chauffeur: 'CHF', magasinier: 'MAG', client: 'CLT' };
+    var prefix = prefixes[role] || 'USR';
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var out = '';
+    var i;
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        var arr = new Uint8Array(6);
+        crypto.getRandomValues(arr);
+        for (i = 0; i < 6; i++) out += chars[arr[i] % chars.length];
+    } else {
+        for (i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return prefix + '-' + out;
 }
 
 // Crée un compte Auth ou récupère l'ID si l'email existe déjà
@@ -696,15 +712,16 @@ window.renderEntreprises = function(filter=''){
 
 window.renderUtilisateurs = function(filter='', roleFilter=''){
     let list=utilisateurs;
-    if(filter) list=list.filter(u=>(u.email+(u.prenom||'')+(u.nom||'')+(u.code||'')).toLowerCase().includes(filter));
+    if(filter) list=list.filter(u=>(u.email+(u.prenom||'')+(u.nom||'')+(u.code||'')+(u.code_usr||'')).toLowerCase().includes(filter));
     if(roleFilter) list=list.filter(u=>u.role===roleFilter);
     document.getElementById('utilisateursList').innerHTML=list.length?list.map(u=>{
         const name=[u.prenom,u.nom].filter(Boolean).join(' ')||'—';
         const ent=u.entreprises?.nom||'—';
-        const codeEsc=(u.code||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+        const ref=u.code_usr||u.code||'';
+        const codeEsc=ref.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
         return `<tr>
             <td><div class="cell-user"><div class="avatar-sm" style="background:rgba(59,130,246,0.12);color:var(--blue)">${initials(u.prenom||u.email)}</div><div><div class="cell-main">${name}</div><div class="cell-sub">${u.email}</div></div></div></td>
-            <td style="font-family:ui-monospace,monospace;font-size:12px;color:var(--muted2)">${u.code?codeEsc:'—'}</td>
+            <td style="font-family:ui-monospace,monospace;font-size:12px;color:var(--muted2)">${ref?codeEsc:'—'}</td>
             <td><span class="chip ${u.role}">${u.role}</span></td>
             <td style="color:var(--muted2)">${ent}</td>
             <td><span class="chip actif">Actif</span></td>
@@ -813,7 +830,7 @@ window.editUser = function(id){
     document.getElementById('uPrenom').value=u.prenom||'';
     document.getElementById('uNom').value=u.nom||'';
     document.getElementById('uTel').value=u.telephone||'';
-    document.getElementById('uCode').value=u.code||'';
+    document.getElementById('uCode').value=u.code||u.code_usr||'';
     document.getElementById('uRole').value=u.role||'client';
     document.getElementById('uEntreprise').value=u.entreprise_id||'';
     document.getElementById('uPwdField').style.display='none';
@@ -828,13 +845,17 @@ window.saveUser = async function(){
     if(!id && !pwd){toast('error','Mot de passe requis');return;}
     showLoad();
     try{
+        var roleVal=document.getElementById('uRole').value;
+        var codeVal=document.getElementById('uCode').value.trim()||null;
+        if(!id && !codeVal) codeVal=generateStoredUserCode(roleVal);
         const profilePayload={
             email,
             prenom:document.getElementById('uPrenom').value.trim()||null,
             nom:document.getElementById('uNom').value.trim()||null,
             telephone:document.getElementById('uTel').value.trim()||null,
-            code:document.getElementById('uCode').value.trim()||null,
-            role:document.getElementById('uRole').value,
+            code:codeVal,
+            code_usr:codeVal,
+            role:roleVal,
             entreprise_id:document.getElementById('uEntreprise').value||null
         };
         if(id){
@@ -1092,16 +1113,22 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
     renderUtilisateurs();
     renderChauffeurs();
     renderTransports();
-    // Nom admin
-  const userId = session?.user?.id || (codeUser ? JSON.parse(codeUser).id : null);
-if(userId){
-    const {data:me}=await db.from('utilisateurs').select('prenom,nom').eq('id',userId).single();
-    if(me){
-        const name=[me.prenom,me.nom].filter(Boolean).join(' ')||'Admin';
-        document.getElementById('sideName').textContent=name;
-        document.getElementById('sideAvatar').textContent=initials(me.prenom||'A');
+    // Nom admin (maybeSingle évite 406 si 0 ligne — ex. session code sans JWT ou RLS)
+    let parsedCodeUser = null;
+    try { if (codeUser) parsedCodeUser = JSON.parse(codeUser); } catch (e) {}
+    const userId = session?.user?.id || parsedCodeUser?.id || null;
+    if (userId) {
+        const { data: me } = await db.from('utilisateurs').select('prenom,nom').eq('id', userId).maybeSingle();
+        let prenom = me?.prenom, nom = me?.nom;
+        if (!me && parsedCodeUser) {
+            prenom = parsedCodeUser.prenom; nom = parsedCodeUser.nom;
+        }
+        const name = [prenom, nom].filter(Boolean).join(' ') || 'Admin';
+        const sideName = document.getElementById('sideName');
+        const sideAvatar = document.getElementById('sideAvatar');
+        if (sideName) sideName.textContent = name;
+        if (sideAvatar) sideAvatar.textContent = initials((prenom || nom || 'A'));
     }
-}
     // Realtime commandes
     db.channel('dashboard').on(
         'postgres_changes',

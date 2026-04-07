@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260425"></script>
+    <script data-cfasync="false" src="../config.js?v=20260426"></script>
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -224,9 +224,9 @@
                 <thead>
                     <tr>
                         <th>Utilisateur</th>
-                        <th>Code</th><!-- v2 -->
+                        <th>Code connexion</th>
                         <th>Email</th>
-                        <th>Code</th>
+                        <th>Réf. interne</th>
                         <th>Rôle</th>
                         <th>Téléphone</th>
                         <th>Statut</th>
@@ -235,7 +235,7 @@
                     </tr>
                 </thead>
                 <tbody id="usersTableBody">
-                    <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
+                    <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -285,7 +285,7 @@
         </div>
         <div class="field">
             <label>Code</label>
-            <input type="text" id="uCode" placeholder="Réf. interne (optionnel)" maxlength="64" autocomplete="off">
+            <input type="text" id="uCode" placeholder="Réf. interne — vide = généré auto (ex. CLT-AB12CD)" maxlength="64" autocomplete="off">
         </div>
         <div class="field" id="activeField">
             <label>Statut</label>
@@ -480,6 +480,7 @@
                    (u.email||'').toLowerCase().includes(q) ||
                    (u.telephone||'').toLowerCase().includes(q) ||
                    (u.code||'').toLowerCase().includes(q) ||
+                   (u.code_usr||'').toLowerCase().includes(q) ||
                    ('usr-' + u.id.slice(0,8).toLowerCase()).includes(q);
         });
     }
@@ -502,25 +503,21 @@
     }
 
     /* ── Render ── */
-    function generateUserCode(user) {
-        // Formats selon le rôle
-        const roleFormats = {
-            'super_admin': 'SA-XXXXXX',
-            'admin': 'ADM-XXXXX', 
-            'chauffeur': 'CHF-XXXXX',
-            'magasinier': 'MAG-XXXXX',
-            'client': 'CLT-XXXXX'
-        };
-        
-        const format = roleFormats[user.role];
-        if (!format) return 'USR-' + user.id.slice(0,8).toUpperCase(); // Fallback
-        
-        // Générer les chiffres aléatoires
-        const prefix = format.split('-')[0];
-        const digitsLength = format.split('-')[1].length;
-        const digits = Math.random().toString().slice(2, 2 + digitsLength).padStart(digitsLength, '0');
-        
-        return `${prefix}-${digits}`;
+    /** Code DB `utilisateurs.code` — généré à la création si le champ est laissé vide */
+    function generateStoredUserCode(role) {
+        var prefixes = { super_admin: 'SA', admin: 'ADM', chauffeur: 'CHF', magasinier: 'MAG', client: 'CLT' };
+        var prefix = prefixes[role] || 'USR';
+        var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        var out = '';
+        var i;
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            var arr = new Uint8Array(6);
+            crypto.getRandomValues(arr);
+            for (i = 0; i < 6; i++) out += chars[arr[i] % chars.length];
+        } else {
+            for (i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return prefix + '-' + out;
     }
     
     function renderTable() {
@@ -528,7 +525,7 @@
         const tbody = document.getElementById('usersTableBody');
 
         if (!users.length) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:50px;color:var(--muted);"><div style="font-size:32px;opacity:0.15;margin-bottom:10px;">👥</div>Aucun utilisateur trouvé</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:50px;color:var(--muted);"><div style="font-size:32px;opacity:0.15;margin-bottom:10px;">👥</div>Aucun utilisateur trouvé</td></tr>`;
             return;
         }
 
@@ -538,8 +535,9 @@
             const color = roleColors[u.role] || 'var(--muted)';
             const isActive = u.actif !== false;
             const dateStr = u.created_at ? new Date(u.created_at).toLocaleDateString('fr-CH', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
-            const codeDisplay = u.code_usr
-                ? `<span style="font-family:monospace;font-size:12px;color:var(--red);background:rgba(232,49,26,0.1);padding:3px 8px;border-radius:6px;border:1px solid rgba(232,49,26,0.3);font-weight:600;">${u.code_usr}</span>`
+            const badgeCode = u.code_usr || u.code;
+            const codeDisplay = badgeCode
+                ? `<span style="font-family:monospace;font-size:12px;color:var(--red);background:rgba(232,49,26,0.1);padding:3px 8px;border-radius:6px;border:1px solid rgba(232,49,26,0.3);font-weight:600;">${escapeHtml(String(badgeCode))}</span>`
                 : `<span style="color:var(--muted);font-size:12px;">—</span>`;
 
             return `<tr>
@@ -605,7 +603,7 @@
         document.getElementById('uPassword').value = '';
         document.getElementById('uRole').value = u.role || 'client';
         document.getElementById('uTel').value = u.telephone || '';
-        document.getElementById('uCode').value = u.code || '';
+        document.getElementById('uCode').value = u.code || u.code_usr || '';
         document.getElementById('uActif').value = (u.actif !== false) ? 'true' : 'false';
         document.getElementById('pwdField').style.display = 'none';
         document.getElementById('activeField').style.display = '';
@@ -621,8 +619,9 @@
         const pwd    = document.getElementById('uPassword').value;
         const role   = document.getElementById('uRole').value;
         const tel    = document.getElementById('uTel').value.trim();
-        const code   = document.getElementById('uCode').value.trim() || null;
+        let   code   = document.getElementById('uCode').value.trim() || null;
         const actif  = document.getElementById('uActif').value === 'true';
+        if (!id && !code) code = generateStoredUserCode(role);
 
         if (!email) { toast('error', 'L\'email est requis'); return; }
         if (!id && pwd.length < 6) { toast('error', 'Le mot de passe doit faire au moins 6 caractères'); return; }
@@ -635,7 +634,7 @@
                 const { error: dbErr } = await db.from('utilisateurs').upsert([{
                     id: userId, email,
                     nom: nom || null, prenom: prenom || null,
-                    telephone: tel || null, code, role, actif: true
+                    telephone: tel || null, code, code_usr: code, role, actif: true
                 }]);
                 if (dbErr) throw dbErr;
                 toast('success', isNew ? '✅ Utilisateur créé !' : '✅ Profil mis à jour (compte existant).');
@@ -643,7 +642,7 @@
                 // Update existing
                 const { error } = await db.from('utilisateurs').update({
                     nom: nom || null, prenom: prenom || null,
-                    telephone: tel || null, code, role, actif
+                    telephone: tel || null, code, code_usr: code, role, actif
                 }).eq('id', id);
                 if (error) throw error;
                 toast('success', '✅ Utilisateur mis à jour !');
