@@ -81,13 +81,19 @@
         .login-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 24px; }
         .login-icon { width:80px; height:80px; background:var(--red); border-radius:20px; display:grid; place-items:center; font-size:36px; margin:0 auto 20px; box-shadow:0 8px 32px rgba(232,49,26,0.35); }
         .login-title { font-family:'Bebas Neue',cursive; font-size:32px; letter-spacing:2px; text-align:center; margin-bottom:6px; }
-        .login-sub { font-size:14px; color:var(--muted); text-align:center; margin-bottom:36px; }
-        .login-form { width:100%; }
+        .login-sub { font-size:14px; color:var(--muted); text-align:center; margin-bottom:20px; line-height:1.5; max-width:400px; }
+        .login-tabs { display:flex; gap:0; margin-bottom:20px; background:var(--night3); border-radius:12px; padding:4px; border:1px solid var(--border2); width:100%; max-width:400px; }
+        .login-tabs button { flex:1; padding:12px; border:none; border-radius:10px; background:transparent; color:var(--muted); font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; cursor:pointer; transition:background .2s,color .2s; }
+        .login-tabs button.active { background:var(--red); color:#fff; }
+        .login-form { width:100%; max-width:400px; }
         .lf { margin-bottom:14px; }
         .lf label { display:block; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
         .lf input { width:100%; padding:15px 16px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; color:var(--white); }
+        .lf input.code-input { font-size:22px; font-weight:700; letter-spacing:4px; text-align:center; text-transform:uppercase; }
         .lf input:focus { outline:none; border-color:var(--red); }
         .lf input::placeholder { color:rgba(255,255,255,0.2); }
+        .login-foot { margin-top:22px; font-size:12px; text-align:center; }
+        .login-foot a { color:var(--muted2); }
         .btn-login { width:100%; padding:16px; background:var(--red); color:var(--white); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 6px 24px rgba(232,49,26,0.35); margin-top:8px; }
         .btn-login:active { transform:scale(0.98); }
 
@@ -439,12 +445,22 @@
     <div class="login-wrap">
         <div class="login-icon">🚚</div>
         <div class="login-title">COLIXO DRIVER</div>
-        <div class="login-sub">Même email et mot de passe que sur la page « Connexion équipe » Colixo du site.</div>
-        <div class="login-form">
+        <div class="login-sub">Utilisez le <strong>code d’accès</strong> fourni par Colixo (comme sur la page connexion du site), ou l’email et le mot de passe si votre compte est lié à la connexion équipe.</div>
+        <div class="login-tabs" role="tablist">
+            <button type="button" class="active" id="tabLoginCode" onclick="showDriverLoginTab('code')">Code d’accès</button>
+            <button type="button" id="tabLoginEmail" onclick="showDriverLoginTab('email')">Email</button>
+        </div>
+        <div class="login-form" id="panelLoginCode">
+            <div class="lf"><label>Code d’accès</label><input type="text" id="lCode" class="code-input" placeholder="CHF-7290" maxlength="14" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.45;">Trois lettres, tiret, quatre chiffres (ex. CHF-7290).</p>
+            <button type="button" class="btn-login" onclick="doLoginCode()"><i class="fas fa-key"></i> Accéder à l’app</button>
+        </div>
+        <div class="login-form" id="panelLoginEmail" style="display:none;">
             <div class="lf"><label>Email</label><input type="email" id="lEmail" placeholder="chauffeur@exemple.ch" inputmode="email" autocomplete="email"></div>
             <div class="lf"><label>Mot de passe</label><input type="password" id="lPwd" placeholder="••••••••" autocomplete="current-password"></div>
-            <button class="btn-login" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> Se connecter</button>
+            <button type="button" class="btn-login" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> Se connecter</button>
         </div>
+        <p class="login-foot"><a href="../login/index.html">Page connexion Colixo</a></p>
     </div>
 </div>
 
@@ -1097,6 +1113,58 @@
     };
 
     /* ── LOGIN ── */
+    window.showDriverLoginTab = function(which) {
+        var isCode = which === 'code';
+        document.getElementById('tabLoginCode').classList.toggle('active', isCode);
+        document.getElementById('tabLoginEmail').classList.toggle('active', !isCode);
+        document.getElementById('panelLoginCode').style.display = isCode ? 'block' : 'none';
+        document.getElementById('panelLoginEmail').style.display = isCode ? 'none' : 'block';
+    };
+
+    (function bindCodeInput() {
+        var el = document.getElementById('lCode');
+        if (el) el.addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        });
+    })();
+
+    window.doLoginCode = async function() {
+        var code = document.getElementById('lCode').value.trim().toUpperCase();
+        var okStandard = /^[A-Z]{3}-\d{4}$/.test(code);
+        var okLegacy = /^[A-Z]{2,4}-[A-Z0-9]{4,10}$/.test(code);
+        if (!code || (!okStandard && !okLegacy)) {
+            toast('error', 'Format attendu : trois lettres, tiret, quatre chiffres (ex. CHF-7290).');
+            return;
+        }
+        showLoad();
+        try {
+            const { data: user, error } = await db.from('utilisateurs')
+                .select('id, role, nom, prenom, code_usr, actif')
+                .eq('code_usr', code)
+                .maybeSingle();
+            if (error) throw error;
+            if (!user) { toast('error', 'Code introuvable.'); return; }
+            if (user.actif === false) { toast('error', 'Compte désactivé.'); return; }
+            if (!['chauffeur', 'admin', 'super_admin'].includes(user.role)) {
+                toast('error', 'Accès réservé aux chauffeurs.');
+                return;
+            }
+            sessionStorage.setItem('colixo_user', JSON.stringify({
+                id: user.id,
+                role: user.role,
+                nom: user.nom,
+                prenom: user.prenom,
+                code: user.code_usr
+            }));
+            const { data: full, error: e2 } = await db.from('utilisateurs').select('*').eq('id', user.id).maybeSingle();
+            if (e2) throw e2;
+            if (!full) { toast('error', 'Profil introuvable.'); return; }
+            driver = full;
+            afterLogin();
+        } catch (e) { toast('error', e.message || String(e)); }
+        finally { hideLoad(); }
+    };
+
     window.doLogin = async function() {
         const email = document.getElementById('lEmail').value.trim();
         const pwd   = document.getElementById('lPwd').value;
@@ -1105,7 +1173,7 @@
         try {
             const { data, error } = await db.auth.signInWithPassword({ email, password:pwd });
             if(error) throw error;
-            const { data:user } = await db.from('utilisateurs').select('*').eq('id',data.user.id).single();
+            const { data:user } = await db.from('utilisateurs').select('*').eq('id',data.user.id).maybeSingle();
             if(!user||!['chauffeur','admin','super_admin'].includes(user.role)) {
                 await db.auth.signOut(); throw new Error('Accès réservé aux chauffeurs');
             }
@@ -1121,10 +1189,10 @@
         const codeUser = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
         if(!session && !codeUser) return;
         if(session) {
-            const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
+            const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).maybeSingle();
             if(user && ['chauffeur','admin','super_admin'].includes(user.role)) { driver=user; afterLogin(); }
         } else if(codeUser && ['chauffeur','admin','super_admin'].includes(codeUser.role)) {
-            const { data:user } = await db.from('utilisateurs').select('*').eq('id',codeUser.id).single();
+            const { data:user } = await db.from('utilisateurs').select('*').eq('id',codeUser.id).maybeSingle();
             if(user) { driver=user; afterLogin(); }
         }
     }
@@ -2096,7 +2164,8 @@
 
     window.logout = async function() {
         stopGPS(); clearInterval(workTimer);
-        await db.auth.signOut();
+        try { await db.auth.signOut(); } catch (e) {}
+        try { sessionStorage.removeItem('colixo_user'); } catch (e) {}
         driver=null; missions=[];
         showScreen('login');
     };
