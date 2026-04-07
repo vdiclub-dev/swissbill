@@ -1,16 +1,8 @@
 /**
- * Envoi d'email facture/devis Brimot (PDF joint + lien consultation) via Resend.
+ * Envoi d’email facture Colixo (HTML + optionnel PDF) via Resend.
+ * Même stack que send-brimot-invoice : RESEND_API_KEY, COLIXO_FROM_EMAIL (sinon BRIMOT_FROM_EMAIL).
  *
- * Important : on renvoie toujours HTTP 200 + JSON { ok, error? } pour les erreurs « métier »,
- * afin que supabase.functions.invoke remonte le détail dans `data` et pas seulement « non-2xx ».
- *
- * Déployer avec JWT désactivé côté passerelle (évite « non-2xx » avant le code) :
- *   supabase functions deploy send-brimot-invoice --no-verify-jwt
- * (auth toujours vérifiée dans ce fichier via getUser + utilisateurs.role)
- * Secrets : RESEND_API_KEY, optionnel BRIMOT_FROM_EMAIL, optionnel BRIMOT_REPLY_TO_EMAIL
- *   From : une seule adresse sur un domaine vérifié chez Resend (ex. noreply@colixo.ch) suffit pour l’envoi.
- *   Reply-To / signature : le client reçoit le bon contact si reply_to est envoyé (payload reply_to ou secret BRIMOT_REPLY_TO_EMAIL)
- *   et si la signature dans le corps mentionne le mail métier (ex. info@brimot.ch).
+ * Déployer : supabase functions deploy send-colixo-facture --no-verify-jwt
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -34,10 +26,11 @@ type Body = {
   to?: string;
   subject?: string;
   body?: string;
+  html_full?: string;
+  /** Lien « Voir la facture en ligne » (page publique hash, comme Brimot) */
   view_url?: string;
   pdf_base64?: string;
   pdf_filename?: string;
-  /** Réponse « Répondre » vers ce mail (ex. info@brimot.ch) si différent du From Resend */
   reply_to?: string;
 };
 
@@ -61,6 +54,27 @@ function bodyTextWithoutViewUrl(text: string, viewUrl: string): string {
   let t = text.split(viewUrl).join("");
   t = t.replace(/\n{3,}/g, "\n\n").trim();
   return t;
+}
+
+function injectColixoEmailBanner(htmlFull: string, viewUrl: string, hasPdf: boolean): string {
+  const parts: string[] = [];
+  if (viewUrl) {
+    parts.push(
+      `<p style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:14px"><a href="${escapeHtml(viewUrl)}" style="color:#e8311a;font-weight:600">Voir la facture en ligne</a></p>`,
+    );
+  }
+  if (hasPdf) {
+    parts.push(
+      `<p style="margin:0 0 12px;padding:8px 12px;background:#fff7ed;border-left:3px solid #e8311a;font-family:Arial,sans-serif;font-size:12px;color:#9a3412">Le PDF de la facture est joint à cet email.</p>`,
+    );
+  }
+  if (!parts.length) return htmlFull;
+  const banner =
+    `<div style="max-width:210mm;margin:0 auto;padding:12px 16px;background:#fafafa;border-bottom:1px solid #e5e7eb">${parts.join("")}</div>`;
+  if (htmlFull.includes("<body")) {
+    return htmlFull.replace(/<body[^>]*>/i, (m) => m + banner);
+  }
+  return banner + htmlFull;
 }
 
 Deno.serve(async (req) => {
@@ -105,8 +119,7 @@ Deno.serve(async (req) => {
   if (!prof || !["admin", "super_admin"].includes(String(prof.role))) {
     return json({
       ok: false,
-      error:
-        "Accès refusé : seuls les comptes admin / super_admin peuvent envoyer des factures Brimot.",
+      error: "Accès refusé : seuls les comptes admin / super_admin peuvent envoyer des factures Colixo.",
     });
   }
 
@@ -118,8 +131,9 @@ Deno.serve(async (req) => {
   }
 
   const to = (payload.to ?? "").trim();
-  const subject = (payload.subject ?? "").trim() || "Facture Brimot";
+  const subject = (payload.subject ?? "").trim() || "Facture Colixo";
   const bodyText = (payload.body ?? "").trim();
+  const htmlFull = (payload.html_full ?? "").trim();
   const viewUrl = (payload.view_url ?? "").trim();
   const pdfB64 = (payload.pdf_base64 ?? "").replace(/[\r\n\s]/g, "");
   const pdfName = (payload.pdf_filename ?? "facture.pdf").trim() || "facture.pdf";
@@ -128,15 +142,29 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Adresse email destinataire invalide." });
   }
 
+  if (!htmlFull && !bodyText) {
+    return json({ ok: false, error: "Corps du message (body) ou html_full requis." });
+  }
+
+  const MAX_HTML = 5_200_000;
+  if (htmlFull.length > MAX_HTML) {
+    return json({
+      ok: false,
+      error: "HTML facture trop volumineux pour l’envoi (réduire ou contacter le support).",
+    });
+  }
+
   const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
   const from = (
-    Deno.env.get("BRIMOT_FROM_EMAIL") ?? "Brimot Nettoyage <onboarding@resend.dev>"
-  ).trim();
+    Deno.env.get("COLIXO_FROM_EMAIL")?.trim() ||
+    Deno.env.get("BRIMOT_FROM_EMAIL")?.trim() ||
+    "Colixo <onboarding@resend.dev>"
+  );
 
   let replyTo = (payload.reply_to ?? "").trim();
   if (replyTo && !isValidEmailLoose(replyTo)) replyTo = "";
   if (!replyTo) {
-    const rt = (Deno.env.get("BRIMOT_REPLY_TO_EMAIL") ?? "").trim();
+    const rt = (Deno.env.get("COLIXO_REPLY_TO_EMAIL") ?? "").trim();
     replyTo = rt && isValidEmailLoose(rt) ? rt : "";
   }
 
@@ -148,31 +176,45 @@ Deno.serve(async (req) => {
     });
   }
 
-  const bodyForHtml = bodyTextWithoutViewUrl(bodyText, viewUrl);
-  const bodyHtml =
-    `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.6">` +
-    escapeHtml(bodyForHtml).split("\n").join("<br>") +
-    (viewUrl
-      ? `<p style="margin:18px 0 0"><a href="${escapeHtml(viewUrl)}" style="color:#2563eb;text-decoration:underline;font-weight:600">Voir la facture en ligne</a></p>`
-      : "") +
-    (pdfB64
-      ? `<p style="margin-top:12px;padding:8px 12px;background:#f0f9ff;border-left:3px solid #0ea5e9;font-size:11px;color:#0369a1">Le PDF de la facture est joint à cet email.</p>`
-      : "") +
-    `</div>`;
+  /** html_full = document facture complet (DOCTYPE…) + bandeau lien / PDF comme Brimot */
+  const bodyForText = bodyTextWithoutViewUrl(bodyText, viewUrl);
+  let htmlEmail = htmlFull
+    ? injectColixoEmailBanner(htmlFull, viewUrl, !!pdfB64)
+    : `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.6">${bodyText
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .split("\n")
+        .join("<br>")}</div>`;
+  if (!htmlFull && (viewUrl || pdfB64)) {
+    htmlEmail =
+      `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.6">` +
+      escapeHtml(bodyForText).split("\n").join("<br>") +
+      (viewUrl
+        ? `<p style="margin:18px 0 0"><a href="${escapeHtml(viewUrl)}" style="color:#e8311a;text-decoration:underline;font-weight:600">Voir la facture en ligne</a></p>`
+        : "") +
+      (pdfB64
+        ? `<p style="margin-top:12px;padding:8px 12px;background:#fff7ed;border-left:3px solid #e8311a;font-size:11px;color:#9a3412">Le PDF de la facture est joint à cet email.</p>`
+        : "") +
+      `</div>`;
+  }
 
-  const textBody = bodyTextWithoutViewUrl(bodyText, viewUrl);
+  const textCombined =
+    bodyForText +
+    (viewUrl ? `\n\nVoir la facture en ligne :\n${viewUrl}\n` : "") +
+    (pdfB64 ? `\n\n(PDF joint : ${pdfName})\n` : "");
+
   const resendBody: Record<string, unknown> = {
     from,
     to: [to],
     subject,
-    text: textBody + (viewUrl ? `\n\nVoir la facture en ligne :\n${viewUrl}\n` : ""),
-    html: bodyHtml,
+    text:
+      textCombined ||
+      (htmlFull ? "Facture Colixo — ouvrez la version HTML de ce message." : ""),
+    html: htmlEmail,
   };
 
-  if (replyTo) {
-    resendBody.reply_to = replyTo;
-  }
-
+  if (replyTo) resendBody.reply_to = replyTo;
   if (pdfB64) {
     resendBody.attachments = [{ filename: pdfName, content: pdfB64 }];
   }
@@ -197,14 +239,14 @@ Deno.serve(async (req) => {
       /* ignore */
     }
     let hint =
-      " Vérifiez aussi l’expéditeur (secret BRIMOT_FROM_EMAIL ou domaine vérifié chez Resend) et les destinataires autorisés.";
+      " Vérifiez COLIXO_FROM_EMAIL ou BRIMOT_FROM_EMAIL (domaine vérifié Resend).";
     if (res.status === 401) {
       hint =
-        " La clé Resend est refusée : créez une clé sur resend.com/api-keys, puis dans Supabase → Project Settings → Edge Functions → Secrets, définissez ou remplacez RESEND_API_KEY (souvent pas besoin de redéployer la fonction).";
+        " Clé Resend : vérifiez RESEND_API_KEY dans Supabase → Edge Functions → Secrets.";
     }
     if (res.status === 403) {
       hint =
-        " Resend limite les tests : sans domaine 100 % validé pour l’envoi, seul le destinataire = l’email du compte Resend est accepté. Pour envoyer aux clients : (1) resend.com/domains → saniguard.ch avec « Enable Sending » entièrement vert (MX + TXT sur l’hôte send) ; (2) Supabase → secret BRIMOT_FROM_EMAIL = « Brimot Nettoyage <info@saniguard.ch> » (ou autre adresse @saniguard.ch). En attendant, testez avec le destinataire = email du compte Resend.";
+        " Domaine Resend ou destinataire de test : vérifiez resend.com/domains et l’adresse From.";
     }
     return json({
       ok: false,

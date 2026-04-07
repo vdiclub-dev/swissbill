@@ -4,7 +4,7 @@
 //  Les pages chargent config.js en <script src="…?v=…"> (compatible Cloudflare).
 //  Incrémenter COLIXO_ASSET_VERSION + version.txt (racine) + ?v= dans les HTML lors d’un déploiement important.
 // ============================================================
-window.COLIXO_ASSET_VERSION = '20250405-1630';
+window.COLIXO_ASSET_VERSION = '20260425';
 
 /** Sur pages GitHub Pages (user.github.io/nom-du-repo/), les liens /login/… sans préfixe cassent. */
 window.COLIXO_BASE_PATH = (function () {
@@ -51,6 +51,9 @@ window.SUPABASE_CONFIG = {
 // Brimot — envoi d'emails : si la facturation est sur un domaine sans PHP (ex. GitHub Pages),
 // mettez l'URL absolue de send_mail.php sur l'hébergement qui exécute le PHP (ex. LWS).
 // Exemple : window.BRIMOT_SEND_MAIL_URL = 'https://votredomaine.ch/admin/brimot/send_mail.php';
+// Sinon : Edge send-brimot-invoice + Resend — secrets Supabase RESEND_API_KEY, BRIMOT_FROM_EMAIL (domaine vérifié Resend).
+// Le « Répondre » du client utilise Reply-To = MAIL_BR dans facturation.html ; optionnel BRIMOT_REPLY_TO_EMAIL si pas de payload.
+// Facturation Colixo (admin/facturation.html) : Edge send-colixo-facture — COLIXO_FROM_EMAIL optionnel ; optionnel window.COLIXO_FACTURE_REPLY_EMAIL ou secret COLIXO_REPLY_TO_EMAIL.
 if (typeof window.BRIMOT_SEND_MAIL_URL === 'undefined') window.BRIMOT_SEND_MAIL_URL = '';
 
 /** Stockage session auth : localStorage → sessionStorage → mémoire (Edge « Tracking Prevention », Safari strict, etc.). */

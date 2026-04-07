@@ -7,8 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../config.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260425"></script>
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -226,6 +226,7 @@
                         <th>Utilisateur</th>
                         <th>Code</th><!-- v2 -->
                         <th>Email</th>
+                        <th>Code</th>
                         <th>Rôle</th>
                         <th>Téléphone</th>
                         <th>Statut</th>
@@ -281,6 +282,10 @@
         <div class="field">
             <label>Téléphone</label>
             <input type="tel" id="uTel" placeholder="+41 79 000 00 00">
+        </div>
+        <div class="field">
+            <label>Code</label>
+            <input type="text" id="uCode" placeholder="Réf. interne (optionnel)" maxlength="64" autocomplete="off">
         </div>
         <div class="field" id="activeField">
             <label>Statut</label>
@@ -339,6 +344,14 @@
         return;
     }
     const db = window.SUPABASE_CLIENT;
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
 
     // Client temporaire isolé pour créer des comptes sans écraser la session admin
     function makeTempClient() {
@@ -466,6 +479,7 @@
                    (u.prenom||'').toLowerCase().includes(q) ||
                    (u.email||'').toLowerCase().includes(q) ||
                    (u.telephone||'').toLowerCase().includes(q) ||
+                   (u.code||'').toLowerCase().includes(q) ||
                    ('usr-' + u.id.slice(0,8).toLowerCase()).includes(q);
         });
     }
@@ -539,6 +553,7 @@
                 </td>
                 <td>${codeDisplay}</td>
                 <td>${u.email || '—'}</td>
+                <td style="font-family:ui-monospace,monospace;font-size:12px;color:var(--white);">${u.code ? escapeHtml(String(u.code)) : '—'}</td>
                 <td><span class="role-badge role-${u.role}">${roleIcons[u.role]||''} ${u.role}</span></td>
                 <td>${u.telephone || '—'}</td>
                 <td>
@@ -570,6 +585,7 @@
         document.getElementById('uPassword').value = '';
         document.getElementById('uRole').value = 'client';
         document.getElementById('uTel').value = '';
+        document.getElementById('uCode').value = '';
         document.getElementById('uActif').value = 'true';
         document.getElementById('pwdField').style.display = '';
         document.getElementById('activeField').style.display = 'none';
@@ -589,6 +605,7 @@
         document.getElementById('uPassword').value = '';
         document.getElementById('uRole').value = u.role || 'client';
         document.getElementById('uTel').value = u.telephone || '';
+        document.getElementById('uCode').value = u.code || '';
         document.getElementById('uActif').value = (u.actif !== false) ? 'true' : 'false';
         document.getElementById('pwdField').style.display = 'none';
         document.getElementById('activeField').style.display = '';
@@ -604,6 +621,7 @@
         const pwd    = document.getElementById('uPassword').value;
         const role   = document.getElementById('uRole').value;
         const tel    = document.getElementById('uTel').value.trim();
+        const code   = document.getElementById('uCode').value.trim() || null;
         const actif  = document.getElementById('uActif').value === 'true';
 
         if (!email) { toast('error', 'L\'email est requis'); return; }
@@ -617,7 +635,7 @@
                 const { error: dbErr } = await db.from('utilisateurs').upsert([{
                     id: userId, email,
                     nom: nom || null, prenom: prenom || null,
-                    telephone: tel || null, role, actif: true
+                    telephone: tel || null, code, role, actif: true
                 }]);
                 if (dbErr) throw dbErr;
                 toast('success', isNew ? '✅ Utilisateur créé !' : '✅ Profil mis à jour (compte existant).');
@@ -625,7 +643,7 @@
                 // Update existing
                 const { error } = await db.from('utilisateurs').update({
                     nom: nom || null, prenom: prenom || null,
-                    telephone: tel || null, role, actif
+                    telephone: tel || null, code, role, actif
                 }).eq('id', id);
                 if (error) throw error;
                 toast('success', '✅ Utilisateur mis à jour !');
