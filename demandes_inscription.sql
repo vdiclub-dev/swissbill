@@ -1,6 +1,12 @@
 -- Demandes d'accès (sans mot de passe) — l'admin crée le compte et attribue le rôle + code dans Colixo.
 -- Exécuter dans Supabase → SQL Editor
-
+--
+-- Où voir les demandes :
+--   • Admin Colixo : page admin/users.html — bloc « Demandes d'accès (formulaire login) »
+--     (la lecture REST suit les politiques RLS ci-dessous : session Supabase Auth avec le même
+--     uuid que public.utilisateurs.id, rôle admin / super_admin).
+--   • Toujours disponible : Supabase Dashboard → Table Editor → public.demandes_inscription
+--
 CREATE TABLE IF NOT EXISTS public.demandes_inscription (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at timestamptz NOT NULL DEFAULT now(),

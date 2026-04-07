@@ -205,6 +205,36 @@
             </div>
         </div>
 
+        <!-- Demandes d'accès (formulaire « Demande d'accès » sur la page login) -->
+        <div class="card" style="margin-bottom:24px;">
+            <div style="padding:14px 16px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                <div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;">Demandes d'accès (formulaire login)</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:4px;">Enregistrées dans la table <code style="color:var(--muted2);">demandes_inscription</code> — traitement manuel : créer l’utilisateur + code dans le tableau ci-dessous.</div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="loadDemandes()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+            </div>
+            <p id="demandesHint" style="display:none;padding:12px 16px;font-size:13px;color:var(--yellow);background:rgba(245,158,11,0.08);border-bottom:1px solid var(--border);line-height:1.5;"></p>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Contact</th>
+                            <th>Email</th>
+                            <th>Téléphone</th>
+                            <th>Entreprise</th>
+                            <th>Message</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="demandesTableBody">
+                        <tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Filters -->
         <div class="filter-bar">
             <input type="text" id="searchInput" placeholder="🔍 Rechercher par nom, email, téléphone…" oninput="applyFilters()">
@@ -391,8 +421,9 @@
     (async () => {
         const { data: { session } } = await db.auth.getSession();
         const codeUser = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
-        const userId = userId || codeUser?.id;
+        const userId = session?.user?.id || codeUser?.id;
         if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
+        if (!userId) { window.location.replace('../login/index.html'); return; }
         const { data: user } = await db.from('utilisateurs').select('role').eq('id', userId).single();
         if (!user || !['admin','super_admin'].includes(user.role)) {
             await db.auth.signOut();
@@ -492,6 +523,51 @@
         allUsers = data || [];
         updateStats();
         renderTable();
+    };
+
+    /** Demandes depuis login (table demandes_inscription). RLS : lecture réservée aux admins avec JWT Supabase ; sinon voir hint. */
+    window.loadDemandes = async function() {
+        const tbody = document.getElementById('demandesTableBody');
+        const hint = document.getElementById('demandesHint');
+        if (hint) { hint.style.display = 'none'; hint.textContent = ''; }
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>';
+        const { data, error } = await db.from('demandes_inscription')
+            .select('id, created_at, prenom, nom, email, telephone, entreprise_nom, adresse, message, statut')
+            .order('created_at', { ascending: false })
+            .limit(300);
+        if (error) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Impossible de charger la liste depuis l’app.</td></tr>';
+            if (hint) {
+                hint.style.display = 'block';
+                hint.innerHTML =
+                    '<strong>Lecture bloquée ou table absente.</strong> ' +
+                    escapeHtml(error.message) +
+                    '<br><br>— <strong>Supabase (toujours possible)</strong> : Dashboard → <em>Table Editor</em> → table <code>demandes_inscription</code>. ' +
+                    '— <strong>Sessions « code » admin</strong> : les politiques RLS exigent souvent une session <em>Supabase Auth</em> (même id que <code>utilisateurs</code>). ' +
+                    'Exécutez aussi <code>demandes_inscription.sql</code> si la table n’existe pas.';
+            }
+            return;
+        }
+        const rows = data || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">Aucune demande pour l’instant.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(function (d) {
+            var dt = d.created_at ? new Date(d.created_at).toLocaleString('fr-CH') : '—';
+            var contact = escapeHtml([d.prenom, d.nom].filter(Boolean).join(' ') || '—');
+            var msg = (d.message || '').trim();
+            if (msg.length > 80) msg = msg.slice(0, 77) + '…';
+            return '<tr>' +
+                '<td style="white-space:nowrap;font-size:12px;color:var(--muted);">' + escapeHtml(dt) + '</td>' +
+                '<td style="font-weight:600;color:var(--white);">' + contact + '</td>' +
+                '<td>' + escapeHtml(d.email || '—') + '</td>' +
+                '<td>' + escapeHtml(d.telephone || '—') + '</td>' +
+                '<td>' + escapeHtml(d.entreprise_nom || '—') + '</td>' +
+                '<td style="max-width:220px;font-size:12px;" title="' + escapeHtml((d.message || '').replace(/"/g, '&quot;')) + '">' + escapeHtml(msg || '—') + '</td>' +
+                '<td><span style="font-size:11px;padding:3px 8px;border-radius:100px;background:rgba(59,130,246,0.12);color:var(--blue);">' + escapeHtml(d.statut || '—') + '</span></td>' +
+                '</tr>';
+        }).join('');
     };
 
     function updateStats() {
@@ -745,6 +821,7 @@
             window.location.href = '../login/index.html';
         });
         await loadUsers();
+        await loadDemandes();
     }
 
     init();

@@ -1457,43 +1457,67 @@
             return;
         }
         const db = window.SUPABASE_CLIENT;
+        var currentClientId = null;
+
+        async function resolveClientUid() {
+            const { data: { session } } = await db.auth.getSession();
+            var uid = session && session.user ? session.user.id : null;
+            if (!uid) {
+                try {
+                    var raw = sessionStorage.getItem('colixo_user');
+                    if (raw) {
+                        var cu = JSON.parse(raw);
+                        if (cu && cu.id && cu.role === 'client') uid = cu.id;
+                    }
+                } catch (e) {}
+            }
+            return { session: session || null, uid: uid };
+        }
 
         async function checkAuth() {
-            const { data: { session } } = await db.auth.getSession();
-            if (!session) {
+            const { session, uid } = await resolveClientUid();
+            if (!uid) {
+                currentClientId = null;
                 document.getElementById('loginSection').style.display = 'flex';
                 document.getElementById('dashboardSection').style.display = 'none';
                 return;
             }
 
             const { data: utilisateur } = await db.from('utilisateurs')
-                .select('role, prenom, nom').eq('id', session.user.id).single();
+                .select('role, prenom, nom, email')
+                .eq('id', uid)
+                .maybeSingle();
 
             if (!utilisateur || utilisateur.role !== 'client') {
-                await db.auth.signOut();
+                try { await db.auth.signOut(); } catch (e) {}
+                try { sessionStorage.removeItem('colixo_user'); } catch (e) {}
+                currentClientId = null;
                 document.getElementById('loginSection').style.display = 'flex';
                 document.getElementById('dashboardSection').style.display = 'none';
                 return;
             }
 
+            currentClientId = uid;
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('dashboardSection').style.display = 'block';
 
-            const userName = utilisateur.prenom || utilisateur.nom || session.user.email.split('@')[0];
-            document.getElementById('userEmail').textContent = session.user.email;
+            const userName = [utilisateur.prenom, utilisateur.nom].filter(Boolean).join(' ') || 'Client';
+            var emailDisp = (session && session.user && session.user.email) || utilisateur.email || '—';
+            document.getElementById('userEmail').textContent = emailDisp;
             document.getElementById('userName').textContent = userName;
             document.getElementById('welcomeName').textContent = userName;
 
-            loadStats(session.user.id);
+            loadStats();
         }
 
-        async function loadStats(userId) {
+        async function loadStats() {
+            if (!currentClientId) return;
             try {
                 const thisMonth = new Date().toISOString().slice(0, 7);
                 const [r1, r2, r3] = await Promise.all([
-                    db.from('transport_orders_simple').select('id',{count:'exact',head:true}).eq('entreprise_id', userId).in('status',['in_transit','planned','accepted']),
-                    db.from('transport_orders_simple').select('id',{count:'exact',head:true}).eq('status','delivered').gte('created_at', thisMonth + '-01'),
-                    db.from('transport_orders_simple').select('id',{count:'exact',head:true}).in('admin_status',['pending','pending_validation'])
+                    db.from('transport_orders_simple').select('id',{count:'exact',head:true}).eq('entreprise_id', currentClientId).in('status',['in_transit','planned','accepted']),
+                    db.from('transport_orders_simple').select('id',{count:'exact',head:true}).eq('entreprise_id', currentClientId).eq('status','delivered').gte('created_at', thisMonth + '-01'),
+                    db.from('transport_orders_simple').select('id',{count:'exact',head:true}).eq('entreprise_id', currentClientId).in('admin_status',['pending','pending_validation'])
                 ]);
                 document.getElementById('enCours').textContent = r1.count ?? 0;
                 document.getElementById('livres').textContent   = r2.count ?? 0;
@@ -1504,7 +1528,9 @@
         }
 
         window.logout = async function() {
-            await db.auth.signOut();
+            try { await db.auth.signOut(); } catch (e) {}
+            try { sessionStorage.removeItem('colixo_user'); } catch (e) {}
+            currentClientId = null;
             window.location.reload();
         };
 
@@ -1558,9 +1584,8 @@
 
         async function loadHistorique() {
             const content = document.getElementById('historiqueContent');
-            const { data: { session } } = await db.auth.getSession();
-            
-            if (!session) {
+            const { uid } = await resolveClientUid();
+            if (!uid) {
                 content.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Session expirée</h3><p>Veuillez vous reconnecter</p></div>';
                 return;
             }
@@ -1569,7 +1594,7 @@
                 const { data: transports, error } = await db
                     .from('transport_orders_simple')
                     .select('*')
-                    .eq('entreprise_id', session.user.id)
+                    .eq('entreprise_id', uid)
                     .order('created_at', { ascending: false })
                     .limit(50);
 
@@ -1629,9 +1654,8 @@
 
         async function loadFactures() {
             const content = document.getElementById('facturesContent');
-            const { data: { session } } = await db.auth.getSession();
-            
-            if (!session) {
+            const { uid } = await resolveClientUid();
+            if (!uid) {
                 content.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Session expirée</h3><p>Veuillez vous reconnecter</p></div>';
                 return;
             }
@@ -1640,7 +1664,7 @@
                 const { data: transports, error } = await db
                     .from('transport_orders_simple')
                     .select('*')
-                    .eq('entreprise_id', session.user.id)
+                    .eq('entreprise_id', uid)
                     .eq('status', 'delivered')
                     .order('created_at', { ascending: false })
                     .limit(50);
