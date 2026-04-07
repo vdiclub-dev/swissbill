@@ -163,7 +163,7 @@ if (typeof console !== 'undefined' && console.info) {
     function dashboardHref() {
         var bp = window.COLIXO_BASE_PATH || '';
         try {
-            var u = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
+            var u = JSON.parse(localStorage.getItem('colixo_user') || 'null');
             if (u && u.role) {
                 var routes = {
                     super_admin: '/admin/dashboard.html',
@@ -217,7 +217,7 @@ if (typeof console !== 'undefined' && console.info) {
             try {
                 if (window.SUPABASE_CLIENT && window.SUPABASE_CLIENT.auth) await window.SUPABASE_CLIENT.auth.signOut();
             } catch (e) {}
-            try { sessionStorage.removeItem('colixo_user'); } catch (e) {}
+            try { localStorage.removeItem('colixo_user'); } catch (e) {}
             window.location.href = loginHref();
         });
     }
