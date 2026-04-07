@@ -285,7 +285,7 @@
         </div>
         <div class="field">
             <label>Code</label>
-            <input type="text" id="uCode" placeholder="Réf. interne — vide = généré auto (ex. CLT-AB12CD)" maxlength="64" autocomplete="off">
+            <input type="text" id="uCode" placeholder="Connexion — vide = auto (ex. CLT-7290)" maxlength="12" autocomplete="off">
         </div>
         <div class="field" id="activeField">
             <label>Statut</label>
@@ -503,21 +503,20 @@
     }
 
     /* ── Render ── */
-    /** Code DB `utilisateurs.code` — généré à la création si le champ est laissé vide */
+    /** Code connexion : 3 lettres + tiret + 4 chiffres (ex. CLT-7290), aligné sur login/index.html */
     function generateStoredUserCode(role) {
-        var prefixes = { super_admin: 'SA', admin: 'ADM', chauffeur: 'CHF', magasinier: 'MAG', client: 'CLT' };
+        var prefixes = { super_admin: 'SUP', admin: 'ADM', chauffeur: 'CHF', magasinier: 'MAG', client: 'CLT' };
         var prefix = prefixes[role] || 'USR';
-        var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        var out = '';
+        var d = '';
         var i;
         if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-            var arr = new Uint8Array(6);
+            var arr = new Uint8Array(4);
             crypto.getRandomValues(arr);
-            for (i = 0; i < 6; i++) out += chars[arr[i] % chars.length];
+            for (i = 0; i < 4; i++) d += String(arr[i] % 10);
         } else {
-            for (i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+            for (i = 0; i < 4; i++) d += String(Math.floor(Math.random() * 10));
         }
-        return prefix + '-' + out;
+        return prefix + '-' + d;
     }
     
     function renderTable() {
@@ -637,7 +636,9 @@
                     telephone: tel || null, code, code_usr: code, role, actif: true
                 }]);
                 if (dbErr) throw dbErr;
-                toast('success', isNew ? '✅ Utilisateur créé !' : '✅ Profil mis à jour (compte existant).');
+                var msgCreate = isNew ? '✅ Utilisateur créé !' : '✅ Profil mis à jour (compte existant).';
+                if (code) msgCreate += ' Code d’accès (connexion) : ' + code;
+                toast('success', msgCreate);
             } else {
                 // Update existing
                 const { error } = await db.from('utilisateurs').update({

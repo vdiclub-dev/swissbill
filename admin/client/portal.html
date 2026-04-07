@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260428"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260429"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -574,6 +574,24 @@
 
     function fmt(v){return parseFloat(v||0).toFixed(2);}
 
+    /** Connexion par code : 3 lettres + tiret + 4 chiffres (aligné login + admin) */
+    function generateUserAccessCode(role) {
+        var prefixes = {
+            super_admin: 'SUP', admin: 'ADM', chauffeur: 'CHF', magasinier: 'MAG', client: 'CLT',
+            gestionnaire: 'GES', comptable: 'CMP', sous_utilisateur: 'SUB'
+        };
+        var prefix = prefixes[role] || 'USR';
+        var d = '', i;
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            var arr = new Uint8Array(4);
+            crypto.getRandomValues(arr);
+            for (i = 0; i < 4; i++) d += String(arr[i] % 10);
+        } else {
+            for (i = 0; i < 4; i++) d += String(Math.floor(Math.random() * 10));
+        }
+        return prefix + '-' + d;
+    }
+
     // Masquer les prix pour les magasiniers
     function hidePricesForMagasinier() {
         if (currentUserRole === 'magasinier') {
@@ -977,6 +995,7 @@
             if(entErr) throw entErr;
 
             // 4. Créer le profil utilisateur (rôle client = admin entreprise)
+            const accessCode = generateUserAccessCode('client');
             const { error: userErr } = await db.from('utilisateurs').insert([{
                 id: userId,
                 email,
@@ -984,7 +1003,9 @@
                 nom,
                 telephone: telMob || null,
                 role: 'client',
-                entreprise_id: ent.id
+                entreprise_id: ent.id,
+                code: accessCode,
+                code_usr: accessCode
             }]);
             if(userErr) throw userErr;
 
@@ -1003,7 +1024,7 @@
                 actif: true
             }]);
 
-            toast('✅ Compte créé avec succès ! Connexion en cours...');
+            toast('✅ Compte créé ! Code d’accès (page login) : <strong>' + accessCode + '</strong> — connexion…');
 
             // 6. Connecter automatiquement
             await db.auth.signInWithPassword({ email, password: pwd });
@@ -1101,15 +1122,18 @@
             if(authErr) throw authErr;
             const userId = authData.user?.id;
 
+            const memCode = generateUserAccessCode(selectedRole);
             const { error: userErr } = await db.from('utilisateurs').insert([{
                 id: userId,
                 email, prenom, nom,
                 role: selectedRole,
-                entreprise_id: client.entreprise_id
+                entreprise_id: client.entreprise_id,
+                code: memCode,
+                code_usr: memCode
             }]);
             if(userErr) throw userErr;
 
-            toast(`✅ ${prenom} ${nom} ajouté comme ${selectedRole}`);
+            toast(`✅ ${prenom} ${nom} ajouté (${selectedRole}). Code d’accès : <strong>${memCode}</strong>`);
             closeModal('modalAddMembre');
             document.getElementById('mPrenom').value = '';
             document.getElementById('mNom').value = '';

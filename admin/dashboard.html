@@ -387,7 +387,7 @@
             <div class="field"><label>Nom</label><input type="text" id="uNom" placeholder="Dupont"></div>
         </div>
         <div class="field"><label>Téléphone</label><input type="tel" id="uTel" placeholder="+41 79 000 00 00"></div>
-        <div class="field"><label>Code</label><input type="text" id="uCode" placeholder="Réf. interne — vide = généré auto (ex. CLT-AB12CD)" maxlength="64" autocomplete="off"></div>
+        <div class="field"><label>Code</label><input type="text" id="uCode" placeholder="Connexion — vide = auto (ex. CLT-7290)" maxlength="12" autocomplete="off"></div>
         <div class="field-row">
             <div class="field"><label>Rôle</label>
                 <select id="uRole">
@@ -469,19 +469,18 @@ function makeTempClient() {
 }
 
 function generateStoredUserCode(role) {
-    var prefixes = { super_admin: 'SA', admin: 'ADM', chauffeur: 'CHF', magasinier: 'MAG', client: 'CLT' };
+    var prefixes = { super_admin: 'SUP', admin: 'ADM', chauffeur: 'CHF', magasinier: 'MAG', client: 'CLT' };
     var prefix = prefixes[role] || 'USR';
-    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    var out = '';
+    var d = '';
     var i;
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-        var arr = new Uint8Array(6);
+        var arr = new Uint8Array(4);
         crypto.getRandomValues(arr);
-        for (i = 0; i < 6; i++) out += chars[arr[i] % chars.length];
+        for (i = 0; i < 4; i++) d += String(arr[i] % 10);
     } else {
-        for (i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+        for (i = 0; i < 4; i++) d += String(Math.floor(Math.random() * 10));
     }
-    return prefix + '-' + out;
+    return prefix + '-' + d;
 }
 
 // Crée un compte Auth ou récupère l'ID si l'email existe déjà
@@ -870,7 +869,9 @@ window.saveUser = async function(){
                 .upsert([{id:userId,...profilePayload}], {onConflict:'id'});
             if(upsErr) throw upsErr;
         }
-        toast('success',id?'Utilisateur modifié ✓':'Utilisateur créé ✓');
+        var msgOk = id ? 'Utilisateur modifié ✓' : 'Utilisateur créé ✓';
+        if (!id && codeVal) msgOk += ' · Code d’accès : ' + codeVal;
+        toast('success', msgOk);
         closeModal('modalUser');
         await loadUtilisateurs();
         renderUtilisateurs();

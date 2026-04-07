@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260428"></script>
+    <script data-cfasync="false" src="../config.js?v=20260429"></script>
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -154,8 +154,9 @@
                 type="text"
                 id="codeInput"
                 class="code-field"
-                placeholder="USR-XXXX"
+                placeholder="CLT-7290"
                 maxlength="8"
+                inputmode="text"
                 autocomplete="off"
                 autocorrect="off"
                 autocapitalize="characters"
@@ -163,7 +164,7 @@
                 required>
         </div>
         <div class="code-hint">
-            Code fourni par Colixo · Exemple : <strong>USR-A3F9</strong>
+            3 lettres, tiret, 4 chiffres · Ex. <strong>CLT-7290</strong> ou <strong>USR-1024</strong>
         </div>
         <button type="submit" class="btn-submit">
             <i class="fas fa-arrow-right"></i> Accéder à mon espace
@@ -235,8 +236,10 @@
         clearError();
 
         const code = document.getElementById('codeInput').value.trim().toUpperCase();
-        if (!code || code.length < 4) {
-            showError('❌ Code invalide. Format attendu : USR-XXXX');
+        var okStandard = /^[A-Z]{3}-\d{4}$/.test(code);
+        var okLegacy = /^[A-Z]{2,4}-[A-Z0-9]{4,10}$/.test(code);
+        if (!code || (!okStandard && !okLegacy)) {
+            showError('❌ Format attendu : trois lettres, tiret, quatre chiffres (ex. CLT-7290). Les anciens codes restent acceptés.');
             return;
         }
 
@@ -246,9 +249,14 @@
                 .from('utilisateurs')
                 .select('id, role, nom, prenom, code_usr, actif')
                 .eq('code_usr', code)
-                .single();
+                .maybeSingle();
 
-            if (error || !user) {
+            if (error) {
+                hideLoad();
+                showError('❌ Erreur : ' + error.message);
+                return;
+            }
+            if (!user) {
                 hideLoad();
                 showError('❌ Code introuvable. Vérifiez votre code.');
                 return;
