@@ -363,13 +363,19 @@
     (async function init() {
         const { data: { session } } = await db.auth.getSession();
         const codeUser = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
-        const userId = userId || codeUser?.id;
         if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
-        const { data: user } = await db.from('utilisateurs').select('role').eq('id', userId).single();
-        if (!user || !['admin', 'super_admin'].includes(user.role)) {
-            await db.auth.signOut();
-            window.location.replace('../login/index.html');
-            return;
+        const uid = session?.user?.id || codeUser?.id;
+        if (codeUser) {
+            if (!['admin', 'super_admin'].includes(codeUser.role)) {
+                window.location.replace('../login/index.html'); return;
+            }
+        } else {
+            const { data: user } = await db.from('utilisateurs').select('role').eq('id', uid).single();
+            if (!user || !['admin', 'super_admin'].includes(user.role)) {
+                await db.auth.signOut();
+                window.location.replace('../login/index.html');
+                return;
+            }
         }
 
         map = L.map('map', { zoomControl: false, attributionControl: false }).setView(CH_CENTER, 8);
