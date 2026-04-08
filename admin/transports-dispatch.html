@@ -585,10 +585,12 @@
 
     (async function auth() {
         var _a = await db.auth.getSession();
-        if (!_a.data.session && !localStorage.getItem('colixo_user')) { window.location.href = '../login/index.html'; return; }
-        var u = await db.from('utilisateurs').select('role').eq('id', _a.data.userId).single();
-        if (!u.data || !['admin', 'super_admin'].includes(u.data.role)) {
-            await db.auth.signOut();
+        var codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+        if (!_a.data.session && !codeUser) { window.location.href = '../login/index.html'; return; }
+        var uid = _a.data.session?.user?.id || codeUser?.id;
+        var u = uid ? await db.from('utilisateurs').select('role').eq('id', uid).single() : { data: null };
+        var role = u.data?.role || codeUser?.role || '';
+        if (!['admin', 'super_admin'].includes(role)) {
             window.location.href = '../login/index.html';
             return;
         }
