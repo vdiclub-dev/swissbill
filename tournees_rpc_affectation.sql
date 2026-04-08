@@ -31,9 +31,10 @@ BEGIN
     ARRAY[1,2,3,4,5]::int[]
   ) INTO jours_val;
 
-  INSERT INTO public.tournees (id, nom, heure_debut, heure_fin, zone, vehicle, jours, couleur, notes)
+  INSERT INTO public.tournees (id, numero_tournee, nom, heure_debut, heure_fin, zone, vehicle, jours, couleur, notes)
   VALUES (
     tid,
+    COALESCE(NULLIF(TRIM(p_tournee->>'numero_tournee'), '')::integer, 1),
     COALESCE(NULLIF(TRIM(p_tournee->>'nom'), ''), 'Tournée'),
     COALESCE((p_tournee->>'heure_debut')::time, TIME '07:00'),
     COALESCE((p_tournee->>'heure_fin')::time, TIME '18:00'),
@@ -44,6 +45,7 @@ BEGIN
     NULLIF(TRIM(p_tournee->>'notes'), '')
   )
   ON CONFLICT (id) DO UPDATE SET
+    numero_tournee = EXCLUDED.numero_tournee,
     nom = EXCLUDED.nom,
     heure_debut = EXCLUDED.heure_debut,
     heure_fin = EXCLUDED.heure_fin,

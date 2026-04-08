@@ -9,6 +9,7 @@
 -- 1. Tournées (définition des routes)
 CREATE TABLE IF NOT EXISTS tournees (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  numero_tournee INTEGER NOT NULL DEFAULT 1,
   nom          TEXT NOT NULL,
   heure_debut  TIME NOT NULL,
   heure_fin    TIME NOT NULL,
