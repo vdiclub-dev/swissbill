@@ -5,7 +5,7 @@
 
 -- 1. Tournées (définition des routes)
 CREATE TABLE IF NOT EXISTS tournees (
-  id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nom          TEXT NOT NULL,
   heure_debut  TIME NOT NULL,
   heure_fin    TIME NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS tournees (
 -- 2. Affectations (employé → tournée → jour)
 CREATE TABLE IF NOT EXISTS tournee_affectations (
   id           BIGSERIAL PRIMARY KEY,
-  tournee_id   TEXT NOT NULL REFERENCES tournees(id) ON DELETE CASCADE,
+  tournee_id   UUID NOT NULL REFERENCES tournees(id) ON DELETE CASCADE,
   date         DATE NOT NULL,
   employe_id   UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
   created_at   TIMESTAMPTZ DEFAULT NOW(),
