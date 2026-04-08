@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="fr" data-colixo-build="20260440">
+<html lang="fr" data-colixo-build="20260441">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>Tournées (20260440) — Colixo</title>
+<title>Tournées (20260441) — Colixo</title>
 <!-- colixo-tournees-affect-v2 : affectations = UPDATE puis INSERT uniquement (jamais upsert REST sur tournee_affectations) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script data-cfasync="false" src="../config.js?v=20260440"></script>
+<script data-cfasync="false" src="../config.js?v=20260441"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -180,7 +180,7 @@ select option{background:var(--bg3)}
 </div>
 
 <div id="colixoDeployBanner" style="background:linear-gradient(90deg,rgba(34,197,94,.2),rgba(79,142,247,.15));border-bottom:1px solid var(--border);padding:10px 20px;font-size:12px;color:#86efac;text-align:center;line-height:1.4">
-  <strong>Interface 20260440</strong> — enregistrement tournées corrigé (sans upsert REST). Si ce bandeau vert n’apparaît pas après déploiement : purge cache <strong>Cloudflare</strong> puis rechargement forcé (Cmd+Shift+R).
+  <strong>Interface 20260441</strong> — migration UUID locale + messages d’erreur Supabase détaillés. Si ce bandeau n’apparaît pas : purge cache <strong>Cloudflare</strong> puis Cmd+Shift+R.
 </div>
 
 <!-- TABS -->
@@ -359,7 +359,7 @@ select option{background:var(--bg3)}
 <script>
 (async function () {
 'use strict';
-console.info('[Colixo] tournées.html 20260440 — tournees + affectations: UPDATE puis INSERT (plus d’upsert REST 400/409)');
+console.info('[Colixo] tournées.html 20260441 — UUID migrés si besoin ; erreurs PostgREST (details/hint) affichées');
 
 // ── CONSTANTES ──────────────────────────────────
 const DAYS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
@@ -370,6 +370,44 @@ const ABS_CYCLE = ['','maladie','vacances','absence','formation'];
 const ABS_LABELS = {maladie:'🤒 Maladie',vacances:'🏖 Vacances',absence:'🚫 Absence',formation:'📚 Formation'};
 const ABS_CSS   = {maladie:'maladie',vacances:'vacances',absence:'absence',formation:'formation'};
 const MAX_WEEK_H = 48;
+
+/** UUID v4 (évite 400 PostgREST « invalid input syntax for type uuid » sur id). */
+function isValidUuid(s) {
+  if (s == null || typeof s !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
+}
+/** Anciennes données locales : id non-UUID → nouveau UUID + clés d’affectations remappées. */
+function migrateInvalidTourneeIds() {
+  const remap = new Map();
+  for (const t of tournees) {
+    if (!t || t.id == null) continue;
+    const sid = String(t.id).trim();
+    if (sid && !isValidUuid(sid)) {
+      const nid = crypto.randomUUID();
+      remap.set(sid, nid);
+      t.id = nid;
+    }
+  }
+  if (remap.size === 0) return false;
+  const next = {};
+  for (const k of Object.keys(affectations)) {
+    const p = k.indexOf('|');
+    if (p <= 0) continue;
+    const tid = k.slice(0, p);
+    const rest = k.slice(p + 1);
+    const ntid = remap.get(tid) || tid;
+    next[ntid + '|' + rest] = affectations[k];
+  }
+  affectations = next;
+  return true;
+}
+function pgRestErrorMessage(err) {
+  if (!err) return 'Erreur inconnue';
+  const m = err.message || String(err);
+  const d = err.details || err.description;
+  const h = err.hint;
+  return [m, d && d !== m ? d : '', h ? 'Astuce : ' + h : ''].filter(Boolean).join(' — ');
+}
 
 // ── ÉTAT ────────────────────────────────────────
 const db  = window.SUPABASE_CLIENT;
@@ -406,6 +444,7 @@ async function init() {
 
   // Charger données
   loadLocal();
+  if (migrateInvalidTourneeIds()) saveLocal();
   await loadEmployees();
   await loadFromDb();
   saveLocal();
@@ -461,13 +500,13 @@ function joursToPg(j) {
 function tourneeRowForDb(t) {
   const nt = normalizeTourneeRow(t);
   return {
-    id: String(nt.id).trim(),
+    id: String(nt.id == null ? '' : nt.id).trim(),
     nom: (nt.nom && String(nt.nom).trim()) || 'Tournée',
     heure_debut: timeToPg(nt.heure_debut),
     heure_fin: timeToPg(nt.heure_fin),
     zone: nt.zone == null || String(nt.zone).trim() === '' ? null : String(nt.zone).trim(),
     vehicle: nt.vehicle == null || String(nt.vehicle).trim() === '' ? null : String(nt.vehicle).trim(),
-    jours: joursToPg(nt.jours),
+    jours: joursToPg(nt.jours).map((n) => n | 0),
     couleur: (nt.couleur && String(nt.couleur).trim()) || '#4f8ef7',
     notes: nt.notes == null || String(nt.notes).trim() === '' ? null : String(nt.notes).trim()
   };
@@ -475,22 +514,32 @@ function tourneeRowForDb(t) {
 /** Pas d’upsert REST sur tournees (400 fréquents) : UPDATE puis INSERT. */
 async function persistTourneeRow(row) {
   const id = row.id;
+  if (!isValidUuid(String(id))) {
+    throw new Error('ID tournée invalide (UUID attendu). Enregistrez à nouveau la tournée depuis le formulaire.');
+  }
   const patch = { nom: row.nom, heure_debut: row.heure_debut, heure_fin: row.heure_fin, zone: row.zone, vehicle: row.vehicle, jours: row.jours, couleur: row.couleur, notes: row.notes };
   const up = await db.from('tournees').update(patch).eq('id', id).select('id');
-  if (up.error) throw up.error;
+  if (up.error) {
+    console.error('[Colixo] tournees UPDATE', up.error);
+    throw new Error(pgRestErrorMessage(up.error));
+  }
   if (up.data && up.data.length > 0) return;
   const ins = await db.from('tournees').insert([row]);
   if (!ins.error) return;
+  console.error('[Colixo] tournees INSERT', ins.error, ins.error?.details, ins.error?.hint);
   const msg = String(ins.error.message || '');
   const code = String(ins.error.code || '');
   const st = ins.error.status || ins.error.statusCode;
   const conflict = code === '23505' || st === 409 || /duplicate|unique|already exists|conflict/i.test(msg);
   if (conflict) {
     const up2 = await db.from('tournees').update(patch).eq('id', id);
-    if (up2.error) throw up2.error;
+    if (up2.error) {
+      console.error('[Colixo] tournees UPDATE après conflit', up2.error);
+      throw new Error(pgRestErrorMessage(up2.error));
+    }
     return;
   }
-  throw ins.error;
+  throw new Error(pgRestErrorMessage(ins.error));
 }
 /** Évite d’écraser le cache local quand le SELECT renvoie [] (RLS, pas encore sync, etc.). */
 function mergeTourneesLocalRemote(local, remote) {
@@ -1221,6 +1270,6 @@ function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 init();
 })();
 </script>
-<div id="colixoTourRev" aria-hidden="true" style="position:fixed;bottom:4px;right:10px;font-size:10px;color:var(--text3);opacity:.45;pointer-events:none;z-index:50">Tournées UI 20260440</div>
+<div id="colixoTourRev" aria-hidden="true" style="position:fixed;bottom:4px;right:10px;font-size:10px;color:var(--text3);opacity:.45;pointer-events:none;z-index:50">Tournées UI 20260441</div>
 </body>
 </html>

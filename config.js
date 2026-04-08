@@ -4,7 +4,7 @@
 //  Les pages chargent config.js en <script src="…?v=…"> (compatible Cloudflare).
 //  Incrémenter COLIXO_ASSET_VERSION + version.txt (racine) + ?v= dans les HTML lors d’un déploiement important.
 // ============================================================
-window.COLIXO_ASSET_VERSION = '20260440';
+window.COLIXO_ASSET_VERSION = '20260441';
 
 /** Sur pages GitHub Pages (user.github.io/nom-du-repo/), les liens /login/… sans préfixe cassent. */
 window.COLIXO_BASE_PATH = (function () {
