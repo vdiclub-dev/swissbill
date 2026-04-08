@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tournées & Affectations — Colixo</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../config.js?v=20260408"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f16;--bg2:#161622;--bg3:#1e1e2e;--bg4:#252535;
+  --border:#2a2a3e;--border2:#353550;
+  --text:#e8e8f0;--text2:#9898b8;--text3:#6060a0;
+  --red:#e8311a;--red2:rgba(232,49,26,.15);
+  --blue:#4f8ef7;--blue2:rgba(79,142,247,.15);
+  --green:#22c55e;--green2:rgba(34,197,94,.15);
+  --orange:#f97316;--orange2:rgba(249,115,22,.15);
+  --purple:#a855f7;--purple2:rgba(168,85,247,.15);
+  --yellow:#eab308;--yellow2:rgba(234,179,8,.15);
+  --cyan:#06b6d4;--cyan2:rgba(6,182,212,.15);
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;font-size:13px;min-height:100vh}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:60px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200}
+.topbar-logo{font-size:20px;font-weight:800;color:var(--red);flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:600;flex:1}
+.topbar-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;font:inherit;font-size:12px;transition:.2s;white-space:nowrap}
+.btn:hover{background:var(--bg4)}
+.btn-primary{background:var(--red);border-color:var(--red);color:#fff}
+.btn-primary:hover{background:#c92a15}
+.btn-green{background:var(--green2);border-color:var(--green);color:var(--green)}
+.btn-blue{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.btn-orange{background:var(--orange2);border-color:var(--orange);color:var(--orange)}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg2);padding:0 20px}
+.tab{padding:14px 18px;border:none;background:none;color:var(--text2);cursor:pointer;font:inherit;font-size:13px;border-bottom:2px solid transparent;transition:.15s}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+
+/* TOOLBAR */
+.toolbar{display:flex;align-items:center;gap:10px;padding:12px 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.week-nav{display:flex;align-items:center;gap:8px}
+.week-label{font-weight:600;font-size:13px;min-width:180px;text-align:center}
+
+/* ── TAB 1 : GRILLE TOURNÉES ─── */
+.assign-wrap{overflow-x:auto;padding:16px 20px}
+.assign-table{width:100%;border-collapse:separate;border-spacing:0;min-width:860px}
+.assign-table th,.assign-table td{border:1px solid var(--border);padding:0}
+.assign-table th{background:var(--bg2);padding:10px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--text2);position:sticky;top:60px;z-index:10}
+.th-tournee{width:200px;text-align:left !important;padding:10px 14px !important;position:sticky;left:0;z-index:15;background:var(--bg2)}
+.th-day .day-name{color:var(--text);font-size:13px;font-weight:700}
+.th-day .day-date{font-size:11px;color:var(--text3);margin-top:2px}
+.th-day.today .day-name{color:var(--blue)}
+.th-day.weekend .day-name{color:var(--orange)}
+
+/* Tournée row header */
+.td-tournee{background:var(--bg2);padding:10px 14px;position:sticky;left:0;z-index:5;border-right:2px solid var(--border2);vertical-align:middle}
+.t-color{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;flex-shrink:0}
+.t-name{font-weight:700;font-size:13px;color:var(--text)}
+.t-time{font-size:11px;color:var(--text3);margin-top:2px}
+.t-zone{font-size:10px;margin-top:2px;padding:2px 6px;border-radius:4px;display:inline-block;background:var(--bg3)}
+.t-actions{margin-top:6px;display:flex;gap:4px}
+
+/* Assignment cell */
+.assign-cell{height:80px;padding:6px;background:var(--bg);cursor:pointer;transition:.15s;position:relative;vertical-align:top;min-width:110px}
+.assign-cell:hover{background:var(--bg3)}
+.assign-cell.weekend{background:#0d0d18}
+.assign-cell.today{background:rgba(79,142,247,.04);border-color:rgba(79,142,247,.3) !important}
+.assign-cell.has-conflict{border-color:var(--red) !important}
+
+/* Employee badge in cell */
+.emp-badge{border-radius:8px;padding:6px 8px;font-size:12px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;transition:.15s;position:relative}
+.emp-badge:hover{filter:brightness(1.1)}
+.emp-badge .eb-name{font-weight:700;color:var(--text)}
+.emp-badge .eb-code{font-size:10px;color:var(--text3);margin-top:2px}
+.emp-badge .eb-hours{font-size:10px;color:var(--blue);margin-top:2px}
+.emp-badge .eb-del{position:absolute;top:3px;right:5px;font-size:11px;color:var(--red);opacity:0;cursor:pointer}
+.emp-badge:hover .eb-del{opacity:1}
+.emp-badge.conflict{border-color:var(--red);background:rgba(232,49,26,.08)}
+.cell-empty{color:var(--text3);font-size:11px;text-align:center;padding-top:8px;opacity:.5}
+.cell-add-btn{position:absolute;bottom:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--bg3);border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text3);opacity:0;transition:.15s}
+.assign-cell:hover .cell-add-btn{opacity:1}
+
+/* ── TAB 2 : VUE PAR EMPLOYÉ ─── */
+.emp-view{padding:16px 20px}
+.emp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.emp-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.emp-card-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.emp-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.emp-card-name{font-weight:700;font-size:13px}
+.emp-card-role{font-size:11px;color:var(--text2)}
+.emp-card-body{padding:10px 16px}
+.emp-day-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px}
+.emp-day-row:last-child{border:none}
+.emp-day-name{width:36px;color:var(--text2);font-size:11px;flex-shrink:0}
+.emp-day-shift{flex:1}
+.emp-tournee-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid transparent}
+.emp-card-footer{padding:8px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:11px}
+.emp-week-h{color:var(--blue);font-weight:700}
+.emp-night-h{color:var(--purple)}
+.emp-warn{color:var(--orange)}
+
+/* ── TAB 3 : GESTION TOURNÉES ─── */
+.tournee-list{padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+.tournee-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:16px}
+.tc-color{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.tc-info{flex:1}
+.tc-name{font-weight:700;font-size:14px}
+.tc-detail{font-size:12px;color:var(--text2);margin-top:4px}
+.tc-tags{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.tc-tag{padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:var(--bg3);border:1px solid var(--border2);color:var(--text2)}
+.tc-actions{display:flex;gap:6px;flex-shrink:0}
+
+/* STATS ROW */
+.stats-row{display:flex;gap:10px;padding:12px 20px;background:var(--bg);border-bottom:1px solid var(--border);overflow-x:auto}
+.stat-card{flex:1;min-width:130px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 14px}
+.stat-label{font-size:11px;color:var(--text2);margin-bottom:3px}
+.stat-value{font-size:18px;font-weight:700}
+.stat-sub{font-size:10px;color:var(--text3);margin-top:2px}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:440px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:20px}
+.modal-body{display:flex;flex-direction:column;gap:14px}
+.form-group{display:flex;flex-direction:column;gap:6px}
+.form-row{display:flex;gap:10px}
+.form-row .form-group{flex:1}
+label{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+input,select,textarea{width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font:inherit;font-size:13px;transition:.15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
+.modal-footer{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.btn-ghost:hover{background:var(--bg3)}
+.btn-danger{background:rgba(232,49,26,.12);border-color:var(--red);color:var(--red)}
+.btn-danger:hover{background:rgba(232,49,26,.22)}
+
+/* Color picker */
+.color-picker{display:flex;gap:8px;flex-wrap:wrap}
+.color-dot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.15s}
+.color-dot.active{border-color:#fff;transform:scale(1.15)}
+
+/* Assign modal — employee list */
+.emp-pick-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto}
+.emp-pick-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;transition:.15s}
+.emp-pick-item:hover{background:var(--bg4)}
+.ep-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+.ep-name{font-weight:600;font-size:12px}
+.ep-role{font-size:10px;color:var(--text3)}
+.ep-status{margin-left:auto;font-size:10px}
+.ep-status.conflict{color:var(--red)}
+.ep-status.ok{color:var(--green)}
+.ep-status.heavy{color:var(--orange)}
+.emp-pick-item.selected{border-color:var(--blue);background:var(--blue2)}
+
+/* Conflict badge */
+.conflict-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;background:rgba(232,49,26,.15);border:1px solid rgba(232,49,26,.3);color:#ff8a7a;font-size:10px;font-weight:600}
+
+/* Empty */
+.empty{text-align:center;padding:40px;color:var(--text3)}
+.empty .icon{font-size:40px;margin-bottom:10px}
+select option{background:var(--bg3)}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-logo">Colixo</div>
+  <div class="topbar-title">Tournées & Affectations</div>
+  <div class="topbar-right">
+    <button class="btn btn-green" onclick="exportAffectations()">⬇ Export CSV</button>
+    <button class="btn btn-orange" onclick="autoAssign()">⚡ Affectation auto</button>
+    <button class="btn" id="btnLogout">⏻</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab active" onclick="showTab('affectation',this)">📅 Affectation semaine</button>
+  <button class="tab" onclick="showTab('employes',this)">👷 Vue par employé</button>
+  <button class="tab" onclick="showTab('tournees',this)">🗺 Gérer les tournées</button>
+</div>
+
+<!-- ═══════ TAB: AFFECTATION ═══════ -->
+<div id="tabAffectation">
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="week-nav">
+      <button class="btn" onclick="navWeek(-1)">‹</button>
+      <div class="week-label" id="weekLabel">Chargement…</div>
+      <button class="btn" onclick="navWeek(1)">›</button>
+      <button class="btn" onclick="goToday()">Aujourd'hui</button>
+    </div>
+    <select id="filterRole" onchange="renderAll()">
+      <option value="">Tous les rôles</option>
+      <option value="chauffeur">Chauffeurs</option>
+      <option value="magasinier">Magasiniers</option>
+    </select>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Tournées actives</div>
+      <div class="stat-value" id="statTournees">—</div>
+      <div class="stat-sub">Cette semaine</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Affectations</div>
+      <div class="stat-value" id="statAffect">—</div>
+      <div class="stat-sub">Employés assignés</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Non couverts</div>
+      <div class="stat-value" id="statMissing" style="color:var(--orange)">—</div>
+      <div class="stat-sub">Tournée sans pilote</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Conflits</div>
+      <div class="stat-value" id="statConflicts" style="color:var(--red)">—</div>
+      <div class="stat-sub">Contraintes violées</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Heures de nuit</div>
+      <div class="stat-value" id="statNight" style="color:var(--purple)">—</div>
+      <div class="stat-sub">+10% majoration</div>
+    </div>
+  </div>
+
+  <!-- GRILLE AFFECTATION -->
+  <div class="assign-wrap">
+    <table class="assign-table" id="assignTable">
+      <thead id="assignHead"></thead>
+      <tbody id="assignBody"></tbody>
+    </table>
+    <div class="empty" id="emptyTournees" style="display:none">
+      <div class="icon">🗺</div>
+      <p>Aucune tournée créée.</p>
+      <button class="btn btn-primary" style="margin-top:12px" onclick="showTab('tournees',document.querySelectorAll('.tab')[2]);openTourneeModal()">+ Créer la première tournée</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ TAB: VUE EMPLOYÉS ═══════ -->
+<div id="tabEmployes" style="display:none">
+  <div class="emp-view">
+    <div class="emp-grid" id="empGrid"></div>
+    <div class="empty" id="emptyEmp" style="display:none">
+      <div class="icon">👷</div>
+      <p>Aucun employé trouvé.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ TAB: TOURNÉES ═══════ -->
+<div id="tabTournees" style="display:none">
+  <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+    <button class="btn btn-primary" onclick="openTourneeModal()">+ Nouvelle tournée</button>
+  </div>
+  <div class="tournee-list" id="tourneeList">
+    <div class="empty" id="emptyList">
+      <div class="icon">🗺</div>
+      <p>Aucune tournée. Créez votre première tournée.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ MODAL — TOURNÉE ═══════ -->
+<div class="modal-overlay" id="modalTournee">
+<div class="modal">
+  <div class="modal-title" id="modalTourneeTitle">🗺 Nouvelle tournée</div>
+  <div class="modal-body">
+    <input type="hidden" id="tId">
+    <div class="form-group">
+      <label>Nom de la tournée *</label>
+      <input type="text" id="tNom" placeholder="Ex: Route Lausanne Matin">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Heure de début</label>
+        <input type="time" id="tDebut" value="07:00">
+      </div>
+      <div class="form-group">
+        <label>Heure de fin</label>
+        <input type="time" id="tFin" value="15:45">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Zone / Secteur</label>
+        <input type="text" id="tZone" placeholder="Ex: Vaud nord">
+      </div>
+      <div class="form-group">
+        <label>Véhicule</label>
+        <select id="tVehicle">
+          <option value="">— aucun —</option>
+          <option value="camionnette">Camionnette</option>
+          <option value="camion">Camion</option>
+          <option value="utilitaire">Utilitaire</option>
+          <option value="moto">Moto</option>
+          <option value="velo">Vélo cargo</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Jours actifs</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="tDays">
+        <label style="all:unset;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)"><input type="checkbox" value="1" checked style="width:14px;height:14px;accent-color:var(--blue)"> Lun</label>
+        <label style="all:unset;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)"><input type="checkbox" value="2" checked style="width:14px;height:14px;accent-color:var(--blue)"> Mar</label>
+        <label style="all:unset;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)"><input type="checkbox" value="3" checked style="width:14px;height:14px;accent-color:var(--blue)"> Mer</label>
+        <label style="all:unset;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)"><input type="checkbox" value="4" checked style="width:14px;height:14px;accent-color:var(--blue)"> Jeu</label>
+        <label style="all:unset;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)"><input type="checkbox" value="5" checked style="width:14px;height:14px;accent-color:var(--blue)"> Ven</label>
+        <label style="all:unset;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)"><input type="checkbox" value="6" style="width:14px;height:14px;accent-color:var(--blue)"> Sam</label>
+        <label style="all:unset;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)"><input type="checkbox" value="0" style="width:14px;height:14px;accent-color:var(--blue)"> Dim</label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Couleur</label>
+      <div class="color-picker" id="colorPicker">
+        <div class="color-dot active" style="background:#4f8ef7" data-color="#4f8ef7" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#22c55e" data-color="#22c55e" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#f97316" data-color="#f97316" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#a855f7" data-color="#a855f7" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#e8311a" data-color="#e8311a" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#06b6d4" data-color="#06b6d4" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#eab308" data-color="#eab308" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#ec4899" data-color="#ec4899" onclick="pickColor(this)"></div>
+        <div class="color-dot" style="background:#14b8a6" data-color="#14b8a6" onclick="pickColor(this)"></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="tNotes" rows="2" placeholder="Instructions spécifiques…"></textarea>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-danger" id="btnDeleteTournee" style="display:none;margin-right:auto" onclick="deleteTournee()">🗑 Supprimer</button>
+    <button class="btn btn-ghost" onclick="closeModal('modalTournee')">Annuler</button>
+    <button class="btn btn-primary" onclick="saveTournee()">💾 Enregistrer</button>
+  </div>
+</div>
+</div>
+
+<!-- ═══════ MODAL — ASSIGNER EMPLOYÉ ═══════ -->
+<div class="modal-overlay" id="modalAssign">
+<div class="modal">
+  <div class="modal-title" id="assignModalTitle">👷 Assigner un employé</div>
+  <div class="modal-body">
+    <input type="hidden" id="assignTourneeId">
+    <input type="hidden" id="assignDate">
+    <div id="assignInfo" style="padding:10px 12px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);font-size:12px;margin-bottom:4px"></div>
+    <div class="form-group">
+      <label>Choisir l'employé</label>
+      <div class="emp-pick-list" id="empPickList"></div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-danger" id="btnUnassign" style="display:none;margin-right:auto" onclick="unassignEmp()">↩ Désaffecter</button>
+    <button class="btn btn-ghost" onclick="closeModal('modalAssign')">Annuler</button>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════ SCRIPT ═══════════════════ -->
+<script>
+(async function(){
+'use strict';
+
+// ── CONTRAINTES LÉGALES ─────────────────────────────────
+const C = {
+  MAX_SHIFT_H:  12,
+  MAX_WEEK_H:   48,
+  MAX_DAYS:     5,
+  MIN_REST_H:   9,
+  BREAK_MIN:    270, // 4h30 en minutes
+  BREAK_DUR:    45,
+  NIGHT_START:  23,
+  NIGHT_END:    5,
+};
+
+const ROLE_COLORS = {chauffeur:'#4f8ef7',magasinier:'#22c55e',admin:'#f97316',super_admin:'#a855f7'};
+const ROLE_LABELS = {chauffeur:'Chauffeur',magasinier:'Magasinier',admin:'Admin',super_admin:'Super Admin'};
+const DAYS_FR = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+const MONTHS_FR = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+
+// ── STATE ──────────────────────────────────────────────
+let db = window.SUPABASE_CLIENT;
+let employees = [];
+let tournees = [];       // [{id, nom, heure_debut, heure_fin, zone, vehicle, jours, couleur, notes}]
+let affectations = {};   // {'tourneeId_date': empId}
+let weekStart = getMonday(new Date());
+let currentTab = 'affectation';
+
+// ── INIT ───────────────────────────────────────────────
+async function init() {
+  const raw = localStorage.getItem('colixo_user');
+  let cu = null; try { cu = JSON.parse(raw || 'null'); } catch(e){}
+  let session = null;
+  if (db) { try { const r = await db.auth.getSession(); session = r.data?.session; } catch(e){} }
+  if (!session && !cu) { window.location.href = '../login/index.html'; return; }
+  const role = cu?.role || session?.user?.user_metadata?.role || 'admin';
+  if (!['admin','super_admin'].includes(role)) { window.location.href = '../login/index.html'; return; }
+
+  document.getElementById('btnLogout').addEventListener('click', async () => {
+    if (db) try { await db.auth.signOut(); } catch(e){}
+    localStorage.removeItem('colixo_user');
+    window.location.href = '../login/index.html';
+  });
+
+  loadLocal();
+  await Promise.all([loadEmployees(), loadTourneesFromDb(), loadAffectationsFromDb()]);
+  renderWeekLabel();
+  renderAll();
+}
+
+// ── LOCAL STORAGE FALLBACK ─────────────────────────────
+function loadLocal() {
+  try { tournees   = JSON.parse(localStorage.getItem('colixo_tournees')   || '[]'); } catch(e){ tournees=[]; }
+  try { affectations = JSON.parse(localStorage.getItem('colixo_affect')   || '{}'); } catch(e){ affectations={}; }
+}
+function saveLocal() {
+  localStorage.setItem('colixo_tournees', JSON.stringify(tournees));
+  localStorage.setItem('colixo_affect', JSON.stringify(affectations));
+}
+
+// ── SUPABASE ───────────────────────────────────────────
+async function loadEmployees() {
+  if (!db) { employees = demoEmployees(); return; }
+  try {
+    const {data,error} = await db.from('utilisateurs')
+      .select('id,nom,prenom,role,code_usr,actif').eq('actif',true)
+      .in('role',['chauffeur','magasinier','admin','super_admin'])
+      .order('role').order('nom');
+    if (error) throw error;
+    employees = data || [];
+  } catch(e) { employees = demoEmployees(); }
+}
+
+async function loadTourneesFromDb() {
+  if (!db || tournees.length > 0) return;
+  try {
+    const {data,error} = await db.from('tournees').select('*').order('heure_debut');
+    if (!error && data) tournees = data;
+  } catch(e) {}
+}
+
+async function loadAffectationsFromDb() {
+  if (!db) return;
+  const d0 = fmtDate(weekStart), d1 = fmtDate(addDays(weekStart,6));
+  try {
+    const {data,error} = await db.from('tournee_affectations')
+      .select('*').gte('date',d0).lte('date',d1);
+    if (!error && data) {
+      data.forEach(a => { affectations[a.tournee_id+'_'+a.date] = a.employe_id; });
+    }
+  } catch(e) {}
+}
+
+async function saveTourneeDb(t) {
+  if (!db) return;
+  try {
+    await db.from('tournees').upsert([t],{onConflict:'id'});
+  } catch(e) {}
+}
+async function deleteTourneeDb(id) {
+  if (!db) return;
+  try { await db.from('tournees').delete().eq('id',id); } catch(e){}
+}
+async function saveAffectationDb(tourneeId, date, empId) {
+  if (!db) return;
+  try {
+    if (empId) {
+      await db.from('tournee_affectations').upsert(
+        [{tournee_id:tourneeId, date, employe_id:empId}],
+        {onConflict:'tournee_id,date'}
+      );
+    } else {
+      await db.from('tournee_affectations').delete()
+        .eq('tournee_id',tourneeId).eq('date',date);
+    }
+  } catch(e) {}
+}
+
+function demoEmployees() {
+  return [
+    {id:'d1',nom:'Martin',prenom:'Jean',role:'chauffeur',code_usr:'CHF-1001',actif:true},
+    {id:'d2',nom:'Dupont',prenom:'Marie',role:'chauffeur',code_usr:'CHF-1002',actif:true},
+    {id:'d3',nom:'Blanc',prenom:'Pierre',role:'magasinier',code_usr:'MAG-2001',actif:true},
+    {id:'d4',nom:'Noir',prenom:'Sophie',role:'chauffeur',code_usr:'CHF-1003',actif:true},
+    {id:'d5',nom:'Gris',prenom:'Lucas',role:'magasinier',code_usr:'MAG-2002',actif:true},
+  ];
+}
+
+// ── DATE UTILS ─────────────────────────────────────────
+function getMonday(d) {
+  const dt = new Date(d); dt.setHours(0,0,0,0);
+  const diff = dt.getDay()===0 ? -6 : 1-dt.getDay();
+  dt.setDate(dt.getDate()+diff); return dt;
+}
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function fmtDate(d){ return d.toISOString().slice(0,10); }
+function t2m(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+function isoWeek(d){
+  const dt=new Date(d); dt.setHours(0,0,0,0);
+  dt.setDate(dt.getDate()+3-(dt.getDay()+6)%7);
+  const w1=new Date(dt.getFullYear(),0,4);
+  return 1+Math.round(((dt-w1)/86400000-(3-(w1.getDay()+6)%7))/7);
+}
+
+// ── WEEK NAV ──────────────────────────────────────────
+window.navWeek = async function(dir) {
+  weekStart = addDays(weekStart, dir*7);
+  await loadAffectationsFromDb();
+  renderWeekLabel(); renderAll();
+};
+window.goToday = function() {
+  weekStart = getMonday(new Date());
+  loadAffectationsFromDb().then(() => { renderWeekLabel(); renderAll(); });
+};
+function renderWeekLabel() {
+  const end = addDays(weekStart,6);
+  const fmt = d => `${d.getDate()} ${MONTHS_FR[d.getMonth()]}`;
+  document.getElementById('weekLabel').textContent =
+    `Sem. ${isoWeek(weekStart)} — ${fmt(weekStart)} au ${fmt(end)} ${weekStart.getFullYear()}`;
+}
+
+// ── TABS ───────────────────────────────────────────────
+window.showTab = function(tab, btn) {
+  currentTab = tab;
+  document.getElementById('tabAffectation').style.display = tab==='affectation' ? '' : 'none';
+  document.getElementById('tabEmployes').style.display    = tab==='employes'     ? '' : 'none';
+  document.getElementById('tabTournees').style.display    = tab==='tournees'     ? '' : 'none';
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderAll();
+};
+
+// ── RENDER ALL ─────────────────────────────────────────
+function renderAll() {
+  const days = Array.from({length:7},(_,i) => addDays(weekStart,i));
+  const roleF = document.getElementById('filterRole')?.value || '';
+  const visEmp = employees.filter(e => !roleF || e.role === roleF);
+
+  if (currentTab === 'affectation') {
+    renderAssignGrid(days, visEmp);
+    renderStats(days, visEmp);
+    renderTourneeList(); // always keep list in sync
+  } else if (currentTab === 'employes') {
+    renderEmpView(days, visEmp);
+  } else if (currentTab === 'tournees') {
+    renderTourneeList();
+  }
+}
+
+// ── GRILLE AFFECTATION ─────────────────────────────────
+function renderAssignGrid(days, visEmp) {
+  const head = document.getElementById('assignHead');
+  const body = document.getElementById('assignBody');
+  const empty = document.getElementById('emptyTournees');
+
+  const activeTournees = tournees.filter(t => {
+    // Show all tournees for this week (check jours field)
+    return true;
+  });
+
+  if (activeTournees.length === 0) {
+    document.getElementById('assignTable').style.display = 'none';
+    empty.style.display = 'block'; return;
+  }
+  document.getElementById('assignTable').style.display = '';
+  empty.style.display = 'none';
+
+  // HEAD
+  head.innerHTML = '';
+  const htr = document.createElement('tr');
+  const thT = document.createElement('th'); thT.className='th-tournee'; thT.textContent='Tournée'; htr.appendChild(thT);
+  days.forEach(d => {
+    const isWE = d.getDay()===0||d.getDay()===6;
+    const isNow = fmtDate(d)===fmtDate(new Date());
+    const th = document.createElement('th');
+    th.className = 'th-day' + (isNow?' today':'') + (isWE?' weekend':'');
+    th.innerHTML = `<div class="day-name">${DAYS_FR[d.getDay()]}</div><div class="day-date">${d.getDate()} ${MONTHS_FR[d.getMonth()]}</div>`;
+    htr.appendChild(th);
+  });
+  head.appendChild(htr);
+
+  // BODY
+  body.innerHTML = '';
+  activeTournees.forEach(t => {
+    const tr = document.createElement('tr');
+
+    // Tournée header cell
+    const tdT = document.createElement('td'); tdT.className = 'td-tournee';
+    tdT.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <div class="t-color" style="background:${t.couleur||'#4f8ef7'};margin-top:3px"></div>
+        <div style="flex:1;min-width:0">
+          <div class="t-name">${esc(t.nom)}</div>
+          <div class="t-time">${t.heure_debut} → ${t.heure_fin} (${shiftDuration(t)}h)</div>
+          ${t.zone ? `<div class="t-zone" style="color:${t.couleur||'#4f8ef7'};border-color:${t.couleur||'#4f8ef7'}33">${esc(t.zone)}</div>` : ''}
+          ${t.vehicle ? `<div style="font-size:10px;color:var(--text3);margin-top:3px">🚛 ${t.vehicle}</div>` : ''}
+        </div>
+      </div>
+      <div class="t-actions">
+        <button class="btn btn-sm" onclick="openTourneeModal('${t.id}')">✏</button>
+      </div>`;
+    tr.appendChild(tdT);
+
+    // Day cells
+    days.forEach(d => {
+      const dayNum = d.getDay(); // 0=dim, 1=lun…
+      const isWE = dayNum===0||dayNum===6;
+      const isNow = fmtDate(d)===fmtDate(new Date());
+      const dateStr = fmtDate(d);
+      const key = t.id + '_' + dateStr;
+      const empId = affectations[key];
+      const emp = empId ? employees.find(e => e.id===empId) : null;
+
+      // Is this tournée active on this day?
+      const jours = t.jours || [1,2,3,4,5];
+      const dayActive = jours.includes(dayNum);
+
+      const td = document.createElement('td');
+      td.className = 'assign-cell' + (isWE?' weekend':'') + (isNow?' today':'');
+
+      if (!dayActive) {
+        td.style.background = '#090910';
+        td.style.opacity = '0.4';
+        td.style.cursor = 'not-allowed';
+        td.innerHTML = '<div style="text-align:center;padding-top:10px;font-size:18px;color:var(--text3)">—</div>';
+      } else if (emp) {
+        const conflict = hasConflict(emp.id, dateStr, t);
+        const nightH  = calcNightH(t);
+        td.innerHTML = `
+          <div class="emp-badge ${conflict?'conflict':''}" onclick="openAssignModal('${t.id}','${dateStr}',event)">
+            <div class="eb-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+            <div class="eb-code">${esc(emp.code_usr||'')} · ${ROLE_LABELS[emp.role]||emp.role}</div>
+            <div class="eb-hours">${shiftDuration(t)}h${nightH>0?' · 🌙'+nightH.toFixed(1)+'h':''}</div>
+            ${conflict ? '<div class="conflict-badge" style="margin-top:3px">⚠ conflit</div>' : ''}
+            <span class="eb-del" onclick="quickUnassign('${t.id}','${dateStr}',event)">✕</span>
+          </div>`;
+      } else {
+        td.innerHTML = `<div class="cell-empty">Libre</div><div class="cell-add-btn">+</div>`;
+        td.onclick = () => openAssignModal(t.id, dateStr);
+      }
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+}
+
+// ── VUE PAR EMPLOYÉ ────────────────────────────────────
+function renderEmpView(days, visEmp) {
+  const grid = document.getElementById('empGrid');
+  const empty = document.getElementById('emptyEmp');
+  grid.innerHTML = '';
+
+  if (visEmp.length === 0) { empty.style.display='block'; return; }
+  empty.style.display = 'none';
+
+  visEmp.forEach(emp => {
+    const stats = getEmpWeekStats(emp.id, days);
+    const card = document.createElement('div'); card.className = 'emp-card';
+    const color = ROLE_COLORS[emp.role] || '#888';
+    const initials = (emp.prenom[0]||'') + (emp.nom[0]||'');
+
+    let daysHtml = '';
+    days.forEach(d => {
+      const dateStr = fmtDate(d);
+      const dayNum = d.getDay();
+      const isWE = dayNum===0||dayNum===6;
+      // Find all tournées assigned to this emp on this day
+      const myT = tournees.filter(t => affectations[t.id+'_'+dateStr] === emp.id);
+      const dayName = DAYS_FR[dayNum];
+      let shiftsHtml = '';
+      if (myT.length > 0) {
+        myT.forEach(t => {
+          const nightH = calcNightH(t);
+          shiftsHtml += `<span class="emp-tournee-chip" style="background:${t.couleur}22;border-color:${t.couleur}55;color:${t.couleur}">
+            ${esc(t.nom)} <span style="opacity:.7;font-size:10px">${t.heure_debut}–${t.heure_fin}</span>
+            ${nightH>0?`<span style="color:var(--purple)">🌙</span>`:''}
+          </span>`;
+        });
+      } else {
+        shiftsHtml = `<span style="color:var(--text3);font-size:11px">${isWE?'Week-end':'Libre'}</span>`;
+      }
+      daysHtml += `<div class="emp-day-row">
+        <div class="emp-day-name">${dayName}</div>
+        <div class="emp-day-shift">${shiftsHtml}</div>
+      </div>`;
+    });
+
+    const warnClass = stats.violations > 0 ? 'emp-warn' : '';
+    card.innerHTML = `
+      <div class="emp-card-header">
+        <div class="emp-avatar" style="background:${color}22;color:${color}">${initials}</div>
+        <div>
+          <div class="emp-card-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+          <div class="emp-card-role" style="color:${color}">${ROLE_LABELS[emp.role]||emp.role} · ${esc(emp.code_usr||'')}</div>
+        </div>
+      </div>
+      <div class="emp-card-body">${daysHtml}</div>
+      <div class="emp-card-footer">
+        <span class="emp-week-h">${stats.totalH.toFixed(1)}h / 48h</span>
+        ${stats.nightH > 0 ? `<span class="emp-night-h">🌙 ${stats.nightH.toFixed(1)}h nuit</span>` : ''}
+        ${stats.daysWorked > C.MAX_DAYS ? `<span class="emp-warn">⚠ ${stats.daysWorked}j/semaine</span>` : `<span style="color:var(--text3)">${stats.daysWorked} jour(s)</span>`}
+        ${stats.violations > 0 ? `<span class="emp-warn">⚠ ${stats.violations} conflit(s)</span>` : ''}
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+// ── LISTE TOURNÉES ─────────────────────────────────────
+function renderTourneeList() {
+  const list = document.getElementById('tourneeList');
+  const empty = document.getElementById('emptyList');
+  list.innerHTML = '';
+  if (tournees.length === 0) { empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  tournees.forEach(t => {
+    const div = document.createElement('div'); div.className = 'tournee-card';
+    const jours = (t.jours||[1,2,3,4,5]).map(j=>DAYS_FR[j]).join(', ');
+    div.innerHTML = `
+      <div class="tc-color" style="background:${t.couleur||'#4f8ef7'}"></div>
+      <div class="tc-info">
+        <div class="tc-name">${esc(t.nom)}</div>
+        <div class="tc-detail">${t.heure_debut} → ${t.heure_fin} (${shiftDuration(t)}h/service) · ${t.zone||'Zone non définie'}</div>
+        <div class="tc-tags">
+          <span class="tc-tag">📅 ${jours}</span>
+          ${t.vehicle?`<span class="tc-tag">🚛 ${t.vehicle}</span>`:''}
+          ${calcNightH(t)>0?`<span class="tc-tag" style="color:var(--purple)">🌙 ${calcNightH(t).toFixed(1)}h nuit</span>`:''}
+        </div>
+        ${t.notes?`<div style="font-size:11px;color:var(--text3);margin-top:4px">${esc(t.notes)}</div>`:''}
+      </div>
+      <div class="tc-actions">
+        <button class="btn btn-sm" onclick="openTourneeModal('${t.id}')">✏ Modifier</button>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+// ── STATS ──────────────────────────────────────────────
+function renderStats(days, visEmp) {
+  let totalAffect = 0, missing = 0, conflicts = 0, nightH = 0;
+  const activeDays = days.filter(d => {
+    return tournees.some(t => (t.jours||[1,2,3,4,5]).includes(d.getDay()));
+  });
+
+  tournees.forEach(t => {
+    days.forEach(d => {
+      if (!(t.jours||[1,2,3,4,5]).includes(d.getDay())) return;
+      const key = t.id + '_' + fmtDate(d);
+      const empId = affectations[key];
+      if (empId) {
+        totalAffect++;
+        nightH += calcNightH(t);
+        if (hasConflict(empId, fmtDate(d), t)) conflicts++;
+      } else {
+        missing++;
+      }
+    });
+  });
+
+  document.getElementById('statTournees').textContent = tournees.length;
+  document.getElementById('statAffect').textContent = totalAffect;
+  document.getElementById('statMissing').textContent = missing;
+  document.getElementById('statMissing').parentElement.className = 'stat-card' + (missing>0?' warn':'');
+  document.getElementById('statConflicts').textContent = conflicts;
+  document.getElementById('statConflicts').parentElement.className = 'stat-card' + (conflicts>0?' danger':'');
+  document.getElementById('statNight').textContent = nightH.toFixed(1) + 'h';
+}
+
+// ── CONFLICT & STATS HELPERS ───────────────────────────
+function shiftDuration(t) {
+  let s = t2m(t.heure_debut), e = t2m(t.heure_fin);
+  if (e <= s) e += 24*60;
+  const raw = e - s;
+  const pause = raw > C.BREAK_MIN ? C.BREAK_DUR : 0;
+  return ((raw - pause) / 60).toFixed(1) * 1;
+}
+
+function calcNightH(t) {
+  let s = t2m(t.heure_debut), e = t2m(t.heure_fin);
+  if (e <= s) e += 24*60;
+  let n = 0;
+  for (let m = s; m < e; m++) {
+    const h = Math.floor((m % (24*60)) / 60);
+    if (h >= C.NIGHT_START || h < C.NIGHT_END) n++;
+  }
+  return n / 60;
+}
+
+function getEmpDayShifts(empId, dateStr) {
+  return tournees.filter(t => affectations[t.id+'_'+dateStr] === empId);
+}
+
+function getEmpWeekStats(empId, days) {
+  let totalH = 0, nightH = 0, daysWorked = 0, violations = 0;
+  days.forEach(d => {
+    const myT = getEmpDayShifts(empId, fmtDate(d));
+    if (myT.length > 0) { daysWorked++; }
+    myT.forEach(t => {
+      totalH += shiftDuration(t);
+      nightH += calcNightH(t);
+      if (hasConflict(empId, fmtDate(d), t)) violations++;
+    });
+  });
+  if (totalH > C.MAX_WEEK_H) violations++;
+  if (daysWorked > C.MAX_DAYS) violations++;
+  return { totalH, nightH, daysWorked, violations };
+}
+
+function hasConflict(empId, dateStr, tournee) {
+  // 1. Already assigned elsewhere same day same time?
+  const otherTournees = getEmpDayShifts(empId, dateStr).filter(t => t.id !== tournee.id);
+  for (const other of otherTournees) {
+    if (timesOverlap(tournee, other)) return true;
+  }
+  // 2. Min rest from previous day
+  const dayIdx = getDayIdx(dateStr);
+  if (dayIdx > 0) {
+    const prevDate = fmtDate(addDays(weekStart, dayIdx-1));
+    const prevT = getEmpDayShifts(empId, prevDate);
+    for (const pt of prevT) {
+      let prevEnd = t2m(pt.heure_fin), curStart = t2m(tournee.heure_debut);
+      if (prevEnd <= t2m(pt.heure_debut)) prevEnd += 24*60;
+      const restH = (curStart + 24*60 - prevEnd) / 60;
+      if (restH < C.MIN_REST_H && restH > 0) return true;
+    }
+  }
+  // 3. Weekly hours
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  const stats = getEmpWeekStats(empId, days);
+  if (stats.totalH + shiftDuration(tournee) > C.MAX_WEEK_H) return true;
+  return false;
+}
+
+function timesOverlap(t1, t2) {
+  let s1=t2m(t1.heure_debut), e1=t2m(t1.heure_fin);
+  let s2=t2m(t2.heure_debut), e2=t2m(t2.heure_fin);
+  if (e1<=s1) e1+=24*60; if (e2<=s2) e2+=24*60;
+  return s1 < e2 && s2 < e1;
+}
+
+function getDayIdx(dateStr) {
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  return days.findIndex(d => fmtDate(d)===dateStr);
+}
+
+// ── MODAL — TOURNÉE ────────────────────────────────────
+window.openTourneeModal = function(id) {
+  const t = id ? tournees.find(x=>x.id===id) : null;
+  document.getElementById('tId').value = t?.id || '';
+  document.getElementById('tNom').value = t?.nom || '';
+  document.getElementById('tDebut').value = t?.heure_debut || '07:00';
+  document.getElementById('tFin').value = t?.heure_fin || '15:45';
+  document.getElementById('tZone').value = t?.zone || '';
+  document.getElementById('tVehicle').value = t?.vehicle || '';
+  document.getElementById('tNotes').value = t?.notes || '';
+  // Jours
+  const jours = t?.jours || [1,2,3,4,5];
+  document.querySelectorAll('#tDays input[type=checkbox]').forEach(cb => {
+    cb.checked = jours.includes(parseInt(cb.value));
+  });
+  // Couleur
+  const col = t?.couleur || '#4f8ef7';
+  document.querySelectorAll('#colorPicker .color-dot').forEach(dot => {
+    dot.classList.toggle('active', dot.dataset.color === col);
+  });
+  document.getElementById('modalTourneeTitle').textContent = t ? '✏ Modifier la tournée' : '🗺 Nouvelle tournée';
+  document.getElementById('btnDeleteTournee').style.display = t ? '' : 'none';
+  document.getElementById('modalTournee').classList.add('open');
+};
+
+window.saveTournee = async function() {
+  const nom = document.getElementById('tNom').value.trim();
+  if (!nom) { alert('Le nom de la tournée est obligatoire.'); return; }
+  const jours = Array.from(document.querySelectorAll('#tDays input:checked')).map(c=>parseInt(c.value));
+  const col = document.querySelector('#colorPicker .color-dot.active')?.dataset.color || '#4f8ef7';
+  const id = document.getElementById('tId').value || 'local_'+Date.now();
+  const t = {
+    id, nom,
+    heure_debut: document.getElementById('tDebut').value,
+    heure_fin:   document.getElementById('tFin').value,
+    zone:    document.getElementById('tZone').value.trim() || null,
+    vehicle: document.getElementById('tVehicle').value || null,
+    notes:   document.getElementById('tNotes').value.trim() || null,
+    jours, couleur: col
+  };
+  const idx = tournees.findIndex(x=>x.id===id);
+  if (idx>=0) tournees[idx]=t; else tournees.push(t);
+  saveLocal();
+  await saveTourneeDb(t);
+  closeModal('modalTournee');
+  renderAll();
+};
+
+window.deleteTournee = async function() {
+  const id = document.getElementById('tId').value;
+  if (!id || !confirm('Supprimer cette tournée et toutes ses affectations ?')) return;
+  // Remove affectations
+  Object.keys(affectations).forEach(k => { if(k.startsWith(id+'_')) delete affectations[k]; });
+  tournees = tournees.filter(t=>t.id!==id);
+  saveLocal();
+  await deleteTourneeDb(id);
+  closeModal('modalTournee');
+  renderAll();
+};
+
+window.pickColor = function(el) {
+  document.querySelectorAll('#colorPicker .color-dot').forEach(d=>d.classList.remove('active'));
+  el.classList.add('active');
+};
+
+// ── MODAL — ASSIGNER ───────────────────────────────────
+window.openAssignModal = function(tourneeId, dateStr, e) {
+  if (e) e.stopPropagation();
+  const t = tournees.find(x=>x.id===tourneeId);
+  if (!t) return;
+  const currentEmpId = affectations[tourneeId+'_'+dateStr];
+
+  document.getElementById('assignTourneeId').value = tourneeId;
+  document.getElementById('assignDate').value = dateStr;
+  document.getElementById('assignModalTitle').textContent =
+    `👷 ${esc(t.nom)} — ${dateStr}`;
+
+  const dur = shiftDuration(t);
+  const nightH = calcNightH(t);
+  document.getElementById('assignInfo').innerHTML =
+    `<strong>${t.heure_debut} → ${t.heure_fin}</strong> · ${dur}h
+     ${nightH>0 ? ` · 🌙 <span style="color:var(--purple)">${nightH.toFixed(1)}h nuit (+10%)</span>`:'' }
+     ${t.zone ? ` · 📍${esc(t.zone)}` : ''}`;
+
+  document.getElementById('btnUnassign').style.display = currentEmpId ? '' : 'none';
+
+  // Filter employees: prefer same role as tournée context, show all
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  const list = document.getElementById('empPickList');
+  list.innerHTML = '';
+
+  const sorted = [...employees].sort((a,b) => {
+    // Chauffeurs first for most tournées
+    if (a.role==='chauffeur' && b.role!=='chauffeur') return -1;
+    if (b.role==='chauffeur' && a.role!=='chauffeur') return 1;
+    return a.nom.localeCompare(b.nom);
+  });
+
+  sorted.forEach(emp => {
+    const stats = getEmpWeekStats(emp.id, days);
+    const alreadyOnTournee = affectations[tourneeId+'_'+dateStr] === emp.id;
+    const otherOnSameDay = getEmpDayShifts(emp.id, dateStr).filter(ot=>ot.id!==tourneeId);
+    const wouldConflict = hasConflict(emp.id, dateStr, t);
+    const color = ROLE_COLORS[emp.role]||'#888';
+    const initials = (emp.prenom[0]||'')+(emp.nom[0]||'');
+
+    let statusText='', statusClass='ok';
+    if (alreadyOnTournee) { statusText='✓ Assigné'; statusClass='ok'; }
+    else if (wouldConflict) { statusText='⚠ Conflit'; statusClass='conflict'; }
+    else if (stats.totalH >= 40) { statusText=`${stats.totalH.toFixed(0)}h/sem`; statusClass='heavy'; }
+    else { statusText=`${stats.totalH.toFixed(0)}h/sem`; statusClass='ok'; }
+
+    const item = document.createElement('div');
+    item.className = 'emp-pick-item' + (alreadyOnTournee?' selected':'');
+    item.innerHTML = `
+      <div class="ep-avatar" style="background:${color}22;color:${color}">${initials}</div>
+      <div style="flex:1">
+        <div class="ep-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+        <div class="ep-role">${ROLE_LABELS[emp.role]||emp.role} · ${esc(emp.code_usr||'')}${otherOnSameDay.length>0?' · '+otherOnSameDay.length+' tournée(s) ce jour':''}</div>
+      </div>
+      <div class="ep-status ${statusClass}">${statusText}</div>`;
+    item.onclick = () => assignEmp(tourneeId, dateStr, emp.id);
+    list.appendChild(item);
+  });
+
+  document.getElementById('modalAssign').classList.add('open');
+};
+
+async function assignEmp(tourneeId, dateStr, empId) {
+  const key = tourneeId + '_' + dateStr;
+  affectations[key] = empId;
+  saveLocal();
+  await saveAffectationDb(tourneeId, dateStr, empId);
+  closeModal('modalAssign');
+  renderAll();
+}
+
+window.unassignEmp = async function() {
+  const tourneeId = document.getElementById('assignTourneeId').value;
+  const dateStr   = document.getElementById('assignDate').value;
+  const key = tourneeId + '_' + dateStr;
+  delete affectations[key];
+  saveLocal();
+  await saveAffectationDb(tourneeId, dateStr, null);
+  closeModal('modalAssign');
+  renderAll();
+};
+
+window.quickUnassign = async function(tourneeId, dateStr, e) {
+  e.stopPropagation();
+  const key = tourneeId + '_' + dateStr;
+  delete affectations[key];
+  saveLocal();
+  await saveAffectationDb(tourneeId, dateStr, null);
+  renderAll();
+};
+
+// ── AUTO-ASSIGN ────────────────────────────────────────
+window.autoAssign = function() {
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  let assigned = 0, failed = 0;
+
+  // Pour chaque tournée × jour actif, trouver le meilleur employé libre
+  tournees.forEach(t => {
+    days.forEach(d => {
+      const dayNum = d.getDay();
+      if (!(t.jours||[1,2,3,4,5]).includes(dayNum)) return;
+      const dateStr = fmtDate(d);
+      const key = t.id + '_' + dateStr;
+      if (affectations[key]) return; // déjà assigné
+
+      // Candidats : pas déjà en conflit, min heures accumulées
+      const candidates = employees
+        .filter(emp => {
+          if (!['chauffeur','magasinier'].includes(emp.role)) return false;
+          const dayT = getEmpDayShifts(emp.id, dateStr);
+          // Pas d'overlap avec d'autres tournées ce jour
+          if (dayT.some(ot => timesOverlap(t, ot))) return false;
+          if (hasConflict(emp.id, dateStr, t)) return false;
+          return true;
+        })
+        .sort((a,b) => {
+          const ha = getEmpWeekStats(a.id, days).totalH;
+          const hb = getEmpWeekStats(b.id, days).totalH;
+          return ha - hb; // moins d'heures d'abord
+        });
+
+      if (candidates.length > 0) {
+        affectations[key] = candidates[0].id;
+        assigned++;
+      } else {
+        failed++;
+      }
+    });
+  });
+
+  saveLocal();
+  // Save all to DB async
+  Promise.all(Object.entries(affectations).map(([k,empId]) => {
+    const [tid, date] = k.split(/_(?=\d{4}-)/);
+    return saveAffectationDb(tid, date, empId);
+  })).catch(()=>{});
+
+  alert(`⚡ Affectation automatique : ${assigned} tournées assignées${failed>0?`, ${failed} sans candidat disponible`:''}.`);
+  renderAll();
+};
+
+// ── EXPORT ─────────────────────────────────────────────
+window.exportAffectations = function() {
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  let csv = 'Tournée;Zone;Horaire;Durée;Date;Jour;Employé;Rôle;Code;Heures nuit;Majoration 10%\n';
+  tournees.forEach(t => {
+    days.forEach(d => {
+      const dateStr = fmtDate(d);
+      if (!(t.jours||[1,2,3,4,5]).includes(d.getDay())) return;
+      const key = t.id + '_' + dateStr;
+      const emp = employees.find(e=>e.id===affectations[key]);
+      const dur = shiftDuration(t);
+      const nightH = calcNightH(t);
+      csv += `"${t.nom}";"${t.zone||''}";"${t.heure_debut}–${t.heure_fin}";${dur};${dateStr};${DAYS_FR[d.getDay()]};"${emp?emp.prenom+' '+emp.nom:'NON ASSIGNÉ'}";"${emp?ROLE_LABELS[emp.role]||emp.role:''}";"${emp?emp.code_usr||'':''}";${nightH.toFixed(2)};${(nightH*0.1).toFixed(2)}\n`;
+    });
+  });
+  const blob = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download = `tournees_colixo_sem${isoWeek(weekStart)}_${weekStart.getFullYear()}.csv`;
+  a.click();
+};
+
+// ── UTILS ──────────────────────────────────────────────
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+window.closeModal = function(id) { document.getElementById(id).classList.remove('open'); };
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target===o) o.classList.remove('open'); });
+});
+
+init();
+})();
+</script>
+
+<!--
+SQL — Exécutez dans Supabase SQL Editor :
+
+CREATE TABLE IF NOT EXISTS tournees (
+  id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  nom          TEXT NOT NULL,
+  heure_debut  TIME NOT NULL,
+  heure_fin    TIME NOT NULL,
+  zone         TEXT,
+  vehicle      TEXT,
+  jours        INTEGER[] DEFAULT '{1,2,3,4,5}',
+  couleur      TEXT DEFAULT '#4f8ef7',
+  notes        TEXT,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tournee_affectations (
+  id           BIGSERIAL PRIMARY KEY,
+  tournee_id   TEXT NOT NULL REFERENCES tournees(id) ON DELETE CASCADE,
+  date         DATE NOT NULL,
+  employe_id   UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (tournee_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ta_date ON tournee_affectations (date);
+CREATE INDEX IF NOT EXISTS idx_ta_emp  ON tournee_affectations (employe_id);
+-->
+</body>
+</html>
