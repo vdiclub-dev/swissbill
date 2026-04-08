@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-colixo-build="20260437">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Tournées — Colixo</title>
+<!-- colixo-tournees-affect-v2 : affectations = UPDATE puis INSERT uniquement (jamais upsert REST sur tournee_affectations) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script data-cfasync="false" src="../config.js?v=20260435"></script>
+<script data-cfasync="false" src="../config.js?v=20260437"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -354,6 +355,7 @@ select option{background:var(--bg3)}
 <script>
 (async function () {
 'use strict';
+console.info('[Colixo] tournées.html 20260437 — affectations: UPDATE puis INSERT (pas d’upsert sur tournee_affectations)');
 
 // ── CONSTANTES ──────────────────────────────────
 const DAYS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
@@ -531,19 +533,74 @@ async function dbDeleteTournee(id) {
   } catch(e) {}
 }
 
+/** Garantit la ligne dans public.tournees ; renvoie l’UUID exact utilisé (évite mismatch d’id). */
+async function ensureTourneeRowInDb(tourneeId) {
+  const raw = String(tourneeId == null ? '' : tourneeId).trim();
+  const t = tournees.find((x) => String(x.id).trim() === raw);
+  if (!t) throw new Error('Tournée introuvable. Ouvrez « Mes tournées », enregistrez la tournée, puis réessayez.');
+  const tid = String(t.id).trim();
+  const nt = normalizeTourneeRow(t);
+  const row = {
+    id: tid,
+    nom: (nt.nom && String(nt.nom).trim()) || 'Tournée',
+    heure_debut: nt.heure_debut,
+    heure_fin: nt.heure_fin,
+    zone: nt.zone ?? null,
+    vehicle: nt.vehicle ?? null,
+    jours: Array.isArray(nt.jours) && nt.jours.length ? nt.jours : [1, 2, 3, 4, 5],
+    couleur: nt.couleur || '#4f8ef7',
+    notes: nt.notes ?? null
+  };
+  const { error } = await db.from('tournees').upsert([row], { onConflict: 'id' });
+  if (error) throw error;
+  return tid;
+}
+
+/**
+ * Aucun upsert REST (évite ?on_conflict=… et 409). Ordre : UPDATE puis INSERT si 0 ligne ;
+ * si INSERT en conflit (course), UPDATE à nouveau.
+ */
+async function putTourneeAffectation(tid, dateStr, eid) {
+  const row = { tournee_id: tid, date: dateStr, employe_id: eid };
+  const up1 = await db.from('tournee_affectations')
+    .update({ employe_id: eid })
+    .eq('tournee_id', tid)
+    .eq('date', dateStr)
+    .select('tournee_id');
+  if (up1.error) throw up1.error;
+  if (up1.data && up1.data.length > 0) return;
+
+  const ins = await db.from('tournee_affectations').insert([row]);
+  if (!ins.error) return;
+  const msg = String(ins.error.message || '');
+  const code = String(ins.error.code || '');
+  const st = ins.error.status || ins.error.statusCode;
+  const conflict = code === '23505' || st === 409 || /duplicate|unique|already exists|conflict/i.test(msg);
+  if (!conflict) throw ins.error;
+  const up2 = await db.from('tournee_affectations')
+    .update({ employe_id: eid })
+    .eq('tournee_id', tid)
+    .eq('date', dateStr);
+  if (up2.error) throw up2.error;
+}
+
 async function dbSetAffect(tourneeId, date, empId) {
   if (!db || !dbOk) return;
   setSaving('saving');
   try {
     if (empId) {
-      const {error} = await db.from('tournee_affectations')
-        .upsert([{tournee_id: tourneeId, date, employe_id: empId}], {onConflict:'tournee_id,date'});
-      if (error) throw error;
+      const raw = String(tourneeId == null ? '' : tourneeId).trim();
+      const t = tournees.find((x) => String(x.id).trim() === raw);
+      if (!t) throw new Error('Tournée introuvable. Ouvrez « Mes tournées », enregistrez la tournée, puis réessayez.');
+      const tid = await ensureTourneeRowInDb(raw);
+      await putTourneeAffectation(tid, date, String(empId).trim());
     } else {
-      await db.from('tournee_affectations').delete().eq('tournee_id', tourneeId).eq('date', date);
+      await db.from('tournee_affectations').delete().eq('tournee_id', String(tourneeId).trim()).eq('date', date);
     }
     setSaving('saved');
-  } catch(e) { setSaving('error', e.message); }
+  } catch(e) {
+    setSaving('error', (e && e.message) ? e.message : String(e));
+  }
 }
 
 async function dbSetAbsence(empId, date, type) {
@@ -1124,5 +1181,6 @@ function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 init();
 })();
 </script>
+<div id="colixoTourRev" aria-hidden="true" style="position:fixed;bottom:4px;right:10px;font-size:10px;color:var(--text3);opacity:.45;pointer-events:none;z-index:50">Tournées UI 20260437</div>
 </body>
 </html>
