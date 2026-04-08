@@ -209,16 +209,32 @@
 (function () {
     'use strict';
 
-    if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
+    if (!window.SUPABASE_CONFIG) {
         if (new URLSearchParams(location.search).get('logout') === '1') {
             try { localStorage.removeItem('colixo_user'); } catch (e) {}
             var h0 = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
             window.location.replace(h0);
         }
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>❌ config.js manquant</h2><p>Le fichier config.js est introuvable.</p></div>';
+        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>❌ config.js manquant</h2><p>Le fichier config.js est introuvable. Rechargez la page.</p><br><button onclick="location.reload()" style="padding:10px 20px;background:#e8311a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">Recharger</button></div>';
         return;
     }
-    const db = window.SUPABASE_CLIENT;
+
+    // Récupérer ou réinitialiser le client Supabase si le SDK a échoué au chargement
+    var db = window.SUPABASE_CLIENT;
+    if (!db) {
+        if (window.supabase && window.supabase.createClient) {
+            try {
+                db = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.key, {
+                    auth: { persistSession: true, storageKey: 'Colixo-auth', autoRefreshToken: true }
+                });
+                window.SUPABASE_CLIENT = db;
+            } catch (e) { db = null; }
+        }
+    }
+    if (!db) {
+        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>⚠️ Service temporairement indisponible</h2><p>La connexion au service d\'authentification a échoué. Vérifiez votre connexion internet et réessayez.</p><br><button onclick="location.reload()" style="padding:10px 20px;background:#e8311a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">Recharger</button></div>';
+        return;
+    }
 
     if (new URLSearchParams(location.search).get('logout') === '1') {
         (async function () {
