@@ -197,8 +197,11 @@ select option{background:var(--bg3)}
   <div class="alert alert-error" id="alertErr"></div>
 
   <div class="section-header">
-    <div class="section-title">Vos tournées</div>
-    <button class="btn btn-primary" onclick="openModalTournee()">+ Nouvelle tournée</button>
+    <div class="section-title">Vos tournées <span id="tourneeCount" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-danger" onclick="resetToutSupprimer()" title="Vider toutes les tournées et repartir de zéro">🗑 Tout supprimer</button>
+      <button class="btn btn-primary" onclick="openModalTournee()">+ Nouvelle tournée</button>
+    </div>
   </div>
 
   <div class="t-grid" id="tourneeList"></div>
@@ -594,7 +597,9 @@ function renderAll() {
 function renderTournees() {
   const list = document.getElementById('tourneeList');
   const empty = document.getElementById('emptyTournee');
+  const count = document.getElementById('tourneeCount');
   list.innerHTML = '';
+  if (count) count.textContent = tournees.length > 0 ? `(${tournees.length})` : '';
   if (tournees.length === 0) { empty.style.display='block'; return; }
   empty.style.display = 'none';
   tournees.forEach(t => {
@@ -996,6 +1001,23 @@ window.deleteTournee = async function() {
   closeOverlay('overlayTournee');
   renderAll();
   await dbDeleteTournee(id);
+};
+
+window.resetToutSupprimer = async function() {
+  if (!confirm('Supprimer TOUTES les tournées et affectations ?\n\nCette action est irréversible.')) return;
+  // Vider localStorage
+  localStorage.removeItem('cx_tournees');
+  localStorage.removeItem('cx_affect');
+  localStorage.removeItem('cx_absences');
+  tournees = []; affectations = {}; absences = {};
+  // Vider Supabase
+  if (db && dbOk) {
+    try {
+      await db.from('tournee_affectations').delete().neq('id', 0);
+      await db.from('tournees').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch(e) {}
+  }
+  renderAll();
 };
 
 window.pickColor = function(el) {
