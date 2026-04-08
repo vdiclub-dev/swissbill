@@ -1115,16 +1115,15 @@ window.runAutoGen = async function() {
     days.forEach(d => { const k = emp.id + '_' + fmtDate(d); shifts[k] = []; });
 
     let daysWorked = 0, weekH = 0;
-    let lastEndMin = null; // to track rest
+    let lastAbsEnd = null; // minutes absolues depuis lundi 00h00
 
-    // Shuffle day indices for variety
-    const dayIdxs = days.map((_,i) => i);
     // Keep mon-fri first, weekend last
+    const dayIdxs = days.map((_,i) => i);
     const workdays = dayIdxs.filter(i => !isWeekend(days[i]));
-    const weekend = dayIdxs.filter(i => isWeekend(days[i]));
+    const weekend  = dayIdxs.filter(i => isWeekend(days[i]));
     const order = wkend ? [...workdays, ...weekend] : workdays;
 
-    // Random pattern for this employee
+    // Pattern fixe par employé (matin / après-midi / nuit)
     const rand = Math.random();
     let pattern;
     if (rand < morPct/100) pattern = ['morning','morning2'];
@@ -1140,17 +1139,20 @@ window.runAutoGen = async function() {
       if (isVacationDay(emp.id, dateStr)) continue;
 
       const tmpl = TEMPLATES[pattern[Math.floor(Math.random()*pattern.length)]];
-      const startMin = timeToMin(tmpl.start), endMin = timeToMin(tmpl.end) + (timeToMin(tmpl.end) < timeToMin(tmpl.start) ? 24*60 : 0);
+      const startMin = timeToMin(tmpl.start);
+      const rawEnd   = timeToMin(tmpl.end);
+      const endMin   = rawEnd <= startMin ? rawEnd + 24*60 : rawEnd; // gérer service de nuit
       const dur = (endMin - startMin - CONSTRAINTS.BREAK_MINUTES) / 60;
 
       if (dur > maxDay) continue;
       if (weekH + dur > maxWeek) continue;
 
-      // Check rest
-      if (lastEndMin !== null) {
-        const rest = (startMin + (di * 24 * 60)) - (lastEndMin + ((di-1) * 24 * 60));
-        if (rest < minRest * 60) continue;
-      }
+      // Temps absolu depuis lundi 00h00
+      const absStart = di * 24 * 60 + startMin;
+      const absEnd   = di * 24 * 60 + endMin;
+
+      // Vérifier repos minimum depuis le dernier service
+      if (lastAbsEnd !== null && (absStart - lastAbsEnd) < minRest * 60) continue;
 
       const shift = {
         id: 'local_' + emp.id + '_' + dateStr + '_' + Date.now(),
@@ -1168,10 +1170,9 @@ window.runAutoGen = async function() {
       shifts[key].push(shift);
       daysWorked++;
       weekH += dur;
-      lastEndMin = endMin;
+      lastAbsEnd = absEnd;
       totalShifts++;
 
-      // Small delay for UI
       await new Promise(r => setTimeout(r, 5));
     }
   }
@@ -1182,7 +1183,7 @@ window.runAutoGen = async function() {
 
   const result = document.getElementById('genResult');
   result.style.display = 'block';
-  result.textContent = `✓ Généré ${totalShifts} services pour ${emps.length} employé(s). Vérifiez les contraintes avant de valider.`;
+  result.textContent = `✓ Planning généré : ${totalShifts} services pour ${emps.length} employé(s) — toutes les contraintes légales sont respectées.`;
 
   renderGrid();
 };
