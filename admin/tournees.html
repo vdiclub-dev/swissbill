@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="fr" data-colixo-build="20260445">
+<html lang="fr" data-colixo-build="20260446">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>Tournées (20260445) — Colixo</title>
+<title>Tournées (20260446) — Colixo</title>
 <!-- colixo-tournees-affect-v2 : affectations = UPDATE puis INSERT uniquement (jamais upsert REST sur tournee_affectations) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script data-cfasync="false" src="../config.js?v=20260445"></script>
+<script data-cfasync="false" src="../config.js?v=20260446"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -76,21 +76,22 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .td-name{font-weight:700;font-size:12px;color:var(--text)}
 .td-time{font-size:10px;color:var(--text3);margin-top:2px}
 .td-zone{font-size:10px;color:var(--text2);margin-top:2px}
-.day-cell{min-height:70px;cursor:pointer;position:relative;transition:.15s}
+.day-cell{min-height:70px;cursor:pointer;position:relative;transition:.15s;color:var(--text)}
 .day-cell:hover{background:var(--bg3)}
-.day-cell.today{background:rgba(79,142,247,.05)}
-.day-cell.weekend{background:#0a0a14;opacity:.7;cursor:not-allowed}
-.day-cell.inactive{background:#080810;opacity:.4;cursor:not-allowed}
+.day-cell.today{background:rgba(79,142,247,.08)}
+/* Pas d’opacity sur la cellule : elle rend tout le contenu (puces, texte) illisible. */
+.day-cell.inactive{background:#0a0a12;color:var(--text3);cursor:not-allowed}
+.day-cell.weekend-active{background:#12121c;border-color:#32324a}
 
 /* Badge employé dans cellule */
-.emp-chip{border-radius:8px;padding:6px 8px;background:var(--bg3);border:1px solid var(--border2);position:relative;cursor:pointer}
-.ec-name{font-weight:700;font-size:12px}
+.emp-chip{border-radius:8px;padding:6px 8px;background:var(--bg3);border:1px solid var(--border2);position:relative;cursor:pointer;color:var(--text)}
+.ec-name{font-weight:700;font-size:12px;color:var(--text)}
 .ec-info{font-size:10px;color:var(--text2);margin-top:2px}
 .ec-absent{font-size:10px;font-weight:600;margin-top:3px;padding:1px 6px;border-radius:4px;display:inline-block}
 .ec-remove{position:absolute;top:3px;right:4px;font-size:11px;color:var(--red);opacity:0;cursor:pointer;font-weight:700}
 .emp-chip:hover .ec-remove{opacity:1}
 .ec-conflict{border-color:var(--red) !important}
-.cell-empty{color:var(--text3);font-size:11px;text-align:center;padding-top:6px;opacity:.5}
+.cell-empty{color:var(--text2);font-size:11px;text-align:center;padding-top:6px}
 .cell-plus{position:absolute;bottom:3px;right:3px;width:18px;height:18px;border-radius:50%;background:var(--bg4);border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text3);opacity:0}
 .day-cell:hover .cell-plus{opacity:1}
 .th-day-name{font-size:13px;font-weight:700;color:var(--text)}
@@ -180,7 +181,7 @@ select option{background:var(--bg3)}
 </div>
 
 <div id="colixoDeployBanner" style="background:linear-gradient(90deg,rgba(34,197,94,.2),rgba(79,142,247,.15));border-bottom:1px solid var(--border);padding:10px 20px;font-size:12px;color:#86efac;text-align:center;line-height:1.4">
-  <strong>Interface 20260445</strong> — planning : UUID canoniques + affectations rechargées à l’ouverture de l’onglet. Purge cache si besoin.
+  <strong>Interface 20260446</strong> — planning : contraste cellules corrigé (plus d’opacity qui effaçait tout). Purge cache si besoin.
 </div>
 
 <!-- TABS -->
@@ -359,7 +360,7 @@ select option{background:var(--bg3)}
 <script>
 (async function () {
 'use strict';
-console.info('[Colixo] tournées.html 20260445 — clés UUID minuscules + reload planning à l’onglet');
+console.info('[Colixo] tournées.html 20260446 — CSS planning lisible (opacity retirée sur cellules)');
 
 // ── CONSTANTES ──────────────────────────────────
 const DAYS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
@@ -996,10 +997,11 @@ function renderTournees() {
 
 // ── RENDER PLANNING ────────────────────────────────
 function renderPlanning() {
+  try {
   const head = document.getElementById('planHead');
   const body = document.getElementById('planBody');
   const empty = document.getElementById('emptyPlanning');
-  const table = document.querySelector('.planning-table');
+  const table = document.querySelector('#view-planning .planning-table');
   if (!head || !body || !empty || !table) return;
 
   if (tournees.length === 0) {
@@ -1049,7 +1051,8 @@ function renderPlanning() {
       const actif = joursActifs.includes(d.getDay());
 
       const td = document.createElement('td');
-      td.className = 'day-cell' + (isNow?' today':'') + (isWE?' weekend':'') + (!actif?' inactive':'');
+      td.className = 'day-cell' + (isNow ? ' today' : '') + (!actif ? ' inactive' : '');
+      if (actif && isWE) td.classList.add('weekend-active');
 
       if (!actif) {
         td.innerHTML = '<div style="text-align:center;padding-top:12px;color:var(--text3);font-size:16px">—</div>';
@@ -1090,6 +1093,7 @@ function renderPlanning() {
     });
     body.appendChild(tr);
   });
+  } catch (e) { console.error('[Colixo] renderPlanning', e); }
 }
 
 // ── RENDER ABSENCES ────────────────────────────────
@@ -1443,6 +1447,6 @@ function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 init();
 })();
 </script>
-<div id="colixoTourRev" aria-hidden="true" style="position:fixed;bottom:4px;right:10px;font-size:10px;color:var(--text3);opacity:.45;pointer-events:none;z-index:50">Tournées UI 20260445</div>
+<div id="colixoTourRev" aria-hidden="true" style="position:fixed;bottom:4px;right:10px;font-size:10px;color:var(--text3);opacity:.45;pointer-events:none;z-index:50">Tournées UI 20260446</div>
 </body>
 </html>
