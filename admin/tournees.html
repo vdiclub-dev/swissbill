@@ -1,13 +1,11 @@
 <!DOCTYPE html>
-<html lang="fr" data-colixo-build="20260446">
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>Tournées (20260446) — Colixo</title>
-<!-- colixo-tournees-affect-v2 : affectations = UPDATE puis INSERT uniquement (jamais upsert REST sur tournee_affectations) -->
+<title>Tournées — Colixo</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script data-cfasync="false" src="../config.js?v=20260446"></script>
+<script src="../config.js?v=20260408"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -76,22 +74,21 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .td-name{font-weight:700;font-size:12px;color:var(--text)}
 .td-time{font-size:10px;color:var(--text3);margin-top:2px}
 .td-zone{font-size:10px;color:var(--text2);margin-top:2px}
-.day-cell{min-height:70px;cursor:pointer;position:relative;transition:.15s;color:var(--text)}
+.day-cell{min-height:70px;cursor:pointer;position:relative;transition:.15s}
 .day-cell:hover{background:var(--bg3)}
-.day-cell.today{background:rgba(79,142,247,.08)}
-/* Pas d’opacity sur la cellule : elle rend tout le contenu (puces, texte) illisible. */
-.day-cell.inactive{background:#0a0a12;color:var(--text3);cursor:not-allowed}
-.day-cell.weekend-active{background:#12121c;border-color:#32324a}
+.day-cell.today{background:rgba(79,142,247,.05)}
+.day-cell.weekend{background:#0a0a14;opacity:.7;cursor:not-allowed}
+.day-cell.inactive{background:#080810;opacity:.4;cursor:not-allowed}
 
 /* Badge employé dans cellule */
-.emp-chip{border-radius:8px;padding:6px 8px;background:var(--bg3);border:1px solid var(--border2);position:relative;cursor:pointer;color:var(--text)}
-.ec-name{font-weight:700;font-size:12px;color:var(--text)}
+.emp-chip{border-radius:8px;padding:6px 8px;background:var(--bg3);border:1px solid var(--border2);position:relative;cursor:pointer}
+.ec-name{font-weight:700;font-size:12px}
 .ec-info{font-size:10px;color:var(--text2);margin-top:2px}
 .ec-absent{font-size:10px;font-weight:600;margin-top:3px;padding:1px 6px;border-radius:4px;display:inline-block}
 .ec-remove{position:absolute;top:3px;right:4px;font-size:11px;color:var(--red);opacity:0;cursor:pointer;font-weight:700}
 .emp-chip:hover .ec-remove{opacity:1}
 .ec-conflict{border-color:var(--red) !important}
-.cell-empty{color:var(--text2);font-size:11px;text-align:center;padding-top:6px}
+.cell-empty{color:var(--text3);font-size:11px;text-align:center;padding-top:6px;opacity:.5}
 .cell-plus{position:absolute;bottom:3px;right:3px;width:18px;height:18px;border-radius:50%;background:var(--bg4);border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text3);opacity:0}
 .day-cell:hover .cell-plus{opacity:1}
 .th-day-name{font-size:13px;font-weight:700;color:var(--text)}
@@ -180,10 +177,6 @@ select option{background:var(--bg3)}
   </div>
 </div>
 
-<div id="colixoDeployBanner" style="background:linear-gradient(90deg,rgba(34,197,94,.2),rgba(79,142,247,.15));border-bottom:1px solid var(--border);padding:10px 20px;font-size:12px;color:#86efac;text-align:center;line-height:1.4">
-  <strong>Interface 20260446</strong> — planning : contraste cellules corrigé (plus d’opacity qui effaçait tout). Purge cache si besoin.
-</div>
-
 <!-- TABS -->
 <div class="tabs">
   <button class="tab active" id="tab-tournees"    onclick="showTab('tournees')">🗺 Mes tournées</button>
@@ -208,14 +201,11 @@ select option{background:var(--bg3)}
     <button class="btn btn-primary" onclick="openModalTournee()">+ Nouvelle tournée</button>
   </div>
 
-  <!-- #tourneeList = cartes uniquement ; #emptyTournee en frère (pas enfant) pour éviter tout innerHTML qui le détruit -->
-  <div class="t-grid">
-    <div class="t-grid" id="tourneeList"></div>
-    <div class="empty-state" id="emptyTournee">
-      <div class="ei">🗺</div>
-      <p>Aucune tournée. Créez votre première tournée pour commencer.</p>
-      <button class="btn btn-primary" onclick="openModalTournee()">+ Créer une tournée</button>
-    </div>
+  <div class="t-grid" id="tourneeList"></div>
+  <div class="empty-state" id="emptyTournee" style="display:none">
+    <div class="ei">🗺</div>
+    <p>Aucune tournée. Créez votre première tournée pour commencer.</p>
+    <button class="btn btn-primary" onclick="openModalTournee()">+ Créer une tournée</button>
   </div>
 </div>
 
@@ -360,7 +350,6 @@ select option{background:var(--bg3)}
 <script>
 (async function () {
 'use strict';
-console.info('[Colixo] tournées.html 20260446 — CSS planning lisible (opacity retirée sur cellules)');
 
 // ── CONSTANTES ──────────────────────────────────
 const DAYS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
@@ -372,123 +361,9 @@ const ABS_LABELS = {maladie:'🤒 Maladie',vacances:'🏖 Vacances',absence:'�
 const ABS_CSS   = {maladie:'maladie',vacances:'vacances',absence:'absence',formation:'formation'};
 const MAX_WEEK_H = 48;
 
-/** UUID v4 (évite 400 PostgREST « invalid input syntax for type uuid » sur id). */
-function isValidUuid(s) {
-  if (s == null || typeof s !== 'string') return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
-}
-/** Anciennes données locales : id non-UUID → nouveau UUID + clés d’affectations remappées. */
-function migrateInvalidTourneeIds() {
-  const remap = new Map();
-  for (const t of tournees) {
-    if (!t || t.id == null) continue;
-    const sid = String(t.id).trim();
-    if (sid && !isValidUuid(sid)) {
-      const nid = crypto.randomUUID();
-      remap.set(sid, nid);
-      t.id = nid;
-    }
-  }
-  if (remap.size === 0) return false;
-  const next = {};
-  for (const k of Object.keys(affectations)) {
-    const p = k.indexOf('|');
-    if (p <= 0) continue;
-    const tid = k.slice(0, p);
-    const rest = k.slice(p + 1);
-    const ntid = remap.get(tid) || tid;
-    next[ntid + '|' + rest] = affectations[k];
-  }
-  affectations = next;
-  return true;
-}
-function pgRestErrorMessage(err) {
-  if (!err) return 'Erreur inconnue';
-  const m = err.message || String(err);
-  const d = err.details || err.description;
-  const h = err.hint;
-  return [m, d && d !== m ? d : '', h ? 'Astuce : ' + h : ''].filter(Boolean).join(' — ');
-}
-
-/** PostgREST renvoie les UUID en minuscules ; les clés d’objets JS sont sensibles à la casse. */
-function canonId(s) {
-  return String(s == null ? '' : s).trim().toLowerCase();
-}
-/** Clé stable pour affectations[tournee|date]. */
-function affKey(tourneeId, dateStr) {
-  return canonId(tourneeId) + '|' + String(dateStr == null ? '' : dateStr).trim();
-}
-/** Réécrit cx_affect / cx_absences après anciennes versions (casse UUID). */
-function migrateCanonStorageKeys() {
-  let changed = false;
-  const nextA = {};
-  for (const k of Object.keys(affectations)) {
-    const p = k.indexOf('|');
-    if (p <= 0) {
-      nextA[k] = affectations[k];
-      continue;
-    }
-    const nk = canonId(k.slice(0, p)) + '|' + k.slice(p + 1);
-    let v = affectations[k];
-    if (typeof v === 'string') v = canonId(v);
-    if (nk !== k) changed = true;
-    nextA[nk] = v;
-  }
-  affectations = nextA;
-  const nextAbs = {};
-  for (const k of Object.keys(absences)) {
-    const p = k.indexOf('|');
-    if (p <= 0) {
-      nextAbs[k] = absences[k];
-      continue;
-    }
-    const nk = canonId(k.slice(0, p)) + '|' + k.slice(p + 1);
-    if (nk !== k) changed = true;
-    nextAbs[nk] = absences[k];
-  }
-  absences = nextAbs;
-  for (const t of tournees) {
-    if (!t || t.id == null) continue;
-    const c = canonId(t.id);
-    if (c && c !== String(t.id).trim()) {
-      t.id = c;
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-/** Supabase : colonne numero_tournee NOT NULL — attribue un entier unique si manquant. */
-function ensureTourneesNumeros() {
-  if (!Array.isArray(tournees) || tournees.length === 0) return false;
-  const taken = new Set();
-  let maxN = 0;
-  for (const x of tournees) {
-    if (!x) continue;
-    const n = parseInt(x.numero_tournee, 10);
-    if (!isNaN(n) && n >= 1) {
-      taken.add(n);
-      if (n > maxN) maxN = n;
-    }
-  }
-  let changed = false;
-  for (const x of tournees) {
-    if (!x) continue;
-    const n = parseInt(x.numero_tournee, 10);
-    if (!isNaN(n) && n >= 1) continue;
-    let next = maxN + 1;
-    while (taken.has(next)) next++;
-    taken.add(next);
-    maxN = Math.max(maxN, next);
-    x.numero_tournee = next;
-    changed = true;
-  }
-  return changed;
-}
-
 // ── ÉTAT ────────────────────────────────────────
 const db  = window.SUPABASE_CLIENT;
-let tournees     = [];   // [{id, numero_tournee, nom, heure_debut, heure_fin, zone, vehicle, jours, couleur, notes}]
+let tournees     = [];   // [{id, nom, heure_debut, heure_fin, zone, vehicle, jours, couleur, notes}]
 let affectations = {};   // { 'tourneeId|date' : empId }
 let absences     = {};   // { 'empId|date' : 'maladie'|... }
 let employees    = [];
@@ -498,8 +373,8 @@ let currentTab   = 'tournees';
 
 // ── INIT ─────────────────────────────────────────
 async function init() {
-  // Auth check (sessionStorage = connexion code, comme dispatch ; localStorage = compat)
-  const raw = sessionStorage.getItem('colixo_user') || localStorage.getItem('colixo_user');
+  // Auth check
+  const raw = localStorage.getItem('colixo_user');
   let cu = null; try { cu = JSON.parse(raw || 'null'); } catch(e){}
   let session = null;
   if (db) { try { const r = await db.auth.getSession(); session = r.data?.session; } catch(e){} }
@@ -509,7 +384,6 @@ async function init() {
 
   document.getElementById('btnLogout').addEventListener('click', async () => {
     if (db) try { await db.auth.signOut(); } catch(e) {}
-    try { sessionStorage.removeItem('colixo_user'); } catch(e) {}
     localStorage.removeItem('colixo_user');
     location.href = '../login/index.html';
   });
@@ -521,9 +395,6 @@ async function init() {
 
   // Charger données
   loadLocal();
-  if (migrateCanonStorageKeys()) saveLocal();
-  if (migrateInvalidTourneeIds()) saveLocal();
-  if (ensureTourneesNumeros()) saveLocal();
   await loadEmployees();
   await loadFromDb();
   saveLocal();
@@ -545,139 +416,13 @@ function saveLocal() {
 }
 
 // ── SUPABASE ─────────────────────────────────────
-/** Postgres TIME renvoie souvent "HH:MM:SS" — le UI attend "HH:MM" pour les inputs et t2m(). */
-function normalizeTourneeRow(t) {
-  const fix = (v) => {
-    if (v == null || v === '') return '07:00';
-    const s0 = String(v).trim();
-    const iso = s0.match(/[T\s](\d{1,2}):(\d{2})(?::\d{2})?/);
-    if (iso) {
-      const h = Math.min(23, Math.max(0, parseInt(iso[1], 10) || 0));
-      const m = Math.min(59, Math.max(0, parseInt(iso[2], 10) || 0));
-      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-    }
-    const s = s0;
-    const p = s.split(':');
-    if (p.length >= 2) {
-      const h = String(Math.min(23, Math.max(0, parseInt(p[0], 10) || 0))).padStart(2, '0');
-      const m = String(Math.min(59, Math.max(0, parseInt(p[1], 10) || 0))).padStart(2, '0');
-      return h + ':' + m;
-    }
-    return s.length >= 5 ? s.slice(0, 5) : '07:00';
-  };
-  const out = { ...t, heure_debut: fix(t.heure_debut), heure_fin: fix(t.heure_fin) };
-  out.jours = joursToPg(t.jours);
-  const pn = parseInt(t.numero_tournee, 10);
-  if (!isNaN(pn) && pn >= 1) out.numero_tournee = pn;
-  if (t.id != null && t.id !== '') out.id = canonId(t.id);
-  return out;
-}
-/** TIME PostgreSQL via PostgREST : préférer HH:MM:SS (évite 400 sur upsert). */
-function timeToPg(hm) {
-  const nt = normalizeTourneeRow({ heure_debut: hm, heure_fin: '18:00' });
-  const s = nt.heure_debut;
-  if (/^\d{2}:\d{2}$/.test(s)) return s + ':00';
-  if (/^\d{2}:\d{2}:\d{2}/.test(s)) return s.slice(0, 8);
-  return '07:00:00';
-}
-/** jours : integer[] propre (localStorage peut corrompre le type). */
-function joursToPg(j) {
-  let a = j;
-  if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = null; } }
-  if (!Array.isArray(a)) return [1, 2, 3, 4, 5];
-  const arr = a.map((x) => parseInt(x, 10)).filter((n) => !isNaN(n) && n >= 0 && n <= 7);
-  return arr.length ? arr : [1, 2, 3, 4, 5];
-}
-function tourneeRowForDb(t) {
-  const nt = normalizeTourneeRow(t);
-  const num = parseInt(nt.numero_tournee, 10);
-  const numero_tournee = !isNaN(num) && num >= 1 ? num : 1;
-  return {
-    id: nt.id != null && nt.id !== '' ? canonId(nt.id) : '',
-    numero_tournee,
-    nom: (nt.nom && String(nt.nom).trim()) || 'Tournée',
-    heure_debut: timeToPg(nt.heure_debut),
-    heure_fin: timeToPg(nt.heure_fin),
-    zone: nt.zone == null || String(nt.zone).trim() === '' ? null : String(nt.zone).trim(),
-    vehicle: nt.vehicle == null || String(nt.vehicle).trim() === '' ? null : String(nt.vehicle).trim(),
-    jours: joursToPg(nt.jours).map((n) => n | 0),
-    couleur: (nt.couleur && String(nt.couleur).trim()) || '#4f8ef7',
-    notes: nt.notes == null || String(nt.notes).trim() === '' ? null : String(nt.notes).trim()
-  };
-}
-/** Pas d’upsert REST sur tournees (400 fréquents) : UPDATE puis INSERT. */
-async function persistTourneeRow(row) {
-  const id = row.id;
-  if (!isValidUuid(String(id))) {
-    throw new Error('ID tournée invalide (UUID attendu). Enregistrez à nouveau la tournée depuis le formulaire.');
-  }
-  const patch = { numero_tournee: row.numero_tournee, nom: row.nom, heure_debut: row.heure_debut, heure_fin: row.heure_fin, zone: row.zone, vehicle: row.vehicle, jours: row.jours, couleur: row.couleur, notes: row.notes };
-  const up = await db.from('tournees').update(patch).eq('id', id).select('id');
-  if (up.error) {
-    console.error('[Colixo] tournees UPDATE', up.error);
-    throw new Error(pgRestErrorMessage(up.error));
-  }
-  if (up.data && up.data.length > 0) return;
-  const ins = await db.from('tournees').insert([row]);
-  if (!ins.error) return;
-  console.error('[Colixo] tournees INSERT', ins.error, ins.error?.details, ins.error?.hint);
-  const msg = String(ins.error.message || '');
-  const code = String(ins.error.code || '');
-  const st = ins.error.status || ins.error.statusCode;
-  const conflict = code === '23505' || st === 409 || /duplicate|unique|already exists|conflict/i.test(msg);
-  if (conflict) {
-    const up2 = await db.from('tournees').update(patch).eq('id', id);
-    if (up2.error) {
-      console.error('[Colixo] tournees UPDATE après conflit', up2.error);
-      throw new Error(pgRestErrorMessage(up2.error));
-    }
-    return;
-  }
-  throw new Error(pgRestErrorMessage(ins.error));
-}
-/** Clé UUID stable (évite doublons local/API si typage différent). */
-function tourneeKey(t) {
-  if (!t || t.id == null || t.id === '') return '';
-  return canonId(t.id);
-}
-
-/** Évite d’écraser le cache local quand le SELECT renvoie [] (RLS, pas encore sync, etc.). */
-function mergeTourneesLocalRemote(local, remote) {
-  const byId = new Map();
-  for (const t of local) {
-    const kid = tourneeKey(t);
-    if (!kid) continue;
-    byId.set(kid, normalizeTourneeRow({ ...t, id: kid }));
-  }
-  for (const t of remote) {
-    const kid = tourneeKey(t);
-    if (!kid) continue;
-    const prev = byId.get(kid);
-    byId.set(kid, normalizeTourneeRow({ ...(prev || {}), ...t, id: kid }));
-  }
-  const arr = Array.from(byId.values());
-  arr.sort((a, b) => {
-    const na = normalizeTourneeRow(a), nb = normalizeTourneeRow(b);
-    return t2m(na.heure_debut) - t2m(nb.heure_debut);
-  });
-  return arr;
-}
-
 async function loadFromDb() {
   if (!db) return;
   try {
     // Tournées
     const r1 = await db.from('tournees').select('*').order('heure_debut');
     if (r1.error) { if (r1.error.code === '42P01') { showAlert('alertDb'); return; } throw r1.error; }
-    const rawRows = r1.data || [];
-    const remote = rawRows.map(normalizeTourneeRow);
-    let merged = mergeTourneesLocalRemote(tournees, remote);
-    if (rawRows.length > 0 && merged.length === 0) {
-      console.warn('[Colixo] fusion tournées vide malgré l’API — repli sur les lignes distantes');
-      merged = rawRows.map(normalizeTourneeRow).filter((x) => tourneeKey(x));
-    }
-    tournees = merged;
-    if (ensureTourneesNumeros()) saveLocal();
+    tournees = r1.data || [];
     dbOk = true;
     hideAlert('alertDb');
 
@@ -685,22 +430,13 @@ async function loadFromDb() {
     const d0 = fmt(weekStart), d1 = fmt(addDays(weekStart,6));
     const r2 = await db.from('tournee_affectations').select('*').gte('date',d0).lte('date',d1);
     if (!r2.error && r2.data) {
-      r2.data.forEach((a) => {
-        const dk = dateKeyFromApi(a.date);
-        const tid = String(a.tournee_id != null ? a.tournee_id : '').trim();
-        const eid = a.employe_id != null ? String(a.employe_id).trim() : '';
-        if (dk && tid && eid) affectations[affKey(tid, dk)] = canonId(eid);
-      });
+      r2.data.forEach(a => { affectations[a.tournee_id+'|'+a.date] = a.employe_id; });
     }
 
     // Absences semaine courante
     const r3 = await db.from('employe_absences').select('*').gte('date',d0).lte('date',d1);
     if (!r3.error && r3.data) {
-      r3.data.forEach((a) => {
-        const dk = dateKeyFromApi(a.date);
-        const uid = String(a.employe_id != null ? a.employe_id : '').trim();
-        if (dk && uid && a.type_absence) absences[affKey(uid, dk)] = a.type_absence;
-      });
+      r3.data.forEach(a => { absences[a.employe_id+'|'+a.date] = a.type_absence; });
     }
   } catch(e) { showError('Erreur Supabase : ' + e.message); }
 }
@@ -711,20 +447,11 @@ async function loadAffectSemaine() {
   try {
     const r = await db.from('tournee_affectations').select('*').gte('date',d0).lte('date',d1);
     if (!r.error && r.data) {
-      r.data.forEach((a) => {
-        const dk = dateKeyFromApi(a.date);
-        const tid = String(a.tournee_id != null ? a.tournee_id : '').trim();
-        const eid = a.employe_id != null ? String(a.employe_id).trim() : '';
-        if (dk && tid && eid) affectations[affKey(tid, dk)] = canonId(eid);
-      });
+      r.data.forEach(a => { affectations[a.tournee_id+'|'+a.date] = a.employe_id; });
     }
     const r2 = await db.from('employe_absences').select('*').gte('date',d0).lte('date',d1);
     if (!r2.error && r2.data) {
-      r2.data.forEach((a) => {
-        const dk = dateKeyFromApi(a.date);
-        const uid = String(a.employe_id != null ? a.employe_id : '').trim();
-        if (dk && uid && a.type_absence) absences[affKey(uid, dk)] = a.type_absence;
-      });
+      r2.data.forEach(a => { absences[a.employe_id+'|'+a.date] = a.type_absence; });
     }
   } catch(e) {}
 }
@@ -735,6 +462,7 @@ async function loadEmployees() {
     const r = await db.from('utilisateurs')
       .select('id,nom,prenom,role,code_usr,actif,taux_travail,type_contrat')
       .eq('actif', true)
+      .in('role',['chauffeur','magasinier','admin','super_admin'])
       .order('role').order('nom');
     if (r.error) throw r.error;
     employees = r.data || [];
@@ -746,63 +474,15 @@ async function dbSaveTournee(t) {
   if (!db || !dbOk) return;
   setSaving('saving');
   try {
-    ensureTourneesNumeros();
-    const tRow = tournees.find((x) => x && canonId(x.id) === canonId(t.id)) || t;
-    await persistTourneeRow(tourneeRowForDb(tRow));
-    await loadFromDb();
-    saveLocal();
-    renderAll();
+    const {error} = await db.from('tournees').upsert([t], {onConflict:'id'});
+    if (error) throw error;
     setSaving('saved');
   } catch(e) { setSaving('error', e.message); }
 }
 
 async function dbDeleteTournee(id) {
   if (!db || !dbOk) return;
-  try {
-    await db.from('tournees').delete().eq('id', id);
-    await loadFromDb();
-    saveLocal();
-    renderAll();
-  } catch(e) {}
-}
-
-/** Garantit la ligne dans public.tournees ; renvoie l’UUID exact utilisé (évite mismatch d’id). */
-async function ensureTourneeRowInDb(tourneeId) {
-  const raw = canonId(tourneeId);
-  const t = tournees.find((x) => canonId(x.id) === raw);
-  if (!t) throw new Error('Tournée introuvable. Ouvrez « Mes tournées », enregistrez la tournée, puis réessayez.');
-  if (ensureTourneesNumeros()) saveLocal();
-  const row = tourneeRowForDb(t);
-  await persistTourneeRow(row);
-  return row.id;
-}
-
-/**
- * Aucun upsert REST (évite ?on_conflict=… et 409). Ordre : UPDATE puis INSERT si 0 ligne ;
- * si INSERT en conflit (course), UPDATE à nouveau.
- */
-async function putTourneeAffectation(tid, dateStr, eid) {
-  const row = { tournee_id: tid, date: dateStr, employe_id: eid };
-  const up1 = await db.from('tournee_affectations')
-    .update({ employe_id: eid })
-    .eq('tournee_id', tid)
-    .eq('date', dateStr)
-    .select('tournee_id');
-  if (up1.error) throw up1.error;
-  if (up1.data && up1.data.length > 0) return;
-
-  const ins = await db.from('tournee_affectations').insert([row]);
-  if (!ins.error) return;
-  const msg = String(ins.error.message || '');
-  const code = String(ins.error.code || '');
-  const st = ins.error.status || ins.error.statusCode;
-  const conflict = code === '23505' || st === 409 || /duplicate|unique|already exists|conflict/i.test(msg);
-  if (!conflict) throw ins.error;
-  const up2 = await db.from('tournee_affectations')
-    .update({ employe_id: eid })
-    .eq('tournee_id', tid)
-    .eq('date', dateStr);
-  if (up2.error) throw up2.error;
+  try { await db.from('tournees').delete().eq('id', id); } catch(e) {}
 }
 
 async function dbSetAffect(tourneeId, date, empId) {
@@ -810,18 +490,14 @@ async function dbSetAffect(tourneeId, date, empId) {
   setSaving('saving');
   try {
     if (empId) {
-      const raw = canonId(tourneeId);
-      const t = tournees.find((x) => canonId(x.id) === raw);
-      if (!t) throw new Error('Tournée introuvable. Ouvrez « Mes tournées », enregistrez la tournée, puis réessayez.');
-      const tid = await ensureTourneeRowInDb(raw);
-      await putTourneeAffectation(tid, date, canonId(empId));
+      const {error} = await db.from('tournee_affectations')
+        .upsert([{tournee_id: tourneeId, date, employe_id: empId}], {onConflict:'tournee_id,date'});
+      if (error) throw error;
     } else {
-      await db.from('tournee_affectations').delete().eq('tournee_id', canonId(tourneeId)).eq('date', date);
+      await db.from('tournee_affectations').delete().eq('tournee_id', tourneeId).eq('date', date);
     }
     setSaving('saved');
-  } catch(e) {
-    setSaving('error', (e && e.message) ? e.message : String(e));
-  }
+  } catch(e) { setSaving('error', e.message); }
 }
 
 async function dbSetAbsence(empId, date, type) {
@@ -851,24 +527,7 @@ function getMonday(d) {
   dt.setDate(dt.getDate()+diff); return dt;
 }
 function addDays(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
-/** Calendrier local YYYY-MM-DD (ne pas utiliser toISOString : décalage UTC → clés affectations / planning faux). */
-function fmt(d) {
-  const x = d instanceof Date ? d : new Date(d);
-  if (isNaN(x.getTime())) return '1970-01-01';
-  const y = x.getFullYear();
-  const m = String(x.getMonth() + 1).padStart(2, '0');
-  const day = String(x.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-/** Dates Postgres (date / timestamptz) → même format que fmt() pour les clés. */
-function dateKeyFromApi(v) {
-  if (v == null || v === '') return '';
-  const s = String(v).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  const t = Date.parse(s);
-  return isNaN(t) ? '' : fmt(new Date(t));
-}
+function fmt(d) { return d.toISOString().slice(0,10); }
 function isoWeek(d) {
   const dt=new Date(d); dt.setHours(0,0,0,0);
   dt.setDate(dt.getDate()+3-(dt.getDay()+6)%7);
@@ -912,20 +571,12 @@ function renderWeekLabel() {
 }
 
 // ── TABS ───────────────────────────────────────────
-window.showTab = async function(tab) {
+window.showTab = function(tab) {
   currentTab = tab;
   ['tournees','planning','absences'].forEach(t => {
-    const v = document.getElementById('view-'+t);
-    const tb = document.getElementById('tab-'+t);
-    if (v) v.style.display = t===tab ? '' : 'none';
-    if (tb) tb.classList.toggle('active', t===tab);
+    document.getElementById('view-'+t).style.display = t===tab ? '' : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
   });
-  if (tab === 'planning' && db && dbOk) {
-    try {
-      await loadAffectSemaine();
-      saveLocal();
-    } catch (e) { /* ignore */ }
-  }
   renderAll();
 };
 
@@ -938,40 +589,16 @@ function renderAll() {
 }
 
 // ── RENDER TOURNÉES ────────────────────────────────
-/** Après list.innerHTML = '', #emptyTournee peut avoir disparu (ancien HTML ou cache). Toujours retourner un nœud valide. */
-function ensureEmptyTourneeEl(list) {
-  if (!list) return null;
-  let el = document.getElementById('emptyTournee');
-  if (el) return el;
-  el = document.createElement('div');
-  el.className = 'empty-state';
-  el.id = 'emptyTournee';
-  el.innerHTML = '<div class="ei">🗺</div><p>Aucune tournée. Créez votre première tournée pour commencer.</p><button class="btn btn-primary" onclick="openModalTournee()">+ Créer une tournée</button>';
-  try {
-    if (list.parentNode) list.parentNode.insertBefore(el, list.nextSibling);
-    else list.appendChild(el);
-  } catch (e) {
-    try { list.appendChild(el); } catch (e2) { /* ignore */ }
-  }
-  return document.getElementById('emptyTournee') || el;
-}
-
 function renderTournees() {
-  try {
   const list = document.getElementById('tourneeList');
-  if (!list) return;
+  const empty = document.getElementById('emptyTournee');
   list.innerHTML = '';
-  const empty = ensureEmptyTourneeEl(list);
-  if (!empty) return;
-  if (tournees.length === 0) {
-    if (empty.style) empty.style.display = 'block';
-    return;
-  }
-  if (empty.style) empty.style.display = 'none';
+  if (tournees.length === 0) { empty.style.display='block'; return; }
+  empty.style.display = 'none';
   tournees.forEach(t => {
     const dur = shiftDurH(t).toFixed(1);
     const nH  = nightH(t);
-    const jours = joursToPg(t.jours).map((j) => DAYS[j]).join(', ');
+    const jours = (t.jours||[1,2,3,4,5]).map(j=>DAYS[j]).join(', ');
     const div = document.createElement('div'); div.className='t-card';
     div.innerHTML = `
       <div class="t-dot" style="background:${t.couleur||'#4f8ef7'}"></div>
@@ -992,17 +619,14 @@ function renderTournees() {
       </div>`;
     list.appendChild(div);
   });
-  } catch (e) { console.error('[Colixo] renderTournees', e); }
 }
 
 // ── RENDER PLANNING ────────────────────────────────
 function renderPlanning() {
-  try {
   const head = document.getElementById('planHead');
   const body = document.getElementById('planBody');
   const empty = document.getElementById('emptyPlanning');
-  const table = document.querySelector('#view-planning .planning-table');
-  if (!head || !body || !empty || !table) return;
+  const table = document.querySelector('.planning-table');
 
   if (tournees.length === 0) {
     table.style.display = 'none'; empty.style.display = 'block'; return;
@@ -1047,12 +671,11 @@ function renderPlanning() {
       const dateStr = fmt(d);
       const isWE = d.getDay()===0||d.getDay()===6;
       const isNow = dateStr===fmt(new Date());
-      const joursActifs = joursToPg(t.jours);
+      const joursActifs = t.jours||[1,2,3,4,5];
       const actif = joursActifs.includes(d.getDay());
 
       const td = document.createElement('td');
-      td.className = 'day-cell' + (isNow ? ' today' : '') + (!actif ? ' inactive' : '');
-      if (actif && isWE) td.classList.add('weekend-active');
+      td.className = 'day-cell' + (isNow?' today':'') + (isWE?' weekend':'') + (!actif?' inactive':'');
 
       if (!actif) {
         td.innerHTML = '<div style="text-align:center;padding-top:12px;color:var(--text3);font-size:16px">—</div>';
@@ -1060,12 +683,12 @@ function renderPlanning() {
         tr.appendChild(td); return;
       }
 
-      const key = affKey(t.id, dateStr);
+      const key = t.id+'|'+dateStr;
       const empId = affectations[key];
-      const emp = empId ? employees.find((e) => canonId(e.id) === canonId(empId)) : null;
+      const emp = empId ? employees.find(e=>e.id===empId) : null;
 
       if (emp) {
-        const absType = absences[affKey(emp.id, dateStr)] || '';
+        const absType = absences[emp.id+'|'+dateStr] || '';
         const color = ROLE_COLORS[emp.role]||'#888';
         const wH = empWeekH(emp.id, days);
         const mH = maxH(emp);
@@ -1078,13 +701,6 @@ function renderPlanning() {
             ${conflict ? '<div style="font-size:10px;color:var(--red);margin-top:2px">⚠ max dépassé</div>' : ''}
             <span class="ec-remove" onclick="removeAffect('${t.id}','${dateStr}',event)">✕</span>
           </div>`;
-      } else if (empId) {
-        const short = canonId(empId).replace(/-/g, '').slice(0, 8);
-        td.innerHTML = `
-          <div class="emp-chip" style="border-color:var(--orange)" onclick="openAssign('${t.id}','${dateStr}',event)" title="ID ${esc(canonId(empId))}">
-            <div class="ec-name" style="color:var(--orange)">Assigné (liste restreinte)</div>
-            <div class="ec-info">${short}… — élargir le rôle dans la table utilisateurs ou réassigner</div>
-          </div>`;
       } else {
         td.innerHTML = '<div class="cell-empty">Libre</div><div class="cell-plus">+</div>';
         td.onclick = () => openAssign(t.id, dateStr);
@@ -1093,7 +709,6 @@ function renderPlanning() {
     });
     body.appendChild(tr);
   });
-  } catch (e) { console.error('[Colixo] renderPlanning', e); }
 }
 
 // ── RENDER ABSENCES ────────────────────────────────
@@ -1106,18 +721,17 @@ function renderAbsences() {
   visEmp.forEach(emp => {
     const color = ROLE_COLORS[emp.role]||'#888';
     const init = (emp.prenom[0]||'')+(emp.nom[0]||'');
-    const nbAbs = days.filter((d) => absences[affKey(emp.id, fmt(d))]).length;
+    const nbAbs = days.filter(d=>absences[emp.id+'|'+fmt(d)]).length;
     const card = document.createElement('div'); card.className='abs-card';
 
     let daysHtml = '';
     days.forEach(d => {
       const dateStr = fmt(d);
-      const key = affKey(emp.id, dateStr);
-      const type = absences[key] || '';
+      const key = emp.id+'|'+dateStr;
+      const type = absences[key]||'';
       const isWE = d.getDay()===0||d.getDay()===6;
       // Avertissement si absent mais assigné
-      const assigned = tournees.some((t) =>
-        joursToPg(t.jours).includes(d.getDay()) && affectations[affKey(t.id, dateStr)] === canonId(emp.id));
+      const assigned = tournees.some(t=>(t.jours||[1,2,3,4,5]).includes(d.getDay()) && affectations[t.id+'|'+dateStr]===emp.id);
       daysHtml += `
         <div class="abs-day">
           <span class="abs-day-label">${DAYS[d.getDay()]}</span>
@@ -1145,9 +759,8 @@ function renderAbsences() {
 function updateAbsBadge() {
   const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
   let n=0;
-  employees.forEach((e) => days.forEach((d) => { if (absences[affKey(e.id, fmt(d))]) n++; }));
+  employees.forEach(e=>days.forEach(d=>{ if(absences[e.id+'|'+fmt(d)]) n++; }));
   const badge = document.getElementById('absCount');
-  if (!badge || !badge.style) return;
   badge.textContent=n; badge.style.display=n>0?'':'none';
 }
 
@@ -1156,7 +769,7 @@ function empWeekH(empId, days) {
   let h=0;
   days.forEach(d => {
     tournees.forEach(t => {
-      if (affectations[affKey(t.id, fmt(d))] === canonId(empId)) h += shiftDurH(t);
+      if (affectations[t.id+'|'+fmt(d)]===empId) h+=shiftDurH(t);
     });
   });
   return h;
@@ -1165,7 +778,7 @@ function empWeekH(empId, days) {
 // ── ACTIONS AFFECTATIONS ───────────────────────────
 window.openAssign = function(tourneeId, dateStr, e) {
   if (e) e.stopPropagation();
-  const t = tournees.find((x) => canonId(x.id) === canonId(tourneeId));
+  const t = tournees.find(x=>x.id===tourneeId);
   if (!t) return;
   document.getElementById('aTourneeId').value = tourneeId;
   document.getElementById('aDate').value = dateStr;
@@ -1175,7 +788,7 @@ window.openAssign = function(tourneeId, dateStr, e) {
   document.getElementById('assignInfo').innerHTML =
     `<strong>${t.heure_debut} → ${t.heure_fin}</strong> · ${dur}h${nH>0?` · 🌙 <span style="color:var(--purple)">${nH.toFixed(1)}h nuit</span>`:''}${t.zone?` · 📍${esc(t.zone)}`:''}`;
 
-  const currentEmpId = affectations[affKey(tourneeId, dateStr)];
+  const currentEmpId = affectations[tourneeId+'|'+dateStr];
   document.getElementById('btnUnassign').style.display = currentEmpId ? '' : 'none';
 
   const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
@@ -1189,8 +802,8 @@ window.openAssign = function(tourneeId, dateStr, e) {
   function empItem(emp) {
     const color   = ROLE_COLORS[emp.role]||'#888';
     const init    = (emp.prenom[0]||'')+(emp.nom[0]||'');
-    const isSelected = canonId(currentEmpId) === canonId(emp.id);
-    const absType = absences[affKey(emp.id, dateStr)] || '';
+    const isSelected = currentEmpId === emp.id;
+    const absType = absences[emp.id+'|'+dateStr]||'';
     const wH      = empWeekH(emp.id, days);
     const mH      = maxH(emp);
     const newWH   = wH + shiftDurH(t);
@@ -1231,7 +844,7 @@ window.openAssign = function(tourneeId, dateStr, e) {
 };
 
 async function assignEmp(tourneeId, dateStr, empId) {
-  affectations[affKey(tourneeId, dateStr)] = canonId(empId);
+  affectations[tourneeId+'|'+dateStr] = empId;
   saveLocal();
   closeOverlay('overlayAssign');
   renderAll();
@@ -1240,7 +853,7 @@ async function assignEmp(tourneeId, dateStr, empId) {
 
 window.removeAffect = async function(tourneeId, dateStr, e) {
   if (e) e.stopPropagation();
-  delete affectations[affKey(tourneeId, dateStr)];
+  delete affectations[tourneeId+'|'+dateStr];
   saveLocal();
   renderAll();
   await dbSetAffect(tourneeId, dateStr, null);
@@ -1249,7 +862,7 @@ window.removeAffect = async function(tourneeId, dateStr, e) {
 window.unassign = async function() {
   const tid = document.getElementById('aTourneeId').value;
   const date = document.getElementById('aDate').value;
-  delete affectations[affKey(tid, date)];
+  delete affectations[tid+'|'+date];
   saveLocal();
   closeOverlay('overlayAssign');
   renderAll();
@@ -1263,22 +876,19 @@ window.autoAssign = function() {
   tournees.forEach(t => {
     days.forEach(d => {
       const dayNum=d.getDay(), dateStr=fmt(d);
-      if (!joursToPg(t.jours).includes(dayNum)) return;
-      const key = affKey(t.id, dateStr);
+      if (!(t.jours||[1,2,3,4,5]).includes(dayNum)) return;
+      const key=t.id+'|'+dateStr;
       if (affectations[key]) return; // déjà assigné
 
       // Candidats disponibles
       const candidates = employees
         .filter(emp => {
           if (!['chauffeur','magasinier'].includes(emp.role)) return false;
-          if (absences[affKey(emp.id, dateStr)]) return false; // absent
+          if (absences[emp.id+'|'+dateStr]) return false; // absent
           const wH = empWeekH(emp.id, days);
           if (wH + shiftDurH(t) > maxH(emp)) return false; // dépasse quota
           // Pas d'overlap avec autre tournée ce jour
-          const alreadyOnDay = tournees.some((ot) =>
-            canonId(ot.id) !== canonId(t.id) &&
-            affectations[affKey(ot.id, dateStr)] === canonId(emp.id) &&
-            timesOverlap(t, ot));
+          const alreadyOnDay = tournees.some(ot=>ot.id!==t.id && affectations[ot.id+'|'+dateStr]===emp.id && timesOverlap(t,ot));
           return !alreadyOnDay;
         })
         .sort((a,b) => {
@@ -1288,25 +898,19 @@ window.autoAssign = function() {
         });
 
       if (candidates.length > 0) {
-        affectations[key] = canonId(candidates[0].id);
+        affectations[key] = candidates[0].id;
         assigned++;
       } else skipped++;
     });
   });
   saveLocal();
-  // Sauvegarder en DB uniquement la semaine affichée (évite centaines d’appels / erreurs sur d’anciennes clés)
-  const w0 = fmt(weekStart), w1 = fmt(addDays(weekStart, 6));
-  Object.entries(affectations).forEach(([k, empId]) => {
-    const pipe = k.indexOf('|');
-    if (pipe <= 0) return;
-    const tid = k.slice(0, pipe);
-    const date = k.slice(pipe + 1);
-    if (tid && date && date >= w0 && date <= w1) dbSetAffect(tid, date, empId);
+  // Sauvegarder en DB async
+  Object.entries(affectations).forEach(([k,empId]) => {
+    const [tid,...rest] = k.split('|'); const date=rest.join('|');
+    if(tid && date) dbSetAffect(tid,date,empId);
   });
   renderAll();
-  let msg = `⚡ Terminé : ${assigned} affectation(s) créée(s).`;
-  if (skipped > 0) msg += ` ${skipped} créneau(x) sans candidat (quota, absence ou chevauchement) — rien n’a été forcé.`;
-  alert(msg);
+  alert(`⚡ Terminé : ${assigned} affectations créées${skipped>0?`, ${skipped} sans candidat disponible.`:'.'}`) ;
 };
 
 function timesOverlap(t1,t2) {
@@ -1318,7 +922,7 @@ function timesOverlap(t1,t2) {
 
 // ── CYCLE ABSENCE ──────────────────────────────────
 window.cycleAbsence = async function(empId, dateStr) {
-  const key = affKey(empId, dateStr);
+  const key = empId+'|'+dateStr;
   const cur  = absences[key]||'';
   const idx  = ABS_CYCLE.indexOf(cur);
   const next = ABS_CYCLE[(idx+1)%ABS_CYCLE.length];
@@ -1332,7 +936,7 @@ window.cycleAbsence = async function(empId, dateStr) {
 
 // ── MODAL TOURNÉE ──────────────────────────────────
 window.openModalTournee = function(id) {
-  const t = id ? tournees.find((x) => canonId(x.id) === canonId(id)) : null;
+  const t = id ? tournees.find(x=>x.id===id) : null;
   document.getElementById('tId').value = t?.id||'';
   document.getElementById('tNom').value = t?.nom||'';
   document.getElementById('tDebut').value = t?.heure_debut||'07:00';
@@ -1364,7 +968,7 @@ window.saveTournee = async function() {
   const col = document.querySelector('.c-dot.active')?.dataset.c||'#4f8ef7';
   const existId = document.getElementById('tId').value;
   const t = {
-    id:          existId ? canonId(existId) : crypto.randomUUID(),
+    id:          existId || crypto.randomUUID(),
     nom,
     heure_debut: document.getElementById('tDebut').value,
     heure_fin:   document.getElementById('tFin').value,
@@ -1373,21 +977,19 @@ window.saveTournee = async function() {
     notes:       document.getElementById('tNotes').value.trim()||null,
     jours, couleur: col
   };
-  const idx = tournees.findIndex((x) => canonId(x.id) === canonId(t.id));
+  const idx = tournees.findIndex(x=>x.id===t.id);
   if (idx>=0) tournees[idx]=t; else tournees.push(t);
-  ensureTourneesNumeros();
   saveLocal();
   closeOverlay('overlayTournee');
   renderAll();
-  await dbSaveTournee(tournees.find((x) => canonId(x.id) === canonId(t.id)) || t);
+  await dbSaveTournee(t);
 };
 
 window.deleteTournee = async function() {
   const id = document.getElementById('tId').value;
   if (!id||!confirm('Supprimer cette tournée et toutes ses affectations ?')) return;
-  const idPref = canonId(id) + '|';
-  Object.keys(affectations).forEach((k) => { if (k.startsWith(idPref)) delete affectations[k]; });
-  tournees = tournees.filter((x) => canonId(x.id) !== canonId(id));
+  Object.keys(affectations).forEach(k=>{ if(k.startsWith(id+'|')) delete affectations[k]; });
+  tournees = tournees.filter(t=>t.id!==id);
   saveLocal();
   closeOverlay('overlayTournee');
   renderAll();
@@ -1406,9 +1008,9 @@ window.exportCSV = function() {
   tournees.forEach(t => {
     days.forEach(d => {
       const dateStr=fmt(d);
-      if (!joursToPg(t.jours).includes(d.getDay())) return;
-      const key = affKey(t.id, dateStr);
-      const emp = employees.find((e) => canonId(e.id) === canonId(affectations[key]));
+      if (!(t.jours||[1,2,3,4,5]).includes(d.getDay())) return;
+      const key=t.id+'|'+dateStr;
+      const emp = employees.find(e=>e.id===affectations[key]);
       const dur=shiftDurH(t).toFixed(2), nH=nightH(t).toFixed(2);
       csv+=`"${t.nom}";"${t.zone||''}";"${t.heure_debut}–${t.heure_fin}";${dur};${dateStr};${DAYS[d.getDay()]};"${emp?emp.prenom+' '+emp.nom:'NON ASSIGNÉ'}";"${emp?ROLE_LABELS[emp.role]||emp.role:''}";"${emp?emp.code_usr||'':''}";${emp?emp.taux_travail||100:''};${nH};${(nH*0.1).toFixed(2)}\n`;
     });
@@ -1447,6 +1049,5 @@ function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 init();
 })();
 </script>
-<div id="colixoTourRev" aria-hidden="true" style="position:fixed;bottom:4px;right:10px;font-size:10px;color:var(--text3);opacity:.45;pointer-events:none;z-index:50">Tournées UI 20260446</div>
 </body>
 </html>

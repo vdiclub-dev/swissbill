@@ -1,18 +1,14 @@
 -- ============================================================
 --  tournees.sql — Tables pour la gestion des tournées Colixo
 --  Exécutez ce fichier dans Supabase > SQL Editor
---
---  Si la table tournees existe déjà mais erreur « heure_debut does not exist » :
---  exécutez plutôt tournees_fix_columns.sql (ajoute les colonnes manquantes).
 -- ============================================================
 
 -- 1. Tournées (définition des routes)
 CREATE TABLE IF NOT EXISTS tournees (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  numero_tournee INTEGER NOT NULL DEFAULT 1,
   nom          TEXT NOT NULL,
-  heure_debut  TIME NOT NULL,
-  heure_fin    TIME NOT NULL,
+  heure_debut  TEXT NOT NULL,
+  heure_fin    TEXT NOT NULL,
   zone         TEXT,
   vehicle      TEXT,
   jours        INTEGER[] DEFAULT '{1,2,3,4,5}',
