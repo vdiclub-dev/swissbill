@@ -1,14 +1,14 @@
 -- ============================================================
---  tournees-fix.sql — Correction table tournees existante
---  Exécutez ce fichier dans Supabase > SQL Editor
+--  tournees-fix.sql — Correction tables tournées + droits RLS
+--  Exécutez dans Supabase > SQL Editor
 -- ============================================================
 
--- Supprime tout avec CASCADE (enlève aussi les dépendances)
+-- 1. Supprime tout avec CASCADE
 DROP TABLE IF EXISTS tournee_affectations CASCADE;
 DROP TABLE IF EXISTS tournee_arrets CASCADE;
 DROP TABLE IF EXISTS tournees CASCADE;
 
--- Recrée proprement
+-- 2. Recrée les tables
 CREATE TABLE tournees (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nom          TEXT NOT NULL,
@@ -33,3 +33,36 @@ CREATE TABLE tournee_affectations (
 
 CREATE INDEX IF NOT EXISTS idx_ta_date ON tournee_affectations (date);
 CREATE INDEX IF NOT EXISTS idx_ta_emp  ON tournee_affectations (employe_id);
+
+-- 3. Droits RLS — autoriser la clé anon à tout faire sur ces tables
+ALTER TABLE tournees             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tournee_affectations ENABLE ROW LEVEL SECURITY;
+
+-- Politique : accès complet pour anon et authenticated
+CREATE POLICY "acces_total_tournees"
+  ON tournees FOR ALL
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY "acces_total_affectations"
+  ON tournee_affectations FOR ALL
+  USING (true) WITH CHECK (true);
+
+-- Table absences (si pas encore créée)
+CREATE TABLE IF NOT EXISTS employe_absences (
+  id             BIGSERIAL PRIMARY KEY,
+  employe_id     UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+  date           DATE NOT NULL,
+  type_absence   TEXT NOT NULL,
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (employe_id, date)
+);
+
+ALTER TABLE employe_absences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "acces_total_absences"
+  ON employe_absences FOR ALL
+  USING (true) WITH CHECK (true);
+
+-- Colonnes taux/contrat dans utilisateurs
+ALTER TABLE utilisateurs
+  ADD COLUMN IF NOT EXISTS taux_travail INTEGER DEFAULT 100,
+  ADD COLUMN IF NOT EXISTS type_contrat TEXT DEFAULT 'fixe';

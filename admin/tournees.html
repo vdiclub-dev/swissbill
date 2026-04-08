@@ -474,7 +474,9 @@ async function dbSaveTournee(t) {
   if (!db || !dbOk) return;
   setSaving('saving');
   try {
-    const {error} = await db.from('tournees').upsert([t], {onConflict:'id'});
+    // DELETE + INSERT évite les problèmes RLS avec upsert
+    await db.from('tournees').delete().eq('id', t.id);
+    const {error} = await db.from('tournees').insert([t]);
     if (error) throw error;
     setSaving('saved');
   } catch(e) { setSaving('error', e.message); }
@@ -489,12 +491,13 @@ async function dbSetAffect(tourneeId, date, empId) {
   if (!db || !dbOk) return;
   setSaving('saving');
   try {
+    // Toujours DELETE d'abord, puis INSERT si besoin
+    await db.from('tournee_affectations').delete()
+      .eq('tournee_id', tourneeId).eq('date', date);
     if (empId) {
       const {error} = await db.from('tournee_affectations')
-        .upsert([{tournee_id: tourneeId, date, employe_id: empId}], {onConflict:'tournee_id,date'});
+        .insert([{tournee_id: tourneeId, date, employe_id: empId}]);
       if (error) throw error;
-    } else {
-      await db.from('tournee_affectations').delete().eq('tournee_id', tourneeId).eq('date', date);
     }
     setSaving('saved');
   } catch(e) { setSaving('error', e.message); }
@@ -503,10 +506,9 @@ async function dbSetAffect(tourneeId, date, empId) {
 async function dbSetAbsence(empId, date, type) {
   if (!db || !dbOk) return;
   try {
+    await db.from('employe_absences').delete().eq('employe_id', empId).eq('date', date);
     if (type) {
-      await db.from('employe_absences').upsert([{employe_id:empId, date, type_absence:type}], {onConflict:'employe_id,date'});
-    } else {
-      await db.from('employe_absences').delete().eq('employe_id',empId).eq('date',date);
+      await db.from('employe_absences').insert([{employe_id: empId, date, type_absence: type}]);
     }
   } catch(e) {}
 }
