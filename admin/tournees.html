@@ -489,7 +489,8 @@ async function loadEmployees() {
   if (!db) { employees = demoEmployees(); return; }
   try {
     const {data,error} = await db.from('utilisateurs')
-      .select('id,nom,prenom,role,code_usr,actif').eq('actif',true)
+      .select('id,nom,prenom,role,code_usr,actif,taux_travail,type_contrat')
+      .eq('actif',true)
       .in('role',['chauffeur','magasinier','admin','super_admin'])
       .order('role').order('nom');
     if (error) throw error;
@@ -544,12 +545,29 @@ async function saveAffectationDb(tourneeId, date, empId) {
 
 function demoEmployees() {
   return [
-    {id:'d1',nom:'Martin',prenom:'Jean',role:'chauffeur',code_usr:'CHF-1001',actif:true},
-    {id:'d2',nom:'Dupont',prenom:'Marie',role:'chauffeur',code_usr:'CHF-1002',actif:true},
-    {id:'d3',nom:'Blanc',prenom:'Pierre',role:'magasinier',code_usr:'MAG-2001',actif:true},
-    {id:'d4',nom:'Noir',prenom:'Sophie',role:'chauffeur',code_usr:'CHF-1003',actif:true},
-    {id:'d5',nom:'Gris',prenom:'Lucas',role:'magasinier',code_usr:'MAG-2002',actif:true},
+    {id:'d1',nom:'Martin',prenom:'Jean',role:'chauffeur',code_usr:'CHF-1001',actif:true,taux_travail:100,type_contrat:'fixe'},
+    {id:'d2',nom:'Dupont',prenom:'Marie',role:'chauffeur',code_usr:'CHF-1002',actif:true,taux_travail:80,type_contrat:'temps_partiel'},
+    {id:'d3',nom:'Blanc',prenom:'Pierre',role:'magasinier',code_usr:'MAG-2001',actif:true,taux_travail:100,type_contrat:'fixe'},
+    {id:'d4',nom:'Noir',prenom:'Sophie',role:'chauffeur',code_usr:'CHF-1003',actif:true,taux_travail:50,type_contrat:'auxiliaire'},
+    {id:'d5',nom:'Gris',prenom:'Lucas',role:'magasinier',code_usr:'MAG-2002',actif:true,taux_travail:100,type_contrat:'auxiliaire'},
   ];
+}
+
+// Heures max par semaine selon taux de travail
+function maxWeekH(emp) {
+  const taux = emp.taux_travail || 100;
+  return Math.round(48 * taux / 100 * 10) / 10; // arrondi 0.1h
+}
+
+function isAuxiliaire(emp) {
+  return emp.type_contrat === 'auxiliaire';
+}
+
+function tauxLabel(emp) {
+  const t = emp.taux_travail || 100;
+  if (emp.type_contrat === 'auxiliaire') return '⚡ Aux.';
+  if (t < 100) return t + '%';
+  return '';
 }
 
 // ── DATE UTILS ─────────────────────────────────────────
@@ -835,7 +853,7 @@ function renderAssignGrid(days, visEmp) {
         if (absType) td.classList.add('emp-absent');
         td.innerHTML = `
           <div class="emp-badge ${conflict?'conflict':''} ${absType?'absent':''}" onclick="openAssignModal('${t.id}','${dateStr}',event)">
-            <div class="eb-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+            <div class="eb-name">${esc(emp.prenom)} ${esc(emp.nom)} ${tauxLabel(emp) ? `<span style="font-size:9px;opacity:.7;font-weight:400">${tauxLabel(emp)}</span>` : ''}</div>
             <div class="eb-code">${esc(emp.code_usr||'')} · ${ROLE_LABELS[emp.role]||emp.role}</div>
             ${absType
               ? `<div class="absence-badge ${absInfo.cls}" style="margin-top:4px">${absInfo.icon} ${absInfo.label}</div>`
@@ -896,20 +914,34 @@ function renderEmpView(days, visEmp) {
       </div>`;
     });
 
-    const warnClass = stats.violations > 0 ? 'emp-warn' : '';
+    const mH = maxWeekH(emp);
+    const taux = emp.taux_travail || 100;
+    const pct = mH > 0 ? Math.min(100, Math.round(stats.totalH / mH * 100)) : 0;
+    const barColor = pct >= 100 ? 'var(--red)' : pct >= 85 ? 'var(--orange)' : 'var(--green)';
+    const isAux = isAuxiliaire(emp);
     card.innerHTML = `
       <div class="emp-card-header">
         <div class="emp-avatar" style="background:${color}22;color:${color}">${initials}</div>
-        <div>
+        <div style="flex:1">
           <div class="emp-card-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
-          <div class="emp-card-role" style="color:${color}">${ROLE_LABELS[emp.role]||emp.role} · ${esc(emp.code_usr||'')}</div>
+          <div class="emp-card-role" style="color:${color}">${ROLE_LABELS[emp.role]||emp.role} · ${esc(emp.code_usr||'')}
+            ${isAux ? ' · <span style="color:var(--purple)">⚡ Auxiliaire</span>' : taux<100?` · <span style="color:var(--blue)">${taux}%</span>`:''}
+          </div>
         </div>
       </div>
       <div class="emp-card-body">${daysHtml}</div>
+      <div style="padding:6px 16px 4px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+          <span class="emp-week-h">${stats.totalH.toFixed(1)}h / ${mH}h</span>
+          <span style="color:${barColor}">${pct}%</span>
+        </div>
+        <div style="height:4px;border-radius:2px;background:var(--border);overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${barColor};transition:width .3s"></div>
+        </div>
+      </div>
       <div class="emp-card-footer">
-        <span class="emp-week-h">${stats.totalH.toFixed(1)}h / 48h</span>
-        ${stats.nightH > 0 ? `<span class="emp-night-h">🌙 ${stats.nightH.toFixed(1)}h nuit</span>` : ''}
-        ${stats.daysWorked > C.MAX_DAYS ? `<span class="emp-warn">⚠ ${stats.daysWorked}j/semaine</span>` : `<span style="color:var(--text3)">${stats.daysWorked} jour(s)</span>`}
+        ${stats.nightH > 0 ? `<span class="emp-night-h">🌙 ${stats.nightH.toFixed(1)}h nuit</span>` : '<span></span>'}
+        ${stats.daysWorked > (isAux?7:C.MAX_DAYS) ? `<span class="emp-warn">⚠ ${stats.daysWorked}j/sem</span>` : `<span style="color:var(--text3)">${stats.daysWorked} jour(s)</span>`}
         ${stats.violations > 0 ? `<span class="emp-warn">⚠ ${stats.violations} conflit(s)</span>` : ''}
       </div>`;
     grid.appendChild(card);
@@ -1020,6 +1052,9 @@ function getEmpDayShifts(empId, dateStr) {
 
 function getEmpWeekStats(empId, days) {
   let totalH = 0, nightH = 0, daysWorked = 0, violations = 0;
+  const emp = employees.find(e => e.id === empId);
+  const maxH = emp ? maxWeekH(emp) : C.MAX_WEEK_H;
+  const maxDays = emp?.type_contrat === 'auxiliaire' ? 7 : C.MAX_DAYS;
   days.forEach(d => {
     const myT = getEmpDayShifts(empId, fmtDate(d));
     if (myT.length > 0) { daysWorked++; }
@@ -1029,9 +1064,9 @@ function getEmpWeekStats(empId, days) {
       if (hasConflict(empId, fmtDate(d), t)) violations++;
     });
   });
-  if (totalH > C.MAX_WEEK_H) violations++;
-  if (daysWorked > C.MAX_DAYS) violations++;
-  return { totalH, nightH, daysWorked, violations };
+  if (totalH > maxH) violations++;
+  if (daysWorked > maxDays) violations++;
+  return { totalH, nightH, daysWorked, violations, maxH };
 }
 
 function hasConflict(empId, dateStr, tournee) {
@@ -1052,10 +1087,12 @@ function hasConflict(empId, dateStr, tournee) {
       if (restH < C.MIN_REST_H && restH > 0) return true;
     }
   }
-  // 3. Weekly hours
+  // 3. Weekly hours (selon taux de travail de l'employé)
   const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  const emp = employees.find(e => e.id === empId);
+  const maxH = emp ? maxWeekH(emp) : C.MAX_WEEK_H;
   const stats = getEmpWeekStats(empId, days);
-  if (stats.totalH + shiftDuration(tournee) > C.MAX_WEEK_H) return true;
+  if (stats.totalH + shiftDuration(tournee) > maxH) return true;
   return false;
 }
 
@@ -1157,19 +1194,19 @@ window.openAssignModal = function(tourneeId, dateStr, e) {
 
   document.getElementById('btnUnassign').style.display = currentEmpId ? '' : 'none';
 
-  // Filter employees: prefer same role as tournée context, show all
   const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
   const list = document.getElementById('empPickList');
   list.innerHTML = '';
 
-  const sorted = [...employees].sort((a,b) => {
-    // Chauffeurs first for most tournées
-    if (a.role==='chauffeur' && b.role!=='chauffeur') return -1;
-    if (b.role==='chauffeur' && a.role!=='chauffeur') return 1;
-    return a.nom.localeCompare(b.nom);
-  });
+  // Séparer fixes et auxiliaires, trier par heures accumulées
+  const fixedEmps = employees
+    .filter(e => !isAuxiliaire(e) && ['chauffeur','magasinier','admin','super_admin'].includes(e.role))
+    .sort((a,b) => getEmpWeekStats(a.id,days).totalH - getEmpWeekStats(b.id,days).totalH);
+  const auxEmps = employees
+    .filter(e => isAuxiliaire(e))
+    .sort((a,b) => a.nom.localeCompare(b.nom));
 
-  sorted.forEach(emp => {
+  function buildEmpItem(emp) {
     const stats = getEmpWeekStats(emp.id, days);
     const alreadyOnTournee = affectations[tourneeId+'_'+dateStr] === emp.id;
     const otherOnSameDay = getEmpDayShifts(emp.id, dateStr).filter(ot=>ot.id!==tourneeId);
@@ -1178,13 +1215,18 @@ window.openAssignModal = function(tourneeId, dateStr, e) {
     const absInfo = ABS_TYPES.find(a => a.val === absType);
     const color = ROLE_COLORS[emp.role]||'#888';
     const initials = (emp.prenom[0]||'')+(emp.nom[0]||'');
+    const taux = emp.taux_travail || 100;
+    const mH = maxWeekH(emp);
 
     let statusText='', statusClass='ok';
     if (absType) { statusText=`${absInfo.icon} ${absInfo.label}`; statusClass='conflict'; }
     else if (alreadyOnTournee) { statusText='✓ Assigné'; statusClass='ok'; }
-    else if (wouldConflict) { statusText='⚠ Conflit'; statusClass='conflict'; }
-    else if (stats.totalH >= 40) { statusText=`${stats.totalH.toFixed(0)}h/sem`; statusClass='heavy'; }
-    else { statusText=`${stats.totalH.toFixed(0)}h/sem`; statusClass='ok'; }
+    else if (wouldConflict) { statusText='⚠ Dépassement'; statusClass='conflict'; }
+    else if (stats.totalH >= mH * 0.85) { statusText=`${stats.totalH.toFixed(0)}/${mH}h`; statusClass='heavy'; }
+    else { statusText=`${stats.totalH.toFixed(0)}/${mH}h`; statusClass='ok'; }
+
+    const tauxStr = taux < 100 ? ` · ${taux}%` : '';
+    const auxStr = isAuxiliaire(emp) ? ' · ⚡ Auxiliaire' : '';
 
     const item = document.createElement('div');
     item.className = 'emp-pick-item' + (alreadyOnTournee?' selected':'') + (absType?' absent':'');
@@ -1192,13 +1234,27 @@ window.openAssignModal = function(tourneeId, dateStr, e) {
       <div class="ep-avatar" style="background:${color}22;color:${color};opacity:${absType?.5:1}">${initials}</div>
       <div style="flex:1">
         <div class="ep-name" style="${absType?'text-decoration:line-through;opacity:.6':''}">${esc(emp.prenom)} ${esc(emp.nom)}</div>
-        <div class="ep-role">${ROLE_LABELS[emp.role]||emp.role} · ${esc(emp.code_usr||'')}${otherOnSameDay.length>0?' · '+otherOnSameDay.length+' tournée(s) ce jour':''}</div>
+        <div class="ep-role">${ROLE_LABELS[emp.role]||emp.role}${tauxStr}${auxStr} · ${esc(emp.code_usr||'')}${otherOnSameDay.length>0?` · ${otherOnSameDay.length} tournée(s)`:''}</div>
       </div>
       <div class="ep-status ${statusClass}">${statusText}</div>`;
-    // Still allow assignment even if absent (admin can override)
     item.onclick = () => assignEmp(tourneeId, dateStr, emp.id);
-    list.appendChild(item);
-  });
+    return item;
+  }
+
+  if (fixedEmps.length > 0) {
+    const sep = document.createElement('div');
+    sep.style.cssText='font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);letter-spacing:.5px;padding:4px 2px';
+    sep.textContent = 'Employés fixes';
+    list.appendChild(sep);
+    fixedEmps.forEach(emp => list.appendChild(buildEmpItem(emp)));
+  }
+  if (auxEmps.length > 0) {
+    const sep = document.createElement('div');
+    sep.style.cssText='font-size:10px;font-weight:700;text-transform:uppercase;color:var(--purple);letter-spacing:.5px;padding:8px 2px 4px';
+    sep.textContent = '⚡ Auxiliaires à la demande';
+    list.appendChild(sep);
+    auxEmps.forEach(emp => list.appendChild(buildEmpItem(emp)));
+  }
 
   document.getElementById('modalAssign').classList.add('open');
 };
@@ -1250,7 +1306,6 @@ window.autoAssign = function() {
       const candidates = employees
         .filter(emp => {
           if (!['chauffeur','magasinier'].includes(emp.role)) return false;
-          // Exclure les absents (maladie, vacances, absence, formation)
           if (isAbsent(emp.id, dateStr)) return false;
           const dayT = getEmpDayShifts(emp.id, dateStr);
           if (dayT.some(ot => timesOverlap(t, ot))) return false;
@@ -1258,9 +1313,14 @@ window.autoAssign = function() {
           return true;
         })
         .sort((a,b) => {
-          const ha = getEmpWeekStats(a.id, days).totalH;
-          const hb = getEmpWeekStats(b.id, days).totalH;
-          return ha - hb; // moins d'heures d'abord
+          // Priorité 1 : fixes avant auxiliaires
+          const aAux = isAuxiliaire(a) ? 1 : 0;
+          const bAux = isAuxiliaire(b) ? 1 : 0;
+          if (aAux !== bAux) return aAux - bAux;
+          // Priorité 2 : moins d'heures accumulées (en % du max)
+          const ha = getEmpWeekStats(a.id, days).totalH / maxWeekH(a);
+          const hb = getEmpWeekStats(b.id, days).totalH / maxWeekH(b);
+          return ha - hb;
         });
 
       if (candidates.length > 0) {
@@ -1355,6 +1415,12 @@ CREATE TABLE IF NOT EXISTS employe_absences (
 );
 CREATE INDEX IF NOT EXISTS idx_abs_date ON employe_absences (date);
 CREATE INDEX IF NOT EXISTS idx_abs_emp  ON employe_absences (employe_id);
+
+-- Ajouter colonnes taux et type_contrat dans utilisateurs (si pas encore fait) :
+ALTER TABLE utilisateurs
+  ADD COLUMN IF NOT EXISTS taux_travail  INTEGER DEFAULT 100,
+  ADD COLUMN IF NOT EXISTS type_contrat  TEXT DEFAULT 'fixe'
+    CHECK (type_contrat IN ('fixe','auxiliaire','temps_partiel'));
 -->
 </body>
 </html>

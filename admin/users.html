@@ -317,6 +317,27 @@
             <label>Code</label>
             <input type="text" id="uCode" placeholder="Connexion — vide = auto (ex. CLT-7290)" maxlength="12" autocomplete="off">
         </div>
+        <div class="field">
+            <label>Type de contrat</label>
+            <select id="uTypeContrat">
+                <option value="fixe">Fixe (employé régulier)</option>
+                <option value="auxiliaire">Auxiliaire (à la demande)</option>
+                <option value="temps_partiel">Temps partiel fixe</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Taux de travail</label>
+            <select id="uTaux">
+                <option value="100">100% (plein temps)</option>
+                <option value="90">90%</option>
+                <option value="80">80%</option>
+                <option value="70">70%</option>
+                <option value="60">60%</option>
+                <option value="50">50%</option>
+                <option value="40">40%</option>
+                <option value="20">20%</option>
+            </select>
+        </div>
         <div class="field" id="activeField">
             <label>Statut</label>
             <select id="uActif">
@@ -627,7 +648,11 @@
                 <td>${codeDisplay}</td>
                 <td>${u.email || '—'}</td>
                 <td style="font-family:ui-monospace,monospace;font-size:12px;color:var(--white);">${u.code ? escapeHtml(String(u.code)) : '—'}</td>
-                <td><span class="role-badge role-${u.role}">${roleIcons[u.role]||''} ${u.role}</span></td>
+                <td>
+                  <span class="role-badge role-${u.role}">${roleIcons[u.role]||''} ${u.role}</span>
+                  ${u.type_contrat === 'auxiliaire' ? `<span style="display:inline-block;margin-top:3px;font-size:10px;padding:2px 6px;border-radius:8px;background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.3);color:#c4b5fd">⚡ Auxiliaire</span>` : ''}
+                  ${u.taux_travail && u.taux_travail < 100 ? `<span style="display:inline-block;margin-top:3px;font-size:10px;padding:2px 6px;border-radius:8px;background:rgba(79,142,247,.12);border:1px solid rgba(79,142,247,.3);color:#93c5fd">${u.taux_travail}%</span>` : ''}
+                </td>
                 <td>${u.telephone || '—'}</td>
                 <td>
                     <span class="status-dot ${isActive ? 'dot-active' : 'dot-inactive'}"></span>
@@ -680,6 +705,8 @@
         document.getElementById('uTel').value = u.telephone || '';
         document.getElementById('uCode').value = u.code || u.code_usr || '';
         document.getElementById('uActif').value = (u.actif !== false) ? 'true' : 'false';
+        document.getElementById('uTypeContrat').value = u.type_contrat || 'fixe';
+        document.getElementById('uTaux').value = String(u.taux_travail || 100);
         document.getElementById('pwdField').style.display = 'none';
         document.getElementById('activeField').style.display = '';
         openModal('modalUser');
@@ -695,7 +722,9 @@
         const role   = document.getElementById('uRole').value;
         const tel    = document.getElementById('uTel').value.trim();
         let   code   = document.getElementById('uCode').value.trim() || null;
-        const actif  = document.getElementById('uActif').value === 'true';
+        const actif        = document.getElementById('uActif').value === 'true';
+        const typeContrat  = document.getElementById('uTypeContrat').value;
+        const tauxTravail  = parseInt(document.getElementById('uTaux').value) || 100;
         if (!id && !code) code = generateStoredUserCode(role);
 
         if (!email) { toast('error', 'L\'email est requis'); return; }
@@ -709,7 +738,8 @@
                 const { error: dbErr } = await db.from('utilisateurs').upsert([{
                     id: userId, email,
                     nom: nom || null, prenom: prenom || null,
-                    telephone: tel || null, code, code_usr: code, role, actif: true
+                    telephone: tel || null, code, code_usr: code, role, actif: true,
+                    type_contrat: typeContrat, taux_travail: tauxTravail
                 }]);
                 if (dbErr) throw dbErr;
                 var msgCreate = isNew ? '✅ Utilisateur créé !' : '✅ Profil mis à jour (compte existant).';
@@ -719,7 +749,8 @@
                 // Update existing
                 const { error } = await db.from('utilisateurs').update({
                     nom: nom || null, prenom: prenom || null,
-                    telephone: tel || null, code, code_usr: code, role, actif
+                    telephone: tel || null, code, code_usr: code, role, actif,
+                    type_contrat: typeContrat, taux_travail: tauxTravail
                 }).eq('id', id);
                 if (error) throw error;
                 toast('success', '✅ Utilisateur mis à jour !');
