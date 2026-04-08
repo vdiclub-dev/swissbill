@@ -161,6 +161,37 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
 /* Conflict badge */
 .conflict-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;background:rgba(232,49,26,.15);border:1px solid rgba(232,49,26,.3);color:#ff8a7a;font-size:10px;font-weight:600}
 
+/* Absence badge */
+.absence-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.ab-maladie{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5}
+.ab-vacances{background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.4);color:#fde68a}
+.ab-absence{background:rgba(156,163,175,.15);border:1px solid rgba(156,163,175,.3);color:#d1d5db}
+.ab-formation{background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.4);color:#d8b4fe}
+
+/* Cell absent */
+.assign-cell.emp-absent{background:repeating-linear-gradient(45deg,#0a0a12,#0a0a12 6px,rgba(239,68,68,.04) 6px,rgba(239,68,68,.04) 12px)}
+.emp-badge.absent{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.06)}
+.emp-badge.absent .eb-name{text-decoration:line-through;opacity:.7}
+
+/* Absence pill in emp pick list */
+.abs-pill{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;flex-shrink:0}
+.emp-pick-item.absent{opacity:.55;cursor:not-allowed;border-color:rgba(239,68,68,.35)}
+.emp-pick-item.absent:hover{background:var(--bg3)}
+
+/* TAB: ABSENCES */
+.abs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:16px 20px}
+.abs-emp-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.abs-emp-header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.abs-week{padding:8px 14px;display:flex;flex-direction:column;gap:4px}
+.abs-day-row{display:flex;align-items:center;gap:8px;padding:4px 0}
+.abs-day-label{width:28px;font-size:11px;color:var(--text2);flex-shrink:0}
+.abs-type-btn{padding:3px 9px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font:inherit;font-size:10px;cursor:pointer;transition:.15s}
+.abs-type-btn:hover{background:var(--bg4)}
+.abs-type-btn.active-maladie{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#fca5a5}
+.abs-type-btn.active-vacances{background:rgba(234,179,8,.15);border-color:rgba(234,179,8,.4);color:#fde68a}
+.abs-type-btn.active-absence{background:rgba(156,163,175,.15);border-color:rgba(156,163,175,.3);color:#d1d5db}
+.abs-type-btn.active-formation{background:rgba(168,85,247,.15);border-color:rgba(168,85,247,.4);color:#d8b4fe}
+
 /* Empty */
 .empty{text-align:center;padding:40px;color:var(--text3)}
 .empty .icon{font-size:40px;margin-bottom:10px}
@@ -184,6 +215,7 @@ select option{background:var(--bg3)}
 <div class="tabs">
   <button class="tab active" onclick="showTab('affectation',this)">📅 Affectation semaine</button>
   <button class="tab" onclick="showTab('employes',this)">👷 Vue par employé</button>
+  <button class="tab" onclick="showTab('absences',this)">🤒 Absences <span id="absTabBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px">0</span></button>
   <button class="tab" onclick="showTab('tournees',this)">🗺 Gérer les tournées</button>
 </div>
 
@@ -231,6 +263,11 @@ select option{background:var(--bg3)}
       <div class="stat-value" id="statNight" style="color:var(--purple)">—</div>
       <div class="stat-sub">+10% majoration</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-label">Absences semaine</div>
+      <div class="stat-value" id="statAbsences" style="color:var(--orange)">—</div>
+      <div class="stat-sub" id="statAbsSub">Maladie / Vacances / Autre</div>
+    </div>
   </div>
 
   <!-- GRILLE AFFECTATION -->
@@ -245,6 +282,21 @@ select option{background:var(--bg3)}
       <button class="btn btn-primary" style="margin-top:12px" onclick="showTab('tournees',document.querySelectorAll('.tab')[2]);openTourneeModal()">+ Créer la première tournée</button>
     </div>
   </div>
+</div>
+
+<!-- ═══════ TAB: ABSENCES ═══════ -->
+<div id="tabAbsences" style="display:none">
+  <div class="toolbar" style="justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:12px;color:var(--text2)">Cliquez sur un jour pour changer le statut de l'employé</span>
+      <span class="absence-badge ab-maladie">🤒 Maladie</span>
+      <span class="absence-badge ab-vacances">🏖 Vacances</span>
+      <span class="absence-badge ab-absence">🚫 Absence</span>
+      <span class="absence-badge ab-formation">📚 Formation</span>
+    </div>
+    <button class="btn btn-primary" onclick="clearAllAbsences()">🗑 Effacer semaine</button>
+  </div>
+  <div class="abs-grid" id="absGrid"></div>
 </div>
 
 <!-- ═══════ TAB: VUE EMPLOYÉS ═══════ -->
@@ -394,6 +446,7 @@ let db = window.SUPABASE_CLIENT;
 let employees = [];
 let tournees = [];       // [{id, nom, heure_debut, heure_fin, zone, vehicle, jours, couleur, notes}]
 let affectations = {};   // {'tourneeId_date': empId}
+let absences = {};       // {'empId_date': 'maladie'|'vacances'|'absence'|'formation'}
 let weekStart = getMonday(new Date());
 let currentTab = 'affectation';
 
@@ -414,19 +467,21 @@ async function init() {
   });
 
   loadLocal();
-  await Promise.all([loadEmployees(), loadTourneesFromDb(), loadAffectationsFromDb()]);
+  await Promise.all([loadEmployees(), loadTourneesFromDb(), loadAffectationsFromDb(), loadAbsencesFromDb()]);
   renderWeekLabel();
   renderAll();
 }
 
 // ── LOCAL STORAGE FALLBACK ─────────────────────────────
 function loadLocal() {
-  try { tournees   = JSON.parse(localStorage.getItem('colixo_tournees')   || '[]'); } catch(e){ tournees=[]; }
+  try { tournees     = JSON.parse(localStorage.getItem('colixo_tournees') || '[]'); } catch(e){ tournees=[]; }
   try { affectations = JSON.parse(localStorage.getItem('colixo_affect')   || '{}'); } catch(e){ affectations={}; }
+  try { absences     = JSON.parse(localStorage.getItem('colixo_absences') || '{}'); } catch(e){ absences={}; }
 }
 function saveLocal() {
   localStorage.setItem('colixo_tournees', JSON.stringify(tournees));
-  localStorage.setItem('colixo_affect', JSON.stringify(affectations));
+  localStorage.setItem('colixo_affect',   JSON.stringify(affectations));
+  localStorage.setItem('colixo_absences', JSON.stringify(absences));
 }
 
 // ── SUPABASE ───────────────────────────────────────────
@@ -535,6 +590,7 @@ window.showTab = function(tab, btn) {
   currentTab = tab;
   document.getElementById('tabAffectation').style.display = tab==='affectation' ? '' : 'none';
   document.getElementById('tabEmployes').style.display    = tab==='employes'     ? '' : 'none';
+  document.getElementById('tabAbsences').style.display    = tab==='absences'     ? '' : 'none';
   document.getElementById('tabTournees').style.display    = tab==='tournees'     ? '' : 'none';
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
@@ -550,12 +606,149 @@ function renderAll() {
   if (currentTab === 'affectation') {
     renderAssignGrid(days, visEmp);
     renderStats(days, visEmp);
-    renderTourneeList(); // always keep list in sync
+    renderTourneeList();
   } else if (currentTab === 'employes') {
     renderEmpView(days, visEmp);
+  } else if (currentTab === 'absences') {
+    renderAbsences(days, visEmp);
   } else if (currentTab === 'tournees') {
     renderTourneeList();
   }
+  updateAbsTabBadge(days);
+}
+
+// ── ABSENCES ───────────────────────────────────────────
+const ABS_TYPES = [
+  { val: '',          label: 'Présent',   cls: '',                icon: '✓'  },
+  { val: 'maladie',   label: 'Maladie',   cls: 'ab-maladie',      icon: '🤒' },
+  { val: 'vacances',  label: 'Vacances',  cls: 'ab-vacances',     icon: '🏖' },
+  { val: 'absence',   label: 'Absence',   cls: 'ab-absence',      icon: '🚫' },
+  { val: 'formation', label: 'Formation', cls: 'ab-formation',    icon: '📚' },
+];
+
+function isAbsent(empId, dateStr) { return !!absences[empId+'_'+dateStr]; }
+function getAbsType(empId, dateStr) { return absences[empId+'_'+dateStr] || ''; }
+
+function cycleAbsence(empId, dateStr) {
+  const key = empId + '_' + dateStr;
+  const cur = absences[key] || '';
+  const vals = ABS_TYPES.map(t => t.val);
+  const nextIdx = (vals.indexOf(cur) + 1) % vals.length;
+  if (nextIdx === 0) delete absences[key];
+  else absences[key] = vals[nextIdx];
+  saveLocal();
+  saveAbsenceDb(empId, dateStr, absences[key] || null);
+  renderAll();
+}
+
+async function saveAbsenceDb(empId, dateStr, type) {
+  if (!db) return;
+  try {
+    if (type) {
+      await db.from('employe_absences').upsert(
+        [{employe_id: empId, date: dateStr, type_absence: type}],
+        {onConflict: 'employe_id,date'}
+      );
+    } else {
+      await db.from('employe_absences').delete()
+        .eq('employe_id', empId).eq('date', dateStr);
+    }
+  } catch(e) {}
+}
+
+async function loadAbsencesFromDb() {
+  if (!db) return;
+  const d0 = fmtDate(weekStart), d1 = fmtDate(addDays(weekStart, 6));
+  try {
+    const {data, error} = await db.from('employe_absences')
+      .select('*').gte('date', d0).lte('date', d1);
+    if (!error && data) {
+      data.forEach(a => { absences[a.employe_id+'_'+a.date] = a.type_absence; });
+    }
+  } catch(e) {}
+}
+
+window.clearAllAbsences = function() {
+  if (!confirm('Effacer toutes les absences de cette semaine ?')) return;
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  employees.forEach(emp => {
+    days.forEach(d => { delete absences[emp.id+'_'+fmtDate(d)]; });
+  });
+  saveLocal();
+  renderAll();
+};
+
+function updateAbsTabBadge(days) {
+  let count = 0;
+  employees.forEach(emp => {
+    days.forEach(d => { if (isAbsent(emp.id, fmtDate(d))) count++; });
+  });
+  const badge = document.getElementById('absTabBadge');
+  if (!badge) return;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? '' : 'none';
+}
+
+function renderAbsences(days, visEmp) {
+  const grid = document.getElementById('absGrid');
+  grid.innerHTML = '';
+
+  if (visEmp.length === 0) {
+    grid.innerHTML = '<div class="empty"><div class="icon">👷</div><p>Aucun employé trouvé.</p></div>';
+    return;
+  }
+
+  visEmp.forEach(emp => {
+    const color = ROLE_COLORS[emp.role] || '#888';
+    const initials = (emp.prenom[0]||'') + (emp.nom[0]||'');
+
+    const card = document.createElement('div');
+    card.className = 'abs-emp-card';
+
+    let daysHtml = '';
+    days.forEach(d => {
+      const dateStr = fmtDate(d);
+      const isWE = d.getDay()===0 || d.getDay()===6;
+      const absType = getAbsType(emp.id, dateStr);
+      const absInfo = ABS_TYPES.find(t => t.val === absType) || ABS_TYPES[0];
+      // Warn: if absent but still assigned to a tournee
+      const assignedTournees = tournees.filter(t => affectations[t.id+'_'+dateStr] === emp.id);
+
+      daysHtml += `<div class="abs-day-row">
+        <div class="abs-day-label">${DAYS_FR[d.getDay()]}</div>
+        <button class="abs-type-btn ${absType ? 'active-'+absType : ''}"
+          onclick="cycleAbsence('${emp.id}','${dateStr}')">
+          ${absInfo.icon} ${absInfo.label}
+        </button>
+        ${assignedTournees.length > 0 && absType ? `
+          <span class="absence-badge ab-maladie" title="Cet employé a ${assignedTournees.length} tournée(s) ce jour !">
+            ⚠ ${assignedTournees.length} tournée(s)
+          </span>` : ''}
+        ${isWE && !absType ? '<span style="font-size:10px;color:var(--text3)">WE</span>' : ''}
+      </div>`;
+    });
+
+    // Count absences this week
+    const nbAbs = days.filter(d => isAbsent(emp.id, fmtDate(d))).length;
+    const nbMal = days.filter(d => getAbsType(emp.id, fmtDate(d))==='maladie').length;
+    const nbVac = days.filter(d => getAbsType(emp.id, fmtDate(d))==='vacances').length;
+
+    card.innerHTML = `
+      <div class="abs-emp-header">
+        <div class="emp-avatar" style="background:${color}22;color:${color};width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${initials}</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+          <div style="font-size:11px;color:${color}">${ROLE_LABELS[emp.role]||emp.role} · ${esc(emp.code_usr||'')}</div>
+        </div>
+        ${nbAbs > 0 ? `<div style="text-align:right;font-size:11px;color:var(--red)">${nbAbs}j absent${nbAbs>1?'s':''}</div>` : '<div style="font-size:11px;color:var(--green)">✓ Présent</div>'}
+      </div>
+      <div class="abs-week">${daysHtml}</div>
+      ${nbAbs > 0 ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);display:flex;gap:12px">
+        ${nbMal>0?`<span style="color:#fca5a5">🤒 ${nbMal}j maladie</span>`:''}
+        ${nbVac>0?`<span style="color:#fde68a">🏖 ${nbVac}j vacances</span>`:''}
+      </div>` : ''}`;
+    grid.appendChild(card);
+  });
 }
 
 // ── GRILLE AFFECTATION ─────────────────────────────────
@@ -635,13 +828,19 @@ function renderAssignGrid(days, visEmp) {
         td.style.cursor = 'not-allowed';
         td.innerHTML = '<div style="text-align:center;padding-top:10px;font-size:18px;color:var(--text3)">—</div>';
       } else if (emp) {
-        const conflict = hasConflict(emp.id, dateStr, t);
-        const nightH  = calcNightH(t);
+        const absType  = getAbsType(emp.id, dateStr);
+        const absInfo  = ABS_TYPES.find(a => a.val === absType);
+        const conflict = !absType && hasConflict(emp.id, dateStr, t);
+        const nightH   = calcNightH(t);
+        if (absType) td.classList.add('emp-absent');
         td.innerHTML = `
-          <div class="emp-badge ${conflict?'conflict':''}" onclick="openAssignModal('${t.id}','${dateStr}',event)">
+          <div class="emp-badge ${conflict?'conflict':''} ${absType?'absent':''}" onclick="openAssignModal('${t.id}','${dateStr}',event)">
             <div class="eb-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
             <div class="eb-code">${esc(emp.code_usr||'')} · ${ROLE_LABELS[emp.role]||emp.role}</div>
-            <div class="eb-hours">${shiftDuration(t)}h${nightH>0?' · 🌙'+nightH.toFixed(1)+'h':''}</div>
+            ${absType
+              ? `<div class="absence-badge ${absInfo.cls}" style="margin-top:4px">${absInfo.icon} ${absInfo.label}</div>`
+              : `<div class="eb-hours">${shiftDuration(t)}h${nightH>0?' · 🌙'+nightH.toFixed(1)+'h':''}</div>`
+            }
             ${conflict ? '<div class="conflict-badge" style="margin-top:3px">⚠ conflit</div>' : ''}
             <span class="eb-del" onclick="quickUnassign('${t.id}','${dateStr}',event)">✕</span>
           </div>`;
@@ -768,6 +967,19 @@ function renderStats(days, visEmp) {
     });
   });
 
+  // Count absences this week
+  const days2 = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  let nbMal=0, nbVac=0, nbAbsOther=0;
+  employees.forEach(emp => {
+    days2.forEach(d => {
+      const t = getAbsType(emp.id, fmtDate(d));
+      if (t==='maladie') nbMal++;
+      else if (t==='vacances') nbVac++;
+      else if (t) nbAbsOther++;
+    });
+  });
+  const totalAbs = nbMal+nbVac+nbAbsOther;
+
   document.getElementById('statTournees').textContent = tournees.length;
   document.getElementById('statAffect').textContent = totalAffect;
   document.getElementById('statMissing').textContent = missing;
@@ -775,6 +987,11 @@ function renderStats(days, visEmp) {
   document.getElementById('statConflicts').textContent = conflicts;
   document.getElementById('statConflicts').parentElement.className = 'stat-card' + (conflicts>0?' danger':'');
   document.getElementById('statNight').textContent = nightH.toFixed(1) + 'h';
+  document.getElementById('statAbsences').textContent = totalAbs;
+  document.getElementById('statAbsSub').textContent =
+    [nbMal>0?`🤒 ${nbMal} maladie`:'', nbVac>0?`🏖 ${nbVac} vacances`:'', nbAbsOther>0?`🚫 ${nbAbsOther} autre`:'']
+    .filter(Boolean).join(' · ') || 'Aucune cette semaine';
+  document.getElementById('statAbsences').parentElement.className = 'stat-card' + (totalAbs>0?' warn':'');
 }
 
 // ── CONFLICT & STATS HELPERS ───────────────────────────
@@ -957,24 +1174,28 @@ window.openAssignModal = function(tourneeId, dateStr, e) {
     const alreadyOnTournee = affectations[tourneeId+'_'+dateStr] === emp.id;
     const otherOnSameDay = getEmpDayShifts(emp.id, dateStr).filter(ot=>ot.id!==tourneeId);
     const wouldConflict = hasConflict(emp.id, dateStr, t);
+    const absType = getAbsType(emp.id, dateStr);
+    const absInfo = ABS_TYPES.find(a => a.val === absType);
     const color = ROLE_COLORS[emp.role]||'#888';
     const initials = (emp.prenom[0]||'')+(emp.nom[0]||'');
 
     let statusText='', statusClass='ok';
-    if (alreadyOnTournee) { statusText='✓ Assigné'; statusClass='ok'; }
+    if (absType) { statusText=`${absInfo.icon} ${absInfo.label}`; statusClass='conflict'; }
+    else if (alreadyOnTournee) { statusText='✓ Assigné'; statusClass='ok'; }
     else if (wouldConflict) { statusText='⚠ Conflit'; statusClass='conflict'; }
     else if (stats.totalH >= 40) { statusText=`${stats.totalH.toFixed(0)}h/sem`; statusClass='heavy'; }
     else { statusText=`${stats.totalH.toFixed(0)}h/sem`; statusClass='ok'; }
 
     const item = document.createElement('div');
-    item.className = 'emp-pick-item' + (alreadyOnTournee?' selected':'');
+    item.className = 'emp-pick-item' + (alreadyOnTournee?' selected':'') + (absType?' absent':'');
     item.innerHTML = `
-      <div class="ep-avatar" style="background:${color}22;color:${color}">${initials}</div>
+      <div class="ep-avatar" style="background:${color}22;color:${color};opacity:${absType?.5:1}">${initials}</div>
       <div style="flex:1">
-        <div class="ep-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+        <div class="ep-name" style="${absType?'text-decoration:line-through;opacity:.6':''}">${esc(emp.prenom)} ${esc(emp.nom)}</div>
         <div class="ep-role">${ROLE_LABELS[emp.role]||emp.role} · ${esc(emp.code_usr||'')}${otherOnSameDay.length>0?' · '+otherOnSameDay.length+' tournée(s) ce jour':''}</div>
       </div>
       <div class="ep-status ${statusClass}">${statusText}</div>`;
+    // Still allow assignment even if absent (admin can override)
     item.onclick = () => assignEmp(tourneeId, dateStr, emp.id);
     list.appendChild(item);
   });
@@ -1029,8 +1250,9 @@ window.autoAssign = function() {
       const candidates = employees
         .filter(emp => {
           if (!['chauffeur','magasinier'].includes(emp.role)) return false;
+          // Exclure les absents (maladie, vacances, absence, formation)
+          if (isAbsent(emp.id, dateStr)) return false;
           const dayT = getEmpDayShifts(emp.id, dateStr);
-          // Pas d'overlap avec d'autres tournées ce jour
           if (dayT.some(ot => timesOverlap(t, ot))) return false;
           if (hasConflict(emp.id, dateStr, t)) return false;
           return true;
@@ -1121,6 +1343,18 @@ CREATE TABLE IF NOT EXISTS tournee_affectations (
 
 CREATE INDEX IF NOT EXISTS idx_ta_date ON tournee_affectations (date);
 CREATE INDEX IF NOT EXISTS idx_ta_emp  ON tournee_affectations (employe_id);
+
+CREATE TABLE IF NOT EXISTS employe_absences (
+  id             BIGSERIAL PRIMARY KEY,
+  employe_id     UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+  date           DATE NOT NULL,
+  type_absence   TEXT NOT NULL CHECK (type_absence IN ('maladie','vacances','absence','formation')),
+  notes          TEXT,
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (employe_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_abs_date ON employe_absences (date);
+CREATE INDEX IF NOT EXISTS idx_abs_emp  ON employe_absences (employe_id);
 -->
 </body>
 </html>
