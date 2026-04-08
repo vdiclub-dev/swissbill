@@ -492,25 +492,36 @@
                 tentatives++;
             }
 
-            // 2a. Vérifier si l'email existe déjà
+            // 2. Créer ou mettre à jour l'utilisateur
+            let existingUser = null;
             if (currentDemande.email) {
-                const { data: existing } = await db.from('utilisateurs').select('id,code_usr').eq('email', currentDemande.email).maybeSingle();
-                if (existing) throw new Error(`Cet email est déjà associé à un compte existant (code : ${existing.code_usr || existing.id}). Modifiez l'email dans la demande ou supprimez l'ancien compte.`);
+                const { data } = await db.from('utilisateurs').select('id,code_usr').eq('email', currentDemande.email).maybeSingle();
+                existingUser = data;
             }
 
-            // 2b. Créer l'utilisateur dans la table utilisateurs
-            const { error: insErr } = await db.from('utilisateurs').insert([{
-                id:       crypto.randomUUID(),
-                prenom:   prenom,
-                nom:      nom,
-                email:    currentDemande.email || null,
-                role:     role,
-                code_usr: codeUnique,
-                telephone: currentDemande.telephone || null,
-                entreprise_nom: currentDemande.entreprise_nom || null,
-                actif: true
-            }]);
-            if (insErr) throw insErr;
+            if (existingUser) {
+                // Email déjà utilisé → on met à jour le rôle du compte existant
+                const { error: updUserErr } = await db.from('utilisateurs').update({
+                    role: role,
+                    actif: true
+                }).eq('id', existingUser.id);
+                if (updUserErr) throw updUserErr;
+                codeUnique = existingUser.code_usr || codeUnique;
+            } else {
+                // Nouveau compte
+                const { error: insErr } = await db.from('utilisateurs').insert([{
+                    id:       crypto.randomUUID(),
+                    prenom:   prenom,
+                    nom:      nom,
+                    email:    currentDemande.email || null,
+                    role:     role,
+                    code_usr: codeUnique,
+                    telephone: currentDemande.telephone || null,
+                    entreprise_nom: currentDemande.entreprise_nom || null,
+                    actif: true
+                }]);
+                if (insErr) throw insErr;
+            }
 
             // 3. Mettre à jour la demande : statut = valide + code attribué
             const { error: updErr } = await db.from('demandes_inscription').update({
