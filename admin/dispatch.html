@@ -704,13 +704,33 @@
     /* ── Protection session ── */
     (async () => {
         const { data: { session } } = await db.auth.getSession();
-        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+        const codeUser = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
+        const userId = session?.user?.id || codeUser?.id;
         if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
-        if (codeUser && !['admin','super_admin'].includes(codeUser.role)) {
-            window.location.replace('../login/index.html'); return;
+        if (!userId) { window.location.replace('../login/index.html'); return; }
+        const { data: user } = await db.from('utilisateurs').select('role').eq('id', userId).single();
+        if (!user || !['admin','super_admin'].includes(user.role)) {
+            await db.auth.signOut();
+            window.location.replace('../login/index.html');
         }
     })();
-    const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
+    const ORS_KEY_FALLBACK = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
+    const ORS_KEY = (typeof window.COLIXO_ORS_KEY === 'string' && window.COLIXO_ORS_KEY.trim())
+        ? window.COLIXO_ORS_KEY.trim()
+        : ORS_KEY_FALLBACK;
+
+    function orsErrorUserMessage(status, detail) {
+        var d = String(detail || '');
+        var low = d.toLowerCase();
+        if (status === 429 || /hit your limit|quota|rate limit|too many/i.test(low)) {
+            return 'Quota OpenRouteService atteint (itinéraires des tournées). Le compteur se réinitialise vers 7 h (heure Europe/Zurich), ou créez votre propre clé sur openrouteservice.org et ajoutez-la dans config.js (COLIXO_ORS_KEY).';
+        }
+        if (/reset|7\s*am|zurich/i.test(d)) {
+            return 'Limite de requêtes OpenRouteService : ' + (d.length < 180 ? d : d.slice(0, 177) + '…') + ' — Vous pouvez aussi définir COLIXO_ORS_KEY dans config.js.';
+        }
+        if (d) return 'OpenRouteService : ' + d.slice(0, 220);
+        return 'OpenRouteService indisponible (HTTP ' + (status || '?') + ').';
+    }
 
     /* ── State ── */
     let allOrders  = [];
@@ -1686,16 +1706,29 @@
 
     /* ── ORS ROUTING ── */
     async function getORSRoute(waypoints) {
-        if(waypoints.length<2) return null;
+        if (waypoints.length < 2) return { ok: false, reason: 'points' };
         try {
-            const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{
-                method:'POST',
-                headers:{'Authorization':ORS_KEY,'Content-Type':'application/json'},
-                body:JSON.stringify({coordinates:waypoints.map(p=>[p[1],p[0]])})
+            const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+                method: 'POST',
+                headers: { 'Authorization': ORS_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ coordinates: waypoints.map(p => [p[1], p[0]]) })
             });
-            if(!res.ok) throw new Error(`ORS ${res.status}`);
-            return await res.json();
-        } catch(e) { console.error('[ORS]',e.message); return null; }
+            const text = await res.text();
+            var data;
+            try { data = JSON.parse(text); } catch (e) { data = null; }
+            if (!res.ok) {
+                var detail = '';
+                if (data && data.error && data.error.message) detail = data.error.message;
+                else if (data && typeof data.message === 'string') detail = data.message;
+                else detail = text || ('HTTP ' + res.status);
+                console.error('[ORS]', res.status, detail);
+                return { ok: false, status: res.status, detail: detail };
+            }
+            return { ok: true, data: data };
+        } catch (e) {
+            console.error('[ORS]', e && e.message);
+            return { ok: false, detail: (e && e.message) ? e.message : String(e) };
+        }
     }
 
     /* ── CALC + DRAW TOUR ROUTE ── */
@@ -1714,10 +1747,23 @@
         if(wpts.length<2){toast('info','Transports sans coordonnées GPS');return;}
 
         showLoad('Calcul route ORS…');
-        const data=await getORSRoute(wpts);
+        const orsResult = await getORSRoute(wpts);
         hideLoad();
 
-        if(!data?.features?.[0]){toast('error','Route ORS indisponible'); clearTourMap(tourId); drawFallbackRoute(tour,wpts); return;}
+        if (!orsResult.ok) {
+            if (orsResult.reason === 'points') { toast('info', 'Pas assez de points GPS pour tracer la route'); return; }
+            toast('error', orsErrorUserMessage(orsResult.status, orsResult.detail));
+            clearTourMap(tourId);
+            drawFallbackRoute(tour, wpts);
+            return;
+        }
+        const data = orsResult.data;
+        if (!data?.features?.[0]) {
+            toast('error', 'Route ORS indisponible');
+            clearTourMap(tourId);
+            drawFallbackRoute(tour, wpts);
+            return;
+        }
 
         const feature=data.features[0];
         const props=feature.properties;

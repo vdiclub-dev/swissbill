@@ -56,6 +56,15 @@ window.SUPABASE_CONFIG = {
 // Facturation Colixo (admin/facturation.html) : Edge send-colixo-facture — COLIXO_FROM_EMAIL optionnel ; optionnel window.COLIXO_FACTURE_REPLY_EMAIL ou secret COLIXO_REPLY_TO_EMAIL.
 if (typeof window.BRIMOT_SEND_MAIL_URL === 'undefined') window.BRIMOT_SEND_MAIL_URL = '';
 
+/**
+ * OpenRouteService — itinéraires + géocodage secours (page Dispatch).
+ * Mettez VOTRE clé (tableau de bord → https://openrouteservice.org/dev/#/home ).
+ * Important : ne pas utiliser `if (undefined)` avec une clé par défaut — sinon votre clé peut être ignorée.
+ * Laisser '' = le dispatch utilisera la clé de secours intégrée (quota partagé, vite saturé).
+ * Même avec votre clé, le plan gratuit ORS a encore des plafonds / jour — voir « Usage » sur le site ORS.
+ */
+if (typeof window.COLIXO_ORS_KEY === 'undefined') window.COLIXO_ORS_KEY = '';
+
 /** Stockage session auth : localStorage → sessionStorage → mémoire (Edge « Tracking Prevention », Safari strict, etc.). */
 function colixoAuthStorage() {
     var mem = Object.create(null);
