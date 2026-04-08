@@ -1,6 +1,9 @@
 -- ============================================================
 --  tournees.sql — Tables pour la gestion des tournées Colixo
 --  Exécutez ce fichier dans Supabase > SQL Editor
+--
+--  Si la table tournees existe déjà mais erreur « heure_debut does not exist » :
+--  exécutez plutôt tournees_fix_columns.sql (ajoute les colonnes manquantes).
 -- ============================================================
 
 -- 1. Tournées (définition des routes)
