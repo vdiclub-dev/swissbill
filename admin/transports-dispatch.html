@@ -207,6 +207,13 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
             <div class="field"><label>Priorité</label><select id="nPriority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></div>
             <div class="field"><label>Chauffeur (optionnel)</label><select id="nDriver"><option value="">— Aucun —</option></select></div>
             <div class="field s2"><label>Tournée (optionnel)</label><select id="nTournee"><option value="">— Aucune —</option></select></div>
+            <div id="routeBadge" class="s2" style="display:none;grid-column:1/-1;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--green);display:none;align-items:center;gap:14px;">
+                <i class="fas fa-route"></i>
+                <span id="routeBadgeKm" style="font-weight:700;">—</span>
+                <span style="color:var(--muted)">·</span>
+                <span id="routeBadgeMin" style="font-weight:700;">—</span>
+                <span id="routeBadgeSpinner" style="margin-left:auto;font-size:11px;color:var(--muted);"></span>
+            </div>
             <div class="field s2"><label>Instructions / Notes</label><textarea id="nInstructions" placeholder="Instructions spéciales…"></textarea></div>
         </div>
         <div class="mactions">
@@ -606,13 +613,49 @@ function setupAC(inputId,listId,which){
     inp.addEventListener('input',function(){clearTimeout(gcTimers[inputId]);var q=inp.value.trim();if(q.length<3){lst.classList.remove('open');return;}gcTimers[inputId]=setTimeout(function(){doGeocode(q,lst,inp,which);},400);});
     inp.addEventListener('blur',function(){setTimeout(function(){lst.classList.remove('open');},200);});
 }
+var routeData=null;
 async function doGeocode(q,lst,inp,which){
-    try{var r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=5&countrycodes=ch',{headers:{'Accept-Language':'fr'}});var data=await r.json();lst.innerHTML='';if(!data||!data.length){lst.classList.remove('open');return;}data.forEach(function(item){var div=document.createElement('div');div.className='ac-item';div.textContent=item.display_name;div.addEventListener('mousedown',function(){inp.value=item.display_name;if(which==='pickup')pickupCoords={lat:parseFloat(item.lat),lng:parseFloat(item.lon),label:item.display_name};else deliveryCoords={lat:parseFloat(item.lat),lng:parseFloat(item.lon),label:item.display_name};lst.classList.remove('open');});lst.appendChild(div);});lst.classList.add('open');}catch(e){lst.classList.remove('open');}
+    try{
+        var r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=5&countrycodes=ch',{headers:{'Accept-Language':'fr'}});
+        var data=await r.json();lst.innerHTML='';if(!data||!data.length){lst.classList.remove('open');return;}
+        data.forEach(function(item){
+            var div=document.createElement('div');div.className='ac-item';div.textContent=item.display_name;
+            div.addEventListener('mousedown',function(){
+                inp.value=item.display_name;
+                if(which==='pickup')pickupCoords={lat:parseFloat(item.lat),lng:parseFloat(item.lon),label:item.display_name};
+                else deliveryCoords={lat:parseFloat(item.lat),lng:parseFloat(item.lon),label:item.display_name};
+                lst.classList.remove('open');
+                calculateRoute();
+            });
+            lst.appendChild(div);
+        });
+        lst.classList.add('open');
+    }catch(e){lst.classList.remove('open');}
+}
+async function calculateRoute(){
+    var badge=document.getElementById('routeBadge');
+    var spin=document.getElementById('routeBadgeSpinner');
+    var kmEl=document.getElementById('routeBadgeKm');
+    var minEl=document.getElementById('routeBadgeMin');
+    if(!pickupCoords||!deliveryCoords){badge.style.display='none';routeData=null;return;}
+    badge.style.display='flex';
+    spin.textContent='Calcul…';kmEl.textContent='—';minEl.textContent='—';
+    try{
+        var url='https://router.project-osrm.org/route/v1/driving/'+pickupCoords.lng+','+pickupCoords.lat+';'+deliveryCoords.lng+','+deliveryCoords.lat+'?overview=false';
+        var res=await fetch(url);var json=await res.json();
+        if(json.code!=='Ok')throw new Error('Route introuvable');
+        var km=Math.round(json.routes[0].distance/100)/10;
+        var min=Math.round(json.routes[0].duration/60);
+        routeData={distance_km:km,duration_min:min};
+        kmEl.textContent=km+' km';
+        minEl.textContent=(min>=60?Math.floor(min/60)+'h'+String(min%60).padStart(2,'0'):min+' min');
+        spin.textContent='✓ Route calculée';
+    }catch(e){spin.textContent='Route non calculée';routeData=null;}
 }
 setupAC('pickupInput','pickupList','pickup');
 setupAC('deliveryInput','deliveryList','delivery');
-document.getElementById('pickupInput').addEventListener('input',function(){pickupCoords=null;});
-document.getElementById('deliveryInput').addEventListener('input',function(){deliveryCoords=null;});
+document.getElementById('pickupInput').addEventListener('input',function(){pickupCoords=null;routeData=null;document.getElementById('routeBadge').style.display='none';});
+document.getElementById('deliveryInput').addEventListener('input',function(){deliveryCoords=null;routeData=null;document.getElementById('routeBadge').style.display='none';});
 
 // ── NOUVEAU TRANSPORT ──
 async function initCounter(){var r=await db.from('transport_orders_simple').select('id',{count:'exact',head:true});orderCounter=(r.count||0)+1;}
@@ -622,7 +665,9 @@ document.getElementById('btnNew').addEventListener('click',function(){
     document.getElementById('nQty').value='1';document.getElementById('nWeight').value='';
     document.getElementById('nSvcType').value='standard';document.getElementById('nPkgType').value='colis';
     document.getElementById('nPriority').value='normal';document.getElementById('nDriver').value='';document.getElementById('nTournee').value='';
-    pickupCoords=null;deliveryCoords=null;orderCounter++;openModal('modalNew');
+    pickupCoords=null;deliveryCoords=null;routeData=null;
+    document.getElementById('routeBadge').style.display='none';
+    orderCounter++;openModal('modalNew');
 });
 document.getElementById('btnSaveNew').addEventListener('click',async function(){
     var pA=document.getElementById('pickupInput').value.trim(),dA=document.getElementById('deliveryInput').value.trim();
@@ -631,7 +676,7 @@ document.getElementById('btnSaveNew').addEventListener('click',async function(){
     var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Création…';
     try{
         var drvId=document.getElementById('nDriver').value||null,tourneeId=document.getElementById('nTournee').value||null;
-        var payload={order_number:genNum(),pickup_address:pickupCoords?pickupCoords.label:pA,delivery_address:deliveryCoords?deliveryCoords.label:dA,pickup_lat:pickupCoords?pickupCoords.lat:null,pickup_lng:pickupCoords?pickupCoords.lng:null,delivery_lat:deliveryCoords?deliveryCoords.lat:null,delivery_lng:deliveryCoords?deliveryCoords.lng:null,service_type:document.getElementById('nSvcType').value,speed:document.getElementById('nSvcType').value,package_type:document.getElementById('nPkgType').value,quantity:parseInt(document.getElementById('nQty').value)||1,weight:parseFloat(document.getElementById('nWeight').value)||null,priority:document.getElementById('nPriority').value==='urgent'?'urgent':'normal',instructions:document.getElementById('nInstructions').value.trim()||null,driver_id:drvId,status:drvId?'planned':'pending',destinataire_nom:document.getElementById('destName').value.trim()||null,destinataire_tel:document.getElementById('destPhone').value.trim()||null,assigned_at:drvId?nowCH():null,tournee_id:tourneeId};
+        var payload={order_number:genNum(),pickup_address:pickupCoords?pickupCoords.label:pA,delivery_address:deliveryCoords?deliveryCoords.label:dA,pickup_lat:pickupCoords?pickupCoords.lat:null,pickup_lng:pickupCoords?pickupCoords.lng:null,delivery_lat:deliveryCoords?deliveryCoords.lat:null,delivery_lng:deliveryCoords?deliveryCoords.lng:null,service_type:document.getElementById('nSvcType').value,speed:document.getElementById('nSvcType').value,package_type:document.getElementById('nPkgType').value,quantity:parseInt(document.getElementById('nQty').value)||1,weight:parseFloat(document.getElementById('nWeight').value)||null,priority:document.getElementById('nPriority').value==='urgent'?'urgent':'normal',instructions:document.getElementById('nInstructions').value.trim()||null,driver_id:drvId,status:drvId?'planned':'pending',destinataire_nom:document.getElementById('destName').value.trim()||null,destinataire_tel:document.getElementById('destPhone').value.trim()||null,assigned_at:drvId?nowCH():null,tournee_id:tourneeId,distance_km:routeData?routeData.distance_km:null,duration_min:routeData?routeData.duration_min:null};
         var r=await db.from('transport_orders_simple').insert([payload]);if(r.error)throw r.error;
         toast(payload.order_number+' créé !',true);closeModal('modalNew');await load({silent:true});
     }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Créer le transport';}
