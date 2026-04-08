@@ -39,10 +39,12 @@ ALTER TABLE tournees             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tournee_affectations ENABLE ROW LEVEL SECURITY;
 
 -- Politique : accès complet pour anon et authenticated
+DROP POLICY IF EXISTS "acces_total_tournees" ON tournees;
 CREATE POLICY "acces_total_tournees"
   ON tournees FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "acces_total_affectations" ON tournee_affectations;
 CREATE POLICY "acces_total_affectations"
   ON tournee_affectations FOR ALL
   USING (true) WITH CHECK (true);
@@ -58,6 +60,7 @@ CREATE TABLE IF NOT EXISTS employe_absences (
 );
 
 ALTER TABLE employe_absences ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "acces_total_absences" ON employe_absences;
 CREATE POLICY "acces_total_absences"
   ON employe_absences FOR ALL
   USING (true) WITH CHECK (true);
