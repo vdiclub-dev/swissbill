@@ -11,8 +11,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260431"></script>
-    <script data-cfasync="false">if(!window.SUPABASE_CONFIG){document.write('<scr'+'ipt data-cfasync="false" src="/config.js?v=20260431&t='+Date.now()+'"><\/scr'+'ipt>');}</script>
+    <script data-cfasync="false">
+(function(){var b='';var h=location.hostname||'';var path=location.pathname||'/';if(/\.github\.io$/i.test(h)){var pts=path.split('/').filter(Boolean);if(pts.length>=1)b='/'+pts[0];}else{var A={admin:1,login:1,chauffeur:1,client:1,magasinier:1,'commandes-client':1};var segs=path.split('/').filter(Boolean);if(segs.length>=1){var r0=segs[0],s0=r0.replace(/\.html?$/i,'').toLowerCase();if(segs.length===1){if(/\.html?$/i.test(r0))b='';else if(A[s0])b='';else b='/'+r0;}else{if(A[s0])b='';else b='/'+r0;}}}var primary=(b||'')+'/config.js',v='20260462';var s=document.createElement('script');s.async=false;s.setAttribute('data-cfasync','false');s.src=primary+'?v='+v+'&cb='+Date.now();s.onerror=function(){if((b||'')!==''){var s2=document.createElement('script');s2.async=false;s2.setAttribute('data-cfasync','false');s2.src='/config.js?v='+v+'&cb='+Date.now();document.currentScript.insertAdjacentElement('afterend',s2);}};document.currentScript.insertAdjacentElement('afterend',s);})();
+</script>
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -169,7 +170,7 @@
     <a class="nav-item" href="dashboard.html"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
     <a class="nav-item" href="dashboard.html"><i class="fas fa-building"></i><span>Entreprises</span></a>
     <div class="sidebar-section">Opérations</div>
-    <a class="nav-item" href="dispatch.html"><i class="fas fa-search-location"></i><span>Suivi colis</span></a>
+    <a class="nav-item" href="dispatch.html"><i class="fas fa-map-marked-alt"></i><span>Dispatch</span></a>
     <a class="nav-item" href="commandes-client.html"><i class="fas fa-inbox"></i><span>Commandes</span></a>
     <div class="sidebar-section">Analytiques</div>
     <a class="nav-item active" href="tarification.html"><i class="fas fa-tags"></i><span>Tarification</span></a>
@@ -541,7 +542,10 @@ function renderTarifsSpeciaux(){
 
     tbody.innerHTML=tarifsSpeciaux.map(t=>{
         const ent=entreprises.find(e=>e.id===t.entreprise_id);
-        const typeLabel={forfait:'Forfait',vignologue:'Vignologue',zone:'Par zone',volume:'Volume',custom:'Personnalisé'}[t.type]||t.type;
+        let typeLabel={forfait:'Forfait',vignologue:'Vignologue',zone:'Par zone',negocie:'Négocié / fixe',montant_fixe:'Montant fixe'}[t.type]||t.type;
+        if(t.type==='negocie'||t.type==='montant_fixe'){
+            typeLabel=/^\[volume\]/i.test(String(t.description||'').trim())?'Remise volume':'Personnalisé';
+        }
 
         let grilleHtml='';
         if(t.type==='vignologue'){
@@ -798,7 +802,11 @@ window.editSpecial=function(id){
     document.getElementById('specialId').value=t.id;
     document.getElementById('modalSpecialTitle').textContent='MODIFIER TARIF SPÉCIAL';
     document.getElementById('specialEntreprise').value=t.entreprise_id||'';
-    document.getElementById('specialType').value=t.type||'forfait';
+    var uiType=t.type||'forfait';
+    if(t.type==='negocie'||t.type==='montant_fixe'){
+        uiType=/^\[volume\]/i.test(String(t.description||'').trim())?'volume':'custom';
+    }
+    document.getElementById('specialType').value=uiType;
     document.getElementById('specialDesc').value=t.description||'';
     document.getElementById('specialDateDebut').value=t.date_debut||'';
     document.getElementById('specialDateFin').value=t.date_fin||'';
@@ -813,6 +821,11 @@ window.editSpecial=function(id){
             if(document.getElementById('spP210')) document.getElementById('spP210').value=t.p2_10||7.5;
             if(document.getElementById('spP1030')) document.getElementById('spP1030').value=t.p10_30||12;
             if(document.getElementById('spP30p')) document.getElementById('spP30p').value=t.p30_plus||18;
+        } else if(t.type==='zone'){
+            if(document.getElementById('spZone')) document.getElementById('spZone').value=t.zone||'';
+            if(document.getElementById('spPrixZone')) document.getElementById('spPrixZone').value=t.prix_zone??'';
+        } else if(document.getElementById('spMontantFixe')){
+            document.getElementById('spMontantFixe').value=t.montant_fixe??'';
         }
     }, 50);
     const m=document.getElementById('modalSpecial');
@@ -821,28 +834,37 @@ window.editSpecial=function(id){
 
 window.saveSpecial=async function(){
     const entId=document.getElementById('specialEntreprise').value;
-    const type=document.getElementById('specialType').value;
+    const uiType=document.getElementById('specialType').value;
     const id=document.getElementById('specialId').value;
     if(!entId){toast('❌ Sélectionnez une entreprise');return;}
     const n=v=>v?parseFloat(v):null;
 
+    /* La colonne type en base suit le CHECK (souvent forfait | vignologue | zone | negocie) — pas volume/custom. */
+    var descRaw=String(document.getElementById('specialDesc').value||'').trim();
+    if(uiType==='volume'){
+        if(!/^\[volume\]/i.test(descRaw)) descRaw='[volume] '+descRaw;
+    } else if(uiType==='custom'){
+        descRaw=descRaw.replace(/^\[volume\]\s*/i,'').trim();
+    }
+    var dbType=(uiType==='volume'||uiType==='custom')?'negocie':uiType;
+
     let payload={
         entreprise_id:entId,
-        type,
-        description:document.getElementById('specialDesc').value,
+        type:dbType,
+        description:descRaw||null,
         date_debut:document.getElementById('specialDateDebut').value||null,
         date_fin:document.getElementById('specialDateFin').value||null,
     };
 
-    if(type==='forfait'){
+    if(uiType==='forfait'){
         payload.prix_colis=n(document.getElementById('spPrixColis')?.value);
         payload.poids_max=n(document.getElementById('spPoidsMax')?.value)||30;
-    } else if(type==='vignologue'){
+    } else if(uiType==='vignologue'){
         payload.p0_2=n(document.getElementById('spP02')?.value)||7;
         payload.p2_10=n(document.getElementById('spP210')?.value)||7.5;
         payload.p10_30=n(document.getElementById('spP1030')?.value)||12;
         payload.p30_plus=n(document.getElementById('spP30p')?.value)||18;
-    } else if(type==='zone'){
+    } else if(uiType==='zone'){
         payload.zone=document.getElementById('spZone')?.value;
         payload.prix_zone=n(document.getElementById('spPrixZone')?.value);
     } else {

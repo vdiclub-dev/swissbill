@@ -2,8 +2,33 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <!-- colixo-build:20260462 -->
+    <script>
+    (function(){try{
+      var BUILD='20260462';
+      try{
+        if(localStorage.getItem('colixo_deploy')!==BUILD){
+          localStorage.setItem('colixo_deploy',BUILD);
+          sessionStorage.removeItem('colixo_index_bust');
+          sessionStorage.removeItem('colixo_login_bust');
+        }
+      }catch(e){}
+      var u=new URL(location.href);
+      if(u.searchParams.has('cx')){
+        u.searchParams.delete('cx');
+        history.replaceState(null,'',u.pathname+u.search+u.hash);
+        return;
+      }
+      if(sessionStorage.getItem('colixo_login_bust')==='1')return;
+      sessionStorage.setItem('colixo_login_bust','1');
+      u.searchParams.set('cx',Date.now());
+      location.replace(u.toString());
+    }catch(e){}})();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Connexion — Colixo</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -210,32 +235,26 @@
 (function () {
     'use strict';
 
-    if (!window.SUPABASE_CONFIG) {
+    /* config.js est injecté dans le <head> : sans attendre l’événement « load », ce script
+       s’exécutait avant la fin du chargement → SUPABASE_CONFIG encore absent (sans erreur console). */
+    function colixoLoginApp() {
+
+    if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
         if (new URLSearchParams(location.search).get('logout') === '1') {
             try { localStorage.removeItem('colixo_user'); } catch (e) {}
             var h0 = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
             window.location.replace(h0);
         }
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>❌ config.js manquant</h2><p>Le fichier config.js est introuvable. Rechargez la page.</p><br><button onclick="location.reload()" style="padding:10px 20px;background:#e8311a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">Recharger</button></div>';
-        return;
-    }
-
-    // Récupérer ou réinitialiser le client Supabase si le SDK a échoué au chargement
-    var db = window.SUPABASE_CLIENT;
-    if (!db) {
-        if (window.supabase && window.supabase.createClient) {
-            try {
-                db = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.key, {
-                    auth: { persistSession: true, storageKey: 'Colixo-auth', autoRefreshToken: true }
-                });
-                window.SUPABASE_CLIENT = db;
-            } catch (e) { db = null; }
+        var hint = '';
+        if (window.SUPABASE_CONFIG && !window.SUPABASE_CLIENT) {
+            hint = '<p style="margin-top:12px;font-size:14px;opacity:.9">' + (window.COLIXO_SUPABASE_INIT_ERROR || 'Initialisation du client Supabase impossible (réseau, bloqueur, SDK).') + '</p>';
+        } else {
+            hint = '<p>Le fichier <code>config.js</code> n’a pas pu être chargé (404 ou mauvais chemin). Vérifiez le déploiement à la racine ou sous-dossier, ou rechargez en forcé (Cmd+Shift+R).</p>';
         }
-    }
-    if (!db) {
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>⚠️ Service temporairement indisponible</h2><p>La connexion au service d\'authentification a échoué. Vérifiez votre connexion internet et réessayez.</p><br><button onclick="location.reload()" style="padding:10px 20px;background:#e8311a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">Recharger</button></div>';
+        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:520px;"><h2>❌ config.js manquant</h2>' + hint + '</div>';
         return;
     }
+    const db = window.SUPABASE_CLIENT;
 
     if (new URLSearchParams(location.search).get('logout') === '1') {
         (async function () {
@@ -312,13 +331,9 @@
     }
 
     /* ── Vérifier session existante (code USR déjà connecté) ── */
-    // Ne pas auto-rediriger si l'utilisateur vient de se déconnecter ou si ?noredirect est présent
-    const _noRedir = new URLSearchParams(location.search).get('noredirect') === '1';
-    if (!_noRedir) {
-        const existingUser = localStorage.getItem('colixo_user');
-        if (existingUser) {
-            try { redirectByRole(JSON.parse(existingUser).role); } catch(e) {}
-        }
+    const existingUser = localStorage.getItem('colixo_user');
+    if (existingUser) {
+        try { redirectByRole(JSON.parse(existingUser).role); } catch(e) {}
     }
 
     /* ── DEMANDE D'ACCÈS (table demandes_inscription — exécuter demandes_inscription.sql dans Supabase) ── */
@@ -416,7 +431,13 @@
         }
     });
 
+    }
 
+    if (document.readyState === 'complete') {
+        colixoLoginApp();
+    } else {
+        window.addEventListener('load', colixoLoginApp);
+    }
 })();
 </script>
 </body>

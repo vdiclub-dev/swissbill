@@ -1,18 +1,35 @@
 // ============================================================
 //  config.js — Configuration Supabase pour Colixo
 //  ⚠️  Ne jamais committer ce fichier dans un dépôt public !
-//  Les pages chargent config.js en <script src="…?v=…"> (compatible Cloudflare).
-//  Incrémenter COLIXO_ASSET_VERSION + version.txt (racine) + ?v= dans les HTML lors d’un déploiement important.
+//  Les pages injectent config.js avec ?v=BUILD&cb=timestamp (contourne le cache Cloudflare sur l’URL).
+//  Incrémenter COLIXO_ASSET_VERSION + version.txt + le v dans les HTML (ou relancer scripts/apply-config-cache-bust.py).
 // ============================================================
-window.COLIXO_ASSET_VERSION = '20260431';
+window.COLIXO_ASSET_VERSION = '20260462';
 
-/** Sur pages GitHub Pages (user.github.io/nom-du-repo/), les liens /login/… sans préfixe cassent. */
-window.COLIXO_BASE_PATH = (function () {
-    if (typeof location !== 'undefined' && /\.github\.io$/i.test(location.hostname)) {
-        var parts = location.pathname.split('/').filter(Boolean);
-        if (parts.length >= 1) return '/' + parts[0];
+/**
+ * Préfixe du site (liens /login/…, déploiement sous /dossier/, GitHub Pages, etc.).
+ * Doit rester aligné avec le mini-loader inline dans les HTML (même heuristique).
+ */
+window.COLIXO_BASE_PATH = (function colixoResolveBasePath() {
+    if (typeof location === 'undefined') return '';
+    var h = location.hostname || '';
+    var path = location.pathname || '/';
+    if (/\.github\.io$/i.test(h)) {
+        var pts = path.split('/').filter(Boolean);
+        if (pts.length >= 1) return '/' + pts[0];
     }
-    return '';
+    var APP = { admin: 1, login: 1, chauffeur: 1, client: 1, magasinier: 1, 'commandes-client': 1 };
+    var segs = path.split('/').filter(Boolean);
+    if (segs.length < 1) return '';
+    var raw0 = segs[0];
+    var s0 = raw0.replace(/\.html?$/i, '').toLowerCase();
+    if (segs.length === 1) {
+        if (/\.html?$/i.test(raw0)) return '';
+        if (APP[s0]) return '';
+        return '/' + raw0;
+    }
+    if (APP[s0]) return '';
+    return '/' + segs[0];
 })();
 
 /** Préfixe les chemins absolus du site (ex. /login/index.html → /repo/login/… sur github.io). */
@@ -120,15 +137,10 @@ try {
             }
         }
     );
-    console.log('✅ Configuration Supabase chargée');
 } catch (e) {
     console.warn('Supabase indisponible :', e && e.message);
     window.COLIXO_SUPABASE_INIT_ERROR = e && (e.message || String(e));
     window.SUPABASE_CLIENT = null;
-}
-
-if (typeof console !== 'undefined' && console.info) {
-    console.info('[Colixo] build', window.COLIXO_ASSET_VERSION, 'base', window.COLIXO_BASE_PATH === '' ? '(racine)' : window.COLIXO_BASE_PATH);
 }
 
 /** GitHub Pages peut servir un vieux config.js en cache : version.txt est toujours relue (no-store) pour forcer un reload si le dépôt est plus récent que le bundle. */
@@ -149,7 +161,9 @@ if (typeof console !== 'undefined' && console.info) {
                 if (sessionStorage.getItem(key)) return;
                 sessionStorage.setItem(key, '1');
             } catch (e) {}
-            console.info('[Colixo] version serveur', server, '> bundle', bundle, '— rechargement');
+            if (typeof console !== 'undefined' && console.debug) {
+                console.debug('[Colixo] version serveur', server, '> bundle', bundle, '— rechargement');
+            }
             location.reload();
         })
         .catch(function () {});

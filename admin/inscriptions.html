@@ -151,7 +151,7 @@
     <a class="nav-item" href="dashboard.html"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
     <a class="nav-item" href="users.html"><i class="fas fa-users"></i><span>Utilisateurs</span></a>
     <div class="sidebar-section">Opérations</div>
-    <a class="nav-item" href="dispatch.html"><i class="fas fa-search-location"></i><span>Suivi colis</span></a>
+    <a class="nav-item" href="dispatch.html"><i class="fas fa-map-marked-alt"></i><span>Carte Dispatch</span></a>
     <a class="nav-item" href="transports-dispatch.html"><i class="fas fa-list-ul"></i><span>Transports</span></a>
     <a class="nav-item" href="../commandes-client.html"><i class="fas fa-inbox"></i><span>Commandes</span></a>
     <div class="sidebar-section">Système</div>
@@ -236,6 +236,9 @@
     <div class="modal">
         <h3><i class="fas fa-user-check" style="color:var(--green);margin-right:8px;"></i>Valider l'inscription</h3>
         <p id="modalDesc">Choisissez le rôle et confirmez pour créer le compte.</p>
+        <p class="modal-session-hint" style="font-size:12px;color:var(--muted);margin:-8px 0 12px;line-height:1.45;">
+            Nouveau compte : création du compte <strong>Auth</strong> côté serveur. Vous pouvez rester connecté avec votre <strong>code admin</strong> (ou une session email + mot de passe).
+        </p>
 
         <label>Rôle attribué</label>
         <select id="selectRole">
@@ -508,18 +511,39 @@
                 if (updUserErr) throw updUserErr;
                 codeUnique = existingUser.code_usr || codeUnique;
             } else {
-                // Nouveau compte
-                const { error: insErr } = await db.from('utilisateurs').insert([{
-                    prenom:   prenom,
-                    nom:      nom,
-                    email:    currentDemande.email || null,
-                    role:     role,
-                    code_usr: codeUnique,
-                    telephone: currentDemande.telephone || null,
-                    entreprise_nom: currentDemande.entreprise_nom || null,
-                    actif: true
-                }]);
-                if (insErr) throw insErr;
+                // Nouveau compte : Auth + utilisateurs (Edge Function ; admin JWT ou code admin)
+                if (!currentDemande.email || !String(currentDemande.email).includes('@')) {
+                    throw new Error('Email manquant ou invalide sur la demande — indispensable pour créer le compte Auth.');
+                }
+                const adminCode = (codeUser.code || codeUser.code_usr || '').trim().toUpperCase();
+                if (!codeUser.id || !adminCode) {
+                    throw new Error('Profil admin incomplet : reconnectez-vous avec votre code sur la page de connexion.');
+                }
+                const { data: fnData, error: fnErr } = await db.functions.invoke('create-inscription-user', {
+                    body: {
+                        prenom,
+                        nom,
+                        email: String(currentDemande.email).trim(),
+                        telephone: currentDemande.telephone ?? null,
+                        entreprise_nom: currentDemande.entreprise_nom ?? null,
+                        role,
+                        code_usr: codeUnique,
+                        admin_id: codeUser.id,
+                        admin_code: adminCode
+                    }
+                });
+                if (fnData && typeof fnData === 'object' && fnData.ok === false && fnData.error) {
+                    throw new Error(String(fnData.error));
+                }
+                if (fnErr) {
+                    console.error('create-inscription-user', fnErr);
+                    throw new Error(fnErr.message || 'Appel Edge Function échoué');
+                }
+                if (!fnData || fnData.ok !== true) {
+                    throw new Error(
+                        'Réponse inattendue — déployez la fonction create-inscription-user : supabase functions deploy create-inscription-user --no-verify-jwt'
+                    );
+                }
             }
 
             // 3. Mettre à jour la demande : statut = valide + code attribué
