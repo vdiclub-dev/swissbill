@@ -11,7 +11,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js"></script>
+    <script data-cfasync="false">
+(function(){var b='';var h=location.hostname||'';var path=location.pathname||'/';if(/\.github\.io$/i.test(h)){var pts=path.split('/').filter(Boolean);if(pts.length>=1)b='/'+pts[0];}else{var A={admin:1,login:1,chauffeur:1,client:1,magasinier:1,'commandes-client':1};var segs=path.split('/').filter(Boolean);if(segs.length>=1){var r0=segs[0],s0=r0.replace(/\.html?$/i,'').toLowerCase();if(segs.length===1){if(/\.html?$/i.test(r0))b='';else if(A[s0])b='';else b='/'+r0;}else{if(A[s0])b='';else b='/'+r0;}}}var primary=(b||'')+'/config.js',v='20260462';var s=document.createElement('script');s.async=false;s.setAttribute('data-cfasync','false');s.src=primary+'?v='+v+'&cb='+Date.now();s.onerror=function(){if((b||'')!==''){var s2=document.createElement('script');s2.async=false;s2.setAttribute('data-cfasync','false');s2.src='/config.js?v='+v+'&cb='+Date.now();document.currentScript.insertAdjacentElement('afterend',s2);}};document.currentScript.insertAdjacentElement('afterend',s);})();
+</script>
     <style>
         :root {
             --night:#0d0f14; --night2:#13171f; --night3:#1c2130;
@@ -151,7 +153,7 @@
     <a class="nav-item" href="dashboard.html"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
     <a class="nav-item" href="users.html"><i class="fas fa-users"></i><span>Utilisateurs</span></a>
     <div class="sidebar-section">Opérations</div>
-    <a class="nav-item" href="dispatch.html"><i class="fas fa-search-location"></i><span>Suivi colis</span></a>
+    <a class="nav-item" href="dispatch.html"><i class="fas fa-map-marked-alt"></i><span>Carte Dispatch</span></a>
     <a class="nav-item" href="transports-dispatch.html"><i class="fas fa-list-ul"></i><span>Transports</span></a>
     <a class="nav-item" href="../commandes-client.html"><i class="fas fa-inbox"></i><span>Commandes</span></a>
     <div class="sidebar-section">Système</div>
@@ -236,6 +238,9 @@
     <div class="modal">
         <h3><i class="fas fa-user-check" style="color:var(--green);margin-right:8px;"></i>Valider l'inscription</h3>
         <p id="modalDesc">Choisissez le rôle et confirmez pour créer le compte.</p>
+        <p class="modal-session-hint" style="font-size:12px;color:var(--muted);margin:-8px 0 12px;line-height:1.45;">
+            Nouveau compte : création du compte <strong>Auth</strong> côté serveur. Vous pouvez rester connecté avec votre <strong>code admin</strong> (ou une session email + mot de passe).
+        </p>
 
         <label>Rôle attribué</label>
         <select id="selectRole">
@@ -508,18 +513,39 @@
                 if (updUserErr) throw updUserErr;
                 codeUnique = existingUser.code_usr || codeUnique;
             } else {
-                // Nouveau compte
-                const { error: insErr } = await db.from('utilisateurs').insert([{
-                    prenom:   prenom,
-                    nom:      nom,
-                    email:    currentDemande.email || null,
-                    role:     role,
-                    code_usr: codeUnique,
-                    telephone: currentDemande.telephone || null,
-                    entreprise_nom: currentDemande.entreprise_nom || null,
-                    actif: true
-                }]);
-                if (insErr) throw insErr;
+                // Nouveau compte : Auth + utilisateurs (Edge Function ; admin JWT ou code admin)
+                if (!currentDemande.email || !String(currentDemande.email).includes('@')) {
+                    throw new Error('Email manquant ou invalide sur la demande — indispensable pour créer le compte Auth.');
+                }
+                const adminCode = (codeUser.code || codeUser.code_usr || '').trim().toUpperCase();
+                if (!codeUser.id || !adminCode) {
+                    throw new Error('Profil admin incomplet : reconnectez-vous avec votre code sur la page de connexion.');
+                }
+                const { data: fnData, error: fnErr } = await db.functions.invoke('create-inscription-user', {
+                    body: {
+                        prenom,
+                        nom,
+                        email: String(currentDemande.email).trim(),
+                        telephone: currentDemande.telephone ?? null,
+                        entreprise_nom: currentDemande.entreprise_nom ?? null,
+                        role,
+                        code_usr: codeUnique,
+                        admin_id: codeUser.id,
+                        admin_code: adminCode
+                    }
+                });
+                if (fnData && typeof fnData === 'object' && fnData.ok === false && fnData.error) {
+                    throw new Error(String(fnData.error));
+                }
+                if (fnErr) {
+                    console.error('create-inscription-user', fnErr);
+                    throw new Error(fnErr.message || 'Appel Edge Function échoué');
+                }
+                if (!fnData || fnData.ok !== true) {
+                    throw new Error(
+                        'Réponse inattendue — déployez la fonction create-inscription-user : supabase functions deploy create-inscription-user --no-verify-jwt'
+                    );
+                }
             }
 
             // 3. Mettre à jour la demande : statut = valide + code attribué

@@ -2,8 +2,33 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <!-- colixo-build:20260462 -->
+    <script>
+    (function(){try{
+      var BUILD='20260462';
+      try{
+        if(localStorage.getItem('colixo_deploy')!==BUILD){
+          localStorage.setItem('colixo_deploy',BUILD);
+          sessionStorage.removeItem('colixo_index_bust');
+          sessionStorage.removeItem('colixo_login_bust');
+        }
+      }catch(e){}
+      var u=new URL(location.href);
+      if(u.searchParams.has('cx')){
+        u.searchParams.delete('cx');
+        history.replaceState(null,'',u.pathname+u.search+u.hash);
+        return;
+      }
+      if(sessionStorage.getItem('colixo_login_bust')==='1')return;
+      sessionStorage.setItem('colixo_login_bust','1');
+      u.searchParams.set('cx',Date.now());
+      location.replace(u.toString());
+    }catch(e){}})();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Connexion — Colixo</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,8 +36,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260431"></script>
-    <script data-cfasync="false">if(!window.SUPABASE_CONFIG){document.write('<scr'+'ipt data-cfasync="false" src="/config.js?v=20260431&t='+Date.now()+'"><\/scr'+'ipt>');}</script>
+    <script data-cfasync="false">
+(function(){var b='';var h=location.hostname||'';var path=location.pathname||'/';if(/\.github\.io$/i.test(h)){var pts=path.split('/').filter(Boolean);if(pts.length>=1)b='/'+pts[0];}else{var A={admin:1,login:1,chauffeur:1,client:1,magasinier:1,'commandes-client':1};var segs=path.split('/').filter(Boolean);if(segs.length>=1){var r0=segs[0],s0=r0.replace(/\.html?$/i,'').toLowerCase();if(segs.length===1){if(/\.html?$/i.test(r0))b='';else if(A[s0])b='';else b='/'+r0;}else{if(A[s0])b='';else b='/'+r0;}}}var primary=(b||'')+'/config.js',v='20260462';var s=document.createElement('script');s.async=false;s.setAttribute('data-cfasync','false');s.src=primary+'?v='+v+'&cb='+Date.now();s.onerror=function(){if((b||'')!==''){var s2=document.createElement('script');s2.async=false;s2.setAttribute('data-cfasync','false');s2.src='/config.js?v='+v+'&cb='+Date.now();document.currentScript.insertAdjacentElement('afterend',s2);}};document.currentScript.insertAdjacentElement('afterend',s);})();
+</script>
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -210,32 +236,26 @@
 (function () {
     'use strict';
 
-    if (!window.SUPABASE_CONFIG) {
+    /* config.js est injecté dans le <head> : sans attendre l’événement « load », ce script
+       s’exécutait avant la fin du chargement → SUPABASE_CONFIG encore absent (sans erreur console). */
+    function colixoLoginApp() {
+
+    if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
         if (new URLSearchParams(location.search).get('logout') === '1') {
             try { localStorage.removeItem('colixo_user'); } catch (e) {}
             var h0 = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
             window.location.replace(h0);
         }
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>❌ config.js manquant</h2><p>Le fichier config.js est introuvable. Rechargez la page.</p><br><button onclick="location.reload()" style="padding:10px 20px;background:#e8311a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">Recharger</button></div>';
-        return;
-    }
-
-    // Récupérer ou réinitialiser le client Supabase si le SDK a échoué au chargement
-    var db = window.SUPABASE_CLIENT;
-    if (!db) {
-        if (window.supabase && window.supabase.createClient) {
-            try {
-                db = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.key, {
-                    auth: { persistSession: true, storageKey: 'Colixo-auth', autoRefreshToken: true }
-                });
-                window.SUPABASE_CLIENT = db;
-            } catch (e) { db = null; }
+        var hint = '';
+        if (window.SUPABASE_CONFIG && !window.SUPABASE_CLIENT) {
+            hint = '<p style="margin-top:12px;font-size:14px;opacity:.9">' + (window.COLIXO_SUPABASE_INIT_ERROR || 'Initialisation du client Supabase impossible (réseau, bloqueur, SDK).') + '</p>';
+        } else {
+            hint = '<p>Le fichier <code>config.js</code> n’a pas pu être chargé (404 ou mauvais chemin). Vérifiez le déploiement à la racine ou sous-dossier, ou rechargez en forcé (Cmd+Shift+R).</p>';
         }
-    }
-    if (!db) {
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>⚠️ Service temporairement indisponible</h2><p>La connexion au service d\'authentification a échoué. Vérifiez votre connexion internet et réessayez.</p><br><button onclick="location.reload()" style="padding:10px 20px;background:#e8311a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">Recharger</button></div>';
+        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:520px;"><h2>❌ config.js manquant</h2>' + hint + '</div>';
         return;
     }
+    const db = window.SUPABASE_CLIENT;
 
     if (new URLSearchParams(location.search).get('logout') === '1') {
         (async function () {
@@ -309,13 +329,9 @@
     }
 
     /* ── Vérifier session existante (code USR déjà connecté) ── */
-    // Ne pas auto-rediriger si l'utilisateur vient de se déconnecter ou si ?noredirect est présent
-    const _noRedir = new URLSearchParams(location.search).get('noredirect') === '1';
-    if (!_noRedir) {
-        const existingUser = localStorage.getItem('colixo_user');
-        if (existingUser) {
-            try { redirectByRole(JSON.parse(existingUser).role); } catch(e) {}
-        }
+    const existingUser = localStorage.getItem('colixo_user');
+    if (existingUser) {
+        try { redirectByRole(JSON.parse(existingUser).role); } catch(e) {}
     }
 
     /* ── DEMANDE D'ACCÈS (table demandes_inscription — exécuter demandes_inscription.sql dans Supabase) ── */
@@ -342,7 +358,7 @@
             };
             var ins = await db.from('demandes_inscription').insert([payload]);
             if (ins.error) throw ins.error;
-            toast('success', 'Demande enregistrée. L'accès au tableau de bord n'est possible qu'avec un code : vous le recevrez après validation par l'équipe.');
+            toast('success', 'Demande enregistrée. L’accès au tableau de bord n’est possible qu’avec un code : vous le recevrez après validation par l’équipe.');
             document.getElementById('formRegister').reset();
             showLoginTab('login');
         } catch (err) {
@@ -413,7 +429,13 @@
         }
     });
 
+    }
 
+    if (document.readyState === 'complete') {
+        colixoLoginApp();
+    } else {
+        window.addEventListener('load', colixoLoginApp);
+    }
 })();
 </script>
 </body>
