@@ -132,6 +132,18 @@ html,body{height:100%;font-family:'Outfit',sans-serif;background:var(--night);co
 /* ── MAPS LINK ── */
 .maps-link{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;color:var(--blue);font-size:12px;font-weight:600;text-decoration:none;margin-top:8px;}
 .maps-link:hover{background:rgba(59,130,246,0.2);}
+/* ── DELIVERY TIMER ── */
+.timer-card{background:var(--night3);border:1px solid var(--border);border-radius:12px;padding:14px;grid-column:1/-1;}
+.timer-card.live{border-color:rgba(168,85,247,0.4);background:rgba(168,85,247,0.06);}
+.timer-card.done{border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.05);}
+.timer-display{font-family:'Bebas Neue',cursive;font-size:42px;letter-spacing:4px;margin-top:4px;line-height:1;}
+.timer-card.live .timer-display{color:var(--purple);}
+.timer-card.done .timer-display{color:var(--green);}
+.timer-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+.timer-card.live .timer-badge{color:var(--purple);}
+.timer-card.done .timer-badge{color:var(--green);}
+.pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--purple);animation:tdpulse 1s ease-in-out infinite;}
+@keyframes tdpulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
 @media(max-width:900px){
     .sidebar{display:none;}
     .main{margin-left:0;}
@@ -274,6 +286,7 @@ var allOrders=[];
 var currentFilter='tous';
 var currentId=null;
 var entreprises={};
+var timerInterval=null;
 
 function esc(s){if(s==null)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fmt(d){if(!d)return'—';var dt=new Date(d);return dt.toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'});}
@@ -296,6 +309,7 @@ function chipHtml(o){
 
 // ── LOAD ──
 async function load(){
+    if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
     var[{data:orders},{data:ents}]=await Promise.all([
         db.from('transport_orders_simple').select('*').order('created_at',{ascending:false}),
         db.from('entreprises').select('id,nom')
@@ -354,9 +368,43 @@ function render(){
     });
 }
 
+// ── TIMER HELPERS ──
+function fmtDuration(ms){
+    if(ms<0)ms=0;
+    var s=Math.floor(ms/1000);
+    var h=Math.floor(s/3600);
+    var m=Math.floor((s%3600)/60);
+    var sec=s%60;
+    return(h?h+'h ':'')+String(m).padStart(2,'0')+'min '+String(sec).padStart(2,'0')+'s';
+}
+function timerCardHtml(o){
+    if(!o.picked_up_at)return'';
+    var live=o.status==='in_transit';
+    var done=o.status==='delivered'&&!!o.delivered_at;
+    if(!live&&!done)return'';
+    var cls=live?'live':'done';
+    var icon=live?'<span class="pulse-dot"></span>':'<i class="fas fa-flag-checkered"></i>';
+    var badge=live?'En cours de livraison':'Durée totale de livraison';
+    var display='';
+    if(done){
+        var ms=new Date(o.delivered_at)-new Date(o.picked_up_at);
+        display=fmtDuration(ms);
+    } else {
+        display='--:--';
+    }
+    return'<div class="timer-card '+cls+'" id="timerCard">'
+        +'<div class="info-label"><i class="fas fa-stopwatch" style="margin-right:5px;"></i>Horloge de livraison</div>'
+        +'<div class="timer-badge">'+icon+' '+badge+'</div>'
+        +'<div class="timer-display" id="timerDisplay">'+display+'</div>'
+        +(o.picked_up_at?'<div style="font-size:11px;color:var(--muted);margin-top:6px;">Prise en charge : '+fmt(o.picked_up_at)+'</div>':'')
+        +(done?'<div style="font-size:11px;color:var(--muted);">Livré : '+fmt(o.delivered_at)+'</div>':'')
+    +'</div>';
+}
+
 // ── DETAIL ──
 async function showDetail(o){
     currentId=o.id;
+    if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
     // Marquer selected dans la liste
     document.querySelectorAll('.order-item').forEach(function(el){
         el.classList.toggle('selected',el.getAttribute('data-id')===o.id);
@@ -450,12 +498,25 @@ async function showDetail(o){
             +'</div>'
             +(o.instructions?'<div class="info-card full"><div class="info-label"><i class="fas fa-comment"></i> Instructions</div><div class="info-val muted">'+esc(o.instructions)+'</div></div>':'')
             +(o.distance_km||o.duration_min?'<div class="info-card"><div class="info-label"><i class="fas fa-road"></i> Itinéraire OSRM</div><div class="info-val">'+(o.distance_km?o.distance_km+' km':'—')+(o.duration_min?' · '+Math.floor(o.duration_min/60)+'h'+String(o.duration_min%60).padStart(2,'0'):'')+'</div></div>':'')
+            +timerCardHtml(o)
         +'</div>'
 
         +'<div class="sec-title"><i class="fas fa-route" style="margin-right:6px;"></i>Progression</div>'
         +'<div class="timeline">'+tlHtml+'</div>'
 
         +deliveryHtml;
+
+    // Chrono live si en_transit
+    if(o.status==='in_transit'&&o.picked_up_at){
+        var start=new Date(o.picked_up_at).getTime();
+        function tickTimer(){
+            var el=document.getElementById('timerDisplay');
+            if(!el){clearInterval(timerInterval);timerInterval=null;return;}
+            el.textContent=fmtDuration(Date.now()-start);
+        }
+        tickTimer();
+        timerInterval=setInterval(tickTimer,1000);
+    }
 
     // Dessiner la signature si présente
     if(del&&del.has_signature&&del.signature_data){
