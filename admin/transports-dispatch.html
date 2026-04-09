@@ -115,6 +115,15 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 .mactions .btn{flex:1;justify-content:center;padding:12px;}
 @media(max-width:1150px){.panel-right{width:290px;}}
 @media(max-width:900px){html,body{overflow:auto;}.workspace{flex-direction:column;overflow:visible;}.panel-right{width:100%;border-left:none;border-top:1px solid var(--border);}.tbl-wrap{max-height:55vh;}}
+/* ── Bandeau validation portail ── */
+.bandeau-validation{display:none;background:rgba(245,158,11,0.08);border-bottom:1px solid rgba(245,158,11,0.25);padding:10px 20px;}
+.bandeau-inner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.bandeau-title{font-weight:700;color:#f59e0b;font-size:13px;}
+.bandeau-badge{background:rgba(245,158,11,0.2);color:#f59e0b;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;}
+.bandeau-list{display:flex;gap:8px;flex-wrap:wrap;}
+.bandeau-item{background:var(--night3);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:4px 10px;font-size:12px;color:var(--muted2);}
+.bandeau-link{margin-left:auto;font-size:12px;color:#f59e0b;text-decoration:none;border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:4px 10px;}
+.bandeau-link:hover{background:rgba(245,158,11,0.1);}
     </style>
 </head>
 <body>
@@ -126,6 +135,16 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
     <button type="button" class="btn btn-ghost btn-sm" id="btnRefresh"><i class="fas fa-sync-alt"></i> Actualiser</button>
     <button type="button" class="btn btn-red btn-sm" id="btnNew"><i class="fas fa-plus"></i> Nouveau transport</button>
 </header>
+
+<!-- Bandeau commandes portail en attente de validation -->
+<div class="bandeau-validation" id="bandeauValidation">
+    <div class="bandeau-inner">
+        <span class="bandeau-title"><i class="fas fa-exclamation-triangle"></i> Commandes portail à valider</span>
+        <span class="bandeau-badge" id="bandeauCount"></span>
+        <div class="bandeau-list" id="bandeauList"></div>
+        <a href="commandes-client.html" class="bandeau-link">Gérer →</a>
+    </div>
+</div>
 
 <div class="workspace">
     <div class="panel-left">
@@ -482,11 +501,38 @@ function setupTableDrag(){
     });
 }
 
+// ── BANDEAU VALIDATION ──
+async function loadBandeau(){
+    try{
+        var r=await db.from('transport_orders_simple').select('id,order_number,destinataire_nom,delivery_address').eq('admin_status','pending_validation').order('created_at',{ascending:false});
+        var items=r.data||[];
+        var bv=document.getElementById('bandeauValidation');
+        if(!items.length){bv.style.display='none';return;}
+        bv.style.display='block';
+        document.getElementById('bandeauCount').textContent=items.length+' en attente';
+        document.getElementById('bandeauList').innerHTML=items.slice(0,5).map(function(o){
+            var addr=(o.delivery_address||'').split(',')[0];
+            return'<span class="bandeau-item">'+esc(o.order_number||o.id.slice(0,8))+(addr?' · '+esc(addr):'')+'</span>';
+        }).join('')+(items.length>5?'<span class="bandeau-item" style="color:var(--muted)">+'+( items.length-5)+' autres</span>':'');
+    }catch(e){}
+}
+
 // ── LOAD ──
 var pollTimer=null;
 async function load(opts){
     opts=opts||{};
-    try{var r=await db.from('transport_orders_simple').select('*').order('created_at',{ascending:false});if(r.error)throw r.error;rows=r.data||[];applyFilter();renderTourneePanel();}
+    try{
+        var r=await db.from('transport_orders_simple').select('*')
+            .not('admin_status','eq','refused')
+            .not('admin_status','eq','pending_validation')
+            .not('status','eq','delivered')
+            .order('created_at',{ascending:false});
+        if(r.error)throw r.error;
+        rows=r.data||[];
+        applyFilter();
+        renderTourneePanel();
+        loadBandeau();
+    }
     catch(e){if(!opts.silent)toast('Erreur : '+(e.message||e),false);}
 }
 function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(function(){if(document.visibilityState==='visible')load({silent:true});},15000);}
