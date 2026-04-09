@@ -40,21 +40,3 @@ CREATE POLICY "demandes_inscription_select_admin"
       WHERE u.id = auth.uid() AND u.role IN ('admin', 'super_admin')
     )
   );
-
--- Mise à jour (validation / refus) depuis l’admin — même périmètre que le SELECT
-DROP POLICY IF EXISTS "demandes_inscription_update_admin" ON public.demandes_inscription;
-CREATE POLICY "demandes_inscription_update_admin"
-  ON public.demandes_inscription FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.utilisateurs u
-      WHERE u.id = auth.uid() AND u.role IN ('admin', 'super_admin')
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.utilisateurs u
-      WHERE u.id = auth.uid() AND u.role IN ('admin', 'super_admin')
-    )
-  );
