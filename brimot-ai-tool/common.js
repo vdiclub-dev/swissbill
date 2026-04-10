@@ -27,10 +27,19 @@
     bulkyWasteFlat: 120,
     bulkyWastePerM2: 1.4,
     standardM2PerHour: 32,
-    diogeneM2PerHour: 12
+    diogeneM2PerHour: 12,
+    endOfLeaseM2PerHour: 8,
+    extremeM2PerHour: 5,
+    disinfectionM2PerHour: 15,
+    recurringM2PerHour: 20,
+    recurringOnceRate: 40,
+    recurringWeeklyRate: 38,
+    recurringBiMonthlyRate: 39,
+    recurringMonthlyRate: 40
   };
 
   var DEFAULT_SERVICE_CATALOG = [
+    { category: "Nettoyages residentiels", name: "Menage recurrent (appartement)", unit: "heure", minPrice: 38, maxPrice: 40 },
     { category: "Nettoyages residentiels", name: "Nettoyage d appartement (regulier ou ponctuel)", unit: "heure", minPrice: 55, maxPrice: 75 },
     { category: "Nettoyages residentiels", name: "Nettoyage de maison", unit: "heure", minPrice: 60, maxPrice: 80 },
     { category: "Nettoyages residentiels", name: "Nettoyage de fin de bail (etat des lieux)", unit: "m2", minPrice: 6, maxPrice: 12 },
@@ -121,10 +130,32 @@
   function saveConfig(config) {
     var merged = Object.assign({}, DEFAULT_CONFIG, config || {});
     Object.keys(merged).forEach(function (key) {
-      merged[key] = toNumber(merged[key], DEFAULT_CONFIG[key]);
+      var val = toNumber(merged[key], DEFAULT_CONFIG[key]);
+      var minVal = CONFIG_MIN[key];
+      if (minVal !== undefined && val < minVal) {
+        val = DEFAULT_CONFIG[key];
+      }
+      merged[key] = val;
     });
     localStorage.setItem(STORAGE_CONFIG, JSON.stringify(merged));
     return merged;
+  }
+
+  function resetConfig() {
+    localStorage.removeItem(STORAGE_CONFIG);
+    return Object.assign({}, DEFAULT_CONFIG);
+  }
+
+  function diagnoseConfig() {
+    var cfg = loadConfig();
+    var issues = [];
+    Object.keys(CONFIG_MIN).forEach(function (key) {
+      var min = CONFIG_MIN[key];
+      if (cfg[key] < min) {
+        issues.push(key + " = " + cfg[key] + " (min " + min + ")");
+      }
+    });
+    return { config: cfg, issues: issues };
   }
 
   function cloneDefaultCatalog() {
@@ -150,7 +181,8 @@
       name: String((item && item.name) || "Service").trim() || "Service",
       unit: unit,
       minPrice: minPrice,
-      maxPrice: maxPrice
+      maxPrice: maxPrice,
+      linkedField: String((item && item.linkedField) || "")
     };
   }
 
@@ -225,6 +257,7 @@
   function getTypeLabel(type) {
     var labels = {
       standard: "Standard",
+      recurring: "Menage recurrent",
       end_of_lease: "Fin de bail",
       diogene: "Diogene",
       disinfection_simple: "Desinfection simple",
@@ -251,19 +284,69 @@
   }
 
   function getM2RateByType(type, config, veryDirty) {
+    // Pour les types factures a l'heure, on derive le taux m2 depuis le taux horaire
+    // afin que les modes "heure" et "m2" donnent le meme resultat.
+    if (type === "standard") return round2(config.standardHourlyRate / config.standardM2PerHour);
+    if (type === "extreme") return round2(config.extremeHourlyRate / config.extremeM2PerHour);
     if (type === "end_of_lease") return veryDirty ? config.endOfLeaseDirtyPerM2 : config.endOfLeasePerM2;
-    if (type === "diogene") return config.diogenePerM2;
+    if (type === "diogene") return round2(config.diogeneHourlyRate * config.diogeneMultiplier / config.diogeneM2PerHour);
     if (type === "disinfection_simple") return config.disinfectionSimplePerM2;
     if (type === "decontamination_heavy") return config.decontaminationHeavyPerM2;
     if (type === "windows_storefront") return config.windowsStorefrontPerM2;
-    return config.standardPerM2;
+    return round2(config.standardHourlyRate / config.standardM2PerHour);
   }
 
-  function estimateBase(type, surfaceM2, config) {
+  function getM2PerHourByType(type, config) {
+    if (type === "end_of_lease") return config.endOfLeaseM2PerHour;
+    if (type === "diogene") return config.diogeneM2PerHour;
+    if (type === "extreme") return config.extremeM2PerHour;
+    if (type === "disinfection_simple" || type === "decontamination_heavy") return config.disinfectionM2PerHour;
+    if (type === "recurring") return config.recurringM2PerHour;
+    return config.standardM2PerHour;
+  }
+
+  function roundToQuarter(hours) {
+    return Math.ceil(hours * 4) / 4;
+  }
+
+  function getRecurringRate(frequency, config) {
+    if (frequency === "weekly") return config.recurringWeeklyRate;
+    if (frequency === "bimonthly") return config.recurringBiMonthlyRate;
+    if (frequency === "monthly") return config.recurringMonthlyRate;
+    return config.recurringOnceRate;
+  }
+
+  function estimateBase(type, surfaceM2, config, frequency) {
+    if (type === "recurring") {
+      var recurringHours = roundToQuarter(surfaceM2 / config.recurringM2PerHour);
+      recurringHours = Math.max(0.25, recurringHours);
+      var recurringRate = getRecurringRate(frequency, config);
+      return {
+        amount: round2(recurringHours * recurringRate),
+        hours: recurringHours
+      };
+    }
+
     if (type === "end_of_lease") {
       return {
         amount: round2(surfaceM2 * config.endOfLeasePerM2),
-        hours: round2(surfaceM2 / config.standardM2PerHour)
+        hours: round2(surfaceM2 / config.endOfLeaseM2PerHour)
+      };
+    }
+
+    if (type === "disinfection_simple" || type === "decontamination_heavy") {
+      var disinfM2Rate = getM2RateByType(type, config, false);
+      return {
+        amount: round2(surfaceM2 * disinfM2Rate),
+        hours: round2(surfaceM2 / config.disinfectionM2PerHour)
+      };
+    }
+
+    if (type === "extreme") {
+      var extremeHours = Math.max(2, surfaceM2 / config.extremeM2PerHour);
+      return {
+        amount: round2(extremeHours * config.extremeHourlyRate),
+        hours: round2(extremeHours)
       };
     }
 
@@ -290,6 +373,7 @@
     var type = input.cleaningType || "standard";
     var calcMode = input.calcMode || "auto";
     var manualHours = Math.max(0, toNumber(input.hours, 0));
+    var frequency = input.frequency || "once";
     var urgent = Boolean(input.urgent);
     var veryDirty = Boolean(input.veryDirty);
     var windows = Boolean(input.windows);
@@ -300,24 +384,27 @@
     var customExtra = Math.max(0, toNumber(input.customExtra, 0));
     var travelKm = Math.max(0, toNumber(input.travelKm, 0));
 
-    var base = estimateBase(type, surfaceM2, config);
+    var base = estimateBase(type, surfaceM2, config, frequency);
 
-    if (calcMode === "hour") {
+    if (type !== "recurring" && calcMode === "hour") {
       var billedHours = manualHours > 0 ? manualHours : base.hours;
       base = {
         amount: round2(billedHours * getHourlyRateByType(type, config)),
         hours: round2(billedHours),
         unitLabel: "heure"
       };
-    } else if (calcMode === "m2") {
+    } else if (type !== "recurring" && calcMode === "m2") {
       var m2Rate = getM2RateByType(type, config, veryDirty);
+      var m2PerHour = getM2PerHourByType(type, config);
       base = {
         amount: round2(surfaceM2 * m2Rate),
-        hours: round2(surfaceM2 / config.standardM2PerHour),
+        hours: round2(surfaceM2 / m2PerHour),
         unitLabel: "m2"
       };
-    } else {
+    } else if (type !== "recurring") {
       base.unitLabel = "auto";
+    } else {
+      base.unitLabel = "heure";
     }
 
     var windowsAmount = windows && type !== "windows_storefront" ? round2(surfaceM2 * config.windowsPerM2) : 0;
@@ -326,6 +413,21 @@
       : 0;
     var pestsAmount = pests ? round2(config.pestsInterventionFee) : 0;
     var travelAmount = round2(travelKm * config.travelPerKm);
+
+    // Calcul des heures supplementaires pour les options (vitres, debarras, etc.)
+    var optionHours = 0;
+    if (windowsAmount > 0) {
+      optionHours += round2(windowsAmount / config.standardHourlyRate);
+    }
+    if (bulkyAmount > 0) {
+      optionHours += round2(bulkyAmount / config.standardHourlyRate);
+    }
+    if (pestsAmount > 0) {
+      optionHours += round2(pestsAmount / config.standardHourlyRate);
+    }
+
+    // Mise a jour des heures totales avec les options
+    var totalHours = round2(base.hours + optionHours);
 
     var subtotal = round2(base.amount + windowsAmount + bulkyAmount + pestsAmount + travelAmount + customExtra);
 
@@ -376,6 +478,7 @@
         surfaceM2: surfaceM2,
         cleaningType: type,
         calcMode: calcMode,
+        frequency: frequency,
         hours: manualHours,
         urgent: urgent,
         veryDirty: veryDirty,
@@ -389,11 +492,15 @@
       },
       breakdown: {
         baseAmount: base.amount,
-        estimatedHours: base.hours,
+        baseHours: base.hours,
+        estimatedHours: totalHours,
         baseUnit: base.unitLabel || "auto",
         windowsAmount: windowsAmount,
+        windowsHours: windowsAmount > 0 ? round2(windowsAmount / config.standardHourlyRate) : 0,
         bulkyAmount: bulkyAmount,
+        bulkyHours: bulkyAmount > 0 ? round2(bulkyAmount / config.standardHourlyRate) : 0,
         pestsAmount: pestsAmount,
+        pestsHours: pestsAmount > 0 ? round2(pestsAmount / config.standardHourlyRate) : 0,
         travelAmount: travelAmount,
         customExtra: customExtra,
         subtotal: subtotal,
@@ -414,6 +521,8 @@
     DEFAULT_SERVICE_CATALOG: Object.freeze(cloneDefaultCatalog()),
     loadConfig: loadConfig,
     saveConfig: saveConfig,
+    resetConfig: resetConfig,
+    diagnoseConfig: diagnoseConfig,
     loadServiceCatalog: loadServiceCatalog,
     saveServiceCatalog: saveServiceCatalog,
     resetServiceCatalog: resetServiceCatalog,

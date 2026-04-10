@@ -11,6 +11,9 @@
   var breakdown = document.getElementById("breakdown");
   var cleaningTypeSelect = document.getElementById("cleaningType");
   var calcModeSelect = document.getElementById("calcMode");
+  var calcModeRow = document.getElementById("calcModeRow");
+  var frequencyRow = document.getElementById("frequencyRow");
+  var frequencySelect = document.getElementById("frequency");
   var servicePriceHint = document.getElementById("servicePriceHint");
 
   function slugify(value) {
@@ -25,6 +28,10 @@
   function inferEstimateType(item) {
     var text = slugify((item.category || "") + " " + (item.name || ""));
 
+    if (text.indexOf("regulier") !== -1 || text.indexOf("ponctuel") !== -1 || text.indexOf("menage_recurrent") !== -1 ||
+      (text.indexOf("appartement") !== -1 && (text.indexOf("regulier") !== -1 || text.indexOf("ponctuel") !== -1))) {
+      return "recurring";
+    }
     if (text.indexOf("diogene") !== -1) return "diogene";
     if (text.indexOf("fin_de_bail") !== -1 || text.indexOf("etat_des_lieux") !== -1 || text.indexOf("demenagement") !== -1) return "end_of_lease";
     if (text.indexOf("desinfection") !== -1 || text.indexOf("desinfection_sanitaire") !== -1) return "disinfection_simple";
@@ -98,6 +105,32 @@
     }
   }
 
+  function buildPriceHint(selected) {
+    var estimateType = selected.dataset.estimateType || "standard";
+    var cfg = tool.loadConfig();
+    var catalogHint = selected.dataset.priceHint || "Sur devis";
+
+    // Affiche le tarif reel du config qui sera utilise pour le calcul
+    var configHint = "";
+    if (estimateType === "standard" || estimateType === "extreme") {
+      var rate = estimateType === "extreme" ? cfg.extremeHourlyRate : cfg.standardHourlyRate;
+      var rph = estimateType === "extreme" ? cfg.extremeM2PerHour : cfg.standardM2PerHour;
+      configHint = "Tarif config: " + rate + " CHF/h (rendement " + rph + " m\u00b2/h)";
+    } else if (estimateType === "recurring") {
+      configHint = "Tarifs: " + cfg.recurringOnceRate + " CHF/h unique / " + cfg.recurringWeeklyRate + " CHF/h hebdo";
+    } else if (estimateType === "end_of_lease") {
+      configHint = "Tarif config: " + cfg.endOfLeasePerM2 + " CHF/m\u00b2 (" + cfg.endOfLeaseM2PerHour + " m\u00b2/h)";
+    } else if (estimateType === "disinfection_simple") {
+      configHint = "Tarif config: " + cfg.disinfectionSimplePerM2 + " CHF/m\u00b2";
+    } else if (estimateType === "decontamination_heavy") {
+      configHint = "Tarif config: " + cfg.decontaminationHeavyPerM2 + " CHF/m\u00b2";
+    } else {
+      configHint = catalogHint;
+    }
+
+    return "Catalogue: " + catalogHint + " \u2014 " + configHint;
+  }
+
   function syncSelectedService() {
     var selected = cleaningTypeSelect.options[cleaningTypeSelect.selectedIndex];
     if (!selected) {
@@ -105,10 +138,14 @@
       return;
     }
 
-    servicePriceHint.textContent = "Prix indicatif: " + (selected.dataset.priceHint || "Sur devis");
+    servicePriceHint.textContent = buildPriceHint(selected);
     if (selected.dataset.calcMode) {
       calcModeSelect.value = selected.dataset.calcMode;
     }
+
+    var isRecurring = selected.dataset.estimateType === "recurring";
+    frequencyRow.style.display = isRecurring ? "" : "none";
+    calcModeRow.style.display = isRecurring ? "none" : "";
   }
 
   function line(label, value, isTotal) {
@@ -124,12 +161,22 @@
     var b = estimate.breakdown;
     var rows = [];
 
-    rows.push(line("Base (" + estimate.labels.modeLabel + ")", tool.formatCHF(b.baseAmount), false));
-    rows.push(line("Options vitres", tool.formatCHF(b.windowsAmount), false));
-    rows.push(line("Options debarras", tool.formatCHF(b.bulkyAmount), false));
-    rows.push(line("Nuisibles / cas special", tool.formatCHF(b.pestsAmount || 0), false));
-    rows.push(line("Deplacement", tool.formatCHF(b.travelAmount), false));
-    rows.push(line("Supplement manuel", tool.formatCHF(b.customExtra || 0), false));
+    rows.push(line("Base (" + estimate.labels.modeLabel + ")", tool.formatCHF(b.baseAmount) + " (" + b.baseHours + "h)", false));
+    if (b.windowsAmount > 0) {
+      rows.push(line("Options vitres", tool.formatCHF(b.windowsAmount) + " (" + b.windowsHours + "h)", false));
+    }
+    if (b.bulkyAmount > 0) {
+      rows.push(line("Options debarras", tool.formatCHF(b.bulkyAmount) + " (" + b.bulkyHours + "h)", false));
+    }
+    if (b.pestsAmount > 0) {
+      rows.push(line("Nuisibles / cas special", tool.formatCHF(b.pestsAmount) + " (" + b.pestsHours + "h)", false));
+    }
+    if (b.travelAmount > 0) {
+      rows.push(line("Deplacement", tool.formatCHF(b.travelAmount), false));
+    }
+    if (b.customExtra > 0) {
+      rows.push(line("Supplement manuel", tool.formatCHF(b.customExtra), false));
+    }
     rows.push(line("Sous-total", tool.formatCHF(b.subtotal), false));
 
     if (b.majorations.length) {
@@ -152,6 +199,7 @@
       cleaningType: cleaningTypeSelect.options[cleaningTypeSelect.selectedIndex]
         ? cleaningTypeSelect.options[cleaningTypeSelect.selectedIndex].dataset.estimateType
         : "standard",
+      frequency: frequencySelect.value,
       calcMode: calcModeSelect.value,
       hours: document.getElementById("hoursWorked").value,
       urgent: document.getElementById("optUrgent").checked,
@@ -171,6 +219,10 @@
     resultType.textContent = selected && selected.dataset.serviceLabel
       ? selected.dataset.serviceLabel
       : estimate.labels.typeLabel;
+    if (estimate.input.cleaningType === "recurring") {
+      var freqLabels = { once: "Passage unique", weekly: "Hebdomadaire", bimonthly: "Bi-mensuel", monthly: "Mensuel" };
+      resultType.textContent += " — " + (freqLabels[estimate.input.frequency] || "");
+    }
     resultTotal.textContent = tool.formatCHF(estimate.breakdown.total);
     resultHours.textContent = estimate.breakdown.estimatedHours + " h";
     resultSurface.textContent = estimate.input.surfaceM2 + " m2";
