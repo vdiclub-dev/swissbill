@@ -50,7 +50,15 @@
     "bulkyWasteFlat",
     "bulkyWastePerM2",
     "standardM2PerHour",
-    "diogeneM2PerHour"
+    "diogeneM2PerHour",
+    "endOfLeaseM2PerHour",
+    "extremeM2PerHour",
+    "disinfectionM2PerHour",
+    "recurringM2PerHour",
+    "recurringOnceRate",
+    "recurringWeeklyRate",
+    "recurringBiMonthlyRate",
+    "recurringMonthlyRate"
   ];
 
   function getDefaultModel(provider) {
@@ -108,8 +116,8 @@
   function createCatalogRow(item) {
     var row = document.createElement("tr");
     row.innerHTML = [
-      '<td><input class="input" type="text" data-col="category" placeholder="Categorie"></td>',
-      '<td><input class="input" type="text" data-col="name" placeholder="Prestation"></td>',
+      '<td><input class="input" type="text" data-col="category" placeholder="Categorie" style="min-width:130px;"></td>',
+      '<td><input class="input" type="text" data-col="name" placeholder="Prestation" style="min-width:200px;"></td>',
       '<td>',
       '  <select class="select" data-col="unit">',
       '    <option value="heure">heure</option>',
@@ -120,8 +128,28 @@
       '    <option value="ml">ml</option>',
       '  </select>',
       '</td>',
-      '<td><input class="input" type="number" data-col="minPrice" min="0" step="0.1"></td>',
-      '<td><input class="input" type="number" data-col="maxPrice" min="0" step="0.1"></td>',
+      '<td><input class="input" type="number" data-col="minPrice" min="0" step="0.1" style="min-width:90px;"></td>',
+      '<td><input class="input" type="number" data-col="maxPrice" min="0" step="0.1" style="min-width:90px;"></td>',
+      '<td>',
+      '  <select class="select" data-col="linkedField" style="min-width:160px;">',
+      '    <option value="">-- aucun --</option>',
+      '    <option value="standardHourlyRate">Heure standard</option>',
+      '    <option value="standardPerM2">m\u00b2 standard</option>',
+      '    <option value="endOfLeasePerM2">Fin de bail / m\u00b2</option>',
+      '    <option value="endOfLeaseDirtyPerM2">Fin de bail (sale) / m\u00b2</option>',
+      '    <option value="diogeneHourlyRate">Heure Diog\u00e8ne</option>',
+      '    <option value="diogenePerM2">m\u00b2 Diog\u00e8ne</option>',
+      '    <option value="extremeHourlyRate">Heure extr\u00eame</option>',
+      '    <option value="disinfectionSimplePerM2">D\u00e9sinfection / m\u00b2</option>',
+      '    <option value="decontaminationHeavyPerM2">D\u00e9contamination / m\u00b2</option>',
+      '    <option value="windowsPerM2">Vitres / m\u00b2</option>',
+      '    <option value="windowsStorefrontPerM2">Vitrines / m\u00b2</option>',
+      '    <option value="pestsInterventionFee">Nuisibles forfait</option>',
+      '    <option value="travelPerKm">D\u00e9placement / km</option>',
+      '    <option value="bulkyWasteFlat">D\u00e9barras forfait</option>',
+      '    <option value="bulkyWastePerM2">D\u00e9barras / m\u00b2</option>',
+      '  </select>',
+      '</td>',
       '<td class="catalog-row-remove"><button class="btn btn-ghost" type="button" data-action="remove">Supprimer</button></td>'
     ].join("");
 
@@ -130,6 +158,25 @@
     row.querySelector('[data-col="unit"]').value = item.unit || "devis";
     row.querySelector('[data-col="minPrice"]').value = tool.toNumber(item.minPrice, 0);
     row.querySelector('[data-col="maxPrice"]').value = tool.toNumber(item.maxPrice, 0);
+    row.querySelector('[data-col="linkedField"]').value = item.linkedField || "";
+
+    // Auto-remplissage min/max depuis le config quand l'utilisateur sélectionne un tarif lié
+    var linkedSelect = row.querySelector('[data-col="linkedField"]');
+    linkedSelect.addEventListener("change", function () {
+      var fieldKey = linkedSelect.value;
+      if (!fieldKey) { return; }
+      var minEl = row.querySelector('[data-col="minPrice"]');
+      var maxEl = row.querySelector('[data-col="maxPrice"]');
+      if (Number(minEl.value) === 0 && Number(maxEl.value) === 0) {
+        var cfg = tool.loadConfig();
+        var val = cfg[fieldKey];
+        if (val && val > 0) {
+          minEl.value = val;
+          maxEl.value = val;
+        }
+      }
+    });
+
     return row;
   }
 
@@ -150,13 +197,15 @@
         var minPrice = Math.max(0, tool.toNumber(row.querySelector('[data-col="minPrice"]').value, 0));
         var maxPrice = Math.max(minPrice, tool.toNumber(row.querySelector('[data-col="maxPrice"]').value, minPrice));
 
+        var linkedField = row.querySelector('[data-col="linkedField"]').value || "";
         return {
           id: "svc_" + String(index + 1),
           category: category || "Autres",
           name: name,
           unit: unit,
           minPrice: tool.round2(minPrice),
-          maxPrice: tool.round2(maxPrice)
+          maxPrice: tool.round2(maxPrice),
+          linkedField: linkedField
         };
       })
       .filter(function (row) {
@@ -174,11 +223,12 @@
   });
 
   resetBtn.addEventListener("click", function () {
-    if (!confirm("Reinitialiser les tarifs par defaut ?")) {
+    if (!confirm("Reinitialiser tous les tarifs aux valeurs par defaut ?\n\nCela corrigera aussi les valeurs corrompues.")) {
       return;
     }
-    var saved = tool.saveConfig(tool.DEFAULT_CONFIG);
-    fill(saved);
+    var defaults = tool.resetConfig();
+    fill(defaults);
+    alert("Configuration remise a zero. Les tarifs affichent maintenant les valeurs par defaut.");
   });
 
   function sanitizePatch(patch) {
