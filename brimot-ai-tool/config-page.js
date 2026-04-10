@@ -11,6 +11,10 @@
   var projectInput = document.getElementById("openaiProjectIdCfg");
   var notesInput = document.getElementById("marketNotes");
   var positioningInput = document.getElementById("marketPositioning");
+  var catalogRowsEl = document.getElementById("catalogRows");
+  var addCatalogRowBtn = document.getElementById("btnAddCatalogRow");
+  var saveCatalogBtn = document.getElementById("btnSaveCatalog");
+  var resetCatalogBtn = document.getElementById("btnResetCatalog");
 
   var STORAGE_OPENAI_KEY = "brimot_openai_key_v1";
   var STORAGE_OPENAI_PROJECT = "brimot_openai_project_v1";
@@ -68,6 +72,65 @@
       values[id] = tool.toNumber(document.getElementById(id).value, tool.DEFAULT_CONFIG[id]);
     });
     return values;
+  }
+
+  function createCatalogRow(item) {
+    var row = document.createElement("tr");
+    row.innerHTML = [
+      '<td><input class="input" type="text" data-col="category" placeholder="Categorie"></td>',
+      '<td><input class="input" type="text" data-col="name" placeholder="Prestation"></td>',
+      '<td>',
+      '  <select class="select" data-col="unit">',
+      '    <option value="heure">heure</option>',
+      '    <option value="m2">m2</option>',
+      '    <option value="forfait">forfait</option>',
+      '    <option value="devis">devis</option>',
+      '    <option value="km">km</option>',
+      '    <option value="ml">ml</option>',
+      '  </select>',
+      '</td>',
+      '<td><input class="input" type="number" data-col="minPrice" min="0" step="0.1"></td>',
+      '<td><input class="input" type="number" data-col="maxPrice" min="0" step="0.1"></td>',
+      '<td class="catalog-row-remove"><button class="btn btn-ghost" type="button" data-action="remove">Supprimer</button></td>'
+    ].join("");
+
+    row.querySelector('[data-col="category"]').value = item.category || "";
+    row.querySelector('[data-col="name"]').value = item.name || "";
+    row.querySelector('[data-col="unit"]').value = item.unit || "devis";
+    row.querySelector('[data-col="minPrice"]').value = tool.toNumber(item.minPrice, 0);
+    row.querySelector('[data-col="maxPrice"]').value = tool.toNumber(item.maxPrice, 0);
+    return row;
+  }
+
+  function renderCatalog(catalog) {
+    catalogRowsEl.innerHTML = "";
+    (catalog || []).forEach(function (item) {
+      catalogRowsEl.appendChild(createCatalogRow(item));
+    });
+  }
+
+  function readCatalogRows() {
+    var rows = Array.prototype.slice.call(catalogRowsEl.querySelectorAll("tr"));
+    return rows
+      .map(function (row, index) {
+        var category = row.querySelector('[data-col="category"]').value.trim();
+        var name = row.querySelector('[data-col="name"]').value.trim();
+        var unit = row.querySelector('[data-col="unit"]').value;
+        var minPrice = Math.max(0, tool.toNumber(row.querySelector('[data-col="minPrice"]').value, 0));
+        var maxPrice = Math.max(minPrice, tool.toNumber(row.querySelector('[data-col="maxPrice"]').value, minPrice));
+
+        return {
+          id: "svc_" + String(index + 1),
+          category: category || "Autres",
+          name: name,
+          unit: unit,
+          minPrice: tool.round2(minPrice),
+          maxPrice: tool.round2(maxPrice)
+        };
+      })
+      .filter(function (row) {
+        return row.name.length > 0;
+      });
   }
 
   form.addEventListener("submit", function (event) {
@@ -219,5 +282,46 @@
     alert("Proposition IA appliquee aux tarifs.");
   });
 
+  catalogRowsEl.addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target || target.getAttribute("data-action") !== "remove") {
+      return;
+    }
+    var tr = target.closest("tr");
+    if (tr) {
+      tr.remove();
+    }
+  });
+
+  addCatalogRowBtn.addEventListener("click", function () {
+    catalogRowsEl.appendChild(createCatalogRow({
+      category: "Autres",
+      name: "",
+      unit: "devis",
+      minPrice: 0,
+      maxPrice: 0
+    }));
+  });
+
+  saveCatalogBtn.addEventListener("click", function () {
+    var rows = readCatalogRows();
+    if (!rows.length) {
+      alert("Ajoute au moins une prestation avant de sauvegarder.");
+      return;
+    }
+    var saved = tool.saveServiceCatalog(rows);
+    renderCatalog(saved);
+    alert("Catalogue sauvegarde.");
+  });
+
+  resetCatalogBtn.addEventListener("click", function () {
+    if (!confirm("Recharger la liste de prestations par defaut ?")) {
+      return;
+    }
+    var defaults = tool.resetServiceCatalog();
+    renderCatalog(defaults);
+  });
+
   fill(tool.loadConfig());
+  renderCatalog(tool.loadServiceCatalog());
 })();

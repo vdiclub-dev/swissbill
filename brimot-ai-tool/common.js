@@ -3,6 +3,7 @@
 
   var STORAGE_CONFIG = "brimot_tool_config_v1";
   var STORAGE_HISTORY = "brimot_tool_history_v1";
+  var STORAGE_CATALOG = "brimot_tool_catalog_v1";
 
   var DEFAULT_CONFIG = {
     standardHourlyRate: 65,
@@ -28,6 +29,63 @@
     standardM2PerHour: 32,
     diogeneM2PerHour: 12
   };
+
+  var DEFAULT_SERVICE_CATALOG = [
+    { category: "Nettoyages residentiels", name: "Nettoyage d appartement (regulier ou ponctuel)", unit: "heure", minPrice: 55, maxPrice: 75 },
+    { category: "Nettoyages residentiels", name: "Nettoyage de maison", unit: "heure", minPrice: 60, maxPrice: 80 },
+    { category: "Nettoyages residentiels", name: "Nettoyage de fin de bail (etat des lieux)", unit: "m2", minPrice: 6, maxPrice: 12 },
+    { category: "Nettoyages residentiels", name: "Nettoyage apres demenagement", unit: "m2", minPrice: 5, maxPrice: 10 },
+    { category: "Nettoyages residentiels", name: "Nettoyage de printemps (grand menage saisonnier)", unit: "heure", minPrice: 60, maxPrice: 85 },
+    { category: "Nettoyages residentiels", name: "Nettoyage apres travaux / renovation", unit: "m2", minPrice: 8, maxPrice: 18 },
+    { category: "Nettoyages residentiels", name: "Nettoyage de logements insalubres (type Diogene)", unit: "m2", minPrice: 20, maxPrice: 45 },
+    { category: "Nettoyages residentiels", name: "Nettoyage apres sinistre (eau, feu, fumee)", unit: "devis", minPrice: 0, maxPrice: 0 },
+
+    { category: "Nettoyage specialise", name: "Nettoyage extreme (logements tres degrades)", unit: "heure", minPrice: 95, maxPrice: 160 },
+    { category: "Nettoyage specialise", name: "Nettoyage apres deces", unit: "devis", minPrice: 0, maxPrice: 0 },
+    { category: "Nettoyage specialise", name: "Desinfection complete des lieux", unit: "m2", minPrice: 2, maxPrice: 8 },
+    { category: "Nettoyage specialise", name: "Decontamination (virus, bacteries)", unit: "m2", minPrice: 5, maxPrice: 16 },
+    { category: "Nettoyage specialise", name: "Nettoyage anti-odeurs (tabac, animaux, moisissures)", unit: "devis", minPrice: 0, maxPrice: 0 },
+    { category: "Nettoyage specialise", name: "Traitement des moisissures", unit: "m2", minPrice: 12, maxPrice: 30 },
+
+    { category: "Nettoyage commercial / professionnel", name: "Bureaux", unit: "m2", minPrice: 2.5, maxPrice: 6 },
+    { category: "Nettoyage commercial / professionnel", name: "Commerces et magasins", unit: "m2", minPrice: 3, maxPrice: 8 },
+    { category: "Nettoyage commercial / professionnel", name: "Cabinets medicaux / dentaires", unit: "m2", minPrice: 4, maxPrice: 10 },
+    { category: "Nettoyage commercial / professionnel", name: "Restaurants / cuisines professionnelles", unit: "m2", minPrice: 5, maxPrice: 14 },
+    { category: "Nettoyage commercial / professionnel", name: "Entrepots / depots", unit: "m2", minPrice: 2, maxPrice: 5 },
+    { category: "Nettoyage commercial / professionnel", name: "Ecoles / creches", unit: "m2", minPrice: 3, maxPrice: 7 },
+    { category: "Nettoyage commercial / professionnel", name: "Hotels / Airbnb", unit: "heure", minPrice: 50, maxPrice: 90 },
+
+    { category: "Nettoyage vehicules", name: "Voiture interieure / exterieure", unit: "forfait", minPrice: 60, maxPrice: 180 },
+    { category: "Nettoyage vehicules", name: "Nettoyage complet (detailing)", unit: "forfait", minPrice: 180, maxPrice: 450 },
+    { category: "Nettoyage vehicules", name: "Camion / utilitaire", unit: "forfait", minPrice: 120, maxPrice: 320 },
+    { category: "Nettoyage vehicules", name: "Flotte d entreprise", unit: "devis", minPrice: 0, maxPrice: 0 },
+    { category: "Nettoyage vehicules", name: "Nettoyage vapeur interieur", unit: "forfait", minPrice: 90, maxPrice: 220 },
+
+    { category: "Nettoyages techniques", name: "Nettoyage de vitres (immeubles, vitrines)", unit: "m2", minPrice: 3.5, maxPrice: 12 },
+    { category: "Nettoyages techniques", name: "Nettoyage de facades", unit: "m2", minPrice: 8, maxPrice: 25 },
+    { category: "Nettoyages techniques", name: "Nettoyage de panneaux solaires", unit: "m2", minPrice: 3, maxPrice: 8 },
+    { category: "Nettoyages techniques", name: "Nettoyage de toitures", unit: "m2", minPrice: 10, maxPrice: 28 },
+    { category: "Nettoyages techniques", name: "Nettoyage de gouttieres", unit: "ml", minPrice: 8, maxPrice: 20 },
+    { category: "Nettoyages techniques", name: "Nettoyage haute pression (Karcher)", unit: "m2", minPrice: 4, maxPrice: 12 },
+
+    { category: "Exterieurs", name: "Nettoyage de terrasses", unit: "m2", minPrice: 4, maxPrice: 12 },
+    { category: "Exterieurs", name: "Nettoyage de balcons", unit: "m2", minPrice: 4, maxPrice: 12 },
+    { category: "Exterieurs", name: "Nettoyage de parkings", unit: "m2", minPrice: 2, maxPrice: 7 },
+    { category: "Exterieurs", name: "Nettoyage de cours / allees", unit: "m2", minPrice: 3, maxPrice: 9 },
+    { category: "Exterieurs", name: "Nettoyage de jardins (dechets, remise en ordre)", unit: "heure", minPrice: 55, maxPrice: 95 },
+
+    { category: "Hygiene et maintenance", name: "Desinfection sanitaire", unit: "m2", minPrice: 2.5, maxPrice: 8 },
+    { category: "Hygiene et maintenance", name: "Deratisation / desinsectisation", unit: "forfait", minPrice: 180, maxPrice: 450 },
+    { category: "Hygiene et maintenance", name: "Debarras et evacuation d encombrants", unit: "m2", minPrice: 6, maxPrice: 18 },
+    { category: "Hygiene et maintenance", name: "Tri et recyclage", unit: "heure", minPrice: 50, maxPrice: 85 },
+    { category: "Hygiene et maintenance", name: "Nettoyage avant location / Airbnb", unit: "heure", minPrice: 55, maxPrice: 95 },
+
+    { category: "Cas tres specifiques", name: "Syndrome de Diogene", unit: "devis", minPrice: 0, maxPrice: 0 },
+    { category: "Cas tres specifiques", name: "Logements squattes", unit: "devis", minPrice: 0, maxPrice: 0 },
+    { category: "Cas tres specifiques", name: "Locaux abandonnes", unit: "devis", minPrice: 0, maxPrice: 0 },
+    { category: "Cas tres specifiques", name: "Interventions apres police / judiciaire", unit: "devis", minPrice: 0, maxPrice: 0 },
+    { category: "Cas tres specifiques", name: "Nettoyage post-incendie", unit: "devis", minPrice: 0, maxPrice: 0 }
+  ];
 
   function round2(value) {
     return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -67,6 +125,70 @@
     });
     localStorage.setItem(STORAGE_CONFIG, JSON.stringify(merged));
     return merged;
+  }
+
+  function cloneDefaultCatalog() {
+    return DEFAULT_SERVICE_CATALOG.map(function (item, index) {
+      return {
+        id: "svc_" + String(index + 1),
+        category: String(item.category || "Autres"),
+        name: String(item.name || "Service"),
+        unit: String(item.unit || "devis"),
+        minPrice: round2(toNumber(item.minPrice, 0)),
+        maxPrice: round2(toNumber(item.maxPrice, 0))
+      };
+    });
+  }
+
+  function normalizeCatalogRow(item, index) {
+    var minPrice = Math.max(0, round2(toNumber(item && item.minPrice, 0)));
+    var maxPrice = Math.max(minPrice, round2(toNumber(item && item.maxPrice, minPrice)));
+    var unit = String((item && item.unit) || "devis").trim() || "devis";
+    return {
+      id: String((item && item.id) || ("svc_" + String(index + 1))),
+      category: String((item && item.category) || "Autres").trim() || "Autres",
+      name: String((item && item.name) || "Service").trim() || "Service",
+      unit: unit,
+      minPrice: minPrice,
+      maxPrice: maxPrice
+    };
+  }
+
+  function loadServiceCatalog() {
+    try {
+      var raw = localStorage.getItem(STORAGE_CATALOG);
+      if (!raw) {
+        return cloneDefaultCatalog();
+      }
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) {
+        return cloneDefaultCatalog();
+      }
+      return parsed.map(function (item, index) {
+        return normalizeCatalogRow(item, index);
+      });
+    } catch (error) {
+      return cloneDefaultCatalog();
+    }
+  }
+
+  function saveServiceCatalog(catalog) {
+    var safe = Array.isArray(catalog) ? catalog : [];
+    var normalized = safe
+      .map(function (item, index) {
+        return normalizeCatalogRow(item, index);
+      })
+      .filter(function (item) {
+        return item.name.length > 0;
+      });
+    localStorage.setItem(STORAGE_CATALOG, JSON.stringify(normalized));
+    return normalized;
+  }
+
+  function resetServiceCatalog() {
+    var defaults = cloneDefaultCatalog();
+    localStorage.setItem(STORAGE_CATALOG, JSON.stringify(defaults));
+    return defaults;
   }
 
   function loadHistory() {
@@ -289,8 +411,12 @@
 
   window.BrimotTool = {
     DEFAULT_CONFIG: Object.freeze(Object.assign({}, DEFAULT_CONFIG)),
+    DEFAULT_SERVICE_CATALOG: Object.freeze(cloneDefaultCatalog()),
     loadConfig: loadConfig,
     saveConfig: saveConfig,
+    loadServiceCatalog: loadServiceCatalog,
+    saveServiceCatalog: saveServiceCatalog,
+    resetServiceCatalog: resetServiceCatalog,
     computeEstimate: computeEstimate,
     formatCHF: formatCHF,
     loadHistory: loadHistory,
