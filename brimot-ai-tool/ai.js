@@ -3,6 +3,8 @@
 
   var tool = window.BrimotTool;
   var form = document.getElementById("aiForm");
+  var providerInput = document.getElementById("aiProvider");
+  var modelInput = document.getElementById("aiModel");
   var apiKeyInput = document.getElementById("openaiApiKey");
   var projectInput = document.getElementById("openaiProjectId");
   var outputCard = document.getElementById("aiOutputCard");
@@ -11,11 +13,37 @@
   var outputBreakdown = document.getElementById("aiBreakdown");
   var btnAnalyze = document.getElementById("btnAnalyze");
 
+  var STORAGE_PROVIDER = "brimot_ai_provider_v1";
+  var STORAGE_MODEL = "brimot_ai_model_v1";
   var STORAGE_KEY = "brimot_openai_key_v1";
   var STORAGE_PROJECT = "brimot_openai_project_v1";
 
+  function getDefaultModel(provider) {
+    return provider === "deepseek" ? "deepseek-chat" : "gpt-4o-mini";
+  }
+
+  function getApiBase(provider) {
+    return provider === "deepseek"
+      ? "https://api.deepseek.com/chat/completions"
+      : "https://api.openai.com/v1/chat/completions";
+  }
+
+  providerInput.value = localStorage.getItem(STORAGE_PROVIDER) || "deepseek";
+  modelInput.value = localStorage.getItem(STORAGE_MODEL) || getDefaultModel(providerInput.value);
   apiKeyInput.value = localStorage.getItem(STORAGE_KEY) || "";
   projectInput.value = localStorage.getItem(STORAGE_PROJECT) || "";
+
+  providerInput.addEventListener("change", function () {
+    var provider = providerInput.value || "deepseek";
+    localStorage.setItem(STORAGE_PROVIDER, provider);
+    if (!modelInput.value.trim() || modelInput.value === "gpt-4o-mini" || modelInput.value === "deepseek-chat") {
+      modelInput.value = getDefaultModel(provider);
+    }
+  });
+
+  modelInput.addEventListener("change", function () {
+    localStorage.setItem(STORAGE_MODEL, modelInput.value.trim());
+  });
 
   apiKeyInput.addEventListener("change", function () {
     localStorage.setItem(STORAGE_KEY, apiKeyInput.value.trim());
@@ -26,8 +54,12 @@
   });
 
   document.getElementById("clearApiKey").addEventListener("click", function () {
+    providerInput.value = "deepseek";
+    modelInput.value = getDefaultModel("deepseek");
     apiKeyInput.value = "";
     projectInput.value = "";
+    localStorage.setItem(STORAGE_PROVIDER, providerInput.value);
+    localStorage.setItem(STORAGE_MODEL, modelInput.value);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(STORAGE_PROJECT);
   });
@@ -63,9 +95,9 @@
     outputCard.style.display = "block";
   }
 
-  async function callOpenAI(description, apiKey, projectId) {
+  async function callAI(description, provider, model, apiKey, projectId) {
     var body = {
-      model: "gpt-4o-mini",
+      model: model,
       temperature: 0.1,
       messages: [
         {
@@ -85,11 +117,11 @@
       Authorization: "Bearer " + apiKey
     };
 
-    if (projectId) {
+    if (provider === "openai" && projectId) {
       headers["OpenAI-Project"] = projectId;
     }
 
-    var response = await fetch("https://api.openai.com/v1/chat/completions", {
+    var response = await fetch(getApiBase(provider), {
       method: "POST",
       headers: headers,
       body: JSON.stringify(body)
@@ -97,7 +129,7 @@
 
     if (!response.ok) {
       var errText = await response.text();
-      throw new Error("OpenAI error: " + errText);
+      throw new Error((provider === "deepseek" ? "DeepSeek" : "OpenAI") + " error: " + errText);
     }
 
     var json = await response.json();
@@ -119,12 +151,14 @@
   form.addEventListener("submit", async function (event) {
     event.preventDefault();
 
+    var provider = providerInput.value || "deepseek";
+    var model = modelInput.value.trim() || getDefaultModel(provider);
     var apiKey = apiKeyInput.value.trim();
     var projectId = projectInput.value.trim();
     var description = document.getElementById("siteDescription").value.trim();
 
     if (!apiKey) {
-      alert("Ajoute ta cle OpenAI avant l'analyse.");
+      alert("Ajoute ta cle API avant l analyse.");
       return;
     }
 
@@ -137,7 +171,9 @@
     btnAnalyze.textContent = "Analyse en cours...";
 
     try {
-      var structured = await callOpenAI(description, apiKey, projectId);
+      localStorage.setItem(STORAGE_PROVIDER, provider);
+      localStorage.setItem(STORAGE_MODEL, model);
+      var structured = await callAI(description, provider, model, apiKey, projectId);
 
       var payload = {
         surfaceM2: structured.surface_m2 || 60,
@@ -156,6 +192,8 @@
         id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
         source: "ai",
         createdAt: new Date().toISOString(),
+        provider: provider,
+        model: model,
         rawDescription: description,
         structured: structured,
         input: estimate.input,

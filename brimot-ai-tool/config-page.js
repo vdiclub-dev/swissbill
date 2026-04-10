@@ -4,6 +4,8 @@
   var tool = window.BrimotTool;
   var form = document.getElementById("configForm");
   var resetBtn = document.getElementById("resetConfig");
+  var providerInput = document.getElementById("aiProviderCfg");
+  var modelInput = document.getElementById("aiModelCfg");
   var suggestBtn = document.getElementById("btnSuggestPricing");
   var webSearchBtn = document.getElementById("btnWebSearchPricing");
   var applyBtn = document.getElementById("btnApplyPricing");
@@ -19,6 +21,8 @@
   var saveCatalogBtn = document.getElementById("btnSaveCatalog");
   var resetCatalogBtn = document.getElementById("btnResetCatalog");
 
+  var STORAGE_PROVIDER = "brimot_ai_provider_v1";
+  var STORAGE_MODEL = "brimot_ai_model_v1";
   var STORAGE_OPENAI_KEY = "brimot_openai_key_v1";
   var STORAGE_OPENAI_PROJECT = "brimot_openai_project_v1";
 
@@ -49,8 +53,32 @@
     "diogeneM2PerHour"
   ];
 
+  function getDefaultModel(provider) {
+    return provider === "deepseek" ? "deepseek-chat" : "gpt-4o-mini";
+  }
+
+  function getApiBase(provider) {
+    return provider === "deepseek"
+      ? "https://api.deepseek.com/chat/completions"
+      : "https://api.openai.com/v1/chat/completions";
+  }
+
+  providerInput.value = localStorage.getItem(STORAGE_PROVIDER) || "deepseek";
+  modelInput.value = localStorage.getItem(STORAGE_MODEL) || getDefaultModel(providerInput.value);
   apiKeyInput.value = localStorage.getItem(STORAGE_OPENAI_KEY) || "";
   projectInput.value = localStorage.getItem(STORAGE_OPENAI_PROJECT) || "";
+
+  providerInput.addEventListener("change", function () {
+    var provider = providerInput.value || "deepseek";
+    localStorage.setItem(STORAGE_PROVIDER, provider);
+    if (!modelInput.value.trim() || modelInput.value === "gpt-4o-mini" || modelInput.value === "deepseek-chat") {
+      modelInput.value = getDefaultModel(provider);
+    }
+  });
+
+  modelInput.addEventListener("change", function () {
+    localStorage.setItem(STORAGE_MODEL, modelInput.value.trim());
+  });
 
   apiKeyInput.addEventListener("change", function () {
     localStorage.setItem(STORAGE_OPENAI_KEY, apiKeyInput.value.trim());
@@ -245,7 +273,7 @@
     }
   }
 
-  async function callOpenAIForPricing(apiKey, projectId, marketNotes, positioning, currentConfig) {
+  async function callAIForPricing(provider, model, apiKey, projectId, marketNotes, positioning, currentConfig) {
     var systemPrompt = [
       "Tu es un analyste pricing SaaS pour une entreprise de nettoyage en Suisse.",
       "Tu dois proposer un ajustement de tarifs en fonction du marche fourni.",
@@ -266,15 +294,15 @@
       "Content-Type": "application/json",
       Authorization: "Bearer " + apiKey
     };
-    if (projectId) {
+    if (provider === "openai" && projectId) {
       headers["OpenAI-Project"] = projectId;
     }
 
-    var response = await fetch("https://api.openai.com/v1/chat/completions", {
+    var response = await fetch(getApiBase(provider), {
       method: "POST",
       headers: headers,
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: model,
         temperature: 0.2,
         messages: [
           { role: "system", content: systemPrompt },
@@ -285,7 +313,7 @@
 
     if (!response.ok) {
       var err = await response.text();
-      throw new Error("Erreur OpenAI: " + err);
+      throw new Error("Erreur " + (provider === "deepseek" ? "DeepSeek" : "OpenAI") + ": " + err);
     }
 
     var json = await response.json();
@@ -326,13 +354,19 @@
   }
 
   webSearchBtn.addEventListener("click", async function () {
+    var provider = providerInput.value || "deepseek";
     var apiKey = apiKeyInput.value.trim();
     var projectId = projectInput.value.trim();
     var marketQuery = marketQueryInput.value.trim();
     var marketRegion = marketRegionInput.value.trim();
 
     if (!apiKey) {
-      alert("Ajoute la cle OpenAI pour lancer la recherche web.");
+      alert("Ajoute la cle API pour lancer la recherche web.");
+      return;
+    }
+
+    if (provider !== "openai") {
+      alert("La recherche web automatique est disponible seulement avec OpenAI dans cette version. DeepSeek reste disponible pour l analyse et la proposition tarifaire standard.");
       return;
     }
 
@@ -348,6 +382,9 @@
     aiSuggestedPatch = null;
 
     try {
+      var model = modelInput.value.trim() || getDefaultModel(provider);
+      localStorage.setItem(STORAGE_PROVIDER, provider);
+      localStorage.setItem(STORAGE_MODEL, model);
       var currentConfig = tool.loadConfig();
       var webResult = await callOpenAIWebResearch(
         apiKey,
@@ -365,7 +402,9 @@
       if (webResult.suggested && Object.keys(webResult.suggested).length) {
         applyAiResult(webResult);
       } else {
-        var aiResult = await callOpenAIForPricing(
+        var aiResult = await callAIForPricing(
+          provider,
+          model,
           apiKey,
           projectId,
           notesInput.value.trim(),
@@ -388,12 +427,14 @@
   });
 
   suggestBtn.addEventListener("click", async function () {
+    var provider = providerInput.value || "deepseek";
+    var model = modelInput.value.trim() || getDefaultModel(provider);
     var apiKey = apiKeyInput.value.trim();
     var projectId = projectInput.value.trim();
     var notes = notesInput.value.trim();
 
     if (!apiKey) {
-      alert("Ajoute la cle OpenAI pour proposer un ajustement IA.");
+      alert("Ajoute la cle API pour proposer un ajustement IA.");
       return;
     }
     if (!notes) {
@@ -407,8 +448,12 @@
     aiSuggestedPatch = null;
 
     try {
+      localStorage.setItem(STORAGE_PROVIDER, provider);
+      localStorage.setItem(STORAGE_MODEL, model);
       var currentConfig = tool.loadConfig();
-      var aiResult = await callOpenAIForPricing(
+      var aiResult = await callAIForPricing(
+        provider,
+        model,
         apiKey,
         projectId,
         notes,
