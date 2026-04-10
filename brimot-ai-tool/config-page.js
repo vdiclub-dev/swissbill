@@ -5,12 +5,15 @@
   var form = document.getElementById("configForm");
   var resetBtn = document.getElementById("resetConfig");
   var suggestBtn = document.getElementById("btnSuggestPricing");
+  var webSearchBtn = document.getElementById("btnWebSearchPricing");
   var applyBtn = document.getElementById("btnApplyPricing");
   var outputEl = document.getElementById("aiPricingOutput");
   var apiKeyInput = document.getElementById("openaiApiKeyCfg");
   var projectInput = document.getElementById("openaiProjectIdCfg");
   var notesInput = document.getElementById("marketNotes");
   var positioningInput = document.getElementById("marketPositioning");
+  var marketQueryInput = document.getElementById("marketQuery");
+  var marketRegionInput = document.getElementById("marketRegion");
   var catalogRowsEl = document.getElementById("catalogRows");
   var addCatalogRowBtn = document.getElementById("btnAddCatalogRow");
   var saveCatalogBtn = document.getElementById("btnSaveCatalog");
@@ -160,6 +163,88 @@
     return cleaned;
   }
 
+  function extractResponseText(json) {
+    if (json && typeof json.output_text === "string" && json.output_text.trim()) {
+      return json.output_text;
+    }
+
+    var parts = [];
+    if (json && Array.isArray(json.output)) {
+      json.output.forEach(function (item) {
+        if (!item || !Array.isArray(item.content)) {
+          return;
+        }
+        item.content.forEach(function (contentItem) {
+          if (contentItem && typeof contentItem.text === "string") {
+            parts.push(contentItem.text);
+          }
+        });
+      });
+    }
+
+    return parts.join("\n").trim();
+  }
+
+  async function callOpenAIWebResearch(apiKey, projectId, marketQuery, marketRegion, positioning, currentConfig) {
+    var headers = {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + apiKey
+    };
+
+    if (projectId) {
+      headers["OpenAI-Project"] = projectId;
+    }
+
+    var researchPrompt = [
+      "Recherche sur le web des prix concurrents pour une entreprise de nettoyage en Suisse.",
+      "Zone cible: " + (marketRegion || "Suisse romande"),
+      "Requete principale: " + marketQuery,
+      "Positionnement voulu: " + positioning,
+      "A partir des resultats web, retourne uniquement un JSON valide.",
+      "Format attendu:",
+      '{"market_notes":"resume exploitable des prix observes",',
+      '"sources":[{"title":"...","url":"...","price_signal":"..."}],',
+      '"suggested":{"standardHourlyRate":0}}',
+      "Dans suggested, inclure uniquement des cles existantes de la grille tarifaire fournie si un ajustement est justifie.",
+      "Ne jamais inventer une source URL.",
+      "Current config: " + JSON.stringify(currentConfig),
+      "Allowed keys: " + JSON.stringify(fields)
+    ].join("\n");
+
+    var response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        tools: [
+          {
+            type: "web_search_preview",
+            search_context_size: "medium"
+          }
+        ],
+        input: researchPrompt
+      })
+    });
+
+    if (!response.ok) {
+      var errText = await response.text();
+      throw new Error("Recherche web indisponible: " + errText);
+    }
+
+    var json = await response.json();
+    var content = extractResponseText(json);
+
+    try {
+      return JSON.parse(content);
+    } catch (parseErr) {
+      var match = String(content).match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+      throw new Error("Reponse web non lisible");
+    }
+  }
+
   async function callOpenAIForPricing(apiKey, projectId, marketNotes, positioning, currentConfig) {
     var systemPrompt = [
       "Tu es un analyste pricing SaaS pour une entreprise de nettoyage en Suisse.",
@@ -219,6 +304,89 @@
     }
   }
 
+  function showPricingOutput(payload) {
+    outputEl.style.display = "block";
+    outputEl.textContent = JSON.stringify(payload, null, 2);
+  }
+
+  function applyAiResult(aiResult) {
+    var patch = sanitizePatch((aiResult && aiResult.suggested) || {});
+    var keys = Object.keys(patch);
+    if (!keys.length) {
+      throw new Error("Aucun ajustement exploitable retourne par l IA.");
+    }
+
+    aiSuggestedPatch = patch;
+    showPricingOutput({
+      rationale: aiResult.rationale || aiResult.market_notes || "Ajustement propose.",
+      sources: aiResult.sources || [],
+      suggested: patch
+    });
+    applyBtn.disabled = false;
+  }
+
+  webSearchBtn.addEventListener("click", async function () {
+    var apiKey = apiKeyInput.value.trim();
+    var projectId = projectInput.value.trim();
+    var marketQuery = marketQueryInput.value.trim();
+    var marketRegion = marketRegionInput.value.trim();
+
+    if (!apiKey) {
+      alert("Ajoute la cle OpenAI pour lancer la recherche web.");
+      return;
+    }
+
+    if (!marketQuery) {
+      alert("Ajoute une requete web concurrence.");
+      return;
+    }
+
+    webSearchBtn.disabled = true;
+    webSearchBtn.textContent = "Recherche web en cours...";
+    suggestBtn.disabled = true;
+    applyBtn.disabled = true;
+    aiSuggestedPatch = null;
+
+    try {
+      var currentConfig = tool.loadConfig();
+      var webResult = await callOpenAIWebResearch(
+        apiKey,
+        projectId,
+        marketQuery,
+        marketRegion,
+        positioningInput.value,
+        currentConfig
+      );
+
+      if (webResult.market_notes) {
+        notesInput.value = webResult.market_notes;
+      }
+
+      if (webResult.suggested && Object.keys(webResult.suggested).length) {
+        applyAiResult(webResult);
+      } else {
+        var aiResult = await callOpenAIForPricing(
+          apiKey,
+          projectId,
+          notesInput.value.trim(),
+          positioningInput.value,
+          currentConfig
+        );
+        aiResult.sources = webResult.sources || [];
+        if (!aiResult.rationale && webResult.market_notes) {
+          aiResult.rationale = webResult.market_notes;
+        }
+        applyAiResult(aiResult);
+      }
+    } catch (error) {
+      showPricingOutput({ error: error.message || String(error) });
+    } finally {
+      webSearchBtn.disabled = false;
+      webSearchBtn.textContent = "Recherche web + proposition IA";
+      suggestBtn.disabled = false;
+    }
+  });
+
   suggestBtn.addEventListener("click", async function () {
     var apiKey = apiKeyInput.value.trim();
     var projectId = projectInput.value.trim();
@@ -248,22 +416,9 @@
         currentConfig
       );
 
-      var patch = sanitizePatch((aiResult && aiResult.suggested) || {});
-      var keys = Object.keys(patch);
-      if (!keys.length) {
-        throw new Error("Aucun ajustement exploitable retourne par l'IA.");
-      }
-
-      aiSuggestedPatch = patch;
-      outputEl.style.display = "block";
-      outputEl.textContent = JSON.stringify({
-        rationale: aiResult.rationale || "Ajustement propose.",
-        suggested: patch
-      }, null, 2);
-      applyBtn.disabled = false;
+      applyAiResult(aiResult);
     } catch (error) {
-      outputEl.style.display = "block";
-      outputEl.textContent = "Erreur: " + (error.message || String(error));
+      showPricingOutput({ error: error.message || String(error) });
     } finally {
       suggestBtn.disabled = false;
       suggestBtn.textContent = "Proposer ajustement IA";
