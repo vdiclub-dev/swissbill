@@ -213,16 +213,32 @@
     return parts.join("\n").trim();
   }
 
-  async function callOpenAIWebResearch(apiKey, projectId, marketQuery, marketRegion, positioning, currentConfig) {
-    var headers = {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + apiKey
-    };
+  async function callServerAiProxy(provider, model, projectId, systemPrompt, userPrompt) {
+    var response = await fetch("/api/ai-proxy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        provider: provider,
+        model: model,
+        temperature: 0.2,
+        projectId: projectId,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: JSON.stringify(userPrompt) }
+        ]
+      })
+    });
 
-    if (projectId) {
-      headers["OpenAI-Project"] = projectId;
+    var json = await response.json();
+    if (!response.ok) {
+      throw new Error(json.error || "Erreur proxy serveur");
     }
+    return String(json.content || "{}");
+  }
 
+  async function callOpenAIWebResearch(apiKey, projectId, marketQuery, marketRegion, positioning, currentConfig) {
     var researchPrompt = [
       "Recherche sur le web des prix concurrents pour une entreprise de nettoyage en Suisse.",
       "Zone cible: " + (marketRegion || "Suisse romande"),
@@ -239,27 +255,56 @@
       "Allowed keys: " + JSON.stringify(fields)
     ].join("\n");
 
-    var response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify({
-        model: "gpt-4.1-mini",
-        tools: [
-          {
-            type: "web_search_preview",
-            search_context_size: "medium"
-          }
-        ],
-        input: researchPrompt
-      })
-    });
+    var json;
+    if (!apiKey) {
+      var proxyResponse = await fetch("/api/ai-web-research", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1-mini",
+          projectId: projectId,
+          input: researchPrompt
+        })
+      });
+      json = await proxyResponse.json();
+      if (!proxyResponse.ok) {
+        throw new Error("Recherche web indisponible: " + (json.error || "proxy error"));
+      }
+    } else {
+      var headers = {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + apiKey
+      };
 
-    if (!response.ok) {
-      var errText = await response.text();
-      throw new Error("Recherche web indisponible: " + errText);
+      if (projectId) {
+        headers["OpenAI-Project"] = projectId;
+      }
+
+      var response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({
+          model: "gpt-4.1-mini",
+          tools: [
+            {
+              type: "web_search_preview",
+              search_context_size: "medium"
+            }
+          ],
+          input: researchPrompt
+        })
+      });
+
+      if (!response.ok) {
+        var errText = await response.text();
+        throw new Error("Recherche web indisponible: " + errText);
+      }
+
+      json = await response.json();
     }
 
-    var json = await response.json();
     var content = extractResponseText(json);
 
     try {
@@ -290,36 +335,42 @@
       allowed_keys: fields
     };
 
-    var headers = {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + apiKey
-    };
-    if (provider === "openai" && projectId) {
-      headers["OpenAI-Project"] = projectId;
+    var content = "{}";
+
+    if (!apiKey) {
+      content = await callServerAiProxy(provider, model, projectId, systemPrompt, userPrompt);
+    } else {
+      var headers = {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + apiKey
+      };
+      if (provider === "openai" && projectId) {
+        headers["OpenAI-Project"] = projectId;
+      }
+
+      var response = await fetch(getApiBase(provider), {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({
+          model: model,
+          temperature: 0.2,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: JSON.stringify(userPrompt) }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        var err = await response.text();
+        throw new Error("Erreur " + (provider === "deepseek" ? "DeepSeek" : "OpenAI") + ": " + err);
+      }
+
+      var json = await response.json();
+      content = json.choices && json.choices[0] && json.choices[0].message
+        ? json.choices[0].message.content
+        : "{}";
     }
-
-    var response = await fetch(getApiBase(provider), {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify({
-        model: model,
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: JSON.stringify(userPrompt) }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      var err = await response.text();
-      throw new Error("Erreur " + (provider === "deepseek" ? "DeepSeek" : "OpenAI") + ": " + err);
-    }
-
-    var json = await response.json();
-    var content = json.choices && json.choices[0] && json.choices[0].message
-      ? json.choices[0].message.content
-      : "{}";
 
     try {
       return JSON.parse(content);
@@ -387,11 +438,6 @@
     var projectId = projectInput.value.trim();
     var marketQuery = marketQueryInput.value.trim();
     var marketRegion = marketRegionInput.value.trim();
-
-    if (!apiKey) {
-      alert("Ajoute la cle API pour lancer la recherche web.");
-      return;
-    }
 
     if (provider !== "openai") {
       alert("La recherche web automatique est disponible seulement avec OpenAI dans cette version. DeepSeek reste disponible pour l analyse et la proposition tarifaire standard.");
@@ -475,10 +521,6 @@
     var projectId = projectInput.value.trim();
     var notes = notesInput.value.trim();
 
-    if (!apiKey) {
-      alert("Ajoute la cle API pour proposer un ajustement IA.");
-      return;
-    }
     if (!notes) {
       alert("Colle un releve marche avant l'analyse.");
       return;

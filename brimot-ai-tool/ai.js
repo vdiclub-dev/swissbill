@@ -28,6 +28,39 @@
       : "https://api.openai.com/v1/chat/completions";
   }
 
+  async function callServerProxy(provider, model, projectId, description) {
+    var response = await fetch("/api/ai-proxy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        provider: provider,
+        model: model,
+        temperature: 0.1,
+        projectId: projectId,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Tu es un estimateur de devis pour entreprise de nettoyage en Suisse. Retourne uniquement un JSON valide sans texte annexe avec les champs: surface_m2 (number), cleaning_type (standard|end_of_lease|diogene), urgent (boolean), very_dirty (boolean), windows (boolean), bulky_waste (boolean), travel_km (number), confidence (number 0..1), reasoning (string courte)."
+          },
+          {
+            role: "user",
+            content: description
+          }
+        ]
+      })
+    });
+
+    var json = await response.json();
+    if (!response.ok) {
+      throw new Error(json.error || "Erreur proxy serveur");
+    }
+
+    return json.content || "{}";
+  }
+
   providerInput.value = localStorage.getItem(STORAGE_PROVIDER) || "deepseek";
   modelInput.value = localStorage.getItem(STORAGE_MODEL) || getDefaultModel(providerInput.value);
   apiKeyInput.value = localStorage.getItem(STORAGE_KEY) || "";
@@ -96,6 +129,11 @@
   }
 
   async function callAI(description, provider, model, apiKey, projectId) {
+    var content = "{}";
+
+    if (!apiKey) {
+      content = await callServerProxy(provider, model, projectId, description);
+    } else {
     var body = {
       model: model,
       temperature: 0.1,
@@ -121,21 +159,22 @@
       headers["OpenAI-Project"] = projectId;
     }
 
-    var response = await fetch(getApiBase(provider), {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify(body)
-    });
+      var response = await fetch(getApiBase(provider), {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(body)
+      });
 
-    if (!response.ok) {
-      var errText = await response.text();
-      throw new Error((provider === "deepseek" ? "DeepSeek" : "OpenAI") + " error: " + errText);
+      if (!response.ok) {
+        var errText = await response.text();
+        throw new Error((provider === "deepseek" ? "DeepSeek" : "OpenAI") + " error: " + errText);
+      }
+
+      var json = await response.json();
+      content = json.choices && json.choices[0] && json.choices[0].message
+        ? json.choices[0].message.content
+        : "{}";
     }
-
-    var json = await response.json();
-    var content = json.choices && json.choices[0] && json.choices[0].message
-      ? json.choices[0].message.content
-      : "{}";
 
     try {
       return JSON.parse(content);
@@ -156,11 +195,6 @@
     var apiKey = apiKeyInput.value.trim();
     var projectId = projectInput.value.trim();
     var description = document.getElementById("siteDescription").value.trim();
-
-    if (!apiKey) {
-      alert("Ajoute ta cle API avant l analyse.");
-      return;
-    }
 
     if (!description) {
       alert("Decris un chantier a analyser.");
