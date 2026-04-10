@@ -3,6 +3,42 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, "utf-8");
+  content.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed[0] === "#") {
+      return;
+    }
+
+    const idx = trimmed.indexOf("=");
+    if (idx <= 0) {
+      return;
+    }
+
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+
+    if (
+      (value[0] === '"' && value[value.length - 1] === '"') ||
+      (value[0] === "'" && value[value.length - 1] === "'")
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  });
+}
+
+loadEnvFile(path.join(process.cwd(), ".env.local"));
+loadEnvFile(path.join(process.cwd(), ".env"));
+
 const TLS_KEY_PATH = process.env.BRIMOT_TLS_KEY_PATH || "localhost+2-key.pem";
 const TLS_CERT_PATH = process.env.BRIMOT_TLS_CERT_PATH || "localhost+2.pem";
 const HTTPS_PORT = Number(process.env.BRIMOT_HTTPS_PORT || 8443);
@@ -202,6 +238,14 @@ async function requestHandler(req, res) {
   const pathname = url.pathname;
 
   try {
+    if (req.method === "GET" && pathname === "/api/health") {
+      return sendJson(res, 200, {
+        ok: true,
+        mode: tlsOptions ? "https" : "http",
+        deepseekKeyLoaded: Boolean(DEEPSEEK_API_KEY),
+        openaiKeyLoaded: Boolean(OPENAI_API_KEY)
+      });
+    }
     if (req.method === "POST" && pathname === "/api/ai-proxy") {
       return await handleAiProxy(req, res);
     }
@@ -241,7 +285,7 @@ const activeProtocol = tlsOptions ? "https" : "http";
 
 server.listen(activePort, "0.0.0.0", () => {
   console.log("Serveur " + activeProtocol.toUpperCase() + " demarre sur " + activeProtocol + "://0.0.0.0:" + activePort);
-  console.log("Proxy IA actif: POST /api/ai-proxy, POST /api/ai-web-research");
+  console.log("Proxy IA actif: GET /api/health, POST /api/ai-proxy, POST /api/ai-web-research");
   console.log("Variables attendues: BRIMOT_DEEPSEEK_API_KEY, BRIMOT_OPENAI_API_KEY");
   if (!tlsOptions) {
     console.log("TLS desactive: fichiers PEM introuvables (" + TLS_KEY_PATH + ", " + TLS_CERT_PATH + ")");
