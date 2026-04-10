@@ -353,6 +353,34 @@
     applyBtn.disabled = false;
   }
 
+  async function fallbackFromManualNotes(provider, model, apiKey, projectId, currentConfig, webErrorMessage) {
+    var manualNotes = notesInput.value.trim();
+    if (!manualNotes) {
+      showPricingOutput({
+        fallback: "manual_notes_required",
+        web_error: webErrorMessage,
+        message: "La recherche web a echoue. Colle un releve marche puis clique Proposer ajustement IA."
+      });
+      return;
+    }
+
+    var aiResult = await callAIForPricing(
+      provider,
+      model,
+      apiKey,
+      projectId,
+      manualNotes,
+      positioningInput.value,
+      currentConfig
+    );
+
+    aiResult.rationale =
+      "Recherche web indisponible. Ajustement genere depuis les notes manuelles. " +
+      "Detail: " + webErrorMessage;
+    aiResult.sources = [];
+    applyAiResult(aiResult);
+  }
+
   webSearchBtn.addEventListener("click", async function () {
     var provider = providerInput.value || "deepseek";
     var apiKey = apiKeyInput.value.trim();
@@ -418,7 +446,21 @@
         applyAiResult(aiResult);
       }
     } catch (error) {
-      showPricingOutput({ error: error.message || String(error) });
+      try {
+        await fallbackFromManualNotes(
+          provider,
+          modelInput.value.trim() || getDefaultModel(provider),
+          apiKey,
+          projectId,
+          tool.loadConfig(),
+          error.message || String(error)
+        );
+      } catch (fallbackError) {
+        showPricingOutput({
+          error: error.message || String(error),
+          fallback_error: fallbackError.message || String(fallbackError)
+        });
+      }
     } finally {
       webSearchBtn.disabled = false;
       webSearchBtn.textContent = "Recherche web + proposition IA";
