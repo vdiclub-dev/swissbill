@@ -6,11 +6,21 @@
 
   var DEFAULT_CONFIG = {
     standardHourlyRate: 65,
+    standardPerM2: 6,
     diogeneHourlyRate: 120,
+    diogenePerM2: 26,
     endOfLeasePerM2: 7,
+    endOfLeaseDirtyPerM2: 14,
+    disinfectionSimplePerM2: 2,
+    decontaminationHeavyPerM2: 8,
     windowsPerM2: 3.5,
+    windowsStorefrontPerM2: 10,
     travelPerKm: 1.2,
+    extremeHourlyRate: 70,
+    pestsInterventionFee: 180,
     urgentRate: 0.3,
+    weekendRate: 0.25,
+    stairsRate: 0.15,
     veryDirtyRate: 0.5,
     diogeneMultiplier: 1.35,
     bulkyWasteFlat: 120,
@@ -94,9 +104,37 @@
     var labels = {
       standard: "Standard",
       end_of_lease: "Fin de bail",
-      diogene: "Diogene"
+      diogene: "Diogene",
+      disinfection_simple: "Desinfection simple",
+      decontamination_heavy: "Decontamination lourde",
+      windows_storefront: "Vitrines commerciales",
+      extreme: "Nettoyage extreme"
     };
     return labels[type] || "Standard";
+  }
+
+  function getModeLabel(mode) {
+    var labels = {
+      auto: "Auto",
+      m2: "Calcul au m2",
+      hour: "Calcul a l'heure"
+    };
+    return labels[mode] || labels.auto;
+  }
+
+  function getHourlyRateByType(type, config) {
+    if (type === "diogene") return config.diogeneHourlyRate;
+    if (type === "extreme") return config.extremeHourlyRate;
+    return config.standardHourlyRate;
+  }
+
+  function getM2RateByType(type, config, veryDirty) {
+    if (type === "end_of_lease") return veryDirty ? config.endOfLeaseDirtyPerM2 : config.endOfLeasePerM2;
+    if (type === "diogene") return config.diogenePerM2;
+    if (type === "disinfection_simple") return config.disinfectionSimplePerM2;
+    if (type === "decontamination_heavy") return config.decontaminationHeavyPerM2;
+    if (type === "windows_storefront") return config.windowsStorefrontPerM2;
+    return config.standardPerM2;
   }
 
   function estimateBase(type, surfaceM2, config) {
@@ -128,20 +166,46 @@
 
     var surfaceM2 = Math.max(0, toNumber(input.surfaceM2, 0));
     var type = input.cleaningType || "standard";
+    var calcMode = input.calcMode || "auto";
+    var manualHours = Math.max(0, toNumber(input.hours, 0));
     var urgent = Boolean(input.urgent);
     var veryDirty = Boolean(input.veryDirty);
     var windows = Boolean(input.windows);
     var bulkyWaste = Boolean(input.bulkyWaste);
+    var pests = Boolean(input.pests);
+    var stairsNoLift = Boolean(input.stairsNoLift);
+    var weekend = Boolean(input.weekend);
+    var customExtra = Math.max(0, toNumber(input.customExtra, 0));
     var travelKm = Math.max(0, toNumber(input.travelKm, 0));
 
     var base = estimateBase(type, surfaceM2, config);
-    var windowsAmount = windows ? round2(surfaceM2 * config.windowsPerM2) : 0;
+
+    if (calcMode === "hour") {
+      var billedHours = manualHours > 0 ? manualHours : base.hours;
+      base = {
+        amount: round2(billedHours * getHourlyRateByType(type, config)),
+        hours: round2(billedHours),
+        unitLabel: "heure"
+      };
+    } else if (calcMode === "m2") {
+      var m2Rate = getM2RateByType(type, config, veryDirty);
+      base = {
+        amount: round2(surfaceM2 * m2Rate),
+        hours: round2(surfaceM2 / config.standardM2PerHour),
+        unitLabel: "m2"
+      };
+    } else {
+      base.unitLabel = "auto";
+    }
+
+    var windowsAmount = windows && type !== "windows_storefront" ? round2(surfaceM2 * config.windowsPerM2) : 0;
     var bulkyAmount = bulkyWaste
       ? round2(Math.max(config.bulkyWasteFlat, surfaceM2 * config.bulkyWastePerM2))
       : 0;
+    var pestsAmount = pests ? round2(config.pestsInterventionFee) : 0;
     var travelAmount = round2(travelKm * config.travelPerKm);
 
-    var subtotal = round2(base.amount + windowsAmount + bulkyAmount + travelAmount);
+    var subtotal = round2(base.amount + windowsAmount + bulkyAmount + pestsAmount + travelAmount + customExtra);
 
     var majorationRate = 0;
     var majorations = [];
@@ -164,6 +228,24 @@
       });
     }
 
+    if (weekend) {
+      majorationRate += config.weekendRate;
+      majorations.push({
+        key: "weekend",
+        label: "Majoration week-end",
+        rate: config.weekendRate
+      });
+    }
+
+    if (stairsNoLift) {
+      majorationRate += config.stairsRate;
+      majorations.push({
+        key: "stairs",
+        label: "Majoration sans ascenseur",
+        rate: config.stairsRate
+      });
+    }
+
     var majorationAmount = round2(subtotal * majorationRate);
     var total = round2(subtotal + majorationAmount);
 
@@ -171,18 +253,27 @@
       input: {
         surfaceM2: surfaceM2,
         cleaningType: type,
+        calcMode: calcMode,
+        hours: manualHours,
         urgent: urgent,
         veryDirty: veryDirty,
         windows: windows,
         bulkyWaste: bulkyWaste,
+        pests: pests,
+        stairsNoLift: stairsNoLift,
+        weekend: weekend,
+        customExtra: customExtra,
         travelKm: travelKm
       },
       breakdown: {
         baseAmount: base.amount,
         estimatedHours: base.hours,
+        baseUnit: base.unitLabel || "auto",
         windowsAmount: windowsAmount,
         bulkyAmount: bulkyAmount,
+        pestsAmount: pestsAmount,
         travelAmount: travelAmount,
+        customExtra: customExtra,
         subtotal: subtotal,
         majorationRate: majorationRate,
         majorationAmount: majorationAmount,
@@ -190,7 +281,8 @@
         majorations: majorations
       },
       labels: {
-        typeLabel: getTypeLabel(type)
+        typeLabel: getTypeLabel(type),
+        modeLabel: getModeLabel(calcMode)
       }
     };
   }

@@ -23,10 +23,12 @@
     var b = estimate.breakdown;
     var rows = [];
 
-    rows.push(line("Base", tool.formatCHF(b.baseAmount), false));
+    rows.push(line("Base (" + estimate.labels.modeLabel + ")", tool.formatCHF(b.baseAmount), false));
     rows.push(line("Options vitres", tool.formatCHF(b.windowsAmount), false));
     rows.push(line("Options debarras", tool.formatCHF(b.bulkyAmount), false));
+    rows.push(line("Nuisibles / cas special", tool.formatCHF(b.pestsAmount || 0), false));
     rows.push(line("Deplacement", tool.formatCHF(b.travelAmount), false));
+    rows.push(line("Supplement manuel", tool.formatCHF(b.customExtra || 0), false));
     rows.push(line("Sous-total", tool.formatCHF(b.subtotal), false));
 
     if (b.majorations.length) {
@@ -47,10 +49,16 @@
     var payload = {
       surfaceM2: document.getElementById("surfaceM2").value,
       cleaningType: document.getElementById("cleaningType").value,
+      calcMode: document.getElementById("calcMode").value,
+      hours: document.getElementById("hoursWorked").value,
       urgent: document.getElementById("optUrgent").checked,
       veryDirty: document.getElementById("optVeryDirty").checked,
+      weekend: document.getElementById("optWeekend").checked,
+      stairsNoLift: document.getElementById("optStairs").checked,
       windows: document.getElementById("optWindows").checked,
       bulkyWaste: document.getElementById("optBulky").checked,
+      pests: document.getElementById("optPests").checked,
+      customExtra: document.getElementById("customExtra").value,
       travelKm: document.getElementById("travelKm").value
     };
 
