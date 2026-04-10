@@ -38,6 +38,39 @@
     recurringMonthlyRate: 40
   };
 
+  var CONFIG_MIN = {
+    standardHourlyRate: 5,
+    standardPerM2: 0.5,
+    diogeneHourlyRate: 50,
+    diogenePerM2: 5,
+    endOfLeasePerM2: 1,
+    endOfLeaseDirtyPerM2: 2,
+    disinfectionSimplePerM2: 0.5,
+    decontaminationHeavyPerM2: 1,
+    windowsPerM2: 0.5,
+    windowsStorefrontPerM2: 1,
+    travelPerKm: 0.1,
+    extremeHourlyRate: 50,
+    pestsInterventionFee: 50,
+    urgentRate: 0,
+    weekendRate: 0,
+    stairsRate: 0,
+    veryDirtyRate: 0,
+    diogeneMultiplier: 1,
+    bulkyWasteFlat: 10,
+    bulkyWastePerM2: 0.1,
+    standardM2PerHour: 3,
+    diogeneM2PerHour: 3,
+    endOfLeaseM2PerHour: 2,
+    extremeM2PerHour: 1,
+    disinfectionM2PerHour: 2,
+    recurringM2PerHour: 2,
+    recurringOnceRate: 5,
+    recurringWeeklyRate: 5,
+    recurringBiMonthlyRate: 5,
+    recurringMonthlyRate: 5
+  };
+
   var DEFAULT_SERVICE_CATALOG = [
     { category: "Nettoyages residentiels", name: "Menage recurrent (appartement)", unit: "heure", minPrice: 38, maxPrice: 40 },
     { category: "Nettoyages residentiels", name: "Nettoyage d appartement (regulier ou ponctuel)", unit: "heure", minPrice: 55, maxPrice: 75 },
