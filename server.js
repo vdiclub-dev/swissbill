@@ -1,11 +1,26 @@
+const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
-const options = {
-  key: fs.readFileSync("localhost+2-key.pem"),
-  cert: fs.readFileSync("localhost+2.pem")
-};
+const TLS_KEY_PATH = process.env.BRIMOT_TLS_KEY_PATH || "localhost+2-key.pem";
+const TLS_CERT_PATH = process.env.BRIMOT_TLS_CERT_PATH || "localhost+2.pem";
+const HTTPS_PORT = Number(process.env.BRIMOT_HTTPS_PORT || 8443);
+const HTTP_PORT = Number(process.env.BRIMOT_HTTP_PORT || 8080);
+
+function loadTlsOptions() {
+  try {
+    if (!fs.existsSync(TLS_KEY_PATH) || !fs.existsSync(TLS_CERT_PATH)) {
+      return null;
+    }
+    return {
+      key: fs.readFileSync(TLS_KEY_PATH),
+      cert: fs.readFileSync(TLS_CERT_PATH)
+    };
+  } catch (error) {
+    return null;
+  }
+}
 
 const OPENAI_API_KEY = process.env.BRIMOT_OPENAI_API_KEY || "";
 const DEEPSEEK_API_KEY = process.env.BRIMOT_DEEPSEEK_API_KEY || "";
@@ -173,7 +188,7 @@ async function handleWebResearchProxy(req, res) {
   return sendJson(res, 200, upstream);
 }
 
-const server = https.createServer(options, async (req, res) => {
+async function requestHandler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -214,10 +229,21 @@ const server = https.createServer(options, async (req, res) => {
       res.end(content, "utf-8");
     }
   });
-});
+}
 
-server.listen(8443, "0.0.0.0", () => {
-  console.log("Serveur HTTPS demarre sur https://0.0.0.0:8443");
+const tlsOptions = loadTlsOptions();
+const server = tlsOptions
+  ? https.createServer(tlsOptions, requestHandler)
+  : http.createServer(requestHandler);
+
+const activePort = tlsOptions ? HTTPS_PORT : HTTP_PORT;
+const activeProtocol = tlsOptions ? "https" : "http";
+
+server.listen(activePort, "0.0.0.0", () => {
+  console.log("Serveur " + activeProtocol.toUpperCase() + " demarre sur " + activeProtocol + "://0.0.0.0:" + activePort);
   console.log("Proxy IA actif: POST /api/ai-proxy, POST /api/ai-web-research");
   console.log("Variables attendues: BRIMOT_DEEPSEEK_API_KEY, BRIMOT_OPENAI_API_KEY");
+  if (!tlsOptions) {
+    console.log("TLS desactive: fichiers PEM introuvables (" + TLS_KEY_PATH + ", " + TLS_CERT_PATH + ")");
+  }
 });
