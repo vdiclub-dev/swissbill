@@ -9,7 +9,7 @@ async function startScanner() {
         
         // Vérifier si on est en HTTPS (obligatoire pour la caméra sur mobile)
         if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            throw new Error('La caméra nécessite une connexion HTTPS. Utilisez https://vdiclub-dev.github.io/swissbill/');
+            throw new Error('La caméra nécessite une connexion HTTPS. Ouvrez cette page via le domaine sécurisé du site.');
         }
         
         // Vérifier si le navigateur supporte les permissions

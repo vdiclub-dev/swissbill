@@ -65,7 +65,7 @@ window.SUPABASE_CONFIG = {
     key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y"
 };
 
-// Brimot — envoi d'emails : si la facturation est sur un domaine sans PHP (ex. GitHub Pages),
+// Brimot — envoi d'emails : si la facturation est sur un domaine statique sans PHP,
 // mettez l'URL absolue de send_mail.php sur l'hébergement qui exécute le PHP (ex. LWS).
 // Exemple : window.BRIMOT_SEND_MAIL_URL = 'https://votredomaine.ch/admin/brimot/send_mail.php';
 // Sinon : Edge send-brimot-invoice + Resend — secrets Supabase RESEND_API_KEY, BRIMOT_FROM_EMAIL (domaine vérifié Resend).
@@ -143,7 +143,7 @@ try {
     window.SUPABASE_CLIENT = null;
 }
 
-/** GitHub Pages peut servir un vieux config.js en cache : version.txt est toujours relue (no-store) pour forcer un reload si le dépôt est plus récent que le bundle. */
+/** Un ancien config.js peut rester en cache côté navigateur/CDN : version.txt est relue en no-store pour forcer un reload si le serveur est plus récent que le bundle. */
 (function colixoCheckServerVersion() {
     var bundle = window.COLIXO_ASSET_VERSION;
     if (!bundle || typeof fetch !== 'function' || typeof location === 'undefined') return;
@@ -168,4 +168,3 @@ try {
         })
         .catch(function () {});
 })();
-

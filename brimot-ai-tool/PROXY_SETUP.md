@@ -35,5 +35,5 @@ Laisse le champ cle API vide dans l'UI pour utiliser le proxy serveur.
 
 ## Important
 
-Ce proxy local ne fonctionne pas sur GitHub Pages (site statique pur).
+Ce proxy local ne fonctionne pas sur un hébergement statique pur.
 Pour la production, utiliser un hebergement avec backend (Vercel Functions, Render, Railway, VPS, etc.).
