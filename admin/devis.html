@@ -451,6 +451,7 @@
             </div>
             <div class="row" style="margin-top:16px;">
               <button onclick="generatePDF()" class="btn-success">Télécharger le devis PDF</button>
+              <button id="btnPdfPro" class="btn-success">Télécharger PDF Pro</button>
             </div>
           </div>
         </div>
@@ -1226,6 +1227,7 @@
       document.getElementById('saveClientBtn').addEventListener('click', createClient);
       document.getElementById('saveOrderBtn').addEventListener('click', createOrder);
       document.getElementById('resetOrderBtn').addEventListener('click', resetOrderForm);
+      document.getElementById('btnPdfPro').addEventListener('click', generatePDFPro);
       document.getElementById('saveSettingsBtn').addEventListener('click', saveSettingsAction);
 
       [
@@ -1310,6 +1312,185 @@
       doc.text("Merci pour votre confiance", 20, 100);
 
       doc.save("devis-colixo.pdf");
+    }
+
+    async function generatePDFPro() {
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        showError("jsPDF non chargé.");
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const form = currentOrderForm();
+      const pricing = calculateOrderPrice(form, state.settings);
+      if (pricing.error) {
+        showError(pricing.error);
+        return;
+      }
+
+      const client = state.clients.find(c => c.id === form.clientId);
+      const clientName = client ? (client.name || "Sans client") : "Sans client";
+      const clientCompany = client ? (client.company || "") : "";
+      const clientEmail = client ? (client.email || "") : "";
+      const clientPhone = client ? (client.phone || "") : "";
+
+      const today = new Date().toLocaleDateString("fr-CH");
+      const devisNumber = "DEV-" + new Date().toISOString().slice(0,10).replace(/-/g, "") + "-" + Math.floor(Math.random() * 900 + 100);
+
+      const lineItems = [
+        ["Client", clientName],
+        ["Entreprise", clientCompany || "-"],
+        ["Email", clientEmail || "-"],
+        ["Téléphone", clientPhone || "-"],
+        ["Famille tarifaire", form.tariffFamily],
+        ["Mode d'expédition", form.shippingMode],
+        ["Poids", `${form.weight} kg`],
+        ["Distance", `${form.km} km`],
+        ["Étages", `${form.floorsAfterFirst}`],
+        ["Colis / jour", `${form.packagesPerDay}`],
+        ["Jours / mois", `${form.workingDaysPerMonth}`]
+      ];
+
+      const options = [];
+      if (form.useForfait030) options.push("Forfait 0-30 kg");
+      if (form.includePickup030) options.push("Prise en charge 0-30 kg");
+      if (form.options.callBefore) options.push("Appel avant livraison");
+      if (form.options.cod) options.push("Encaissement");
+      if (form.options.night) options.push("Livraison de nuit");
+      if (form.options.combinedPickup) options.push("Tournée combinée (-50%)");
+
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, 210, 297, "F");
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, 210, 34, "F");
+
+      doc.setTextColor(251, 191, 36);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(24);
+      doc.text("COLIXO", 15, 16);
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.text("DEVIS PROFESSIONNEL", 15, 24);
+
+      doc.setTextColor(17, 24, 39);
+      doc.setDrawColor(226, 232, 240);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(15, 42, 180, 30, 3, 3, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Numéro de devis", 20, 52);
+      doc.text("Date", 120, 52);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      doc.text(devisNumber, 20, 60);
+      doc.text(today, 120, 60);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Informations client", 15, 84);
+
+      let y = 92;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+
+      lineItems.forEach(([label, value]) => {
+        doc.setFont("helvetica", "bold");
+        doc.text(label + " :", 15, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(String(value), 60, y);
+        y += 7;
+      });
+
+      y += 4;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Options appliquées", 15, y);
+      y += 8;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+
+      if (options.length) {
+        options.forEach(opt => {
+          doc.text("• " + opt, 18, y);
+          y += 6;
+        });
+      } else {
+        doc.text("Aucune option sélectionnée", 18, y);
+        y += 6;
+      }
+
+      y += 8;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Résumé financier", 15, y);
+
+      y += 8;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(15, y, 180, 42, 3, 3, "FD");
+
+      doc.setFontSize(11);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Prix du colis", 20, y + 10);
+      doc.text("Revenu / jour", 20, y + 20);
+      doc.text("Revenu / mois", 20, y + 30);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(217, 119, 6);
+      doc.text(`CHF ${pricing.total.toFixed(2)}`, 120, y + 10);
+      doc.text(`CHF ${pricing.dailyRevenue.toFixed(2)}`, 120, y + 20);
+      doc.text(`CHF ${pricing.monthlyRevenue.toFixed(2)}`, 120, y + 30);
+
+      y += 58;
+      doc.setTextColor(17, 24, 39);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Conditions", 15, y);
+
+      y += 8;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const conditions = [
+        "Ce devis est fourni à titre indicatif selon les paramètres saisis.",
+        "Les tarifs peuvent varier selon les contraintes réelles de transport.",
+        "Toute prestation complémentaire non prévue initialement peut être facturée en supplément.",
+        "Validité conseillée du devis : 30 jours."
+      ];
+
+      conditions.forEach(line => {
+        doc.text("• " + line, 18, y);
+        y += 6;
+      });
+
+      y += 14;
+      doc.setDrawColor(180, 180, 180);
+      doc.line(20, y, 90, y);
+      doc.line(120, y, 190, y);
+
+      doc.setFontSize(10);
+      doc.text("Signature Colixo", 35, y + 6);
+      doc.text("Signature client", 138, y + 6);
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 282, 210, 15, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(9);
+      doc.text("Colixo - Devis généré automatiquement depuis l'interface admin", 15, 291);
+
+      doc.save(`${devisNumber}.pdf`);
     }
 
     attachEvents();
