@@ -26,16 +26,18 @@
     diogeneMultiplier: 1.35,
     bulkyWasteFlat: 120,
     bulkyWastePerM2: 1.4,
-    standardM2PerHour: 32,
-    diogeneM2PerHour: 12,
-    endOfLeaseM2PerHour: 8,
-    extremeM2PerHour: 5,
-    disinfectionM2PerHour: 15,
-    recurringM2PerHour: 20,
+    standardM2PerHour: 24,
+    diogeneM2PerHour: 8,
+    endOfLeaseM2PerHour: 6,
+    extremeM2PerHour: 3,
+    disinfectionM2PerHour: 10,
+    recurringM2PerHour: 14,
     recurringOnceRate: 40,
     recurringWeeklyRate: 38,
     recurringBiMonthlyRate: 39,
-    recurringMonthlyRate: 40
+    recurringMonthlyRate: 40,
+    durationBufferRate: 0.3,
+    setupTimeHours: 0.75
   };
 
   var CONFIG_MIN = {
@@ -68,7 +70,9 @@
     recurringOnceRate: 5,
     recurringWeeklyRate: 5,
     recurringBiMonthlyRate: 5,
-    recurringMonthlyRate: 5
+    recurringMonthlyRate: 5,
+    durationBufferRate: 0,
+    setupTimeHours: 0
   };
 
   var DEFAULT_SERVICE_CATALOG = [
@@ -342,6 +346,13 @@
     return Math.ceil(hours * 4) / 4;
   }
 
+  function applyDurationBuffer(hours, config) {
+    var setup = Math.max(0, toNumber(config.setupTimeHours, 0));
+    var buffer = Math.max(0, toNumber(config.durationBufferRate, 0));
+    var adjusted = (Math.max(0, toNumber(hours, 0)) + setup) * (1 + buffer);
+    return roundToQuarter(adjusted);
+  }
+
   function getRecurringRate(frequency, config) {
     if (frequency === "weekly") return config.recurringWeeklyRate;
     if (frequency === "bimonthly") return config.recurringBiMonthlyRate;
@@ -459,8 +470,9 @@
       optionHours += round2(pestsAmount / config.standardHourlyRate);
     }
 
-    // Mise a jour des heures totales avec les options
-    var totalHours = round2(base.hours + optionHours);
+    // Mise a jour des heures totales avec les options, puis marge de securite
+    var totalHoursRaw = round2(base.hours + optionHours);
+    var totalHours = applyDurationBuffer(totalHoursRaw, config);
 
     var subtotal = round2(base.amount + windowsAmount + bulkyAmount + pestsAmount + travelAmount + customExtra);
 
@@ -526,6 +538,7 @@
       breakdown: {
         baseAmount: base.amount,
         baseHours: base.hours,
+        rawEstimatedHours: totalHoursRaw,
         estimatedHours: totalHours,
         baseUnit: base.unitLabel || "auto",
         windowsAmount: windowsAmount,

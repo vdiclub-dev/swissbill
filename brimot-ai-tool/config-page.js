@@ -58,7 +58,9 @@
     "recurringOnceRate",
     "recurringWeeklyRate",
     "recurringBiMonthlyRate",
-    "recurringMonthlyRate"
+    "recurringMonthlyRate",
+    "durationBufferRate",
+    "setupTimeHours"
   ];
 
   function getDefaultModel(provider) {

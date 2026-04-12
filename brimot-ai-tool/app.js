@@ -15,6 +15,51 @@
   var frequencyRow = document.getElementById("frequencyRow");
   var frequencySelect = document.getElementById("frequency");
   var servicePriceHint = document.getElementById("servicePriceHint");
+  var btnExportPdf = document.getElementById("btnExportPdf");
+
+  var TVA_RATE = 0.081;
+  var PDF_LOGO_SIZE_MM = 75;
+  var PDF_LOGO_PATHS = ["./logo.png", "logo.png", "./logo.jpg", "logo.jpg", "./logo.jpeg", "logo.jpeg"];
+  var lastEstimate = null;
+  var lastTypeLabel = "";
+
+  function loadPdfLogoData() {
+    function detectImageFormat(path, mimeType) {
+      var lower = String(path || "").toLowerCase();
+      var mime = String(mimeType || "").toLowerCase();
+      if (mime.indexOf("png") !== -1 || lower.slice(-4) === ".png") return "PNG";
+      return "JPEG";
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function () { resolve(String(reader.result || "")); };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    return PDF_LOGO_PATHS.reduce(function (promise, path) {
+      return promise.catch(function () {
+        return fetch(path, { cache: "no-store" })
+          .then(function (res) {
+            if (!res.ok) throw new Error("Not found");
+            return res.blob();
+          })
+          .then(function (blob) {
+            return blobToDataUrl(blob).then(function (dataUrl) {
+              return {
+                dataUrl: dataUrl,
+                format: detectImageFormat(path, blob.type)
+              };
+            });
+          });
+      });
+    }, Promise.reject(new Error("No logo path matched"))).catch(function () {
+      return null;
+    });
+  }
 
   function slugify(value) {
     return String(value || "")
@@ -186,9 +231,115 @@
       rows.push(line("Montant majorations", tool.formatCHF(b.majorationAmount), false));
     }
 
-    rows.push(line("Total estime", tool.formatCHF(b.total), true));
+    var tvaAmount = Math.round(b.total * TVA_RATE * 100) / 100;
+    var totalTtc = Math.round((b.total + tvaAmount) * 100) / 100;
+
+    rows.push(line("Total estime (HT)", tool.formatCHF(b.total), true));
+    rows.push(line("TVA 8.1%", tool.formatCHF(tvaAmount), false));
+    rows.push(line("Total TTC", tool.formatCHF(totalTtc), true));
 
     breakdown.innerHTML = rows.join("");
+  }
+
+  async function exportPdf() {
+    if (!lastEstimate) {
+      alert("Calcule d'abord un devis avant export PDF.");
+      return;
+    }
+
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      alert("Bibliotheque PDF indisponible. Recharge la page puis reessaie.");
+      return;
+    }
+
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: "mm", format: "a4" });
+    var pageWidth = doc.internal.pageSize.getWidth();
+    var logoAsset = await loadPdfLogoData();
+    var y = 15;
+    var logoBottomY = y;
+
+    var b = lastEstimate.breakdown;
+    var tvaAmount = Math.round(b.total * TVA_RATE * 100) / 100;
+    var totalTtc = Math.round((b.total + tvaAmount) * 100) / 100;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("BRIMOT NETTOYAGE", 14, y);
+
+    if (logoAsset && logoAsset.dataUrl) {
+      var logoX = pageWidth - 14 - PDF_LOGO_SIZE_MM;
+      var logoY = 14;
+      doc.addImage(logoAsset.dataUrl, logoAsset.format, logoX, logoY, PDF_LOGO_SIZE_MM, PDF_LOGO_SIZE_MM);
+      logoBottomY = logoY + PDF_LOGO_SIZE_MM;
+    }
+
+    y += 7;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    var addressLines = [
+      "Didier Gysling",
+      "Impasse des Griottes 3",
+      "1462 Yvonand",
+      "info@brimot.ch",
+      "Tél: +41 79 646 74 42"
+    ];
+    addressLines.forEach(function(line) {
+      doc.text(line, 14, y);
+      y += 4;
+    });
+    y += 2;
+    doc.text("Date: " + new Date().toLocaleDateString("fr-CH"), 14, y);
+    y += 8;
+
+    if (logoBottomY + 4 > y) {
+      y = logoBottomY + 4;
+    }
+
+    doc.setDrawColor(210, 210, 210);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 8;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text("Resultat estimation", 14, y);
+    y += 7;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Prestation: " + (lastTypeLabel || lastEstimate.labels.typeLabel), 14, y);
+    y += 5;
+    doc.text("Surface: " + lastEstimate.input.surfaceM2 + " m2", 14, y);
+    y += 5;
+    doc.text("Temps estime: " + b.estimatedHours + " h", 14, y);
+    y += 8;
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Resume financier", 14, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+
+    var lines = [
+      "Total estime (HT): " + tool.formatCHF(b.total),
+      "TVA 8.1%: " + tool.formatCHF(tvaAmount),
+      "Total TTC: " + tool.formatCHF(totalTtc)
+    ];
+
+    lines.forEach(function (text) {
+      doc.text(text, 14, y);
+      y += 5;
+    });
+
+    y += 3;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9);
+    doc.text("Estimation interne indicative. Validation finale par un responsable avant envoi client.", 14, y, {
+      maxWidth: pageWidth - 28
+    });
+
+    var fileDate = new Date().toISOString().slice(0, 10);
+    doc.save("brimot-estimation-" + fileDate + ".pdf");
   }
 
   function onSubmit(event) {
@@ -227,6 +378,9 @@
     resultHours.textContent = estimate.breakdown.estimatedHours + " h";
     resultSurface.textContent = estimate.input.surfaceM2 + " m2";
 
+    lastEstimate = estimate;
+    lastTypeLabel = resultType.textContent;
+
     renderBreakdown(estimate);
     resultCard.style.display = "block";
 
@@ -247,4 +401,7 @@
 
   renderServiceOptions();
   form.addEventListener("submit", onSubmit);
+  if (btnExportPdf) {
+    btnExportPdf.addEventListener("click", exportPdf);
+  }
 })();
