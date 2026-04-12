@@ -2441,6 +2441,7 @@
                 const basePricing = calculateBasePrice(order, currentSettings());
                 const finalPrice = round2(state.selectedFinalPrice != null ? state.selectedFinalPrice : basePricing.total);
                 const aiAdvice = state.selectedAiAdvice;
+                const editedOrderId = state.editingOrderId;
 
                 showLoader('Enregistrement du devis…');
                 const payload = {
@@ -2471,6 +2472,7 @@
                     monthly_revenue_estimate: basePricing.monthlyRevenue,
                     updated_by: state.user.id
                 };
+                const savedOrderNumber = payload.order_number;
 
                 let error;
                 if (state.editingOrderId) {
@@ -2483,10 +2485,19 @@
                 if (error) throw error;
 
                 await refreshData(false);
+                const savedOrder = editedOrderId
+                    ? state.orders.find(item => item.id === editedOrderId)
+                    : state.orders.find(item => item.order_number === savedOrderNumber);
                 resetOrderForm();
                 renderAll();
                 setSection('orders');
                 showToast('success', 'Devis enregistré', `Le devis pour ${client.company_name} a été sauvegardé.`);
+                if (savedOrder) {
+                    exportPdfByOrder(savedOrder).catch(pdfError => {
+                        console.error('exportPdfByOrder', pdfError);
+                        showToast('error', 'PDF non généré', 'Le devis a été enregistré, mais le PDF automatique a échoué.');
+                    });
+                }
             } catch (error) {
                 showToast('error', 'Erreur devis', error.message || 'Impossible d’enregistrer le devis.');
             } finally {
@@ -2494,7 +2505,30 @@
             }
         }
 
-        function exportPdfByOrder(order){
+        let quoteLogoDataUrlPromise = null;
+
+        function loadQuoteLogoDataUrl() {
+            if (quoteLogoDataUrlPromise) return quoteLogoDataUrlPromise;
+            const logoUrl = window.colixoHref ? window.colixoHref('/brimot-ai-tool/colixo-logo.png') : '/brimot-ai-tool/colixo-logo.png';
+            quoteLogoDataUrlPromise = fetch(logoUrl)
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.blob();
+                })
+                .then(blob => new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                }))
+                .catch(error => {
+                    console.warn('Logo PDF indisponible', error);
+                    return null;
+                });
+            return quoteLogoDataUrlPromise;
+        }
+
+        async function exportPdfByOrder(order){
             const settings = currentSettings();
             const client = getClientById(order.client_id);
             const breakdown = Array.isArray(order.price_breakdown) ? order.price_breakdown : [];
@@ -2504,6 +2538,7 @@
             }
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+            const logoDataUrl = await loadQuoteLogoDataUrl();
 
             let y = 18;
             function line(txt, size, color){
@@ -2516,6 +2551,10 @@
             doc.setFillColor(10, 11, 16);
             doc.rect(0, 0, 210, 297, 'F');
             doc.setTextColor(255,255,255);
+            if (logoDataUrl) {
+                doc.addImage(logoDataUrl, 'PNG', 14, 12, 26, 26);
+                y = 24;
+            }
             line(settings.company.name || 'Colixo Dispatch', 24);
             doc.setTextColor(190,190,190);
             line(settings.company.address_line1 || '', 10);
