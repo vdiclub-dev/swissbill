@@ -667,6 +667,26 @@
       return row ? row.price : null;
     }
 
+    function toServiceLevel(shippingMode) {
+      if (shippingMode === "prio") return "priority";
+      if (shippingMode === "express") return "express";
+      return "eco";
+    }
+
+    function fromServiceLevel(serviceLevel) {
+      if (serviceLevel === "priority") return "prio";
+      if (serviceLevel === "express") return "express";
+      return "eco";
+    }
+
+    function toTariffFamilyDb(tariffFamily) {
+      return tariffFamily === "vinologue" ? "vinologue" : "standard";
+    }
+
+    function fromTariffFamilyDb(tariffFamily) {
+      return tariffFamily === "vinologue" ? "vinologue" : "normal";
+    }
+
     function calculateOrderPrice(order, settings) {
       const family = settings.tariffs[order.tariffFamily] || settings.tariffs.normal;
       let base = 0;
@@ -877,10 +897,9 @@
                 <span>Statut</span>
                 <select onchange="updateOrderStatus('${order.id}', this.value)">
                   <option value="draft" ${order.status === "draft" ? "selected" : ""}>Brouillon</option>
-                  <option value="confirmed" ${order.status === "confirmed" ? "selected" : ""}>Confirmée</option>
-                  <option value="in_progress" ${order.status === "in_progress" ? "selected" : ""}>En cours</option>
-                  <option value="delivered" ${order.status === "delivered" ? "selected" : ""}>Livrée</option>
-                  <option value="cancelled" ${order.status === "cancelled" ? "selected" : ""}>Annulée</option>
+                  <option value="quoted" ${order.status === "quoted" ? "selected" : ""}>Devis envoyé</option>
+                  <option value="validated" ${order.status === "validated" ? "selected" : ""}>Validée</option>
+                  <option value="lost" ${order.status === "lost" ? "selected" : ""}>Perdue</option>
                 </select>
               </label>
             </div>
@@ -1072,19 +1091,19 @@
         id: item.id,
         clientId: item.client_id || "",
         clientName: item.client_name || "Sans client",
-        tariffFamily: item.tariff_family,
-        shippingMode: item.shipping_mode,
-        weight: Number(item.weight || 0),
-        km: Number(item.km || 0),
-        floorsAfterFirst: Number(item.floors_after_first || 0),
+        tariffFamily: fromTariffFamilyDb(item.tariff_family),
+        shippingMode: fromServiceLevel(item.service_level),
+        weight: Number(item.weight_kg || item.weight || 0),
+        km: Number(item.distance_km || item.km || 0),
+        floorsAfterFirst: Number(item.floors || item.floors_after_first || 0),
         packagesPerDay: Number(item.packages_per_day || 0),
         workingDaysPerMonth: Number(item.working_days_per_month || 0),
-        useForfait030: !!item.use_forfait_030,
-        includePickup030: !!item.include_pickup_030,
+        useForfait030: !!(item.use_forfait_030 || (item.price_breakdown && item.price_breakdown.useForfait030)),
+        includePickup030: !!(item.include_pickup_030 || (item.price_breakdown && item.price_breakdown.includePickup030)),
         options: item.options || {},
-        price: Number(item.price || 0),
-        dailyRevenue: Number(item.daily_revenue || 0),
-        monthlyRevenue: Number(item.monthly_revenue || 0),
+        price: Number(item.final_price || item.price || 0),
+        dailyRevenue: Number(item.daily_revenue_estimate || item.daily_revenue || 0),
+        monthlyRevenue: Number(item.monthly_revenue_estimate || item.monthly_revenue || 0),
         status: item.status || "draft"
       }));
     }
@@ -1104,23 +1123,43 @@
       }
 
       const client = state.clients.find(c => c.id === form.clientId);
+      const basePrice = pricing.total;
+      const aiAdvice = getAIPricingAdvice(form, state.settings, basePrice);
+      const orderNumber = "DEV-" + Date.now() + "-" + uid().slice(-6).replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 
       const payload = {
+        order_number: orderNumber,
         client_id: form.clientId || null,
         client_name: client ? client.name : "Sans client",
-        tariff_family: form.tariffFamily,
-        shipping_mode: form.shippingMode,
-        weight: form.weight,
-        km: form.km,
-        floors_after_first: form.floorsAfterFirst,
+        tariff_family: toTariffFamilyDb(form.tariffFamily),
+        service_level: toServiceLevel(form.shippingMode),
+        weight_kg: form.weight,
+        distance_km: form.km,
+        floors: form.floorsAfterFirst,
+        package_type: "parcel",
+        extra_stops: 0,
+        margin_target_percent: 18,
         packages_per_day: form.packagesPerDay,
         working_days_per_month: form.workingDaysPerMonth,
-        use_forfait_030: form.useForfait030,
-        include_pickup_030: form.includePickup030,
         options: form.options,
-        price: pricing.total,
-        daily_revenue: pricing.dailyRevenue,
-        monthly_revenue: pricing.monthlyRevenue,
+        notes_internal: null,
+        notes_customer: null,
+        base_price: basePrice,
+        suggested_ai_price: aiAdvice.suggestedPrice,
+        final_price: basePrice,
+        ai_summary: aiAdvice.advice.join(" ") || null,
+        ai_confidence: null,
+        price_breakdown: {
+          useForfait030: form.useForfait030,
+          includePickup030: form.includePickup030,
+          callBefore: form.options.callBefore,
+          cod: form.options.cod,
+          night: form.options.night,
+          combinedPickup: form.options.combinedPickup
+        },
+        ai_advice: aiAdvice.advice,
+        daily_revenue_estimate: pricing.dailyRevenue,
+        monthly_revenue_estimate: pricing.monthlyRevenue,
         status: "draft"
       };
 
