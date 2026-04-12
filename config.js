@@ -91,6 +91,11 @@ window.colixoHref = function (path) {
     return (window.COLIXO_BASE_PATH || '') + p;
 };
 
+// Log de démarrage explicite pour vérifier rapidement la build réellement chargée.
+if (typeof console !== 'undefined' && console.info) {
+    console.info('[Colixo] build', window.COLIXO_ASSET_VERSION, 'base', window.COLIXO_BASE_PATH === '' ? '(racine)' : window.COLIXO_BASE_PATH);
+}
+
 /**
  * Réécrit les liens `<a href="/...">` après chargement du DOM lorsque
  * le site est servi sous un préfixe (`/repo`, preview statique, github.io).
