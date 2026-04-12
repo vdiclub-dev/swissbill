@@ -3,6 +3,17 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
+// Petit serveur local pour deux usages :
+// 1. servir les fichiers statiques du projet Colixo
+// 2. exposer quelques routes API proxy pour des appels IA côté navigateur
+//
+// En pratique :
+// - si des certificats locaux existent, le serveur démarre en HTTPS
+// - sinon il démarre en HTTP simple
+// - les fichiers du dépôt sont servis directement depuis la racine
+
+// Charge .env.local puis .env sans écraser les variables déjà présentes
+// dans l'environnement du shell.
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
     return;
@@ -39,11 +50,16 @@ function loadEnvFile(filePath) {
 loadEnvFile(path.join(process.cwd(), ".env.local"));
 loadEnvFile(path.join(process.cwd(), ".env"));
 
+// Paramètres réseau locaux :
+// - HTTPS est utilisé uniquement si les fichiers PEM sont présents
+// - sinon le serveur retombe automatiquement sur HTTP
 const TLS_KEY_PATH = process.env.BRIMOT_TLS_KEY_PATH || "localhost+2-key.pem";
 const TLS_CERT_PATH = process.env.BRIMOT_TLS_CERT_PATH || "localhost+2.pem";
 const HTTPS_PORT = Number(process.env.BRIMOT_HTTPS_PORT || 8443);
 const HTTP_PORT = Number(process.env.BRIMOT_HTTP_PORT || 8080);
 
+// Tente de charger la paire clé/certificat locale pour activer HTTPS.
+// Si les fichiers sont absents ou illisibles, on reste en HTTP.
 function loadTlsOptions() {
   try {
     if (!fs.existsSync(TLS_KEY_PATH) || !fs.existsSync(TLS_CERT_PATH)) {
@@ -61,6 +77,8 @@ function loadTlsOptions() {
 const OPENAI_API_KEY = process.env.BRIMOT_OPENAI_API_KEY || "";
 const DEEPSEEK_API_KEY = process.env.BRIMOT_DEEPSEEK_API_KEY || "";
 
+// Types MIME minimaux nécessaires pour servir les principaux assets
+// du dépôt. Les extensions non listées tombent en application/octet-stream.
 const mimeTypes = {
   ".html": "text/html",
   ".js": "text/javascript",
@@ -77,6 +95,7 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+// Lit un body JSON simple pour les routes POST du proxy local.
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -123,6 +142,7 @@ function requestJson(url, method, headers, body) {
   });
 }
 
+// Choisit la cible amont selon le provider demandé par le frontend.
 function getProviderConfig(provider) {
   if (provider === "deepseek") {
     return {
@@ -142,6 +162,8 @@ function extractMessageContent(json) {
     : "{}";
 }
 
+// Proxy minimal vers l'API chat d'OpenAI ou DeepSeek.
+// Le navigateur envoie messages/model/provider, le serveur injecte la clé API.
 async function handleAiProxy(req, res) {
   const payload = await readJsonBody(req);
   const provider = payload.provider === "deepseek" ? "deepseek" : "openai";
@@ -186,6 +208,8 @@ async function handleAiProxy(req, res) {
   });
 }
 
+// Proxy dédié aux réponses OpenAI avec outil de recherche web.
+// Utilisé pour éviter d'exposer la clé API côté navigateur.
 async function handleWebResearchProxy(req, res) {
   if (!OPENAI_API_KEY) {
     return sendJson(res, 500, {
@@ -224,6 +248,10 @@ async function handleWebResearchProxy(req, res) {
   return sendJson(res, 200, upstream);
 }
 
+// Routeur principal :
+// - ajoute des en-têtes CORS permissifs pour le dev local
+// - gère les endpoints API
+// - sert ensuite les fichiers statiques du dépôt
 async function requestHandler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -238,6 +266,7 @@ async function requestHandler(req, res) {
   const pathname = url.pathname;
 
   try {
+    // Vérification rapide du mode de démarrage et de la présence des clés API.
     if (req.method === "GET" && pathname === "/api/health") {
       return sendJson(res, 200, {
         ok: true,
@@ -258,6 +287,7 @@ async function requestHandler(req, res) {
 
   let filePath = "." + pathname;
   if (filePath === "./") {
+    // Comportement attendu à la racine du site.
     filePath = "./index.html";
   }
 
@@ -275,6 +305,8 @@ async function requestHandler(req, res) {
   });
 }
 
+// Si les certificats locaux existent, on sert en HTTPS, utile pour tester
+// des comportements navigateur plus proches de la prod.
 const tlsOptions = loadTlsOptions();
 const server = tlsOptions
   ? https.createServer(tlsOptions, requestHandler)
@@ -283,6 +315,7 @@ const server = tlsOptions
 const activePort = tlsOptions ? HTTPS_PORT : HTTP_PORT;
 const activeProtocol = tlsOptions ? "https" : "http";
 
+// Logs de démarrage utiles en développement local.
 server.listen(activePort, "0.0.0.0", () => {
   console.log("Serveur " + activeProtocol.toUpperCase() + " demarre sur " + activeProtocol + "://0.0.0.0:" + activePort);
   console.log("Proxy IA actif: GET /api/health, POST /api/ai-proxy, POST /api/ai-web-research");
