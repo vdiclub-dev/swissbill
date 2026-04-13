@@ -1479,7 +1479,7 @@
     (function(){
         'use strict';
 
-        const db = window.SUPABASE_CLIENT || null;
+        let db = window.SUPABASE_CLIENT || null;
         const state = {
             user: null,
             profile: null,
@@ -1607,7 +1607,9 @@
         }
 
         function requireDb(){
+            if (!db && window.SUPABASE_CLIENT) db = window.SUPABASE_CLIENT;
             if (!db) throw new Error('window.SUPABASE_CLIENT est indisponible. Vérifie config.js.');
+            return db;
         }
 
         function setSection(name){
@@ -1834,7 +1836,7 @@
             try {
                 const fn = String(settings.ai.edge_function || '').trim();
                 if (!fn) throw new Error('Aucune Edge Function IA configurée.');
-                const { data, error } = await db.functions.invoke(fn, { body: payload });
+                const { data, error } = await requireDb().functions.invoke(fn, { body: payload });
                 if (error) throw error;
                 if (!data || typeof data !== 'object') throw new Error('Réponse IA invalide.');
                 advice = {
@@ -1864,7 +1866,7 @@
 
         async function logAiAdvice(entry){
             try {
-                const { error } = await db.from('colixo_ai_pricing_logs').insert([{
+                const { error } = await requireDb().from('colixo_ai_pricing_logs').insert([{
                     order_id: entry.order_id || null,
                     client_id: entry.client_id || null,
                     source: entry.advice.source,
@@ -2216,7 +2218,7 @@
         }
 
         async function fetchSettings(){
-            const { data, error } = await db.from('colixo_settings').select('*').eq('name', 'default').maybeSingle();
+            const { data, error } = await requireDb().from('colixo_settings').select('*').eq('name', 'default').maybeSingle();
             if (error) throw error;
             if (!data) {
                 state.settings = clone(DEFAULT_SETTINGS);
@@ -2238,19 +2240,19 @@
         }
 
         async function fetchClients(){
-            const { data, error } = await db.from('clients_colixo').select('*').order('company_name', { ascending: true });
+            const { data, error } = await requireDb().from('clients_colixo').select('*').order('company_name', { ascending: true });
             if (error) throw error;
             state.clients = data || [];
         }
 
         async function fetchOrders(){
-            const { data, error } = await db.from('colixo_orders').select('*').order('created_at', { ascending: false }).limit(200);
+            const { data, error } = await requireDb().from('colixo_orders').select('*').order('created_at', { ascending: false }).limit(200);
             if (error) throw error;
             state.orders = data || [];
         }
 
         async function fetchLogs(){
-            const { data, error } = await db.from('colixo_ai_pricing_logs').select('*').order('created_at', { ascending: false }).limit(100);
+            const { data, error } = await requireDb().from('colixo_ai_pricing_logs').select('*').order('created_at', { ascending: false }).limit(100);
             if (error) throw error;
             state.logs = data || [];
         }
@@ -2263,7 +2265,7 @@
                 const email = $('loginEmail').value.trim();
                 const password = $('loginPassword').value;
                 if (!email || !password) throw new Error('Renseigne un e-mail et un mot de passe.');
-                const { error } = await db.auth.signInWithPassword({ email, password });
+                const { error } = await requireDb().auth.signInWithPassword({ email, password });
                 if (error) throw error;
                 await boot();
                 showToast('success', 'Connexion réussie', 'La session admin est active.');
@@ -2277,7 +2279,7 @@
         async function logout(){
             try {
                 showLoader('Déconnexion…');
-                await db.auth.signOut();
+                await requireDb().auth.signOut();
             } catch (error) {
                 console.warn('logout:', error.message);
             } finally {
@@ -2290,11 +2292,11 @@
 
         async function assertAdminSession(){
             requireDb();
-            const { data: { session }, error: sessionError } = await db.auth.getSession();
+            const { data: { session }, error: sessionError } = await requireDb().auth.getSession();
             if (sessionError) throw sessionError;
             if (!session || !session.user) throw new Error('Aucune session active.');
 
-            const { data: profile, error } = await db.from('utilisateurs').select('id,nom,prenom,email,role').eq('id', session.user.id).maybeSingle();
+            const { data: profile, error } = await requireDb().from('utilisateurs').select('id,nom,prenom,email,role').eq('id', session.user.id).maybeSingle();
             if (error) throw error;
             if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
                 throw new Error('Accès refusé. Cette page est réservée aux admins.');
@@ -2332,7 +2334,7 @@
                 console.warn('boot:', error.message);
                 $('appShell').classList.add('hidden');
                 $('authScreen').classList.remove('hidden');
-                if (db) {
+                if (window.SUPABASE_CLIENT || db) {
                     showAuthError(error.message || 'Connexion admin requise.');
                 } else {
                     showAuthError('Supabase non initialisé dans config.js.');
@@ -2365,10 +2367,10 @@
 
                 let error;
                 if ($('clientId').value) {
-                    ({ error } = await db.from('clients_colixo').update(payload).eq('id', $('clientId').value));
+                    ({ error } = await requireDb().from('clients_colixo').update(payload).eq('id', $('clientId').value));
                 } else {
                     payload.created_by = state.user.id;
-                    ({ error } = await db.from('clients_colixo').insert([payload]));
+                    ({ error } = await requireDb().from('clients_colixo').insert([payload]));
                 }
                 if (error) throw error;
                 await refreshData(false);
@@ -2386,14 +2388,14 @@
                 showLoader('Sauvegarde des paramètres…');
                 const settings = readSettingsForm();
                 if (state.settingsRowId) {
-                    const { error } = await db.from('colixo_settings').update({
+                    const { error } = await requireDb().from('colixo_settings').update({
                         settings,
                         updated_at: nowIso(),
                         updated_by: state.user.id
                     }).eq('id', state.settingsRowId);
                     if (error) throw error;
                 } else {
-                    const { data, error } = await db.from('colixo_settings').insert([{
+                    const { data, error } = await requireDb().from('colixo_settings').insert([{
                         name: 'default',
                         settings,
                         created_by: state.user.id,
@@ -2478,10 +2480,10 @@
                 let error;
                 if (state.editingOrderId) {
                     delete payload.order_number;
-                    ({ error } = await db.from('colixo_orders').update(payload).eq('id', state.editingOrderId));
+                    ({ error } = await requireDb().from('colixo_orders').update(payload).eq('id', state.editingOrderId));
                 } else {
                     payload.created_by = state.user.id;
-                    ({ error } = await db.from('colixo_orders').insert([payload]));
+                    ({ error } = await requireDb().from('colixo_orders').insert([payload]));
                 }
                 if (error) throw error;
 
