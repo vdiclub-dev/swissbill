@@ -2,10 +2,10 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260462 -->
+    <!-- colixo-build:20260463 -->
     <script>
     (function(){try{
-      var BUILD='20260462';
+      var BUILD='20260463';
       try{
         if(localStorage.getItem('colixo_deploy')!==BUILD){
           localStorage.setItem('colixo_deploy',BUILD);
@@ -36,7 +36,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../config.js?v=20260463"></script>
     
     <style>
         :root {
@@ -86,10 +86,11 @@
 
         .field{margin-bottom:14px;}
         .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+        .code-wrap{position:relative;}
 
         /* Input code grand format */
         .field input.code-field{
-            width:100%;padding:18px 15px;
+            width:100%;padding:18px 58px 18px 15px;
             background:var(--night3);
             border:1.5px solid var(--border2);
             border-radius:11px;
@@ -101,8 +102,21 @@
             text-transform:uppercase;
             transition:border-color 0.2s,box-shadow 0.2s;
         }
+        .field input.code-field.is-masked{
+            -webkit-text-security: disc;
+        }
         .field input.code-field:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px var(--red-glow);}
         .field input.code-field::placeholder{color:rgba(255,255,255,0.15);letter-spacing:4px;font-size:20px;}
+        .toggle-code{
+            position:absolute;right:10px;top:50%;transform:translateY(-50%);
+            width:40px;height:40px;border:none;border-radius:10px;
+            background:rgba(255,255,255,0.04);color:var(--muted2);
+            display:grid;place-items:center;cursor:pointer;
+            transition:background .2s,color .2s,transform .2s;
+            font-size:18px;font-family:inherit;line-height:1;
+        }
+        .toggle-code:hover{background:rgba(255,255,255,0.08);color:var(--white);}
+        .toggle-code:focus{outline:none;box-shadow:0 0 0 3px var(--red-glow);color:var(--white);}
 
         /* Input standard (admin) */
         .field input.std-field{
@@ -189,21 +203,25 @@
     <form id="formCode">
         <div class="field">
             <label>Code d'accès</label>
-            <input
-                type="text"
-                id="codeInput"
-                class="code-field"
-                placeholder="CLT-7290"
-                maxlength="8"
-                inputmode="text"
-                autocomplete="off"
-                autocorrect="off"
-                autocapitalize="characters"
-                spellcheck="false"
-                required>
+            <div class="code-wrap">
+                <input
+                    type="text"
+                    id="codeInput"
+                    class="code-field is-masked"
+                    placeholder="Code d'accès"
+                    maxlength="8"
+                    inputmode="text"
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                    required>
+                <input type="hidden" id="codeInputRaw" value="">
+                <button type="button" class="toggle-code" id="toggleCode" aria-label="Afficher le code" aria-pressed="false" title="Afficher le code">👁</button>
+            </div>
         </div>
         <div class="code-hint">
-            3 lettres, tiret, 4 chiffres · Ex. <strong>CLT-7290</strong>
+            3 lettres, tiret, 4 chiffres · Le code reste masqué pendant la saisie.
         </div>
         <button type="submit" class="btn-submit">
             <i class="fas fa-arrow-right"></i> Accéder à mon espace
@@ -310,10 +328,106 @@
         document.getElementById('errorBox').style.display = 'none';
     }
 
-    /* ── Formatage code en majuscules automatique ── */
-    document.getElementById('codeInput').addEventListener('input', function () {
-        this.value = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    /* ── Formatage du code d'accès ── */
+    const codeInput = document.getElementById('codeInput');
+    const codeInputRaw = document.getElementById('codeInputRaw');
+    const toggleCode = document.getElementById('toggleCode');
+
+    function normalizeAccessCode(value) {
+        return String(value || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8);
+    }
+
+    function isCodeVisible() {
+        return !codeInput.classList.contains('is-masked');
+    }
+
+    function maskAccessCode(value) {
+        return '•'.repeat(String(value || '').length);
+    }
+
+    function renderCodeInput() {
+        const raw = codeInputRaw.value || '';
+        codeInput.value = isCodeVisible() ? raw : maskAccessCode(raw);
+    }
+
+    function updateRawCode(nextValue) {
+        codeInputRaw.value = normalizeAccessCode(nextValue);
+        renderCodeInput();
+        requestAnimationFrame(() => {
+            const pos = codeInput.value.length;
+            try { codeInput.setSelectionRange(pos, pos); } catch (e) {}
+        });
+    }
+
+    codeInput.addEventListener('keydown', function (e) {
+        const key = e.key;
+
+        if (key === 'Tab' || key === 'Enter') return;
+
+        if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'x'].includes(key.toLowerCase())) return;
+
+        if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'v') {
+            e.preventDefault();
+            return;
+        }
+
+        if (key === 'Backspace') {
+            e.preventDefault();
+            updateRawCode((codeInputRaw.value || '').slice(0, -1));
+            return;
+        }
+
+        if (key === 'Delete') {
+            e.preventDefault();
+            updateRawCode('');
+            return;
+        }
+
+        if (key.startsWith('Arrow') || key === 'Home' || key === 'End') {
+            e.preventDefault();
+            requestAnimationFrame(() => {
+                const pos = codeInput.value.length;
+                try { codeInput.setSelectionRange(pos, pos); } catch (err) {}
+            });
+            return;
+        }
+
+        if (key.length === 1) {
+            e.preventDefault();
+            updateRawCode((codeInputRaw.value || '') + key);
+        }
     });
+
+    codeInput.addEventListener('paste', function (e) {
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
+        updateRawCode((codeInputRaw.value || '') + pasted);
+    });
+
+    codeInput.addEventListener('focus', function () {
+        renderCodeInput();
+        requestAnimationFrame(() => {
+            const pos = codeInput.value.length;
+            try { codeInput.setSelectionRange(pos, pos); } catch (e) {}
+        });
+    });
+
+    codeInput.addEventListener('input', function () {
+        renderCodeInput();
+    });
+
+    toggleCode.addEventListener('click', function () {
+        const isVisible = !codeInput.classList.contains('is-masked');
+        codeInput.classList.toggle('is-masked', isVisible);
+        this.setAttribute('aria-pressed', String(!isVisible));
+        this.setAttribute('aria-label', isVisible ? 'Afficher le code' : 'Masquer le code');
+        this.setAttribute('title', isVisible ? 'Afficher le code' : 'Masquer le code');
+        this.textContent = isVisible ? '👁' : '🙈';
+        renderCodeInput();
+        codeInput.focus();
+    });
+
+    renderCodeInput();
 
     /* ── Redirection selon rôle ── */
     function redirectByRole(role) {
@@ -381,7 +495,7 @@
         e.preventDefault();
         clearError();
 
-        const code = document.getElementById('codeInput').value.trim().toUpperCase();
+        const code = normalizeAccessCode(codeInputRaw.value || codeInput.value);
         var okStandard = /^[A-Z]{3}-\d{4}$/.test(code);
         var okLegacy = /^[A-Z]{2,4}-[A-Z0-9]{4,10}$/.test(code);
         if (!code || (!okStandard && !okLegacy)) {
