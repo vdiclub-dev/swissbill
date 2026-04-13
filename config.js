@@ -268,6 +268,101 @@ try {
 }
 
 /**
+ * Déconnexion unifiée pour toutes les pages de l'application.
+ *
+ * On centralise ici le `signOut()` et le nettoyage local afin d'éviter
+ * des variantes selon les dashboards. La redirection revient toujours
+ * vers l'écran de connexion.
+ *
+ * @returns {Promise<void>}
+ */
+window.colixoLogout = async function () {
+    try {
+        if (window.SUPABASE_CLIENT && window.SUPABASE_CLIENT.auth) {
+            await window.SUPABASE_CLIENT.auth.signOut();
+        }
+    } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[Colixo] logout:', e && e.message ? e.message : e);
+        }
+    }
+    try { localStorage.removeItem('colixo_user'); } catch (e) {}
+    try { sessionStorage.removeItem('colixo_login_bust'); } catch (e) {}
+    var to = (typeof window.colixoHref === 'function')
+        ? window.colixoHref('/login/index.html?logout=1')
+        : '/login/index.html?logout=1';
+    window.location.href = to;
+};
+
+/**
+ * Ajoute un bouton flottant de déconnexion sur les pages connectées afin
+ * de rendre la sortie de session évidente, même quand une petite icône
+ * existe déjà ailleurs dans l'interface.
+ */
+(function colixoInjectEasyLogoutButton() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    var path = String(location.pathname || '/').toLowerCase();
+    var isProtectedPage =
+        path.indexOf('/admin/') >= 0 ||
+        path.indexOf('/client/') >= 0 ||
+        path.indexOf('/chauffeur/') >= 0 ||
+        path.indexOf('/magasinier/') >= 0 ||
+        /\/commandes-client(?:\.html)?$/i.test(path);
+    if (!isProtectedPage) return;
+
+    function ensureButton() {
+        if (document.getElementById('colixo-easy-logout')) return;
+        var btn = document.createElement('button');
+        btn.id = 'colixo-easy-logout';
+        btn.type = 'button';
+        btn.setAttribute('aria-label', 'Déconnexion');
+        btn.textContent = 'Déconnexion';
+        btn.setAttribute(
+            'style',
+            [
+                'position:fixed',
+                'right:18px',
+                'bottom:18px',
+                'z-index:9999',
+                'display:inline-flex',
+                'align-items:center',
+                'gap:8px',
+                'padding:12px 16px',
+                'border:none',
+                'border-radius:999px',
+                'background:#e8311a',
+                'color:#ffffff',
+                'font:600 14px Outfit, Arial, sans-serif',
+                'box-shadow:0 14px 34px rgba(232,49,26,0.28)',
+                'cursor:pointer'
+            ].join(';')
+        );
+        btn.addEventListener('click', function () { window.colixoLogout(); });
+
+        var icon = document.createElement('span');
+        icon.textContent = '↩';
+        icon.setAttribute('style', 'font-size:14px;line-height:1;');
+        btn.insertBefore(icon, btn.firstChild);
+
+        document.body.appendChild(btn);
+    }
+
+    async function run() {
+        if (!window.SUPABASE_CLIENT || !window.SUPABASE_CLIENT.auth) return;
+        try {
+            var result = await window.SUPABASE_CLIENT.auth.getSession();
+            if (result && result.data && result.data.session) ensureButton();
+        } catch (e) {}
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run, { once: true });
+    } else {
+        run();
+    }
+})();
+
+/**
  * Vérifie si le serveur publie une version plus récente que le bundle déjà
  * chargé dans l'onglet, puis déclenche un rechargement unique si nécessaire.
  *
