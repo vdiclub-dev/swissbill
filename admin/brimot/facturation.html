@@ -568,6 +568,7 @@
 <script>
 if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>';throw 0;}
 const db = window.SUPABASE_CLIENT;
+if(!db){document.body.innerHTML='<div style="padding:40px;color:red;">❌ Client Supabase non initialisé. Rechargez la page.</div>';throw 0;}
 
 // ── Helpers ──────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -747,22 +748,28 @@ function showSection(name) {
 
 // ── Init ──────────────────────────────────────────────────
 async function init() {
-    const { data: { session } } = await db.auth.getSession();
-    const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-    if(!session && !codeUser){ window.location.href='../../login/index.html'; return; }
-    const uid = session?.user?.id || codeUser?.id;
-    const { data: u } = await db.from('utilisateurs').select('*').eq('id', uid).single();
-    currentUser = u || { prenom: codeUser?.prenom||'?', nom: codeUser?.nom||'', role: codeUser?.role||'admin' };
-    $('userName').textContent = (currentUser.prenom||'')+' '+(currentUser.nom||'');
-    $('userAv').textContent = (currentUser.prenom||'?')[0].toUpperCase();
-    const role = currentUser.role || '';
-    if (!['admin', 'super_admin'].includes(role)) {
-        toast('error', 'Brimot : accès réservé aux comptes administrateur. Avec un autre rôle, Supabase ne renvoie aucune facture (sécurité). Connectez-vous avec un compte admin.');
-        setTimeout(() => { window.location.href = '../dashboard.html'; }, 3500);
-        return;
+    try {
+        const { data: { session } } = await db.auth.getSession();
+        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+        if(!session && !codeUser){ window.location.href='../../login/index.html'; return; }
+        const uid = session?.user?.id || codeUser?.id;
+        const { data: u } = await db.from('utilisateurs').select('*').eq('id', uid).single();
+        currentUser = u || { prenom: codeUser?.prenom||'?', nom: codeUser?.nom||'', role: codeUser?.role||'admin' };
+        $('userName').textContent = (currentUser.prenom||'')+' '+(currentUser.nom||'');
+        $('userAv').textContent = (currentUser.prenom||'?')[0].toUpperCase();
+        const role = currentUser.role || '';
+        if (!['admin', 'super_admin'].includes(role)) {
+            toast('error', 'Brimot : accès réservé aux comptes administrateur. Avec un autre rôle, Supabase ne renvoie aucune facture (sécurité). Connectez-vous avec un compte admin.');
+            setTimeout(() => { window.location.href = '../dashboard.html'; }, 3500);
+            return;
+        }
+        await Promise.all([loadClients(), loadProduits()]);
+        await loadFactures();
+    } catch(e) {
+        hideLoad();
+        console.error('[Brimot] init error:', e);
+        toast('error', 'Erreur de chargement : ' + (e?.message || String(e)));
     }
-    await Promise.all([loadClients(), loadProduits()]);
-    await loadFactures();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1046,21 +1053,27 @@ window.deleteProduit = deleteProduit;
 // ══════════════════════════════════════════════════════════
 async function loadFactures() {
     showLoad();
-    const { data, error } = await db.from('brimot_factures')
-        .select('*, brimot_clients(*)')
-        .order('created_at',{ascending:false});
-    hideLoad();
-    if (error) {
-        console.error('[Brimot] loadFactures', error);
-        toast('error', 'Chargement factures impossible : ' + (error.message || 'erreur'));
-        factures = [];
+    try {
+        const { data, error } = await db.from('brimot_factures')
+            .select('*, brimot_clients(*)')
+            .order('created_at',{ascending:false});
+        hideLoad();
+        if (error) {
+            console.error('[Brimot] loadFactures', error);
+            toast('error', 'Chargement factures impossible : ' + (error.message || 'erreur'));
+            factures = [];
+            renderFactures(factures);
+            updateStats();
+            return;
+        }
+        factures = data || [];
         renderFactures(factures);
         updateStats();
-        return;
+    } catch(e) {
+        hideLoad();
+        console.error('[Brimot] loadFactures throw:', e);
+        toast('error', 'Erreur réseau factures : ' + (e?.message || String(e)));
     }
-    factures = data || [];
-    renderFactures(factures);
-    updateStats();
 }
 
 function filterFactures() {
