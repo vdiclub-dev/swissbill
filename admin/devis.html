@@ -1268,341 +1268,1210 @@
           return;
         }
 
-        state.settingsRowId = data.id;
-      }
+        function showToast(type, title, message){
+            const toast = $('toast');
+            toast.className = `toast ${type || 'info'} show`;
+            toast.innerHTML = `<strong>${escapeHtml(title || 'Information')}</strong><div>${escapeHtml(message || '')}</div>`;
+            clearTimeout(showToast._timer);
+            showToast._timer = setTimeout(() => toast.classList.remove('show'), 3400);
+        }
 
-      state.settings = nextSettings;
-      renderAll();
-      refreshPricingPreview();
-    }
+        function showAuthError(message){
+            const box = $('authError');
+            box.textContent = message;
+            box.classList.remove('hidden');
+        }
 
-    async function boot() {
-      const authView = document.getElementById('authView');
-      const appView = document.getElementById('appView');
+        function clearAuthError(){
+            $('authError').classList.add('hidden');
+            $('authError').textContent = '';
+        }
 
-      if (!db) {
-        authView.classList.remove('hidden');
-        appView.classList.add('hidden');
-        showError("Supabase non initialisé dans config.js", "authError");
-        setAuthMode('login');
-        return;
-      }
+        function requireDb(){
+            if (!db) throw new Error('window.SUPABASE_CLIENT est indisponible. Vérifie config.js.');
+        }
 
-      const { data: authData } = await db.auth.getSession();
-      state.user = authData?.session?.user || null;
+        function setSection(name){
+            state.section = name;
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.toggle('active', section.id === `section-${name}`);
+            });
+            document.querySelectorAll('[data-section-btn]').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.sectionBtn === name);
+            });
+        }
 
-      if (!state.user) {
-        authView.classList.remove('hidden');
-        appView.classList.add('hidden');
-        setAuthMode('login');
-        return;
-      }
+        function initials(name){
+            const parts = String(name || 'AD').trim().split(/\s+/).filter(Boolean).slice(0,2);
+            return (parts[0]?.[0] || 'A') + (parts[1]?.[0] || 'D');
+        }
 
-      authView.classList.add('hidden');
-      appView.classList.remove('hidden');
+        function getClientById(id){
+            return state.clients.find(client => client.id === id) || null;
+        }
 
-      try {
-        await Promise.all([
-          fetchSettings(),
-          fetchClients(),
-          fetchOrders()
-        ]);
-        renderAll();
-        setPage(state.page || "dashboard");
-      } catch (e) {
-        showError(e.message || "Erreur chargement données.");
-      }
-    }
+        function currentSettings(){
+            return state.settings || clone(DEFAULT_SETTINGS);
+        }
 
-    function attachEvents() {
-      document.getElementById('loginTabBtn').addEventListener('click', () => setAuthMode('login'));
-      document.getElementById('registerTabBtn').addEventListener('click', () => setAuthMode('register'));
+        function getPricingTable(family){
+            const settings = currentSettings();
+            return settings.pricing[family] || settings.pricing.standard;
+        }
 
-      document.getElementById('authSubmitBtn').addEventListener('click', handleAuth);
+        function serviceLabel(service){
+            return {
+                eco: 'ECO',
+                priority: 'Prioritaire',
+                express: 'Express',
+                urgent: 'Urgent',
+                super_urgent: 'Super urgent'
+            }[service] || service || '—';
+        }
 
-      document.getElementById('logoutBtn').addEventListener('click', logout);
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => setPage(btn.dataset.page));
-      });
+        function statusPill(status){
+            const map = {
+                draft: ['Brouillon', 'muted'],
+                quoted: ['Envoyé', 'info'],
+                validated: ['Validé', 'success'],
+                lost: ['Perdu', 'warn']
+            };
+            const pair = map[status] || [status || '—', 'muted'];
+            return `<span class="pill ${pair[1]}">${escapeHtml(pair[0])}</span>`;
+        }
 
-      document.getElementById('saveClientBtn').addEventListener('click', createClient);
-      document.getElementById('saveOrderBtn').addEventListener('click', createOrder);
-      document.getElementById('resetOrderBtn').addEventListener('click', resetOrderForm);
-      document.getElementById('btnPdfPro').addEventListener('click', generatePDFPro);
-      document.getElementById('btnPdfProV2').addEventListener('click', generatePDFProV2);
-      document.getElementById('saveSettingsBtn').addEventListener('click', saveSettingsAction);
+        function buildReference(){
+            const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+            const suffix = Math.floor(1000 + Math.random() * 9000);
+            return `DEV-${stamp}-${suffix}`;
+        }
 
-      [
-        'orderClient','orderTariffFamily','orderShippingMode','orderWeight','orderKm','orderFloors',
-        'orderPackagesPerDay','orderWorkingDays','orderUseForfait030','orderIncludePickup030',
-        'orderCallBefore','orderCOD','orderNight','orderCombined'
-      ].forEach(id => {
-        document.getElementById(id).addEventListener('input', refreshPricingPreview);
-        document.getElementById(id).addEventListener('change', refreshPricingPreview);
-      });
-    }
+        function readOrderForm(){
+            return {
+                client_id: $('orderClient').value || null,
+                status: $('orderStatus').value,
+                service_level: $('orderService').value,
+                tariff_family: $('orderTariffFamily').value,
+                package_type: $('orderPackageType').value,
+                weight_kg: num($('orderWeight').value),
+                distance_km: num($('orderDistance').value),
+                floors: num($('orderFloors').value),
+                extra_stops: num($('orderStops').value),
+                packages_per_day: num($('orderPackagesPerDay').value),
+                working_days_per_month: num($('orderWorkingDays').value),
+                margin_target_percent: num($('orderMarginTarget').value),
+                notes_internal: $('orderInternalNotes').value.trim(),
+                notes_customer: $('orderCustomerNotes').value.trim(),
+                options: {
+                    use_forfait_0_30: $('optUseForfait').checked,
+                    include_pickup_0_30: $('optPickup030').checked,
+                    call_before: $('optCallBefore').checked,
+                    cod: $('optCod').checked,
+                    night: $('optNight').checked,
+                    fragile: $('optFragile').checked,
+                    combined: $('optCombined').checked,
+                    weekend: $('optWeekend').checked
+                }
+            };
+        }
 
-    function runTests() {
-      const testSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+        function calculateBasePrice(order, settings){
+            const table = getPricingTable(order.tariff_family);
+            const parts = [];
+            let total = 0;
 
-      const t1 = calculateOrderPrice({
-        tariffFamily: 'normal',
-        shippingMode: 'eco',
-        weight: 2,
-        km: 0,
-        floorsAfterFirst: 0,
-        packagesPerDay: 1,
-        workingDaysPerMonth: 22,
-        useForfait030: false,
-        includePickup030: false,
-        options: { callBefore: false, cod: false, night: false, combinedPickup: false }
-      }, testSettings);
-      console.assert(t1.total === 7.5, 'Test 1 échoué');
+            function add(label, value){
+                const safe = round2(value);
+                total += safe;
+                parts.push({ label, amount: safe });
+            }
 
-      const t2 = calculateOrderPrice({
-        tariffFamily: 'normal',
-        shippingMode: 'prio',
-        weight: 10,
-        km: 0,
-        floorsAfterFirst: 0,
-        packagesPerDay: 1,
-        workingDaysPerMonth: 22,
-        useForfait030: false,
-        includePickup030: false,
-        options: { callBefore: false, cod: false, night: false, combinedPickup: false }
-      }, testSettings);
-      console.assert(t2.total === 10, 'Test 2 échoué');
+            if (order.options.use_forfait_0_30 && order.weight_kg <= 30) {
+                add('Forfait 0–30 kg', table.forfait_0_30);
+                if (order.options.include_pickup_0_30) add('Enlèvement forfait 0–30 kg', table.forfait_0_30);
+            } else {
+                let weightBase = 0;
+                if (order.weight_kg <= 2) weightBase = table.weight_0_2;
+                else if (order.weight_kg <= 10) weightBase = table.weight_2_10;
+                else if (order.weight_kg <= 30) weightBase = table.weight_10_30;
+                else weightBase = table.weight_30_plus + ((order.weight_kg - 30) * Math.max(table.distance_rate * 0.25, 0.4));
+                add(`Base poids (${order.weight_kg} kg)`, weightBase);
+            }
 
-      const t3 = calculateOrderPrice({
-        tariffFamily: 'vinologue',
-        shippingMode: 'eco',
-        weight: 20,
-        km: 10,
-        floorsAfterFirst: 2,
-        packagesPerDay: 5,
-        workingDaysPerMonth: 22,
-        useForfait030: false,
-        includePickup030: false,
-        options: { callBefore: true, cod: false, night: false, combinedPickup: false }
-      }, testSettings);
-      console.assert(t3.total === 28.5, 'Test 3 échoué');
-    }
+            if (order.distance_km > 0) add(`Distance (${order.distance_km} km)`, order.distance_km * table.distance_rate);
+            if (order.floors > 0) add(`Étages (${order.floors})`, order.floors * table.floor_rate);
+            if (order.extra_stops > 0) add(`Stops additionnels (${order.extra_stops})`, order.extra_stops * table.stop_rate);
 
-    async function generatePDF() {
-      if (!window.jspdf || !window.jspdf.jsPDF) {
-        alert("La librairie PDF n'est pas chargée.");
-        return;
-      }
+            if (order.service_level === 'priority') add('Supplément prioritaire', table.priority_rate);
+            if (order.service_level === 'express') add('Supplément express', table.express_rate);
+            if (order.service_level === 'urgent') add('Supplément urgent', table.urgent_rate);
+            if (order.service_level === 'super_urgent') add('Supplément super urgent', table.super_urgent_rate);
 
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
+            if (order.options.call_before) add('Appel avant livraison', table.call_before_rate);
+            if (order.options.cod) add('Encaissement', table.cod_rate);
+            if (order.options.night) add('Livraison de nuit', table.night_rate);
+            if (order.options.fragile) add('Handling fragile', table.fragile_rate);
+            if (order.options.weekend) add('Livraison week-end', table.weekend_rate);
+            if (order.package_type === 'wine') add('Manipulation vin / cave', table.wine_handling_rate);
 
-      const client = document.getElementById("orderClient").selectedOptions[0]?.text || "Sans client";
-      const prix = document.getElementById("previewPrice").textContent;
-      const jour = document.getElementById("previewDayRevenue").textContent;
-      const mois = document.getElementById("previewMonthRevenue").textContent;
+            if (order.options.combined) {
+                const discount = round2(total * (table.combined_discount_percent / 100));
+                total -= discount;
+                parts.push({ label: `Remise tournée combinée (${table.combined_discount_percent}%)`, amount: -discount });
+            }
 
-      doc.setFontSize(18);
-      doc.text("Devis Colixo", 20, 20);
+            total = Math.max(round2(total), 0);
+            const dailyRevenue = round2(total * Math.max(order.packages_per_day, 0));
+            const monthlyRevenue = round2(dailyRevenue * Math.max(order.working_days_per_month, 0));
 
-      doc.setFontSize(12);
-      doc.text(`Client: ${client}`, 20, 40);
-      doc.text(`Prix du colis: ${prix}`, 20, 50);
-      doc.text(`Revenu par jour: ${jour}`, 20, 60);
-      doc.text(`Revenu par mois: ${mois}`, 20, 70);
+            return {
+                total,
+                dailyRevenue,
+                monthlyRevenue,
+                breakdown: parts
+            };
+        }
 
-      doc.text("Merci pour votre confiance", 20, 100);
+        function buildAiFallback(order, basePricing){
+            const settings = currentSettings();
+            const client = getClientById(order.client_id);
+            const aiCfg = settings.ai;
+            const reasons = [];
+            let deltaPercent = 0;
 
-      doc.save("devis-colixo.pdf");
-    }
+            if (order.service_level === 'urgent' || order.service_level === 'super_urgent') {
+                deltaPercent += 6;
+                reasons.push('Urgence élevée, tension opérationnelle probable et disponibilité chauffeur plus rare.');
+            }
+            if (order.distance_km >= aiCfg.distance_threshold_km) {
+                deltaPercent += 4;
+                reasons.push('Distance au-dessus du seuil sensible, exposition coût/temps plus forte.');
+            }
+            if (order.options.night || order.options.weekend) {
+                deltaPercent += 4;
+                reasons.push('Créneau atypique, valeur perçue supérieure et contrainte planning renforcée.');
+            }
+            if (order.options.combined) {
+                deltaPercent -= 3;
+                reasons.push('Tournée combinée détectée, possibilité de partager une partie des coûts et d’accepter une légère remise.');
+            }
+            if (client && client.ai_sensitivity === 'conversion_first') {
+                deltaPercent -= 2;
+                reasons.push('Client orienté conversion: l’IA limite la hausse pour préserver le taux d’acceptation.');
+            }
+            if (client && client.ai_sensitivity === 'margin_first') {
+                deltaPercent += 2;
+                reasons.push('Client orienté marge: l’IA défend un positionnement prix plus ferme.');
+            }
 
-    async function generatePDFPro() {
-      if (!window.jspdf || !window.jspdf.jsPDF) {
-        showError("jsPDF non chargé.");
-        return;
-      }
+            const markupCap = Math.min(num(client?.markup_cap_percent || aiCfg.markup_cap_percent), 100);
+            const discountCap = Math.min(num(client?.discount_cap_percent || aiCfg.discount_cap_percent), 100);
+            deltaPercent = Math.max(deltaPercent, -discountCap);
+            deltaPercent = Math.min(deltaPercent, markupCap);
 
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4"
-      });
+            const recommendedPrice = round2(basePricing.total * (1 + deltaPercent / 100));
+            const confidence = Math.max(0.45, Math.min(0.88, 0.62 + (Math.abs(deltaPercent) / 50)));
 
-      const form = currentOrderForm();
-      const pricing = calculateOrderPrice(form, state.settings);
-      if (pricing.error) {
-        showError(pricing.error);
-        return;
-      }
+            if (!reasons.length) reasons.push('Aucun signal tarifaire fort détecté: maintien proche du calcul métier recommandé.');
 
-      const client = state.clients.find(c => c.id === form.clientId);
-      const clientName = client ? (client.name || "Sans client") : "Sans client";
-      const clientCompany = client ? (client.company || "") : "";
-      const clientEmail = client ? (client.email || "") : "";
-      const clientPhone = client ? (client.phone || "") : "";
+            return {
+                recommended_price: recommendedPrice,
+                confidence,
+                adjustment_percent: round2(deltaPercent),
+                summary: deltaPercent > 0
+                    ? 'L’IA recommande une légère hausse pour protéger la marge sur cette mission.'
+                    : deltaPercent < 0
+                        ? 'L’IA recommande une légère remise contrôlée pour soutenir la conversion.'
+                        : 'L’IA recommande de rester aligné avec le calcul métier.',
+                reasons,
+                source: 'heuristic_fallback'
+            };
+        }
 
-      const today = new Date().toLocaleDateString("fr-CH");
-      const devisNumber = "DEV-" + new Date().toISOString().slice(0,10).replace(/-/g, "") + "-" + Math.floor(Math.random() * 900 + 100);
+        async function requestAiPricing(order, basePricing){
+            const settings = currentSettings();
+            const client = getClientById(order.client_id);
+            const payload = {
+                order,
+                client: client ? {
+                    id: client.id,
+                    company_name: client.company_name,
+                    tariff_profile: client.tariff_profile,
+                    ai_sensitivity: client.ai_sensitivity,
+                    markup_cap_percent: client.markup_cap_percent,
+                    discount_cap_percent: client.discount_cap_percent
+                } : null,
+                business_pricing: basePricing,
+                ai_config: {
+                    system_prompt: settings.ai.system_prompt,
+                    markup_cap_percent: settings.ai.markup_cap_percent,
+                    discount_cap_percent: settings.ai.discount_cap_percent,
+                    margin_floor_percent: settings.ai.margin_floor_percent,
+                    distance_threshold_km: settings.ai.distance_threshold_km
+                }
+            };
 
-      const lineItems = [
-        ["Client", clientName],
-        ["Entreprise", clientCompany || "-"],
-        ["Email", clientEmail || "-"],
-        ["Téléphone", clientPhone || "-"],
-        ["Famille tarifaire", form.tariffFamily],
-        ["Mode d'expédition", form.shippingMode],
-        ["Poids", `${form.weight} kg`],
-        ["Distance", `${form.km} km`],
-        ["Étages", `${form.floorsAfterFirst}`],
-        ["Colis / jour", `${form.packagesPerDay}`],
-        ["Jours / mois", `${form.workingDaysPerMonth}`]
-      ];
+            let advice;
+            try {
+                const fn = String(settings.ai.edge_function || '').trim();
+                if (!fn) throw new Error('Aucune Edge Function IA configurée.');
+                const { data, error } = await db.functions.invoke(fn, { body: payload });
+                if (error) throw error;
+                if (!data || typeof data !== 'object') throw new Error('Réponse IA invalide.');
+                advice = {
+                    recommended_price: round2(data.recommended_price),
+                    confidence: Math.max(0, Math.min(1, num(data.confidence))),
+                    adjustment_percent: round2(data.adjustment_percent),
+                    summary: String(data.summary || 'Conseil IA disponible.'),
+                    reasons: Array.isArray(data.reasons) ? data.reasons.map(String).slice(0,5) : [],
+                    source: 'edge_function',
+                    raw: data
+                };
+                if (!advice.reasons.length) advice.reasons = ['La fonction IA a répondu sans détail complémentaire.'];
+            } catch (error) {
+                advice = buildAiFallback(order, basePricing);
+                advice.error = error.message || String(error);
+            }
 
-      const options = [];
-      if (form.useForfait030) options.push("Forfait 0-30 kg");
-      if (form.includePickup030) options.push("Prise en charge 0-30 kg");
-      if (form.options.callBefore) options.push("Appel avant livraison");
-      if (form.options.cod) options.push("Encaissement");
-      if (form.options.night) options.push("Livraison de nuit");
-      if (form.options.combinedPickup) options.push("Tournée combinée (-50%)");
+            await logAiAdvice({
+                order_id: state.editingOrderId,
+                client_id: order.client_id,
+                payload,
+                advice
+            });
 
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, 210, 297, "F");
+            return advice;
+        }
 
-      doc.setFillColor(15, 23, 42);
-      doc.rect(0, 0, 210, 34, "F");
+        async function logAiAdvice(entry){
+            try {
+                const { error } = await db.from('colixo_ai_pricing_logs').insert([{
+                    order_id: entry.order_id || null,
+                    client_id: entry.client_id || null,
+                    source: entry.advice.source,
+                    recommended_price: round2(entry.advice.recommended_price),
+                    confidence: num(entry.advice.confidence),
+                    rationale: entry.advice.summary,
+                    reasons: entry.advice.reasons || [],
+                    prompt_payload: entry.payload,
+                    response_payload: entry.advice.raw || entry.advice,
+                    created_by: state.user?.id || null
+                }]);
+                if (error) console.warn('colixo_ai_pricing_logs insert:', error.message);
+            } catch (err) {
+                console.warn('logAiAdvice:', err.message);
+            }
+        }
 
-      doc.setTextColor(251, 191, 36);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(24);
-      doc.text("COLIXO", 15, 16);
+        function renderPricingPreview(){
+            const order = readOrderForm();
+            const pricing = calculateBasePrice(order, currentSettings());
+            const finalPrice = state.selectedFinalPrice != null ? state.selectedFinalPrice : pricing.total;
 
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      doc.text("DEVIS PROFESSIONNEL", 15, 24);
+            $('basePriceValue').textContent = currency(pricing.total);
+            $('dailyRevenueValue').textContent = currency(pricing.dailyRevenue);
+            $('monthlyRevenueValue').textContent = currency(pricing.monthlyRevenue);
+            $('finalPriceValue').textContent = currency(finalPrice);
+            $('marginTargetValue').textContent = `${num(order.margin_target_percent)}%`;
 
-      doc.setTextColor(17, 24, 39);
-      doc.setDrawColor(226, 232, 240);
-      doc.setFillColor(248, 250, 252);
-      doc.roundedRect(15, 42, 180, 30, 3, 3, "FD");
+            $('pricingBreakdown').innerHTML = pricing.breakdown.length
+                ? pricing.breakdown.map(part => `
+                    <div class="reason-item">
+                        <strong>${escapeHtml(part.label)}</strong><br>
+                        ${part.amount < 0 ? '-' : '+'}${currency(Math.abs(part.amount))}
+                    </div>
+                `).join('')
+                : '<div class="reason-item">Aucun élément tarifaire calculé.</div>';
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text("Numéro de devis", 20, 52);
-      doc.text("Date", 120, 52);
+            return pricing;
+        }
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(12);
-      doc.text(devisNumber, 20, 60);
-      doc.text(today, 120, 60);
+        function renderAiAdvice(advice, basePricing){
+            state.selectedAiAdvice = advice;
+            if (!advice) {
+                $('aiPriceValue').textContent = currency(0);
+                $('aiSummaryText').textContent = 'Aucun calcul IA lancé pour ce devis.';
+                $('aiConfidencePill').textContent = 'Confiance n/a';
+                $('aiDeltaPill').textContent = 'Écart CHF 0.00';
+                $('aiReasonList').innerHTML = '<div class="reason-item">Lance un calcul IA pour obtenir un conseil.</div>';
+                state.selectedFinalPrice = null;
+                renderPricingPreview();
+                return;
+            }
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Informations client", 15, 84);
+            const delta = round2(advice.recommended_price - basePricing.total);
+            $('aiPriceValue').textContent = currency(advice.recommended_price);
+            $('aiSummaryText').textContent = advice.error
+                ? `${advice.summary} Fallback utilisé: ${advice.error}`
+                : advice.summary;
+            $('aiConfidencePill').textContent = `Confiance ${Math.round(num(advice.confidence) * 100)}%`;
+            $('aiDeltaPill').textContent = `Écart ${delta >= 0 ? '+' : '-'}${currency(Math.abs(delta))}`;
+            $('aiReasonList').innerHTML = (advice.reasons || []).map(reason => `<div class="reason-item">${escapeHtml(reason)}</div>`).join('');
+        }
 
-      let y = 92;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
+        function fillClientSelect(){
+            const select = $('orderClient');
+            const current = select.value;
+            const activeClients = state.clients.filter(client => client.is_active !== false);
+            select.innerHTML = activeClients.length
+                ? activeClients.map(client => `<option value="${client.id}">${escapeHtml(client.company_name)}</option>`).join('')
+                : '<option value="">Aucun client disponible</option>';
+            if (current && activeClients.some(client => client.id === current)) select.value = current;
+        }
 
-      lineItems.forEach(([label, value]) => {
-        doc.setFont("helvetica", "bold");
-        doc.text(label + " :", 15, y);
-        doc.setFont("helvetica", "normal");
-        doc.text(String(value), 60, y);
-        y += 7;
-      });
+        function renderClients(){
+            fillClientSelect();
+            const q = $('clientSearch').value.trim().toLowerCase();
+            const rows = state.clients.filter(client => {
+                if (!q) return true;
+                return [
+                    client.company_name,
+                    client.contact_name,
+                    client.email,
+                    client.city
+                ].join(' ').toLowerCase().includes(q);
+            });
 
-      y += 4;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Options appliquées", 15, y);
-      y += 8;
+            $('clientsTable').innerHTML = rows.length ? rows.map(client => `
+                <tr>
+                    <td>
+                        <div class="table-title">${escapeHtml(client.company_name || 'Sans nom')}</div>
+                        <div class="table-sub">${escapeHtml([client.address, client.postal_code, client.city].filter(Boolean).join(', ') || 'Adresse non renseignée')}</div>
+                    </td>
+                    <td>
+                        <div class="table-title">${escapeHtml(client.contact_name || '—')}</div>
+                        <div class="table-sub">${escapeHtml(client.email || '—')} · ${escapeHtml(client.phone || '—')}</div>
+                    </td>
+                    <td>
+                        <div class="table-title">${escapeHtml(client.tariff_profile || 'standard')}</div>
+                        <div class="table-sub">${escapeHtml(client.ai_sensitivity || 'balanced')}</div>
+                    </td>
+                    <td>${client.is_active ? '<span class="pill success">Actif</span>' : '<span class="pill muted">Inactif</span>'}</td>
+                    <td>
+                        <div class="toolbar">
+                            <button class="btn btn-ghost btn-sm" type="button" onclick="window.editClient('${client.id}')"><i class="fas fa-pen"></i></button>
+                            <button class="btn btn-ghost btn-sm" type="button" onclick="window.prefillBuilderForClient('${client.id}')"><i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('') : '<tr><td colspan="5" class="empty">Aucun client trouvé.</td></tr>';
+        }
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
+        function renderOrders(){
+            const q = $('orderSearch').value.trim().toLowerCase();
+            const rows = state.orders.filter(order => {
+                if (!q) return true;
+                const client = getClientById(order.client_id);
+                return [
+                    order.order_number,
+                    order.status,
+                    client?.company_name
+                ].join(' ').toLowerCase().includes(q);
+            });
 
-      if (options.length) {
-        options.forEach(opt => {
-          doc.text("• " + opt, 18, y);
-          y += 6;
-        });
-      } else {
-        doc.text("Aucune option sélectionnée", 18, y);
-        y += 6;
-      }
+            const renderRows = list => list.length ? list.map(order => {
+                const client = getClientById(order.client_id);
+                const aiPrice = order.suggested_ai_price == null ? '—' : currency(order.suggested_ai_price);
+                return `
+                    <tr>
+                        <td>
+                            <div class="table-title">${escapeHtml(order.order_number || '—')}</div>
+                            <div class="table-sub">${todayFr(order.created_at)}</div>
+                        </td>
+                        <td>
+                            <div class="table-title">${escapeHtml(client?.company_name || 'Client supprimé')}</div>
+                            <div class="table-sub">${escapeHtml(serviceLabel(order.service_level))}</div>
+                        </td>
+                        <td>${currency(order.base_price)}</td>
+                        <td>${aiPrice}</td>
+                        <td>${currency(order.final_price)}</td>
+                        <td>${escapeHtml(order.tariff_family || 'standard')}</td>
+                        <td>${statusPill(order.status)}</td>
+                        <td>
+                            <div class="toolbar">
+                                <button class="btn btn-ghost btn-sm" type="button" onclick="window.editOrder('${order.id}')"><i class="fas fa-pen"></i></button>
+                                <button class="btn btn-ghost btn-sm" type="button" onclick="window.exportOrderPdf('${order.id}')"><i class="fas fa-file-pdf"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="8" class="empty">Aucun devis trouvé.</td></tr>';
 
-      y += 8;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Résumé financier", 15, y);
+            $('ordersTable').innerHTML = renderRows(rows);
+            $('dashboardOrdersTable').innerHTML = renderRows(state.orders.slice(0,5)).replace(/colspan="8"/g, 'colspan="6"');
+        }
 
-      y += 8;
-      doc.setFillColor(248, 250, 252);
-      doc.setDrawColor(226, 232, 240);
-      doc.roundedRect(15, y, 180, 42, 3, 3, "FD");
+        function renderLogs(){
+            $('logsTable').innerHTML = state.logs.length ? state.logs.map(log => {
+                const client = getClientById(log.client_id);
+                return `
+                    <tr>
+                        <td>${todayFr(log.created_at)}</td>
+                        <td>${escapeHtml(client?.company_name || '—')}</td>
+                        <td>${escapeHtml(log.source || '—')}</td>
+                        <td>${currency(log.recommended_price)}</td>
+                        <td>
+                            <div class="table-title">${escapeHtml(log.rationale || '—')}</div>
+                            <div class="table-sub">${Array.isArray(log.reasons) ? escapeHtml(log.reasons.join(' · ')) : '—'}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="5" class="empty">Aucun log IA pour le moment.</td></tr>';
+        }
 
-      doc.setFontSize(11);
+        function renderDashboard(){
+            $('metricOrders').textContent = String(state.orders.length);
+            $('metricClients').textContent = String(state.clients.filter(client => client.is_active).length);
+            $('metricLogs').textContent = String(state.logs.length);
 
-      doc.setFont("helvetica", "bold");
-      doc.text("Prix du colis", 20, y + 10);
-      doc.text("Revenu / jour", 20, y + 20);
-      doc.text("Revenu / mois", 20, y + 30);
+            const monthlyRevenue = state.orders.reduce((sum, order) => sum + num(order.monthly_revenue_estimate), 0);
+            const avgPrice = state.orders.length ? state.orders.reduce((sum, order) => sum + num(order.final_price), 0) / state.orders.length : 0;
+            const avgDelta = state.orders.length ? state.orders.reduce((sum, order) => sum + (num(order.suggested_ai_price) - num(order.base_price)), 0) / state.orders.length : 0;
+            const today = new Date().toISOString().slice(0,10);
+            const aiToday = state.logs.filter(log => String(log.created_at || '').slice(0,10) === today).length;
 
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(217, 119, 6);
-      doc.text(`CHF ${pricing.total.toFixed(2)}`, 120, y + 10);
-      doc.text(`CHF ${pricing.dailyRevenue.toFixed(2)}`, 120, y + 20);
-      doc.text(`CHF ${pricing.monthlyRevenue.toFixed(2)}`, 120, y + 30);
+            $('statMonthlyRevenue').textContent = currency(monthlyRevenue);
+            $('statAveragePrice').textContent = currency(avgPrice);
+            $('statAverageDelta').textContent = currency(avgDelta);
+            $('statAiToday').textContent = String(aiToday);
+            $('healthSummary').textContent = state.profile
+                ? `Session valide pour ${state.profile.role}. ${state.orders.length} devis, ${state.clients.length} clients et ${state.logs.length} logs IA chargés.`
+                : 'Session admin validée.';
+        }
 
-      y += 58;
-      doc.setTextColor(17, 24, 39);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Conditions", 15, y);
+        function renderAll(){
+            renderPricingPreview();
+            renderClients();
+            renderOrders();
+            renderLogs();
+            renderDashboard();
+        }
 
-      y += 8;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      const conditions = [
-        "Ce devis est fourni à titre indicatif selon les paramètres saisis.",
-        "Les tarifs peuvent varier selon les contraintes réelles de transport.",
-        "Toute prestation complémentaire non prévue initialement peut être facturée en supplément.",
-        "Validité conseillée du devis : 30 jours."
-      ];
+        function resetClientForm(){
+            $('clientId').value = '';
+            $('clientCompany').value = '';
+            $('clientContact').value = '';
+            $('clientEmail').value = '';
+            $('clientPhone').value = '';
+            $('clientAddress').value = '';
+            $('clientPostal').value = '';
+            $('clientCity').value = '';
+            $('clientTariffProfile').value = 'standard';
+            $('clientAiSensitivity').value = 'balanced';
+            $('clientMarkupCap').value = '15';
+            $('clientDiscountCap').value = '10';
+            $('clientNotes').value = '';
+            $('clientActive').checked = true;
+        }
 
-      conditions.forEach(line => {
-        doc.text("• " + line, 18, y);
-        y += 6;
-      });
+        function resetOrderForm(){
+            state.editingOrderId = null;
+            state.selectedAiAdvice = null;
+            state.selectedFinalPrice = null;
+            $('orderStatus').value = 'draft';
+            $('orderService').value = 'eco';
+            $('orderTariffFamily').value = 'standard';
+            $('orderPackageType').value = 'parcel';
+            $('orderWeight').value = '2';
+            $('orderDistance').value = '8';
+            $('orderFloors').value = '0';
+            $('orderStops').value = '0';
+            $('orderPackagesPerDay').value = '1';
+            $('orderWorkingDays').value = '22';
+            $('orderMarginTarget').value = '18';
+            $('orderInternalNotes').value = '';
+            $('orderCustomerNotes').value = '';
+            $('optUseForfait').checked = false;
+            $('optPickup030').checked = false;
+            $('optCallBefore').checked = false;
+            $('optCod').checked = false;
+            $('optNight').checked = false;
+            $('optFragile').checked = false;
+            $('optCombined').checked = false;
+            $('optWeekend').checked = false;
+            renderAiAdvice(null, { total: 0 });
+        }
 
-      y += 14;
-      doc.setDrawColor(180, 180, 180);
-      doc.line(20, y, 90, y);
-      doc.line(120, y, 190, y);
+        function fillSettingsForm(settings){
+            const company = settings.company;
+            const pricing = settings.pricing.standard;
+            const ai = settings.ai;
 
-      doc.setFontSize(10);
-      doc.text("Signature Colixo", 35, y + 6);
-      doc.text("Signature client", 138, y + 6);
+            $('setCompanyName').value = company.name || '';
+            $('setCompanyEmail').value = company.email || '';
+            $('setCompanyPhone').value = company.phone || '';
+            $('setCompanyWebsite').value = company.website || '';
+            $('setCompanyAddress1').value = company.address_line1 || '';
+            $('setCompanyAddress2').value = company.address_line2 || '';
 
-      doc.setFillColor(15, 23, 42);
-      doc.rect(0, 282, 210, 15, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(9);
-      doc.text("Colixo - Devis généré automatiquement depuis l'interface admin", 15, 291);
+            $('setBase02').value = pricing.weight_0_2;
+            $('setBase210').value = pricing.weight_2_10;
+            $('setBase1030').value = pricing.weight_10_30;
+            $('setBase30Plus').value = pricing.weight_30_plus;
+            $('setDistanceRate').value = pricing.distance_rate;
+            $('setFloorRate').value = pricing.floor_rate;
+            $('setStopRate').value = pricing.stop_rate;
+            $('setForfait030').value = pricing.forfait_0_30;
+            $('setPriorityRate').value = pricing.priority_rate;
+            $('setExpressRate').value = pricing.express_rate;
+            $('setUrgentRate').value = pricing.urgent_rate;
+            $('setSuperUrgentRate').value = pricing.super_urgent_rate;
+            $('setCallBeforeRate').value = pricing.call_before_rate;
+            $('setCodRate').value = pricing.cod_rate;
+            $('setNightRate').value = pricing.night_rate;
+            $('setFragileRate').value = pricing.fragile_rate;
+            $('setCombinedDiscount').value = pricing.combined_discount_percent;
+            $('setWeekendRate').value = pricing.weekend_rate;
+            $('setWineHandlingRate').value = pricing.wine_handling_rate;
 
-      doc.save(`${devisNumber}.pdf`);
-    }
+            $('setAiEdgeFunction').value = ai.edge_function || '';
+            $('setAiMarkupCap').value = ai.markup_cap_percent;
+            $('setAiDiscountCap').value = ai.discount_cap_percent;
+            $('setAiMarginFloor').value = ai.margin_floor_percent;
+            $('setAiDistanceThreshold').value = ai.distance_threshold_km;
+            $('setAiSystemPrompt').value = ai.system_prompt || '';
+        }
 
-    async function generatePDFProV2() {
-      // Version 2 — à personnaliser ; utilise generatePDFPro() par défaut
-      await generatePDFPro();
-    }
+        function readSettingsForm(){
+            const next = clone(DEFAULT_SETTINGS);
+            next.company = {
+                name: $('setCompanyName').value.trim(),
+                email: $('setCompanyEmail').value.trim(),
+                phone: $('setCompanyPhone').value.trim(),
+                website: $('setCompanyWebsite').value.trim(),
+                address_line1: $('setCompanyAddress1').value.trim(),
+                address_line2: $('setCompanyAddress2').value.trim()
+            };
+            next.pricing.standard = {
+                weight_0_2: num($('setBase02').value),
+                weight_2_10: num($('setBase210').value),
+                weight_10_30: num($('setBase1030').value),
+                weight_30_plus: num($('setBase30Plus').value),
+                distance_rate: num($('setDistanceRate').value),
+                floor_rate: num($('setFloorRate').value),
+                stop_rate: num($('setStopRate').value),
+                forfait_0_30: num($('setForfait030').value),
+                priority_rate: num($('setPriorityRate').value),
+                express_rate: num($('setExpressRate').value),
+                urgent_rate: num($('setUrgentRate').value),
+                super_urgent_rate: num($('setSuperUrgentRate').value),
+                call_before_rate: num($('setCallBeforeRate').value),
+                cod_rate: num($('setCodRate').value),
+                night_rate: num($('setNightRate').value),
+                fragile_rate: num($('setFragileRate').value),
+                combined_discount_percent: num($('setCombinedDiscount').value),
+                weekend_rate: num($('setWeekendRate').value),
+                wine_handling_rate: num($('setWineHandlingRate').value)
+            };
+            next.pricing.vinologue = {
+                ...clone(DEFAULT_SETTINGS.pricing.vinologue),
+                distance_rate: round2(next.pricing.standard.distance_rate * 1.2),
+                floor_rate: round2(next.pricing.standard.floor_rate * 1.5),
+                stop_rate: round2(next.pricing.standard.stop_rate * 1.15),
+                forfait_0_30: round2(next.pricing.standard.forfait_0_30 * 1.22),
+                priority_rate: round2(next.pricing.standard.priority_rate * 1.5),
+                express_rate: round2(next.pricing.standard.express_rate * 1.2),
+                urgent_rate: round2(next.pricing.standard.urgent_rate * 1.2),
+                super_urgent_rate: round2(next.pricing.standard.super_urgent_rate * 1.2),
+                call_before_rate: next.pricing.standard.call_before_rate,
+                cod_rate: next.pricing.standard.cod_rate,
+                night_rate: round2(next.pricing.standard.night_rate * 1.12),
+                fragile_rate: round2(next.pricing.standard.fragile_rate * 1.16),
+                weekend_rate: round2(next.pricing.standard.weekend_rate * 1.18),
+                wine_handling_rate: Math.max(num($('setWineHandlingRate').value), 0),
+                weight_0_2: round2(next.pricing.standard.weight_0_2 * 1.12),
+                weight_2_10: round2(next.pricing.standard.weight_2_10 * 1.12),
+                weight_10_30: round2(next.pricing.standard.weight_10_30 * 1.14),
+                weight_30_plus: round2(next.pricing.standard.weight_30_plus * 1.1),
+                combined_discount_percent: Math.max(num($('setCombinedDiscount').value) - 2, 0)
+            };
+            next.ai = {
+                edge_function: $('setAiEdgeFunction').value.trim(),
+                system_prompt: $('setAiSystemPrompt').value.trim(),
+                markup_cap_percent: num($('setAiMarkupCap').value),
+                discount_cap_percent: num($('setAiDiscountCap').value),
+                margin_floor_percent: num($('setAiMarginFloor').value),
+                distance_threshold_km: num($('setAiDistanceThreshold').value)
+            };
+            return next;
+        }
 
-    attachEvents();
-    runTests();
-    boot();
-  </script>
+        async function fetchSettings(){
+            const { data, error } = await db.from('colixo_settings').select('*').eq('name', 'default').maybeSingle();
+            if (error) throw error;
+            if (!data) {
+                state.settings = clone(DEFAULT_SETTINGS);
+                state.settingsRowId = null;
+            } else {
+                state.settingsRowId = data.id;
+                state.settings = {
+                    ...clone(DEFAULT_SETTINGS),
+                    ...(data.settings || {})
+                };
+                state.settings.company = { ...clone(DEFAULT_SETTINGS).company, ...(data.settings?.company || {}) };
+                state.settings.pricing = {
+                    standard: { ...clone(DEFAULT_SETTINGS).pricing.standard, ...(data.settings?.pricing?.standard || {}) },
+                    vinologue: { ...clone(DEFAULT_SETTINGS).pricing.vinologue, ...(data.settings?.pricing?.vinologue || {}) }
+                };
+                state.settings.ai = { ...clone(DEFAULT_SETTINGS).ai, ...(data.settings?.ai || {}) };
+            }
+            fillSettingsForm(state.settings);
+        }
+
+        async function fetchClients(){
+            const { data, error } = await db.from('clients_colixo').select('*').order('company_name', { ascending: true });
+            if (error) throw error;
+            state.clients = data || [];
+        }
+
+        async function fetchOrders(){
+            const { data, error } = await db.from('colixo_orders').select('*').order('created_at', { ascending: false }).limit(200);
+            if (error) throw error;
+            state.orders = data || [];
+        }
+
+        async function fetchLogs(){
+            const { data, error } = await db.from('colixo_ai_pricing_logs').select('*').order('created_at', { ascending: false }).limit(100);
+            if (error) throw error;
+            state.logs = data || [];
+        }
+
+        async function login(){
+            clearAuthError();
+            try {
+                requireDb();
+                showLoader('Connexion admin…');
+                const email = $('loginEmail').value.trim();
+                const password = $('loginPassword').value;
+                if (!email || !password) throw new Error('Renseigne un e-mail et un mot de passe.');
+                const { error } = await db.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                await boot();
+                showToast('success', 'Connexion réussie', 'La session admin est active.');
+            } catch (error) {
+                showAuthError(error.message || 'Connexion impossible.');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function logout(){
+            try {
+                showLoader('Déconnexion…');
+                await db.auth.signOut();
+            } catch (error) {
+                console.warn('logout:', error.message);
+            } finally {
+                try { localStorage.removeItem('colixo_user'); } catch (err) {}
+                hideLoader();
+                $('appShell').classList.add('hidden');
+                $('authScreen').classList.remove('hidden');
+            }
+        }
+
+        async function assertAdminSession(){
+            requireDb();
+            const { data: { session }, error: sessionError } = await db.auth.getSession();
+            if (sessionError) throw sessionError;
+            if (!session || !session.user) throw new Error('Aucune session active.');
+
+            const { data: profile, error } = await db.from('utilisateurs').select('id,nom,prenom,email,role').eq('id', session.user.id).maybeSingle();
+            if (error) throw error;
+            if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
+                throw new Error('Accès refusé. Cette page est réservée aux admins.');
+            }
+
+            state.user = session.user;
+            state.profile = profile;
+            $('userName').textContent = [profile.prenom, profile.nom].filter(Boolean).join(' ') || profile.email || 'Admin';
+            $('userRole').textContent = profile.role;
+            $('userAvatar').textContent = initials([profile.prenom, profile.nom].filter(Boolean).join(' ') || profile.email || 'Admin');
+        }
+
+        async function refreshData(showVisualLoader){
+            try {
+                if (showVisualLoader) showLoader('Chargement des données devis…');
+                await Promise.all([fetchSettings(), fetchClients(), fetchOrders(), fetchLogs()]);
+                renderAll();
+            } finally {
+                if (showVisualLoader) hideLoader();
+            }
+        }
+
+        async function boot(){
+            try {
+                requireDb();
+                await assertAdminSession();
+                $('authScreen').classList.add('hidden');
+                $('appShell').classList.remove('hidden');
+                await refreshData(true);
+                if (!state.clients.length) resetClientForm();
+                if (!$('orderClient').value && state.clients.length) $('orderClient').value = state.clients[0].id;
+                renderPricingPreview();
+                renderAiAdvice(null, { total: 0 });
+            } catch (error) {
+                console.warn('boot:', error.message);
+                $('appShell').classList.add('hidden');
+                $('authScreen').classList.remove('hidden');
+                if (db) {
+                    showAuthError(error.message || 'Connexion admin requise.');
+                } else {
+                    showAuthError('Supabase non initialisé dans config.js.');
+                }
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function saveClient(){
+            try {
+                showLoader('Sauvegarde du client…');
+                const payload = {
+                    company_name: $('clientCompany').value.trim(),
+                    contact_name: $('clientContact').value.trim(),
+                    email: $('clientEmail').value.trim(),
+                    phone: $('clientPhone').value.trim(),
+                    address: $('clientAddress').value.trim(),
+                    postal_code: $('clientPostal').value.trim(),
+                    city: $('clientCity').value.trim(),
+                    tariff_profile: $('clientTariffProfile').value,
+                    ai_sensitivity: $('clientAiSensitivity').value,
+                    markup_cap_percent: num($('clientMarkupCap').value),
+                    discount_cap_percent: num($('clientDiscountCap').value),
+                    notes: $('clientNotes').value.trim(),
+                    is_active: $('clientActive').checked,
+                    updated_by: state.user.id
+                };
+                if (!payload.company_name) throw new Error('Le nom de société est obligatoire.');
+
+                let error;
+                if ($('clientId').value) {
+                    ({ error } = await db.from('clients_colixo').update(payload).eq('id', $('clientId').value));
+                } else {
+                    payload.created_by = state.user.id;
+                    ({ error } = await db.from('clients_colixo').insert([payload]));
+                }
+                if (error) throw error;
+                await refreshData(false);
+                resetClientForm();
+                showToast('success', 'Client enregistré', 'La fiche client a été sauvegardée.');
+            } catch (error) {
+                showToast('error', 'Erreur client', error.message || 'Impossible de sauvegarder le client.');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function saveSettings(){
+            try {
+                showLoader('Sauvegarde des paramètres…');
+                const settings = readSettingsForm();
+                if (state.settingsRowId) {
+                    const { error } = await db.from('colixo_settings').update({
+                        settings,
+                        updated_at: nowIso(),
+                        updated_by: state.user.id
+                    }).eq('id', state.settingsRowId);
+                    if (error) throw error;
+                } else {
+                    const { data, error } = await db.from('colixo_settings').insert([{
+                        name: 'default',
+                        settings,
+                        created_by: state.user.id,
+                        updated_by: state.user.id
+                    }]).select().single();
+                    if (error) throw error;
+                    state.settingsRowId = data.id;
+                }
+                state.settings = settings;
+                renderPricingPreview();
+                showToast('success', 'Paramètres enregistrés', 'La grille métier et la config IA ont été sauvegardées.');
+            } catch (error) {
+                showToast('error', 'Erreur paramètres', error.message || 'Impossible de sauvegarder les paramètres.');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function calculateAi(){
+            try {
+                const order = readOrderForm();
+                if (!order.client_id) throw new Error('Sélectionne un client avant le calcul IA.');
+                const basePricing = calculateBasePrice(order, currentSettings());
+                showLoader('Calcul du conseil IA…');
+                const advice = await requestAiPricing(order, basePricing);
+                state.selectedFinalPrice = advice.recommended_price;
+                renderAiAdvice(advice, basePricing);
+                renderPricingPreview();
+                await fetchLogs();
+                renderLogs();
+                showToast('success', 'Conseil IA généré', advice.error ? 'Fallback heuristique utilisé.' : 'Recommandation IA disponible.');
+            } catch (error) {
+                showToast('error', 'Erreur IA', error.message || 'Impossible de calculer le prix conseillé.');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function saveOrder(){
+            try {
+                const order = readOrderForm();
+                if (!order.client_id) throw new Error('Sélectionne un client.');
+                const client = getClientById(order.client_id);
+                if (!client) throw new Error('Client introuvable.');
+
+                const basePricing = calculateBasePrice(order, currentSettings());
+                const finalPrice = round2(state.selectedFinalPrice != null ? state.selectedFinalPrice : basePricing.total);
+                const aiAdvice = state.selectedAiAdvice;
+                const editedOrderId = state.editingOrderId;
+
+                showLoader('Enregistrement du devis…');
+                const payload = {
+                    client_id: order.client_id,
+                    order_number: state.editingOrderId ? undefined : buildReference(),
+                    status: order.status,
+                    service_level: order.service_level,
+                    tariff_family: order.tariff_family,
+                    package_type: order.package_type,
+                    weight_kg: order.weight_kg,
+                    distance_km: order.distance_km,
+                    floors: order.floors,
+                    extra_stops: order.extra_stops,
+                    packages_per_day: order.packages_per_day,
+                    working_days_per_month: order.working_days_per_month,
+                    margin_target_percent: order.margin_target_percent,
+                    options: order.options,
+                    notes_internal: order.notes_internal,
+                    notes_customer: order.notes_customer,
+                    base_price: basePricing.total,
+                    suggested_ai_price: aiAdvice ? round2(aiAdvice.recommended_price) : null,
+                    final_price: finalPrice,
+                    ai_summary: aiAdvice ? aiAdvice.summary : null,
+                    ai_confidence: aiAdvice ? num(aiAdvice.confidence) : null,
+                    price_breakdown: basePricing.breakdown,
+                    ai_advice: aiAdvice || null,
+                    daily_revenue_estimate: basePricing.dailyRevenue,
+                    monthly_revenue_estimate: basePricing.monthlyRevenue,
+                    updated_by: state.user.id
+                };
+                const savedOrderNumber = payload.order_number;
+
+                let error;
+                if (state.editingOrderId) {
+                    delete payload.order_number;
+                    ({ error } = await db.from('colixo_orders').update(payload).eq('id', state.editingOrderId));
+                } else {
+                    payload.created_by = state.user.id;
+                    ({ error } = await db.from('colixo_orders').insert([payload]));
+                }
+                if (error) throw error;
+
+                await refreshData(false);
+                const savedOrder = editedOrderId
+                    ? state.orders.find(item => item.id === editedOrderId)
+                    : state.orders.find(item => item.order_number === savedOrderNumber);
+                resetOrderForm();
+                renderAll();
+                setSection('orders');
+                showToast('success', 'Devis enregistré', `Le devis pour ${client.company_name} a été sauvegardé.`);
+                if (savedOrder) {
+                    exportPdfByOrder(savedOrder).catch(pdfError => {
+                        console.error('exportPdfByOrder', pdfError);
+                        showToast('error', 'PDF non généré', 'Le devis a été enregistré, mais le PDF automatique a échoué.');
+                    });
+                }
+            } catch (error) {
+                showToast('error', 'Erreur devis', error.message || 'Impossible d’enregistrer le devis.');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        const quoteLogoDataUrlCache = Object.create(null);
+
+        function fileToDataUrl(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function loadQuoteLogoDataUrl(settings) {
+            const configuredLogo = String(settings?.company_profile?.logo_url || '').trim();
+            const candidates = [
+                configuredLogo,
+                '../brimot-ai-tool/colixo-logo.png',
+                '../brimot-ai-tool/logocolixo-removebg-preview.png',
+                window.colixoHref ? window.colixoHref('/brimot-ai-tool/colixo-logo.png') : '/brimot-ai-tool/colixo-logo.png',
+                window.colixoHref ? window.colixoHref('/brimot-ai-tool/logocolixo-removebg-preview.png') : '/brimot-ai-tool/logocolixo-removebg-preview.png'
+            ].filter((value, index, arr) => value && arr.indexOf(value) === index);
+
+            const cacheKey = candidates.join('|');
+            if (quoteLogoDataUrlCache[cacheKey]) return quoteLogoDataUrlCache[cacheKey];
+
+            quoteLogoDataUrlCache[cacheKey] = (async function () {
+                for (const logoUrl of candidates) {
+                    try {
+                        const response = await fetch(logoUrl);
+                        if (!response.ok) continue;
+                        return await fileToDataUrl(await response.blob());
+                    } catch (error) {
+                        console.warn('Logo PDF indisponible pour', logoUrl, error);
+                    }
+                }
+                return null;
+            })();
+
+            return quoteLogoDataUrlCache[cacheKey];
+        }
+
+        async function exportPdfByOrder(order){
+            const settings = currentSettings();
+            const client = getClientById(order.client_id);
+            const breakdown = Array.isArray(order.price_breakdown) ? order.price_breakdown : [];
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                showToast('error', 'PDF indisponible', 'La librairie jsPDF n’est pas chargée.');
+                return;
+            }
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+            const logoDataUrl = await loadQuoteLogoDataUrl(settings);
+
+            let y = 18;
+            function line(txt, size, color){
+                if (color) doc.setTextColor.apply(doc, color);
+                doc.setFontSize(size || 11);
+                doc.text(String(txt || ''), 14, y);
+                y += size === 24 ? 10 : 7;
+            }
+
+            doc.setFillColor(10, 11, 16);
+            doc.rect(0, 0, 210, 297, 'F');
+            doc.setTextColor(255,255,255);
+            if (logoDataUrl) {
+                doc.addImage(logoDataUrl, 'PNG', 14, 12, 26, 26);
+                y = 24;
+            }
+            line(settings.company.name || 'Colixo Dispatch', 24);
+            doc.setTextColor(190,190,190);
+            line(settings.company.address_line1 || '', 10);
+            line(settings.company.address_line2 || '', 10);
+            line(`${settings.company.email || ''}  ${settings.company.phone || ''}`, 10);
+
+            y += 6;
+            doc.setTextColor(255, 209, 102);
+            line(`DEVIS ${order.order_number || ''}`, 18);
+            doc.setTextColor(255,255,255);
+            line(`Date: ${todayFr(order.created_at)}`, 10);
+            line(`Client: ${client?.company_name || '—'}`, 11);
+            line(`Contact: ${client?.contact_name || '—'}`, 10);
+            line(`Service: ${serviceLabel(order.service_level)} · Famille: ${order.tariff_family || 'standard'}`, 10);
+
+            y += 6;
+            doc.setDrawColor(70,70,70);
+            doc.line(14, y, 196, y);
+            y += 8;
+
+            breakdown.forEach(part => {
+                doc.setTextColor(220,220,220);
+                doc.setFontSize(10);
+                doc.text(String(part.label || ''), 14, y);
+                doc.text(currency(part.amount), 196, y, { align: 'right' });
+                y += 6;
+            });
+
+            y += 6;
+            doc.setDrawColor(90,90,90);
+            doc.line(14, y, 196, y);
+            y += 9;
+            doc.setTextColor(255,255,255);
+            doc.setFontSize(13);
+            doc.text('Prix métier', 14, y);
+            doc.text(currency(order.base_price), 196, y, { align: 'right' });
+            y += 8;
+            doc.text('Prix conseillé IA', 14, y);
+            doc.text(order.suggested_ai_price == null ? '—' : currency(order.suggested_ai_price), 196, y, { align: 'right' });
+            y += 8;
+            doc.setTextColor(255, 209, 102);
+            doc.setFontSize(15);
+            doc.text('Prix final retenu', 14, y);
+            doc.text(currency(order.final_price), 196, y, { align: 'right' });
+            y += 12;
+
+            doc.setTextColor(200,200,200);
+            doc.setFontSize(10);
+            const reasons = Array.isArray(order.ai_advice?.reasons) ? order.ai_advice.reasons : [];
+            const summary = order.ai_summary || 'Pas de conseil IA utilisé.';
+            doc.text(doc.splitTextToSize(`Synthèse IA: ${summary}`, 182), 14, y);
+            y += 10;
+            if (reasons.length) {
+                doc.text('Conseils IA :', 14, y);
+                y += 6;
+                reasons.slice(0,4).forEach(reason => {
+                    doc.text(doc.splitTextToSize(`• ${reason}`, 178), 18, y);
+                    y += 7;
+                });
+            }
+
+            if (order.notes_customer) {
+                y += 4;
+                doc.setTextColor(255,255,255);
+                doc.text('Notes client', 14, y);
+                y += 6;
+                doc.setTextColor(210,210,210);
+                doc.text(doc.splitTextToSize(order.notes_customer, 182), 14, y);
+            }
+
+            doc.save(`${order.order_number || 'devis-colixo'}.pdf`);
+        }
+
+        function orderPayloadToForm(order){
+            state.editingOrderId = order.id;
+            state.selectedAiAdvice = order.ai_advice || null;
+            state.selectedFinalPrice = num(order.final_price);
+            $('orderClient').value = order.client_id || '';
+            $('orderStatus').value = order.status || 'draft';
+            $('orderService').value = order.service_level || 'eco';
+            $('orderTariffFamily').value = order.tariff_family || 'standard';
+            $('orderPackageType').value = order.package_type || 'parcel';
+            $('orderWeight').value = num(order.weight_kg);
+            $('orderDistance').value = num(order.distance_km);
+            $('orderFloors').value = num(order.floors);
+            $('orderStops').value = num(order.extra_stops);
+            $('orderPackagesPerDay').value = num(order.packages_per_day);
+            $('orderWorkingDays').value = num(order.working_days_per_month);
+            $('orderMarginTarget').value = num(order.margin_target_percent || 18);
+            $('orderInternalNotes').value = order.notes_internal || '';
+            $('orderCustomerNotes').value = order.notes_customer || '';
+            const options = order.options || {};
+            $('optUseForfait').checked = !!options.use_forfait_0_30;
+            $('optPickup030').checked = !!options.include_pickup_0_30;
+            $('optCallBefore').checked = !!options.call_before;
+            $('optCod').checked = !!options.cod;
+            $('optNight').checked = !!options.night;
+            $('optFragile').checked = !!options.fragile;
+            $('optCombined').checked = !!options.combined;
+            $('optWeekend').checked = !!options.weekend;
+            renderPricingPreview();
+            renderAiAdvice(order.ai_advice || null, { total: num(order.base_price) });
+            setSection('builder');
+        }
+
+        function attachEvents(){
+            $('loginBtn').addEventListener('click', login);
+            $('logoutBtn').addEventListener('click', logout);
+            $('refreshBtn').addEventListener('click', () => refreshData(true));
+            $('saveClientBtn').addEventListener('click', saveClient);
+            $('resetClientBtn').addEventListener('click', resetClientForm);
+            $('saveSettingsBtn').addEventListener('click', saveSettings);
+            $('saveOrderBtn').addEventListener('click', saveOrder);
+            $('saveOrderTopBtn').addEventListener('click', () => { setSection('builder'); saveOrder(); });
+            $('aiSuggestBtn').addEventListener('click', calculateAi);
+            $('applyAiBtn').addEventListener('click', () => {
+                const basePricing = renderPricingPreview();
+                if (state.selectedAiAdvice) {
+                    state.selectedFinalPrice = state.selectedAiAdvice.recommended_price;
+                    renderAiAdvice(state.selectedAiAdvice, basePricing);
+                    renderPricingPreview();
+                    showToast('info', 'Prix final mis à jour', 'Le prix conseillé IA a été appliqué au devis.');
+                } else {
+                    showToast('info', 'Aucun conseil IA', 'Calcule d’abord le prix conseillé IA.');
+                }
+            });
+            $('resetOrderBtn').addEventListener('click', () => {
+                resetOrderForm();
+                renderPricingPreview();
+            });
+            $('pdfBtn').addEventListener('click', () => {
+                const preview = readOrderForm();
+                const pricing = calculateBasePrice(preview, currentSettings());
+                const tempOrder = {
+                    order_number: state.editingOrderId ? (state.orders.find(order => order.id === state.editingOrderId)?.order_number || buildReference()) : buildReference(),
+                    created_at: nowIso(),
+                    client_id: preview.client_id,
+                    service_level: preview.service_level,
+                    tariff_family: preview.tariff_family,
+                    base_price: pricing.total,
+                    suggested_ai_price: state.selectedAiAdvice ? state.selectedAiAdvice.recommended_price : null,
+                    final_price: state.selectedFinalPrice != null ? state.selectedFinalPrice : pricing.total,
+                    price_breakdown: pricing.breakdown,
+                    ai_advice: state.selectedAiAdvice,
+                    ai_summary: state.selectedAiAdvice ? state.selectedAiAdvice.summary : null,
+                    notes_customer: preview.notes_customer
+                };
+                exportPdfByOrder(tempOrder);
+            });
+
+            document.querySelectorAll('[data-section-btn]').forEach(btn => {
+                btn.addEventListener('click', () => setSection(btn.dataset.sectionBtn));
+            });
+            document.querySelectorAll('[data-section-open]').forEach(btn => {
+                btn.addEventListener('click', () => setSection(btn.dataset.sectionOpen));
+            });
+
+            [
+                'orderClient','orderStatus','orderService','orderTariffFamily','orderPackageType','orderWeight','orderDistance',
+                'orderFloors','orderStops','orderPackagesPerDay','orderWorkingDays','orderMarginTarget',
+                'optUseForfait','optPickup030','optCallBefore','optCod','optNight','optFragile','optCombined','optWeekend'
+            ].forEach(id => {
+                $(id).addEventListener('input', () => {
+                    state.selectedFinalPrice = null;
+                    renderPricingPreview();
+                });
+                $(id).addEventListener('change', () => {
+                    state.selectedFinalPrice = null;
+                    renderPricingPreview();
+                });
+            });
+
+            $('clientSearch').addEventListener('input', renderClients);
+            $('orderSearch').addEventListener('input', renderOrders);
+        }
+
+        window.editClient = function(id){
+            const client = getClientById(id);
+            if (!client) return;
+            $('clientId').value = client.id;
+            $('clientCompany').value = client.company_name || '';
+            $('clientContact').value = client.contact_name || '';
+            $('clientEmail').value = client.email || '';
+            $('clientPhone').value = client.phone || '';
+            $('clientAddress').value = client.address || '';
+            $('clientPostal').value = client.postal_code || '';
+            $('clientCity').value = client.city || '';
+            $('clientTariffProfile').value = client.tariff_profile || 'standard';
+            $('clientAiSensitivity').value = client.ai_sensitivity || 'balanced';
+            $('clientMarkupCap').value = num(client.markup_cap_percent || 15);
+            $('clientDiscountCap').value = num(client.discount_cap_percent || 10);
+            $('clientNotes').value = client.notes || '';
+            $('clientActive').checked = !!client.is_active;
+            setSection('clients');
+        };
+
+        window.prefillBuilderForClient = function(id){
+            const client = getClientById(id);
+            if (!client) return;
+            $('orderClient').value = client.id;
+            $('orderTariffFamily').value = client.tariff_profile || 'standard';
+            setSection('builder');
+            renderPricingPreview();
+        };
+
+        window.editOrder = function(id){
+            const order = state.orders.find(item => item.id === id);
+            if (order) orderPayloadToForm(order);
+        };
+
+        window.exportOrderPdf = function(id){
+            const order = state.orders.find(item => item.id === id);
+            if (order) exportPdfByOrder(order);
+        };
+
+        attachEvents();
+        boot();
+    })();
+    </script>
 </body>
 </html>
