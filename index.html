@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Livraison rapide pour entreprises en Suisse</title>
   <meta name="description" content="Colixo simplifie les expéditions des entreprises en Suisse : collecte directe, livraison rapide, service fiable." />
+  <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script data-cfasync="false" src="/config.js?v=20260462"></script>
   <style>
     :root {
       --bg: #0a0a0a;
@@ -839,12 +841,7 @@
           </div>
 
           <div class="form-panel">
-            <form action="https://formsubmit.co/info@colixo.ch" method="POST">
-              <input type="hidden" name="_subject" value="Nouvelle demande de devis — Colixo" />
-              <input type="hidden" name="_captcha" value="false" />
-              <input type="hidden" name="_template" value="table" />
-              <input type="hidden" name="_next" value="https://colixo.ch/merci.html" />
-
+            <form id="leadForm">
               <div class="field-row">
                 <div>
                   <label for="name">Nom</label>
@@ -882,7 +879,8 @@
                 <textarea id="message" name="Message" placeholder="Décrivez votre activité, le volume approximatif, la fréquence et vos attentes."></textarea>
               </div>
 
-              <button class="btn btn-primary" type="submit" style="width:100%;">Envoyer ma demande</button>
+              <button class="btn btn-primary" type="submit" id="leadSubmit" style="width:100%;">Envoyer ma demande</button>
+              <p id="leadFormStatus" class="form-note" aria-live="polite"></p>
               <p class="form-note">
                 Réponse garantie sous 24h. Vos données ne sont jamais revendues.
               </p>
@@ -899,5 +897,84 @@
       <div><a href="#top">Retour en haut</a></div>
     </div>
   </footer>
+  <script>
+    (function () {
+      var form = document.getElementById('leadForm');
+      if (!form) return;
+
+      var submitBtn = document.getElementById('leadSubmit');
+      var statusEl = document.getElementById('leadFormStatus');
+
+      function setStatus(message, isError) {
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.style.color = isError ? '#ff9b9b' : '#9fe3b0';
+      }
+
+      function splitName(fullName) {
+        var parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return { prenom: '', nom: '' };
+        if (parts.length === 1) return { prenom: parts[0], nom: parts[0] };
+        return {
+          prenom: parts.shift(),
+          nom: parts.join(' ')
+        };
+      }
+
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        setStatus('', false);
+
+        if (!window.SUPABASE_CLIENT) {
+          setStatus('Le service de demande est momentanément indisponible. Merci de nous appeler ou de nous écrire.', true);
+          return;
+        }
+
+        var fullName = document.getElementById('name').value.trim();
+        var company = document.getElementById('company').value.trim();
+        var email = document.getElementById('email').value.trim();
+        var phone = document.getElementById('phone').value.trim();
+        var need = document.getElementById('need').value.trim();
+        var message = document.getElementById('message').value.trim();
+        var nameParts = splitName(fullName);
+
+        var payload = {
+          prenom: nameParts.prenom,
+          nom: nameParts.nom,
+          email: email,
+          telephone: phone || null,
+          entreprise_nom: company || null,
+          adresse: null,
+          message: ('Besoin: ' + need + '\n\n' + message).trim()
+        };
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Envoi en cours...';
+
+        try {
+          var result = await window.SUPABASE_CLIENT
+            .from('demandes_inscription')
+            .insert([payload]);
+
+          if (result.error) throw result.error;
+
+          setStatus('Demande envoyée. Nous revenons vers vous rapidement.', false);
+          form.reset();
+          setTimeout(function () {
+            window.location.href = '/merci.html';
+          }, 800);
+        } catch (error) {
+          var messageText = error && error.message ? error.message : String(error);
+          setStatus('Envoi impossible pour le moment. Merci de nous contacter directement par téléphone ou email.', true);
+          if (window.console && console.warn) {
+            console.warn('[Colixo] lead form error:', messageText);
+          }
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Envoyer ma demande';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
