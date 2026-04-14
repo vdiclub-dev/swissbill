@@ -363,6 +363,98 @@ window.colixoLogout = async function () {
 })();
 
 /**
+ * Déconnexion automatique après inactivité sur les pages connectées.
+ *
+ * Le délai est partagé entre onglets via localStorage afin d'éviter qu'une
+ * ancienne page reste connectée indéfiniment pendant qu'une autre continue
+ * d'être utilisée.
+ */
+(function colixoAutoLogoutOnIdle() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    var path = String(location.pathname || '/').toLowerCase();
+    var isProtectedPage =
+        path.indexOf('/admin/') >= 0 ||
+        path.indexOf('/client/') >= 0 ||
+        path.indexOf('/chauffeur/') >= 0 ||
+        path.indexOf('/magasinier/') >= 0 ||
+        /\/commandes-client(?:\.html)?$/i.test(path);
+    if (!isProtectedPage) return;
+
+    var IDLE_LIMIT_MS = 30 * 60 * 1000;
+    var ACTIVITY_KEY = 'colixo_last_activity_at';
+    var CHECK_INTERVAL_MS = 30 * 1000;
+    var hasTimedOut = false;
+
+    function now() {
+        return Date.now();
+    }
+
+    function setActivity(ts) {
+        try { localStorage.setItem(ACTIVITY_KEY, String(ts)); } catch (e) {}
+    }
+
+    function getActivity() {
+        try {
+            var raw = localStorage.getItem(ACTIVITY_KEY);
+            var val = Number(raw);
+            return Number.isFinite(val) ? val : 0;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    async function logoutIfIdle() {
+        if (hasTimedOut) return;
+        var last = getActivity();
+        if (!last) {
+            setActivity(now());
+            return;
+        }
+        if (now() - last < IDLE_LIMIT_MS) return;
+        hasTimedOut = true;
+        try { sessionStorage.setItem('colixo_idle_timeout', '1'); } catch (e) {}
+        await window.colixoLogout();
+    }
+
+    function touch() {
+        if (hasTimedOut) return;
+        setActivity(now());
+    }
+
+    async function boot() {
+        if (!window.SUPABASE_CLIENT || !window.SUPABASE_CLIENT.auth) return;
+        try {
+            var result = await window.SUPABASE_CLIENT.auth.getSession();
+            if (!(result && result.data && result.data.session)) return;
+        } catch (e) {
+            return;
+        }
+
+        await logoutIfIdle();
+        if (hasTimedOut) return;
+        touch();
+
+        ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(function (eventName) {
+            window.addEventListener(eventName, touch, { passive: true });
+        });
+        window.addEventListener('focus', function () { logoutIfIdle(); });
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') logoutIfIdle();
+        });
+        window.addEventListener('storage', function (event) {
+            if (event.key === ACTIVITY_KEY) logoutIfIdle();
+        });
+        setInterval(logoutIfIdle, CHECK_INTERVAL_MS);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot, { once: true });
+    } else {
+        boot();
+    }
+})();
+
+/**
  * Vérifie si le serveur publie une version plus récente que le bundle déjà
  * chargé dans l'onglet, puis déclenche un rechargement unique si nécessaire.
  *
