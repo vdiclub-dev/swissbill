@@ -1395,6 +1395,20 @@
         });
     }
 
+    function triggerNativeCameraFallback(reason) {
+        const input = document.getElementById('scanInputCamera');
+        const statusEl = document.getElementById('scanStatus');
+        if (statusEl) {
+            statusEl.style.color = 'var(--yellow)';
+            statusEl.textContent = reason || '📸 Ouverture de la caméra du téléphone…';
+        }
+        if (input) {
+            setTimeout(function () {
+                input.click();
+            }, 120);
+        }
+    }
+
     /** Arrête caméra + analyse (sans changer d’écran) */
     window.stopLiveScanTracks = function() {
         if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
@@ -1600,6 +1614,11 @@
             .then(function (stream) {
                 scanStream = stream;
                 video.srcObject = stream;
+                setTimeout(function () {
+                    if (!scanInterval && (!video.videoWidth || video.readyState < 2)) {
+                        triggerNativeCameraFallback('📸 Caméra live instable — ouverture de la caméra du téléphone…');
+                    }
+                }, 2500);
                 return attachVideoPlayThenScan(video, statusEl);
             })
             .catch(function (err) {
@@ -1621,6 +1640,7 @@
                     statusEl.textContent = msg;
                 }
                 toast('error', msg);
+                triggerNativeCameraFallback('📸 Bascule vers la caméra du téléphone…');
             });
     };
 
