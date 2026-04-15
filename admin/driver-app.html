@@ -1788,18 +1788,68 @@
         input.value = ''; // reset pour permettre re-scan
     };
 
-    function tryJsQR(canvas, el) {
-        if(!window.jsQR) { el.textContent = '❌ Bibliothèque QR non disponible'; return; }
+    function decodeCanvasWithJsQR(canvas) {
+        if (!window.jsQR || !canvas) return null;
         const ctx = canvas.getContext('2d');
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'attemptBoth'});
-        if(code?.data) {
+        if (!ctx) return null;
+        try {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
+            return code && code.data ? code.data : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function buildCanvasVariant(sourceCanvas, sx, sy, sw, sh, scale) {
+        const out = document.createElement('canvas');
+        out.width = Math.max(80, Math.round(sw * scale));
+        out.height = Math.max(80, Math.round(sh * scale));
+        const ctx = out.getContext('2d');
+        ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+        return out;
+    }
+
+    function tryJsQR(canvas, el) {
+        if(!window.jsQR) {
+            el.textContent = '❌ Bibliothèque QR non disponible';
+            el.style.color = 'var(--red)';
+            return;
+        }
+
+        const variants = [canvas];
+        const w = canvas.width;
+        const h = canvas.height;
+        const cropRatios = [0.9, 0.75, 0.6];
+        const scales = [1, 1.4, 1.8, 2.2];
+
+        cropRatios.forEach(function (ratio) {
+            const cw = Math.round(w * ratio);
+            const ch = Math.round(h * ratio);
+            const sx = Math.round((w - cw) / 2);
+            const sy = Math.round((h - ch) / 2);
+            scales.forEach(function (scale) {
+                variants.push(buildCanvasVariant(canvas, sx, sy, cw, ch, scale));
+            });
+        });
+
+        scales.slice(1).forEach(function (scale) {
+            variants.push(buildCanvasVariant(canvas, 0, 0, w, h, scale));
+        });
+
+        let found = null;
+        for (let i = 0; i < variants.length; i += 1) {
+            found = decodeCanvasWithJsQR(variants[i]);
+            if (found) break;
+        }
+
+        if(found) {
             el.style.color = 'var(--green)';
             el.textContent = '✅ QR détecté !';
-            handleQRResult(code.data);
+            handleQRResult(found);
         } else {
             el.style.color = 'var(--red)';
-            el.textContent = '❌ QR non reconnu — rapprochez-vous ou réessayez';
+            el.textContent = '❌ QR non reconnu — rapprochez-vous, centrez le QR et réessayez';
             clearScanFileInputs();
         }
     }
