@@ -85,14 +85,19 @@
 
     function buildFactureHtmlDocument(f, lignes, ent, qrBillBase64, forEmail) {
         const qrRef = buildQRRef(f.numero || f.id || `FAC-${new Date().getFullYear()}-0001`);
+        const basePath = (typeof window !== 'undefined' && window.COLIXO_BASE_PATH) ? String(window.COLIXO_BASE_PATH) : '';
+        const origin = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+        const logoUrl = `${origin}${basePath}/images/colixo-logo.png`;
         const printButtons = `<br><button onclick="window.print()" style="background:#e8311a;color:white;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:8px;">🖨 Imprimer / PDF</button>
         <button onclick="window.close()" style="background:#f3f4f6;border:none;padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer;">Fermer</button>`;
         return `<!DOCTYPE html><html><head><meta charset="UTF-8">
         <style>
             body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1a1a1a;font-size:13px;}
             .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;}
-            .logo{font-size:28px;font-weight:900;color:#e8311a;letter-spacing:2px;}
-            .logo span{color:#1a1a1a;}
+            .logo-wrap{display:flex;align-items:flex-start;gap:16px;}
+            .logo-img{max-height:56px;max-width:240px;object-fit:contain;display:block;}
+            .logo-fallback{font-size:28px;font-weight:900;color:#e8311a;letter-spacing:2px;}
+            .logo-fallback span{color:#1a1a1a;}
             .facture-num{font-size:22px;font-weight:700;color:#e8311a;text-align:right;}
             .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-bottom:30px;}
             .info-box h4{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;margin-bottom:8px;}
@@ -111,7 +116,10 @@
         </style></head><body>
         <div class="header">
             <div>
-                <div class="logo">COLIXO<span> — Didier Gysling</span></div>
+                <div class="logo-wrap">
+                    <img src="${logoUrl}" alt="Colixo" class="logo-img" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                    <div class="logo-fallback" style="display:none;">COLIXO<span> — Didier Gysling</span></div>
+                </div>
                 <p style="color:#6b7280;margin-top:6px;">Transport express — Suisse romande<br>1462 Yvonand • TVA CHE-499.684.981</p>
             </div>
             <div style="text-align:right;">
