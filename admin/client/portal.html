@@ -1423,58 +1423,7 @@
 
     window.showPDF = async function(orderId) {
         const id = orderId || currentOrderId; if(!id) return;
-        showLoad();
-        const { data: o } = await db.from('transport_orders_simple').select('*').eq('id', id).single();
-        hideLoad();
-        if(!o) return;
-
-        const qty = parseInt(o.quantity) || 1;
-        const poidsUnitaire = qty > 0 ? ((parseFloat(o.weight)||0) / qty).toFixed(2) : o.weight||0;
-        const svcColors = { eco:'#6b7280', normal:'#3b82f6', express:'#f97316', urgent:'#e8311a' };
-        const qrUrl = window.location.origin + '/admin/driver-app.html?order=' + encodeURIComponent(o.order_number||'') + '&id=' + o.id;
-
-        // Si 1 seul colis → afficher dans le modal comme avant
-        // Si plusieurs → ouvrir directement la fenêtre d'impression avec toutes les étiquettes
-        if(qty === 1) {
-            // Remplir le modal (comportement existant)
-            document.getElementById('etiq-num').textContent = o.order_number || o.id.slice(0,8);
-            document.getElementById('etiq-date').textContent = new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'});
-            const svcEl = document.getElementById('etiq-service');
-            svcEl.textContent = (o.service_type||'normal').toUpperCase();
-            svcEl.style.background = svcColors[o.service_type] || '#3b82f6';
-            const nuitEl = document.getElementById('etiq-nuit');
-            nuitEl.style.display = o.night_delivery ? 'inline-block' : 'none';
-            document.getElementById('etiq-exp').innerHTML = (o.pickup_address||'—').replace(/·/g,'<br>').replace(/ - /g,'<br>');
-            document.getElementById('etiq-dest').innerHTML =
-                `<div style="font-size:15px;">${o.destinataire_nom||''}</div>` +
-                `<div style="font-weight:400;font-size:12px;margin-top:4px;">${o.delivery_address||''}</div>` +
-                (o.destinataire_tel ? `<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${o.destinataire_tel}</div>` : '');
-            document.getElementById('etiq-qty').textContent = '1 colis';
-            document.getElementById('etiq-poids').textContent = (o.weight||0) + ' kg';
-            const instrEl = document.getElementById('etiq-instructions');
-            if(o.instructions){ instrEl.style.display='block'; instrEl.innerHTML='⚠️ <strong>Instructions :</strong> '+o.instructions; }
-            else instrEl.style.display='none';
-            document.getElementById('etiq-qrtext').textContent = o.order_number || o.id.slice(0,8);
-            document.getElementById('qrCodeImg').innerHTML = '';
-            const tempDiv = document.createElement('div');
-            tempDiv.style.cssText = 'position:absolute;left:-9999px;';
-            document.body.appendChild(tempDiv);
-            new QRCode(tempDiv, { text: qrUrl, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.H });
-            setTimeout(() => {
-                const canvas = tempDiv.querySelector('canvas');
-                if(canvas){
-                    const img = document.createElement('img');
-                    img.src = canvas.toDataURL('image/png');
-                    img.style.cssText = 'width:120px;height:120px;display:block;border:1px solid #ddd;border-radius:6px;';
-                    document.getElementById('qrCodeImg').appendChild(img);
-                }
-                document.body.removeChild(tempDiv);
-                openModal('modalPDF');
-            }, 300);
-        } else {
-            // Plusieurs colis → générer toutes les étiquettes dans une fenêtre d'impression
-            printToutesEtiquettes(o, qty, poidsUnitaire, qrUrl, svcColors);
-        }
+        window.open('../etiquette-colis.html?id=' + encodeURIComponent(id), '_blank');
     };
 
     // Génère toutes les étiquettes dans une nouvelle fenêtre et lance l'impression
