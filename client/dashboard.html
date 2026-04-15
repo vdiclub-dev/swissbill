@@ -1467,7 +1467,7 @@
                     var raw = localStorage.getItem('colixo_user');
                     if (raw) {
                         var cu = JSON.parse(raw);
-                        if (cu && cu.id && cu.role === 'client') uid = cu.id;
+                        if (cu && cu.id && ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].indexOf(cu.role) !== -1) uid = cu.id;
                     }
                 } catch (e) {}
             }
@@ -1484,11 +1484,11 @@
             }
 
             const { data: utilisateur } = await db.from('utilisateurs')
-                .select('role, prenom, nom, email')
+                .select('role, prenom, nom, email, entreprise_id')
                 .eq('id', uid)
                 .maybeSingle();
 
-            if (!utilisateur || utilisateur.role !== 'client') {
+            if (!utilisateur || ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].indexOf(utilisateur.role) === -1) {
                 try { await db.auth.signOut(); } catch (e) {}
                 try { localStorage.removeItem('colixo_user'); } catch (e) {}
                 currentClientId = null;
@@ -1497,7 +1497,7 @@
                 return;
             }
 
-            currentClientId = uid;
+            currentClientId = utilisateur.entreprise_id || uid;
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('dashboardSection').style.display = 'block';
 

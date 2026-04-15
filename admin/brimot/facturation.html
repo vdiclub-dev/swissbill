@@ -2358,12 +2358,11 @@ function edgeInvokeErrorToMessage(error) {
 /** Envoi via Edge Function Supabase + Resend (fonctionne sur GitHub Pages sans PHP). Utilise functions.invoke (auth + CORS gérés par le client). */
 async function sendEmailViaEdge(to, subject, body, fileBase64, filename, viewUrl) {
     const { data: { session } } = await db.auth.getSession();
-    if (!session) {
-        return { ok: false, error: 'Session expiree - reconnectez-vous.' };
-    }
-    await db.auth.refreshSession();
     if (!window.SUPABASE_CONFIG || !window.SUPABASE_CONFIG.url) {
         return { ok: false, error: 'Configuration Supabase manquante.' };
+    }
+    if (session) {
+        await db.auth.refreshSession();
     }
     const b64 = fileBase64 || '';
     /* Limite côté passerelle (~6 Mo corps) : évite FunctionsFetchError silencieux */
@@ -2384,7 +2383,29 @@ async function sendEmailViaEdge(to, subject, body, fileBase64, filename, viewUrl
     let last = { ok: false, error: 'Erreur inconnue' };
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            const { data, error } = await db.functions.invoke('send-brimot-invoice', { body: bodyPayload });
+            let data = null;
+            let error = null;
+            if (session) {
+                const result = await db.functions.invoke('send-brimot-invoice', { body: bodyPayload });
+                data = result.data;
+                error = result.error;
+            } else {
+                const endpoint = String(window.SUPABASE_CONFIG.url || '').replace(/\/+$/, '') + '/functions/v1/send-brimot-invoice';
+                const anonKey = window.SUPABASE_CONFIG.key;
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': anonKey,
+                        'Authorization': 'Bearer ' + anonKey
+                    },
+                    body: JSON.stringify(bodyPayload)
+                });
+                data = await response.json().catch(() => null);
+                if (!response.ok || (data && data.ok === false)) {
+                    error = { message: (data && data.error) || ('HTTP ' + response.status), name: 'EdgeFetchError' };
+                }
+            }
             /* La fonction renvoie HTTP 200 + { ok, error? } pour que le détail soit dans data */
             if (data && typeof data === 'object' && data.ok === false && data.error) {
                 return { ok: false, error: String(data.error) };
