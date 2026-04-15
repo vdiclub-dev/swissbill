@@ -88,6 +88,9 @@
         const basePath = (typeof window !== 'undefined' && window.COLIXO_BASE_PATH) ? String(window.COLIXO_BASE_PATH) : '';
         const origin = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
         const logoUrl = `${origin}${basePath}/images/colixo-logo.png`;
+        const totalColis = Array.isArray(lignes) && lignes.length
+            ? lignes.reduce((sum, l) => sum + (parseInt(l?.quantite, 10) || 1), 0)
+            : (parseInt(f?.nb_colis, 10) || 0);
         const printButtons = `<br><button onclick="window.print()" style="background:#e8311a;color:white;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:8px;">🖨 Imprimer / PDF</button>
         <button onclick="window.close()" style="background:#f3f4f6;border:none;padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer;">Fermer</button>`;
         return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -120,7 +123,7 @@
                     <img src="${logoUrl}" alt="Colixo" class="logo-img" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
                     <div class="logo-fallback" style="display:none;">COLIXO<span> — Didier Gysling</span></div>
                 </div>
-                <p style="color:#6b7280;margin-top:6px;">Transport express — Suisse romande<br>1462 Yvonand • TVA CHE-499.684.981</p>
+                <p style="color:#6b7280;margin-top:6px;">Transport express — Suisse romande<br>Impasse des Griottes 3<br>1462 Yvonand • TVA CHE-499.684.981</p>
             </div>
             <div style="text-align:right;">
                 <div class="facture-num">FACTURE ${f.numero}</div>
@@ -133,6 +136,7 @@
                 <h4>Émetteur</h4>
                 <p><strong>Didier Gysling</strong><br>
                 Colixo<br>
+                Impasse des Griottes 3<br>
                 1462 Yvonand<br>
                 Suisse<br>
                 <span style="color:#6b7280;font-size:11px;">N° TVA : CHE-499.684.981</span></p>
@@ -147,7 +151,7 @@
         </div>
         <p style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;color:#c2410c;font-size:12px;margin-bottom:20px;">
             📅 Période : <strong>${new Date(f.periode_debut).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'long'})} au ${new Date(f.periode_fin).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'long',year:'numeric'})}</strong>
-            &nbsp;|&nbsp; ${f.nb_colis||0} colis livrés
+            &nbsp;|&nbsp; ${totalColis} colis livrés
         </p>
         <table>
             <thead><tr><th>Commande</th><th>Livré le</th><th>Destinataire</th><th>Poids</th><th>Service</th><th>Qté</th><th>P.U.</th><th>Total</th></tr></thead>
@@ -176,7 +180,7 @@
             <strong>Conditions de paiement :</strong> ${f.conditions_paiement||'Net 30 jours'}<br>
             <span style="color:#6b7280;font-size:12px;">Échéance au ${new Date(f.echeance_date).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'long',year:'numeric'})}</span>
         </div>
-        <div class="footer">Didier Gysling — Colixo • 1462 Yvonand • N° TVA CHE-499.684.981 • Merci pour votre confiance</div>
+        <div class="footer">Didier Gysling — Colixo • Impasse des Griottes 3 • 1462 Yvonand • N° TVA CHE-499.684.981 • Merci pour votre confiance</div>
 
         <!-- ══ QR BILL SUISSE ══ -->
         <div style="page-break-before:always;"></div>
@@ -194,6 +198,7 @@
                         <strong>CH95 3000 5291 1478 8940 K</strong><br>
                         Didier Gysling<br>
                         Colixo<br>
+                        Impasse des Griottes 3<br>
                         1462 Yvonand<br>
                         <span style="font-size:7pt;">TVA CHE-499.684.981</span>
                     </div>
@@ -241,6 +246,7 @@
                             <div style="margin-bottom:3mm;">
                                 <strong>CH95 3000 5291 1478 8940 K</strong><br>
                                 Didier Gysling / Colixo<br>
+                                Impasse des Griottes 3<br>
                                 Yverdon-les-Bains<br>
                                 1400 Yverdon-les-Bains
                             </div>
