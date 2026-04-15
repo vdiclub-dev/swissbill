@@ -344,6 +344,7 @@
     if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">config.js manquant</div>';return;}
     const db=window.SUPABASE_CLIENT;
     let entreprises=[],factures=[],tarifs=[],ordersAfacturer=[];
+    let currentUser=null;
     let currentFactureLignes=[];
 
     // ── Utils ──
@@ -988,18 +989,68 @@
         const reply_to = (typeof window.COLIXO_FACTURE_REPLY_EMAIL === 'string' && window.COLIXO_FACTURE_REPLY_EMAIL.trim())
             ? window.COLIXO_FACTURE_REPLY_EMAIL.trim() : undefined;
         showLoad('Envoi de l\'email…');
-        const { data: invData, error: invErr } = await db.functions.invoke('send-colixo-facture', {
-            body: {
-                to,
-                subject,
-                body,
-                html_full,
-                pdf_base64,
-                pdf_filename,
-                ...(viewUrl ? { view_url: viewUrl } : {}),
-                ...(reply_to ? { reply_to } : {}),
+        const bodyPayload = {
+            to,
+            subject,
+            body,
+            html_full,
+            pdf_base64,
+            pdf_filename,
+            ...(viewUrl ? { view_url: viewUrl } : {}),
+            ...(reply_to ? { reply_to } : {}),
+        };
+        let invData = null;
+        let invErr = null;
+        const { data: { session } } = await db.auth.getSession();
+        if (session) {
+            try {
+                await Promise.race([
+                    db.auth.refreshSession(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout refresh session')), 7000))
+                ]);
+            } catch (e) {
+                console.warn('colixo refreshSession timeout/failure:', e);
             }
-        });
+            try {
+                const result = await Promise.race([
+                    db.functions.invoke('send-colixo-facture', { body: bodyPayload }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout Edge Function')), 15000))
+                ]);
+                invData = result.data;
+                invErr = result.error;
+            } catch (e) {
+                invErr = e;
+            }
+        } else {
+            const endpoint = String(window.SUPABASE_CONFIG.url || '').replace(/\/+$/, '') + '/functions/v1/send-colixo-facture';
+            const anonKey = window.SUPABASE_CONFIG.key;
+            const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+            const effectiveUser = currentUser && currentUser.id ? currentUser : codeUser;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': anonKey,
+                        'Authorization': 'Bearer ' + anonKey,
+                        'x-colixo-user-id': effectiveUser?.id || '',
+                        'x-colixo-user-role': effectiveUser?.role || ''
+                    },
+                    body: JSON.stringify(bodyPayload),
+                    signal: controller.signal
+                });
+                invData = await response.json().catch(() => null);
+                if (!response.ok || (invData && invData.ok === false)) {
+                    invErr = { message: (invData && invData.error) || ('HTTP ' + response.status), name: 'EdgeFetchError' };
+                }
+            } catch (e) {
+                invErr = e;
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
         hideLoad();
         if(invData && typeof invData === 'object' && invData.ok === false && invData.error){
             toast('error', String(invData.error));
@@ -1047,6 +1098,7 @@
         if(!session && !codeUser){window.location.href='../login/index.html';return;}
         const{data:user}=await db.from('utilisateurs').select('*').eq('id',userId).single();
         if(!user||!['admin','super_admin'].includes(user.role)){window.location.href='../index.html';return;}
+        currentUser = user;
         const ini=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
         document.getElementById('sbAv').textContent=ini;
         document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
