@@ -1704,6 +1704,45 @@
         }
     }
 
+    function parseQrPayload(raw) {
+        const text = String(raw || '').trim();
+        if (!text) return null;
+
+        // 1) JSON payload (historique Colixo)
+        try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object') {
+                return {
+                    orderId: data.id || null,
+                    orderNumber: data.order || data.order_number || data.orderNumber || null,
+                    qrData: data
+                };
+            }
+        } catch (e) {}
+
+        // 2) Lien web avec paramètres ?id= / ?order=
+        try {
+            const u = new URL(text);
+            const qpId = u.searchParams.get('id');
+            const qpOrder = u.searchParams.get('order') || u.searchParams.get('order_number');
+            if (qpId || qpOrder) {
+                return {
+                    orderId: qpId || null,
+                    orderNumber: qpOrder || null,
+                    qrData: { id: qpId || undefined, order: qpOrder || undefined }
+                };
+            }
+        } catch (e) {}
+
+        // 3) Code brut (ex: LC-2026-00001, numéro commande ou UUID)
+        const normalized = text.replace(/^Commande\s*[:#-]?\s*/i, '').trim();
+        return {
+            orderId: null,
+            orderNumber: normalized,
+            qrData: {}
+        };
+    }
+
     async function handleQRResult(raw) {
         if (!raw) return;
         clearInterval(scanInterval);
@@ -1726,17 +1765,28 @@
             }, 1500);
         }
 
+        const parsed = parseQrPayload(raw);
+        if (!parsed) return;
+
         try {
-            const data = JSON.parse(raw);
-            const orderId = data.id;
-            if (!orderId) throw new Error('QR invalide');
+            let query = db.from('transport_orders_simple').select('*');
+            if (parsed.orderId) {
+                query = query.eq('id', parsed.orderId);
+            } else if (parsed.orderNumber) {
+                query = query.eq('order_number', parsed.orderNumber);
+            } else {
+                throw new Error('QR invalide');
+            }
 
-            const { data: order } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
+            const { data: order } = await query.maybeSingle();
             if (!order) throw new Error('Transport introuvable');
-
-            showScanResult(order, data);
+            showScanResult(order, parsed.qrData || {});
         } catch (e) {
-            await searchByNum(String(raw).trim());
+            if (parsed.orderNumber) {
+                await searchByNum(String(parsed.orderNumber).trim());
+            } else {
+                await searchByNum(String(raw).trim());
+            }
         }
     }
 
