@@ -2362,7 +2362,14 @@ async function sendEmailViaEdge(to, subject, body, fileBase64, filename, viewUrl
         return { ok: false, error: 'Configuration Supabase manquante.' };
     }
     if (session) {
-        await db.auth.refreshSession();
+        try {
+            await Promise.race([
+                db.auth.refreshSession(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout refresh session')), 7000))
+            ]);
+        } catch (e) {
+            console.warn('refreshSession timeout/failure:', e);
+        }
     }
     const b64 = fileBase64 || '';
     /* Limite côté passerelle (~6 Mo corps) : évite FunctionsFetchError silencieux */
@@ -2386,12 +2393,17 @@ async function sendEmailViaEdge(to, subject, body, fileBase64, filename, viewUrl
             let data = null;
             let error = null;
             if (session) {
-                const result = await db.functions.invoke('send-brimot-invoice', { body: bodyPayload });
+                const result = await Promise.race([
+                    db.functions.invoke('send-brimot-invoice', { body: bodyPayload }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout Edge Function')), 15000))
+                ]);
                 data = result.data;
                 error = result.error;
             } else {
                 const endpoint = String(window.SUPABASE_CONFIG.url || '').replace(/\/+$/, '') + '/functions/v1/send-brimot-invoice';
                 const anonKey = window.SUPABASE_CONFIG.key;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
@@ -2399,8 +2411,9 @@ async function sendEmailViaEdge(to, subject, body, fileBase64, filename, viewUrl
                         'apikey': anonKey,
                         'Authorization': 'Bearer ' + anonKey
                     },
-                    body: JSON.stringify(bodyPayload)
-                });
+                    body: JSON.stringify(bodyPayload),
+                    signal: controller.signal
+                }).finally(() => clearTimeout(timeoutId));
                 data = await response.json().catch(() => null);
                 if (!response.ok || (data && data.ok === false)) {
                     error = { message: (data && data.error) || ('HTTP ' + response.status), name: 'EdgeFetchError' };
