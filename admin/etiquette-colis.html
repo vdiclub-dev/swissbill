@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Étiquette colis | Colixo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root{
+            --red:#e8311a; --night:#0a0a0f; --night2:#111118; --surface:#ffffff;
+            --text:#111111; --muted:#666666; --line:#d1d5db;
+        }
+        *{box-sizing:border-box}
+        body{
+            margin:0;
+            font-family:'Outfit',sans-serif;
+            background:#f3f4f6;
+            color:var(--text);
+            padding:24px;
+        }
+        .toolbar{
+            max-width:760px;
+            margin:0 auto 18px;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:12px;
+            flex-wrap:wrap;
+        }
+        .title{
+            font-family:'Bebas Neue',cursive;
+            font-size:28px;
+            letter-spacing:1px;
+            color:var(--night);
+        }
+        .actions{display:flex;gap:10px;flex-wrap:wrap}
+        .btn{
+            display:inline-flex;align-items:center;justify-content:center;gap:8px;
+            padding:12px 18px;border-radius:10px;border:none;cursor:pointer;
+            font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;text-decoration:none;
+        }
+        .btn-red{background:var(--red);color:#fff}
+        .btn-ghost{background:#fff;color:var(--night);border:1px solid #d1d5db}
+        .label-sheet{
+            width:148mm;
+            min-height:105mm;
+            margin:0 auto;
+            background:#fff;
+            border:1px solid #d1d5db;
+            border-radius:14px;
+            overflow:hidden;
+            box-shadow:0 18px 50px rgba(0,0,0,0.08);
+        }
+        .label-inner{padding:16mm 14mm 12mm}
+        .label-head{
+            display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+            margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #111;
+        }
+        .brand img{max-width:220px;max-height:60px;display:block;object-fit:contain}
+        .brand-fallback{
+            font-family:'Bebas Neue',cursive;font-size:34px;letter-spacing:2px;color:var(--red)
+        }
+        .head-meta{text-align:right}
+        .doc-num{font-family:'Bebas Neue',cursive;font-size:28px;letter-spacing:1px;color:var(--red)}
+        .meta-line{font-size:12px;color:var(--muted);margin-top:4px}
+        .grid{display:grid;grid-template-columns:1.3fr 0.9fr;gap:16px;align-items:start}
+        .addr-box{
+            border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;background:#fff;
+        }
+        .addr-label{
+            font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;
+        }
+        .addr-name{font-size:24px;font-weight:700;line-height:1.15;margin-bottom:6px}
+        .addr-line{font-size:18px;line-height:1.35}
+        .mini-box{
+            border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fafafa;
+        }
+        .info-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed #ddd}
+        .info-row:last-child{border-bottom:none}
+        .info-key{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)}
+        .info-val{font-size:14px;font-weight:600;text-align:right}
+        .qr-card{
+            border:2px solid #111;border-radius:14px;padding:12px;background:#fff;text-align:center;
+        }
+        #qrWrap{display:flex;align-items:center;justify-content:center;min-height:180px}
+        .qr-caption{font-size:11px;color:var(--muted);margin-top:10px}
+        .scan-code{
+            margin-top:10px;font-family:monospace;font-size:12px;word-break:break-all;background:#f3f4f6;padding:8px;border-radius:8px
+        }
+        .loading,.error{max-width:760px;margin:40px auto;text-align:center;font-size:16px}
+        @media print{
+            @page{size:A5 landscape;margin:6mm}
+            body{background:#fff;padding:0}
+            .toolbar{display:none}
+            .label-sheet{width:100%;min-height:auto;border:none;border-radius:0;box-shadow:none}
+            .label-inner{padding:8mm}
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div class="title">Étiquette colis</div>
+        <div class="actions">
+            <a class="btn btn-ghost" href="dispatch.html">Retour</a>
+            <button class="btn btn-red" onclick="window.print()">Imprimer</button>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">Chargement de l’étiquette…</div>
+    <div id="error" class="error" style="display:none;color:#b91c1c;"></div>
+
+    <div id="sheet" class="label-sheet" style="display:none;">
+        <div class="label-inner">
+            <div class="label-head">
+                <div class="brand">
+                    <img src="../images/colixo-logo.png" alt="Colixo" onerror="this.style.display='none';document.getElementById('brandFallback').style.display='block';">
+                    <div id="brandFallback" class="brand-fallback" style="display:none;">COLIXO</div>
+                </div>
+                <div class="head-meta">
+                    <div id="docNum" class="doc-num">—</div>
+                    <div id="createdAt" class="meta-line">—</div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div>
+                    <div class="addr-box">
+                        <div class="addr-label">Expéditeur</div>
+                        <div class="addr-name">Colixo</div>
+                        <div class="addr-line">Impasse des Griottes 3</div>
+                        <div class="addr-line">1462 Yvonand</div>
+                        <div class="addr-line">Suisse</div>
+                    </div>
+
+                    <div class="addr-box">
+                        <div class="addr-label">Destinataire</div>
+                        <div id="destName" class="addr-name">—</div>
+                        <div id="destAddr" class="addr-line">—</div>
+                        <div id="destPhone" class="addr-line" style="font-size:15px;color:#444;"></div>
+                    </div>
+
+                    <div class="mini-box">
+                        <div class="info-row"><div class="info-key">Service</div><div id="serviceVal" class="info-val">—</div></div>
+                        <div class="info-row"><div class="info-key">Colis</div><div id="qtyVal" class="info-val">—</div></div>
+                        <div class="info-row"><div class="info-key">Poids</div><div id="weightVal" class="info-val">—</div></div>
+                        <div class="info-row"><div class="info-key">Type</div><div id="packageVal" class="info-val">—</div></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="qr-card">
+                        <div id="qrWrap"></div>
+                        <div class="qr-caption">QR de scan colis</div>
+                        <div id="scanCode" class="scan-code"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+(function(){
+    if(!window.SUPABASE_CONFIG){ document.getElementById('error').style.display='block'; document.getElementById('error').textContent='config.js manquant'; return; }
+    const db = window.SUPABASE_CLIENT;
+    const loading = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const sheet = document.getElementById('sheet');
+
+    function fail(msg){
+        loading.style.display='none';
+        errorEl.style.display='block';
+        errorEl.textContent = msg || "Impossible de charger l'étiquette.";
+    }
+
+    function qs(name){
+        return new URLSearchParams(location.search).get(name);
+    }
+
+    function fmtDate(v){
+        if(!v) return '—';
+        try{
+            return new Date(v).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'2-digit',year:'numeric'});
+        }catch(e){ return '—'; }
+    }
+
+    async function init(){
+        try{
+            const id = qs('id');
+            if(!id){ fail('Commande introuvable : identifiant manquant.'); return; }
+
+            const { data:{ session } } = await db.auth.getSession();
+            const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+            if(!session && !codeUser){ location.href='../login/index.html'; return; }
+            const uid = session?.user?.id || codeUser?.id;
+            const { data:user } = await db.from('utilisateurs').select('*').eq('id', uid).single();
+            if(!user || !['admin','super_admin','magasinier','chauffeur'].includes(String(user.role||''))){
+                fail("Accès refusé à l'étiquette colis.");
+                return;
+            }
+
+            const { data:o, error } = await db.from('transport_orders_simple').select('*').eq('id', id).single();
+            if(error || !o){ fail('Commande introuvable.'); return; }
+
+            const orderRef = o.order_number || String(o.id).slice(0,8).toUpperCase();
+            const qrData = `order:${o.id}`;
+
+            document.getElementById('docNum').textContent = orderRef;
+            document.getElementById('createdAt').textContent = `Créée le ${fmtDate(o.created_at)}`;
+            document.getElementById('destName').textContent = o.destinataire_nom || o.client_name || o.entreprise_nom || 'Destinataire';
+            document.getElementById('destAddr').innerHTML = (o.delivery_address || 'Adresse non renseignée').replace(/\n/g,'<br>');
+            document.getElementById('destPhone').textContent = o.destinataire_tel || '';
+            document.getElementById('serviceVal').textContent = (o.service_type || o.speed || 'Standard') + (o.night_delivery ? ' · Nuit' : '');
+            document.getElementById('qtyVal').textContent = `${o.quantity || 1} colis`;
+            document.getElementById('weightVal').textContent = `${o.weight || 0} kg`;
+            document.getElementById('packageVal').textContent = o.package_type || 'Standard';
+            document.getElementById('scanCode').textContent = qrData;
+
+            new QRCode(document.getElementById('qrWrap'), {
+                text: qrData,
+                width: 180,
+                height: 180,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+
+            loading.style.display='none';
+            sheet.style.display='block';
+        }catch(e){
+            console.error(e);
+            fail("Erreur d'affichage de l'étiquette.");
+        }
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>
