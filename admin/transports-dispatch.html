@@ -67,6 +67,13 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 .chip.accepted{background:rgba(59,130,246,0.16);color:var(--blue);}
 .chip.refused{background:rgba(248,113,113,0.16);color:#f87171;}
 .chip.portal{background:rgba(245,158,11,0.1);color:var(--yellow);border:1px solid rgba(245,158,11,0.24);}
+.chip.dispatch-overdue{background:rgba(232,49,26,0.16);color:#fca5a5;}
+.chip.dispatch-24h{background:rgba(59,130,246,0.16);color:#93c5fd;}
+.chip.dispatch-48h{background:rgba(20,184,166,0.16);color:#99f6e4;}
+.chip.route-normal{background:rgba(34,197,94,0.14);color:var(--green);}
+.chip.route-tolerance{background:rgba(245,158,11,0.16);color:var(--yellow);}
+.chip.route-watch{background:rgba(249,115,22,0.16);color:var(--orange);}
+.chip.route-split{background:rgba(232,49,26,0.16);color:#fca5a5;}
 .type-pill{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;}
 .tp-standard{background:rgba(255,255,255,0.08);color:var(--muted2);}
 .tp-express{background:rgba(249,115,22,0.14);color:var(--orange);}
@@ -159,6 +166,12 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
                 <option value="prio">Prioritaire</option>
                 <option value="same_day">Same Day</option>
                 <option value="vinologue">Vinologue</option>
+            </select>
+            <select id="filtreDispatch" title="Priorité dispatch">
+                <option value="">Toutes priorités dispatch</option>
+                <option value="48h_reporte">48h reporté</option>
+                <option value="24h">24h</option>
+                <option value="48h">48h</option>
             </select>
             <select id="filtreChauffeur" title="Chauffeur">
                 <option value="">Tous chauffeurs</option>
@@ -312,9 +325,44 @@ var portalHighlightId=new URLSearchParams(window.location.search).get('highlight
 function esc(s){if(s==null)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fdate(d){return d?new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';}
 function nowCH(){var d=new Date(),off=-d.getTimezoneOffset(),s=off>=0?'+':'-',h=String(Math.floor(Math.abs(off)/60)).padStart(2,'0'),m=String(Math.abs(off)%60).padStart(2,'0');return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,-1)+s+h+':'+m;}
+function startOfToday(){var d=new Date();d.setHours(0,0,0,0);return d;}
+function createdDay(o){var d=o&&o.created_at?new Date(o.created_at):new Date();d.setHours(0,0,0,0);return d;}
+function dayDiffFromToday(o){return Math.round((startOfToday()-createdDay(o))/86400000);}
 function npaOf(o){var m=(o.delivery_address||'').match(/\b([1-9]\d{3})\b/);return m?parseInt(m[1]):99999;}
 function getAdminStatus(o){return o.admin_status||(o.status==='refused'?'refused':'accepted');}
 function isPortalFresh(o){return getAdminStatus(o)==='pending_validation';}
+function isClosedOrder(o){return['delivered','refused','cancelled'].indexOf(o.status)>=0||getAdminStatus(o)==='refused';}
+function getDispatchServiceLevel(o){
+    var k=o.service_type||o.speed||'standard';
+    return ['express','prio','same_day'].indexOf(k)>=0?'24h':'48h';
+}
+function getDispatchPriority(o){
+    if(isClosedOrder(o))return 'done';
+    var level=getDispatchServiceLevel(o);
+    if(level==='48h'&&dayDiffFromToday(o)>=1&&(!o.tournee_id||o.status==='pending'))return '48h_reporte';
+    return level;
+}
+function dispatchPriorityRank(o){
+    var p=getDispatchPriority(o);
+    return p==='48h_reporte'?0:(p==='24h'?1:(p==='48h'?2:3));
+}
+function dispatchChip(o){
+    var p=getDispatchPriority(o);
+    if(p==='done')return '';
+    var meta={
+        '48h_reporte':{cls:'dispatch-overdue',label:'48h reporté'},
+        '24h':{cls:'dispatch-24h',label:'24h'},
+        '48h':{cls:'dispatch-48h',label:'48h'}
+    }[p];
+    return meta?'<span class="chip '+meta.cls+'">'+meta.label+'</span>':'';
+}
+function routeHealth(km,count){
+    var density=km>0?(count/km):0;
+    if(km<=500)return{cls:'route-normal',label:'Normal',hint:'Zone dans la cible 500 km'};
+    if(km<=650&&density>=0.15)return{cls:'route-tolerance',label:'Tolérance',hint:'Au-dessus de 500 km, mais densité acceptable'};
+    if(km<=650)return{cls:'route-watch',label:'À surveiller',hint:'Tolérance km avec faible densité'};
+    return{cls:'route-split',label:'À découper',hint:'Au-delà de 650 km'};
+}
 function adminChip(o){
     var st=getAdminStatus(o),lbl={pending_validation:'Nouveau',accepted:'Validé',refused:'Refusé'}[st]||st;
     return '<span class="chip '+esc(st)+'">'+esc(lbl)+'</span>';
@@ -394,22 +442,32 @@ function populateTourneeSelects(){
 }
 function tourneeTotals(tid){
     var tr=rows.filter(function(r){return r.tournee_id===tid;});
-    return{count:tr.length,weight:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.weight)||0);},0)*10)/10,km:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.distance_km)||0);},0)),min:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.duration_min)||0);},0))};
+    return{
+        count:tr.length,
+        weight:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.weight)||0);},0)*10)/10,
+        km:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.distance_km)||0);},0)),
+        min:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.duration_min)||0);},0)),
+        overdue48:tr.filter(function(r){return getDispatchPriority(r)==='48h_reporte';}).length,
+        d24:tr.filter(function(r){return getDispatchPriority(r)==='24h';}).length,
+        d48:tr.filter(function(r){return getDispatchPriority(r)==='48h';}).length
+    };
 }
 function renderTourneePanel(){
     var panel=document.getElementById('tourneePanel');
     if(!tournees.length){panel.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:13px;">Aucune tournée.<br><br>Créez votre première tournée avec le bouton ci-dessus.</div>';return;}
     panel.innerHTML=tournees.map(function(t){
         var tot=tourneeTotals(t.id);
+        var health=routeHealth(tot.km,tot.count);
         var drv=driverName(t._chauffeur_id);
         var col=t.couleur||'#3b82f6';
         var trItems=rows.filter(function(r){return r.tournee_id===t.id;}).map(function(r){
-            return'<div class="t-tr-item"><span style="font-weight:600;">'+esc(r.order_number||r.id.slice(0,8))+'</span><span style="color:var(--muted);font-size:10px;flex:1;margin:0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc((r.delivery_address||'').split(',')[0])+'</span><button type="button" onclick="removeFromTournee(\''+r.id+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;">✕</button></div>';
+            return'<div class="t-tr-item"><span style="font-weight:600;">'+esc(r.order_number||r.id.slice(0,8))+'</span><span style="color:var(--muted);font-size:10px;flex:1;margin:0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc((r.delivery_address||'').split(',')[0])+'</span>'+(dispatchChip(r)?'<span style="margin-right:6px;">'+dispatchChip(r)+'</span>':'')+'<button type="button" onclick="removeFromTournee(\''+r.id+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;">✕</button></div>';
         }).join('');
         return'<div class="t-card" id="tc-'+t.id+'" data-tournee-id="'+t.id+'" ondragover="onTDragOver(event,\''+t.id+'\')" ondragleave="onTDragLeave(\''+t.id+'\')" ondrop="onTDrop(event,\''+t.id+'\')">'
             +'<div class="t-card-head"><div class="t-dot" style="background:'+esc(col)+'"></div><span class="t-name">'+esc(t.nom)+'</span><span class="t-time">'+esc(t.heure_debut||'')+(t.heure_fin?' – '+esc(t.heure_fin):'')+'</span></div>'
             +'<div class="t-card-drv"><i class="fas fa-user" style="font-size:10px;margin-right:4px;color:var(--muted);"></i>'+(drv?'<strong>'+esc(drv)+'</strong>':'<span style="color:var(--muted)">Aucun chauffeur</span>')+'</div>'
-            +'<div class="t-card-stats"><span class="t-stat"><i class="fas fa-box"></i>'+tot.count+' transport'+(tot.count!==1?'s':'')+'</span>'+(tot.weight?'<span class="t-stat"><i class="fas fa-weight-hanging"></i>'+tot.weight+' kg</span>':'')+(tot.km?'<span class="t-stat"><i class="fas fa-road"></i>'+tot.km+' km</span>':'')+(tot.min?'<span class="t-stat"><i class="fas fa-clock"></i>'+Math.floor(tot.min/60)+'h'+String(tot.min%60).padStart(2,'0')+'</span>':'')+'</div>'
+            +'<div class="t-card-stats"><span class="t-stat"><i class="fas fa-box"></i>'+tot.count+' transport'+(tot.count!==1?'s':'')+'</span>'+(tot.weight?'<span class="t-stat"><i class="fas fa-weight-hanging"></i>'+tot.weight+' kg</span>':'')+(tot.km?'<span class="t-stat"><i class="fas fa-road"></i>'+tot.km+' km</span>':'')+(tot.min?'<span class="t-stat"><i class="fas fa-clock"></i>'+Math.floor(tot.min/60)+'h'+String(tot.min%60).padStart(2,'0')+'</span>':'')+'<span class="chip '+health.cls+'" title="'+esc(health.hint)+'">'+health.label+'</span></div>'
+            +'<div class="t-card-stats">'+(tot.overdue48?'<span class="t-stat"><i class="fas fa-hourglass-end"></i>'+tot.overdue48+' reporté(s)</span>':'')+(tot.d24?'<span class="t-stat"><i class="fas fa-bolt"></i>'+tot.d24+' en 24h</span>':'')+(tot.d48?'<span class="t-stat"><i class="fas fa-calendar-day"></i>'+tot.d48+' en 48h</span>':'')+'</div>'
             +(trItems?'<div class="t-transports">'+trItems+'</div>':'')
             +'<div class="t-drop-zone"><i class="fas fa-hand-point-up" style="margin-right:5px;opacity:0.5;"></i>Glisser un transport ici</div>'
             +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
@@ -519,6 +577,7 @@ function applyFilter(){
     var q=(document.getElementById('q').value||'').toLowerCase();
     var f=document.getElementById('filtreStatut').value;
     var ft=document.getElementById('filtreType').value;
+    var fd=document.getElementById('filtreDispatch').value;
     var fc=document.getElementById('filtreChauffeur').value;
     var tri=document.getElementById('triListe').value;
     var list=rows.slice();
@@ -529,6 +588,7 @@ function applyFilter(){
     else if(f==='urgent')list=list.filter(function(o){return o.priority==='urgent';});
     else if(f!=='tous')list=list.filter(function(o){return(o.status||'')===f;});
     if(ft)list=list.filter(function(o){return(o.service_type||o.speed||'standard')===ft;});
+    if(fd)list=list.filter(function(o){return getDispatchPriority(o)===fd;});
     if(fc==='none')list=list.filter(function(o){return!o.driver_id;});
     else if(fc)list=list.filter(function(o){return o.driver_id===fc;});
     if(q)list=list.filter(function(o){return((o.order_number||'')+' '+(o.pickup_address||'')+' '+(o.delivery_address||'')+' '+(o.destinataire_nom||'')+(o.client_name||'')).toLowerCase().indexOf(q)!==-1;});
@@ -538,6 +598,7 @@ function applyFilter(){
     else list.sort(function(a,b){return npaOf(a)-npaOf(b)||new Date(a.created_at||0)-new Date(b.created_at||0);});
     list.sort(function(a,b){
         if(isPortalFresh(a)!==isPortalFresh(b))return isPortalFresh(a)?-1:1;
+        if(dispatchPriorityRank(a)!==dispatchPriorityRank(b))return dispatchPriorityRank(a)-dispatchPriorityRank(b);
         if(portalHighlightId){
             if(a.id===portalHighlightId&&b.id!==portalHighlightId)return-1;
             if(b.id===portalHighlightId&&a.id!==portalHighlightId)return 1;
@@ -565,7 +626,7 @@ function renderTable(list){
         }
         return'<tr draggable="true" data-id="'+o.id+'"'+(trClass?' class="'+trClass+'"':'')+'>'
             +'<td><span class="num">'+(o.order_number||o.id.slice(0,8))+'</span></td>'
-            +'<td><div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start;"><span class="chip '+chipCls(o)+'" onclick="openStatusModal(\''+o.id+'\')" title="Cliquer pour changer">'+chipLbl(o)+'</span>'+adminChip(o)+(isPortalFresh(o)?'<span class="chip portal">Portail client</span>':'')+'</div></td>'
+            +'<td><div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start;"><span class="chip '+chipCls(o)+'" onclick="openStatusModal(\''+o.id+'\')" title="Cliquer pour changer">'+chipLbl(o)+'</span>'+adminChip(o)+(dispatchChip(o)||'')+(isPortalFresh(o)?'<span class="chip portal">Portail client</span>':'')+'</div></td>'
             +'<td>'+typePill(o)+'</td>'
             +'<td><div class="addr-lbl">DÉPART</div><div class="addr-full">'+esc(o.pickup_address||'—')+'</div></td>'
             +'<td><div class="addr-lbl">ARRIVÉE</div><div class="addr-full">'+esc(o.delivery_address||'—')+'</div></td>'
@@ -777,6 +838,7 @@ document.getElementById('btnSaveNew').addEventListener('click',async function(){
 document.getElementById('q').addEventListener('input',applyFilter);
 document.getElementById('filtreStatut').addEventListener('change',applyFilter);
 document.getElementById('filtreType').addEventListener('change',applyFilter);
+document.getElementById('filtreDispatch').addEventListener('change',applyFilter);
 document.getElementById('filtreChauffeur').addEventListener('change',applyFilter);
 document.getElementById('triListe').addEventListener('change',applyFilter);
 document.getElementById('btnRefresh').addEventListener('click',function(){load();loadTournees();});
