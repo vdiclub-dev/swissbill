@@ -513,6 +513,10 @@
     let savedAddresses = [];
     let currentUserRole = null;
 
+    function getClientScopeId() {
+        return client?.entreprise_id || client?.id || null;
+    }
+
     function toast(msg){const t=document.getElementById('toast');t.innerHTML=msg;t.className='toast show';setTimeout(()=>t.classList.remove('show'),3000);}
     function showLoad(){document.getElementById('loader').classList.add('on');}
     function hideLoad(){document.getElementById('loader').classList.remove('on');}
@@ -569,8 +573,9 @@
     }
 
     async function loadClientTarif() {
-        if(!client || !client.entreprise_id) return;
-        const { data } = await db.from('tarifs_clients').select('*').eq('entreprise_id', client.entreprise_id).single();
+        const clientScopeId = getClientScopeId();
+        if(!clientScopeId) return;
+        const { data } = await db.from('tarifs_clients').select('*').eq('entreprise_id', clientScopeId).single();
         if(data) {
             clientTarif = data;
         } else {
@@ -1051,7 +1056,7 @@
 
             const orderData = {
                 order_number: envNum,
-                entreprise_id: client.entreprise_id || null,
+                entreprise_id: getClientScopeId(),
                 pickup_address: pickupAddr,
                 delivery_address: fullDelivery,
                 destinataire_nom: destinataireNom,
@@ -1116,7 +1121,7 @@
         // Charger toutes les commandes non livrées de l'entreprise
         const { data: orders } = await db.from('transport_orders_simple')
             .select('*')
-            .eq('entreprise_id', client.entreprise_id)
+            .eq('entreprise_id', getClientScopeId())
             .neq('status', 'delivered')
             .order('created_at', { ascending: false })
             .limit(20);
@@ -1275,7 +1280,7 @@
     async function loadOrders() {
         if(!client) return;
         const { data } = await db.from('transport_orders_simple').select('*')
-            .eq('entreprise_id', client.entreprise_id)
+            .eq('entreprise_id', getClientScopeId())
             .order('created_at', { ascending: false })
             .limit(50);
         // Commandes actives = non livrées + livrées dans les dernières 24h
@@ -1307,7 +1312,7 @@
 
         // Charger toutes les commandes
         const { data: orders } = await db.from('transport_orders_simple')
-            .select('*').eq('entreprise_id', client.entreprise_id)
+            .select('*').eq('entreprise_id', getClientScopeId())
             .order('created_at', { ascending: false });
         if(!orders?.length) { el.innerHTML = '<div class="empty">📋 Aucune expédition</div>'; return; }
 
@@ -1816,6 +1821,20 @@
     };
 
     async function checkSession() {
+        try {
+            if (document.referrer) {
+                var ref = new URL(document.referrer);
+                var fromLogin = /\/login(?:\/index\.html)?$/i.test(ref.pathname || '');
+                var wantsSwitch = ref.searchParams.get('switch') === '1';
+                if (fromLogin && wantsSwitch) {
+                    try { await db.auth.signOut(); } catch (e) {}
+                    try { localStorage.removeItem('colixo_user'); } catch (e) {}
+                    window.location.replace(h('/login/index.html?switched=1'));
+                    return;
+                }
+            }
+        } catch (e) {}
+
         const { data: { session } } = await db.auth.getSession();
         const wantRegister = new URLSearchParams(window.location.search).get('register') === '1';
 

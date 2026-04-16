@@ -155,7 +155,7 @@
     <a href="admin/dashboard.html" class="sb-logo"><div class="sb-mark">🚚</div><div class="sb-text">Colixo <em>Dispatch</em></div></a>
     <div class="nav-sec">Navigation</div>
     <a href="admin/dashboard.html"        class="nav-item"><i class="fas fa-th-large"></i>    <span>Dashboard</span></a>
-    <a href="admin/dispatch.html"         class="nav-item"><i class="fas fa-map"></i>          <span>Dispatch</span></a>
+    <a href="admin/transports-dispatch.html" class="nav-item"><i class="fas fa-truck-loading"></i><span>Transports dispatch</span></a>
     <a href="commandes-client.html" class="nav-item active"><i class="fas fa-inbox"></i><span>Commandes clients</span><span class="nav-badge" id="navBadge">0</span></a>
     <a href="admin/new-transport.html"    class="nav-item"><i class="fas fa-plus-circle"></i>  <span>Nouveau transport</span></a>
     <a href="admin/rh.html"               class="nav-item"><i class="fas fa-users-cog"></i>    <span>Gestion RH</span></a>
@@ -251,7 +251,7 @@
         return local.toISOString().slice(0,-1) + sign + hh + ':' + mm;
     }
 
-    let allOrders=[], entreprises=[];
+    let allOrders=[], entreprises=[], clientUsers=[];
 
     /* ── Helpers ── */
     const toastEl=document.getElementById('toast');
@@ -264,6 +264,30 @@
     window.closeModal=id=>{ const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} };
     document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) window.closeModal(m.id); }));
     const shortAddr=a=>a?a.split(',').slice(0,2).join(',').trim():'—';
+    function getAdminStatus(o){
+        return o.admin_status || (o.status === 'refused' ? 'refused' : 'pending_validation');
+    }
+    function getClientLabel(order){
+        const ent=entreprises.find(e=>e.id===order.entreprise_id);
+        if(ent?.nom) return ent.nom;
+        const user=clientUsers.find(u=>u.id===order.entreprise_id);
+        if(user){
+            const fullName=[user.prenom,user.nom].filter(Boolean).join(' ').trim();
+            return fullName || user.email || 'Client inconnu';
+        }
+        return 'Client inconnu';
+    }
+    async function getNotificationRecipients(order){
+        if(!order?.entreprise_id) return [];
+        const { data: companyUsers } = await db.from('utilisateurs').select('id')
+            .eq('entreprise_id', order.entreprise_id)
+            .eq('role','client');
+        if(companyUsers?.length) return companyUsers;
+        const { data: directUser } = await db.from('utilisateurs').select('id')
+            .eq('id', order.entreprise_id)
+            .maybeSingle();
+        return directUser ? [directUser] : [];
+    }
 
     /* ── TABS ── */
     document.querySelectorAll('.tab').forEach(t=>{
@@ -278,16 +302,17 @@
     /* ── LOAD ── */
     window.loadAll = async function() {
         showLoad();
-        const [{data:orders},{data:ents}] = await Promise.all([
+        const [{data:orders},{data:ents},{data:users}] = await Promise.all([
             db.from('transport_orders_simple').select('*')
-                .not('admin_status','is',null)
                 .order('created_at',{ascending:false}),
-            db.from('entreprises').select('id,nom')
+            db.from('entreprises').select('id,nom'),
+            db.from('utilisateurs').select('id,prenom,nom,email').in('role',['client','gestionnaire','comptable','sous_utilisateur','magasinier'])
         ]);
         allOrders  = orders||[];
         entreprises= ents||[];
+        clientUsers= users||[];
 
-        const pending=allOrders.filter(o=>o.admin_status==='pending_validation').length;
+        const pending=allOrders.filter(o=>getAdminStatus(o)==='pending_validation').length;
         document.getElementById('badgeValidation').textContent=pending;
         document.getElementById('navBadge').textContent=pending;
 
@@ -298,10 +323,10 @@
     function renderAll(){
         const activeTab=document.querySelector('.tab.active')?.dataset.tab||'validation';
         const filters={
-            validation: o=>o.admin_status==='pending_validation',
-            accepted:   o=>o.admin_status==='accepted',
-            dispatched: o=>['planned','in_transit','delivered'].includes(o.status)&&o.admin_status==='accepted',
-            refused:    o=>o.admin_status==='refused',
+            validation: o=>getAdminStatus(o)==='pending_validation',
+            accepted:   o=>getAdminStatus(o)==='accepted',
+            dispatched: o=>['planned','in_transit','delivered'].includes(o.status)&&getAdminStatus(o)==='accepted',
+            refused:    o=>getAdminStatus(o)==='refused',
             all:        ()=>true
         };
         const list=allOrders.filter(filters[activeTab]||filters.all);
@@ -311,8 +336,7 @@
     }
 
     function renderCard(o) {
-        const ent=entreprises.find(e=>e.id===o.entreprise_id);
-        const ast=o.admin_status||'pending_validation';
+        const ast=getAdminStatus(o);
         const astLabel={pending_validation:'⏳ En attente',accepted:'✅ Acceptée',refused:'❌ Refusée'}[ast]||ast;
         const astClass={pending_validation:'badge-pv',accepted:'badge-ok',refused:'badge-no'}[ast]||'badge-ds';
 
@@ -320,7 +344,7 @@
             <div class="oc-header">
                 <div class="oc-left">
                     <div class="oc-num">${o.order_number||o.id.slice(0,8)}</div>
-                    <div class="oc-client"><i class="fas fa-building" style="color:var(--blue)"></i> ${ent?.nom||'Client inconnu'}</div>
+                    <div class="oc-client"><i class="fas fa-building" style="color:var(--blue)"></i> ${getClientLabel(o)}</div>
                     <div class="oc-date">${new Date(o.created_at).toLocaleString('fr-CH')}</div>
                 </div>
                 <span class="oc-badge ${astClass}">${astLabel}</span>
@@ -380,7 +404,7 @@
             // Notifier le client via notifications
             const{data:o}=await db.from('transport_orders_simple').select('*,entreprise:entreprises(*)').eq('id',id).single();
             // Trouver le compte client lié à cette entreprise
-            const{data:users}=await db.from('utilisateurs').select('id').eq('entreprise_id',o.entreprise_id).eq('role','client');
+            const users = await getNotificationRecipients(o);
             for(const u of users||[]){
                 await db.from('notifications').insert([{
                     user_id: u.id,
@@ -416,7 +440,7 @@
 
             // Notifier le client
             const{data:o}=await db.from('transport_orders_simple').select('*').eq('id',id).single();
-            const{data:users}=await db.from('utilisateurs').select('id').eq('entreprise_id',o.entreprise_id).eq('role','client');
+            const users = await getNotificationRecipients(o);
             for(const u of users||[]){
                 await db.from('notifications').insert([{
                     user_id: u.id,
@@ -434,14 +458,14 @@
     };
 
     window.sendToDispatch = async function(id) {
-        window.location.href = `admin/dispatch.html?highlight=${id}`;
+        window.location.href = `admin/transports-dispatch.html?highlight=${id}`;
     };
 
     /* ── PDF ── */
     window.openPDF = async function(id) {
         showLoad();
         const{data:o}=await db.from('transport_orders_simple').select('*').eq('id',id).single();
-        const ent=entreprises.find(e=>e.id===o.entreprise_id);
+        const clientLabel=getClientLabel(o);
         hideLoad();
 
         document.getElementById('qrCode').innerHTML='';
@@ -453,7 +477,7 @@
         document.getElementById('pdfInfo').innerHTML=`
             <div style="font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;margin-bottom:10px;">${o.order_number}</div>
             <div style="display:grid;gap:5px;font-size:13px;">
-                <div><b>Client :</b> ${ent?.nom||'—'}</div>
+                <div><b>Client :</b> ${clientLabel}</div>
                 <div><b>Départ :</b> ${o.pickup_address||'—'}</div>
                 <div><b>Livraison :</b> ${o.delivery_address||'—'}</div>
                 <div><b>Destinataire :</b> ${o.destinataire_nom||'—'} ${o.destinataire_tel?'· '+o.destinataire_tel:''}</div>
@@ -518,7 +542,7 @@
         // Realtime
         db.channel('commandes_client')
             .on('postgres_changes',{event:'INSERT',schema:'public',table:'transport_orders_simple'},payload=>{
-                if(payload.new.admin_status==='pending_validation'){
+                if(getAdminStatus(payload.new)==='pending_validation'){
                     toast('info',`📦 Nouvelle commande : ${payload.new.order_number||'—'}`);
                     loadAll();
                 }
