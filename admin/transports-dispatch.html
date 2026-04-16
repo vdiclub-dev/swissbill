@@ -321,10 +321,14 @@ var rows=[],chauffeurs=[],tournees=[];
 var pickupCoords=null,deliveryCoords=null,orderCounter=1;
 var displayOrder=[],dragId=null,dragSrcRow=null;
 var portalHighlightId=new URLSearchParams(window.location.search).get('highlight');
+var ROUTE_COST_DAY_CHF=320;
+var ROUTE_KM_TARGET=500;
+var ROUTE_KM_TOLERANCE=650;
 
 function esc(s){if(s==null)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fdate(d){return d?new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';}
 function nowCH(){var d=new Date(),off=-d.getTimezoneOffset(),s=off>=0?'+':'-',h=String(Math.floor(Math.abs(off)/60)).padStart(2,'0'),m=String(Math.abs(off)%60).padStart(2,'0');return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,-1)+s+h+':'+m;}
+function fmtMoney(n){return new Intl.NumberFormat('fr-CH',{style:'currency',currency:'CHF',minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);}
 function startOfToday(){var d=new Date();d.setHours(0,0,0,0);return d;}
 function createdDay(o){var d=o&&o.created_at?new Date(o.created_at):new Date();d.setHours(0,0,0,0);return d;}
 function dayDiffFromToday(o){return Math.round((startOfToday()-createdDay(o))/86400000);}
@@ -358,10 +362,32 @@ function dispatchChip(o){
 }
 function routeHealth(km,count){
     var density=km>0?(count/km):0;
-    if(km<=500)return{cls:'route-normal',label:'Normal',hint:'Zone dans la cible 500 km'};
-    if(km<=650&&density>=0.15)return{cls:'route-tolerance',label:'Tolérance',hint:'Au-dessus de 500 km, mais densité acceptable'};
-    if(km<=650)return{cls:'route-watch',label:'À surveiller',hint:'Tolérance km avec faible densité'};
-    return{cls:'route-split',label:'À découper',hint:'Au-delà de 650 km'};
+    if(km<=ROUTE_KM_TARGET)return{cls:'route-normal',label:'Normal',hint:'Zone dans la cible '+ROUTE_KM_TARGET+' km'};
+    if(km<=ROUTE_KM_TOLERANCE&&density>=0.15)return{cls:'route-tolerance',label:'Tolérance',hint:'Au-dessus de '+ROUTE_KM_TARGET+' km, mais densité acceptable'};
+    if(km<=ROUTE_KM_TOLERANCE)return{cls:'route-watch',label:'À surveiller',hint:'Tolérance km avec faible densité'};
+    return{cls:'route-split',label:'À découper',hint:'Au-delà de '+ROUTE_KM_TOLERANCE+' km'};
+}
+function orderRevenue(o){
+    var direct=parseFloat(o.price_chf);
+    if(!isNaN(direct)&&direct>0)return direct;
+    var fallbackByType={same_day:35,express:25,prio:18,vinologue:16,standard:12,eco:9};
+    var type=o.service_type||o.speed||'standard';
+    var qty=parseInt(o.quantity,10)||1;
+    return (fallbackByType[type]||12)*qty;
+}
+function routeVehiclesNeeded(km){return Math.max(1,Math.ceil((parseFloat(km)||0)/ROUTE_KM_TARGET)||1);}
+function routeEconomics(tr){
+    var revenue=tr.reduce(function(s,r){return s+orderRevenue(r);},0);
+    var km=Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.distance_km)||0);},0));
+    var vehicles=routeVehiclesNeeded(km);
+    var cost=vehicles*ROUTE_COST_DAY_CHF;
+    return{
+        revenue:revenue,
+        cost:cost,
+        result:revenue-cost,
+        vehicles:vehicles,
+        costPerKm:km>0?(cost/km):0
+    };
 }
 function adminChip(o){
     var st=getAdminStatus(o),lbl={pending_validation:'Nouveau',accepted:'Validé',refused:'Refusé'}[st]||st;
@@ -442,6 +468,7 @@ function populateTourneeSelects(){
 }
 function tourneeTotals(tid){
     var tr=rows.filter(function(r){return r.tournee_id===tid;});
+    var eco=routeEconomics(tr);
     return{
         count:tr.length,
         weight:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.weight)||0);},0)*10)/10,
@@ -449,7 +476,12 @@ function tourneeTotals(tid){
         min:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.duration_min)||0);},0)),
         overdue48:tr.filter(function(r){return getDispatchPriority(r)==='48h_reporte';}).length,
         d24:tr.filter(function(r){return getDispatchPriority(r)==='24h';}).length,
-        d48:tr.filter(function(r){return getDispatchPriority(r)==='48h';}).length
+        d48:tr.filter(function(r){return getDispatchPriority(r)==='48h';}).length,
+        revenue:eco.revenue,
+        cost:eco.cost,
+        result:eco.result,
+        vehicles:eco.vehicles,
+        costPerKm:eco.costPerKm
     };
 }
 function renderTourneePanel(){
@@ -468,6 +500,7 @@ function renderTourneePanel(){
             +'<div class="t-card-drv"><i class="fas fa-user" style="font-size:10px;margin-right:4px;color:var(--muted);"></i>'+(drv?'<strong>'+esc(drv)+'</strong>':'<span style="color:var(--muted)">Aucun chauffeur</span>')+'</div>'
             +'<div class="t-card-stats"><span class="t-stat"><i class="fas fa-box"></i>'+tot.count+' transport'+(tot.count!==1?'s':'')+'</span>'+(tot.weight?'<span class="t-stat"><i class="fas fa-weight-hanging"></i>'+tot.weight+' kg</span>':'')+(tot.km?'<span class="t-stat"><i class="fas fa-road"></i>'+tot.km+' km</span>':'')+(tot.min?'<span class="t-stat"><i class="fas fa-clock"></i>'+Math.floor(tot.min/60)+'h'+String(tot.min%60).padStart(2,'0')+'</span>':'')+'<span class="chip '+health.cls+'" title="'+esc(health.hint)+'">'+health.label+'</span></div>'
             +'<div class="t-card-stats">'+(tot.overdue48?'<span class="t-stat"><i class="fas fa-hourglass-end"></i>'+tot.overdue48+' reporté(s)</span>':'')+(tot.d24?'<span class="t-stat"><i class="fas fa-bolt"></i>'+tot.d24+' en 24h</span>':'')+(tot.d48?'<span class="t-stat"><i class="fas fa-calendar-day"></i>'+tot.d48+' en 48h</span>':'')+'</div>'
+            +'<div class="t-card-stats"><span class="t-stat"><i class="fas fa-truck"></i>'+tot.vehicles+' véhicule'+(tot.vehicles!==1?'s':'')+'</span><span class="t-stat"><i class="fas fa-sack-dollar"></i>CA '+fmtMoney(tot.revenue)+'</span><span class="t-stat"><i class="fas fa-wallet"></i>Coût '+fmtMoney(tot.cost)+'</span><span class="t-stat" style="color:'+(tot.result>=0?'var(--green)':'#f87171')+';"><i class="fas fa-chart-line"></i>Résultat '+fmtMoney(tot.result)+'</span>'+(tot.km?'<span class="t-stat"><i class="fas fa-gauge-high"></i>'+fmtMoney(tot.costPerKm)+'/km</span>':'')+'</div>'
             +(trItems?'<div class="t-transports">'+trItems+'</div>':'')
             +'<div class="t-drop-zone"><i class="fas fa-hand-point-up" style="margin-right:5px;opacity:0.5;"></i>Glisser un transport ici</div>'
             +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
