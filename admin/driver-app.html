@@ -1704,6 +1704,62 @@
         }
     }
 
+    function parseDriverQrPayload(raw) {
+        const text = String(raw || '').trim();
+        if (!text) return null;
+
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object') {
+                return {
+                    id: parsed.id || parsed.order_id || parsed.transport_id || null,
+                    orderNumber: parsed.order_number || parsed.numero || parsed.num || null,
+                    raw: text
+                };
+            }
+        } catch (e) {}
+
+        try {
+            const url = new URL(text);
+            return {
+                id: url.searchParams.get('id') || url.searchParams.get('order_id') || url.searchParams.get('transport_id') || null,
+                orderNumber: url.searchParams.get('order') || url.searchParams.get('order_number') || url.searchParams.get('num') || null,
+                raw: text
+            };
+        } catch (e) {}
+
+        const direct = text.match(/^(?:order|commande|colis|id)\s*[:#-]?\s*(.+)$/i);
+        const token = direct ? direct[1].trim() : text;
+
+        return {
+            id: /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(token) ? token : null,
+            orderNumber: token,
+            raw: text
+        };
+    }
+
+    async function fetchOrderFromQrToken(token) {
+        const cleaned = String(token || '').trim();
+        if (!cleaned) return null;
+
+        const exact = await db.from('transport_orders_simple')
+            .select('*')
+            .or(`order_number.eq.${cleaned},id.eq.${cleaned}`)
+            .maybeSingle();
+        if (exact.data) return exact.data;
+
+        const looksLikeLc = /^LC[-\s]?\d{4,}/i.test(cleaned) || /^COL[-\s]?\d{4,}/i.test(cleaned);
+        if (looksLikeLc) {
+            const like = await db.from('transport_orders_simple')
+                .select('*')
+                .ilike('order_number', cleaned.replace(/\s+/g, '%'))
+                .limit(1);
+            if (like.data && like.data[0]) return like.data[0];
+        }
+
+        return null;
+    }
+
     async function handleQRResult(raw) {
         if (!raw) return;
         clearInterval(scanInterval);
@@ -1727,14 +1783,23 @@
         }
 
         try {
-            const data = JSON.parse(raw);
-            const orderId = data.id;
-            if (!orderId) throw new Error('QR invalide');
+            const parsed = parseDriverQrPayload(raw);
+            if (!parsed) throw new Error('QR invalide');
 
-            const { data: order } = await db.from('transport_orders_simple').select('*').eq('id', orderId).single();
+            let order = null;
+            if (parsed.id) {
+                const byId = await db.from('transport_orders_simple').select('*').eq('id', parsed.id).maybeSingle();
+                order = byId.data || null;
+            }
+            if (!order && parsed.orderNumber) {
+                order = await fetchOrderFromQrToken(parsed.orderNumber);
+            }
+            if (!order && parsed.raw) {
+                order = await fetchOrderFromQrToken(parsed.raw);
+            }
             if (!order) throw new Error('Transport introuvable');
 
-            showScanResult(order, data);
+            showScanResult(order, parsed);
         } catch (e) {
             await searchByNum(String(raw).trim());
         }
@@ -1856,8 +1921,7 @@
 
     async function searchByNum(num) {
         document.getElementById('scanStatus').textContent = 'Recherche…';
-        const { data } = await db.from('transport_orders_simple').select('*')
-            .or(`order_number.eq.${num},id.eq.${num}`).maybeSingle();
+        const data = await fetchOrderFromQrToken(num);
         if(!data) {
             document.getElementById('scanStatus').textContent = '❌ Transport introuvable : ' + num;
             document.getElementById('scanStatus').style.color = 'var(--red)';
