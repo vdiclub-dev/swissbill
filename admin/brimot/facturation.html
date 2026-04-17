@@ -109,7 +109,12 @@
         .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
 
         /* ── Lignes facture ── */
-        .ligne-row{display:grid;grid-template-columns:26px 2.4fr 145px 72px 100px 100px 30px;gap:8px;align-items:center;margin-bottom:8px;}
+        .ligne-wrap{margin-bottom:10px;}
+        .ligne-row{display:grid;grid-template-columns:26px 2.4fr 145px 72px 100px 100px 30px;gap:8px;align-items:center;}
+        .ligne-desc-row{display:grid;grid-template-columns:26px 1fr 30px;gap:8px;margin-top:4px;}
+        .ligne-desc-row textarea{padding:6px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;font-family:'Outfit',sans-serif;font-size:11px;color:var(--muted2);resize:vertical;min-height:30px;max-height:80px;width:100%;}
+        .ligne-desc-row textarea:focus{outline:none;border-color:var(--brimot);color:var(--white);}
+        .ligne-desc-row textarea::placeholder{color:rgba(255,255,255,0.18);}
         .ligne-row input,.ligne-row select{padding:8px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);}
         .ligne-total{text-align:right;font-weight:700;font-size:12px;}
         .btn-del-ligne{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:4px;}
@@ -1178,6 +1183,7 @@ function addLigne(data=null) {
     lignes.push({
         id,
         designation: parsed.designation || '',
+        description: data?.description || '',
         date_intervention: normalizeInterventionDate(data?.date_intervention || parsed.date_intervention),
         qte: data?.qte || 1,
         prix_ht: data?.prix_ht || 0
@@ -1190,29 +1196,39 @@ function renderLignes() {
     c.innerHTML = lignes.map(l=>{
         // Échapper les guillemets dans la désignation pour l'attribut HTML value
         const safeDesig = (l.designation||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        const safeDesc  = (l.description||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
         const safeDateIntervention = normalizeInterventionDate(l.date_intervention);
         return `
-        <div class="ligne-row" id="lr-${l.id}">
-            <button class="btn-cat-ligne" title="Choisir dans le catalogue" onclick="openModalCatalogueForLigne('${l.id}')"><i class="fas fa-boxes"></i></button>
-            <div style="position:relative;">
-                <input type="text" value="${safeDesig}" placeholder="Désignation du service…"
-                    oninput="updateLigne('${l.id}','designation',this.value);showProduitSuggest('${l.id}',this.value)"
-                    onchange="updateLigne('${l.id}','designation',this.value)"
-                    id="ld-${l.id}">
-                <div id="sug-${l.id}" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--night3);border:1px solid var(--border2);border-radius:8px;z-index:50;max-height:160px;overflow-y:auto;"></div>
+        <div class="ligne-wrap" id="lr-${l.id}">
+            <div class="ligne-row">
+                <button class="btn-cat-ligne" title="Choisir dans le catalogue" onclick="openModalCatalogueForLigne('${l.id}')"><i class="fas fa-boxes"></i></button>
+                <div style="position:relative;">
+                    <input type="text" value="${safeDesig}" placeholder="Désignation du service…"
+                        oninput="updateLigne('${l.id}','designation',this.value);showProduitSuggest('${l.id}',this.value)"
+                        onchange="updateLigne('${l.id}','designation',this.value)"
+                        id="ld-${l.id}">
+                    <div id="sug-${l.id}" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--night3);border:1px solid var(--border2);border-radius:8px;z-index:50;max-height:160px;overflow-y:auto;"></div>
+                </div>
+                <input type="date" value="${safeDateIntervention}"
+                    oninput="updateLigne('${l.id}','date_intervention',this.value)"
+                    onchange="updateLigne('${l.id}','date_intervention',this.value)"
+                    id="ldi-${l.id}">
+                <input type="number" value="${l.qte}" min="0.01" step="0.01"
+                    oninput="updateLigne('${l.id}','qte',this.value)"
+                    onchange="updateLigne('${l.id}','qte',this.value)">
+                <input type="number" value="${l.prix_ht}" min="0" step="0.01" placeholder="0.00"
+                    oninput="updateLigne('${l.id}','prix_ht',this.value)"
+                    onchange="updateLigne('${l.id}','prix_ht',this.value)">
+                <div class="ligne-total" id="lt-${l.id}">${fmtMoney(l.qte*l.prix_ht)}</div>
+                <button class="btn-del-ligne" onclick="deleteLigne('${l.id}')"><i class="fas fa-times"></i></button>
             </div>
-            <input type="date" value="${safeDateIntervention}"
-                oninput="updateLigne('${l.id}','date_intervention',this.value)"
-                onchange="updateLigne('${l.id}','date_intervention',this.value)"
-                id="ldi-${l.id}">
-            <input type="number" value="${l.qte}" min="0.01" step="0.01"
-                oninput="updateLigne('${l.id}','qte',this.value)"
-                onchange="updateLigne('${l.id}','qte',this.value)">
-            <input type="number" value="${l.prix_ht}" min="0" step="0.01" placeholder="0.00"
-                oninput="updateLigne('${l.id}','prix_ht',this.value)"
-                onchange="updateLigne('${l.id}','prix_ht',this.value)">
-            <div class="ligne-total" id="lt-${l.id}">${fmtMoney(l.qte*l.prix_ht)}</div>
-            <button class="btn-del-ligne" onclick="deleteLigne('${l.id}')"><i class="fas fa-times"></i></button>
+            <div class="ligne-desc-row">
+                <span></span>
+                <textarea placeholder="Description détaillée (optionnel)…"
+                    oninput="updateLigne('${l.id}','description',this.value)"
+                    id="ldesc-${l.id}">${safeDesc}</textarea>
+                <span></span>
+            </div>
         </div>`;
     }).join('');
     calcTotaux();
@@ -1387,6 +1403,7 @@ async function editFacture(id) {
             id:'l'+l.id,
             _dbId:l.id,
             designation: parsed.designation || '',
+            description: l.description || '',
             date_intervention: normalizeInterventionDate(parsed.date_intervention),
             qte:l.qte||1,
             prix_ht:l.prix_ht||0
@@ -1483,6 +1500,7 @@ async function saveFacture(openPreview=false) {
     const lignesPayload = lignes.map((l,i)=>({
         facture_id:factureId, position:i+1,
         designation:mergeDesignationAndIntervention(l.designation, l.date_intervention),
+        description:l.description||null,
         qte:l.qte, prix_ht:l.prix_ht,
         total_ht:l.qte*l.prix_ht
     }));
