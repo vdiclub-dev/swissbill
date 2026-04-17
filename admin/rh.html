@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -55,15 +55,15 @@
         .user-chip { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:var(--night3); }
         .user-avatar { width:30px; height:30px; background:var(--red); border-radius:8px; display:grid; place-items:center; font-family:'Bebas Neue',cursive; font-size:13px; flex-shrink:0; }
         .user-name { font-size:12px; font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .btn-logout { background:none; border:none; cursor:pointer; color:var(--muted); font-size:13px; transition:color 0.2s; padding:4px; }
-        .btn-logout:hover { color:var(--red); }
+        .btn-logout{background:var(--night3);border:1px solid var(--border2);border-radius:8px;cursor:pointer;color:var(--muted);padding:0;width:32px;height:32px;display:grid;place-items:center;font-size:13px;flex-shrink:0;transition:all 0.2s;}
+        .btn-logout:hover{color:var(--white);border-color:var(--red);}
 
         /* ── MAIN ── */
         .main { margin-left:var(--sidebar); flex:1; display:flex; flex-direction:column; min-height:100vh; }
         .topbar { background:var(--night2); border-bottom:1px solid var(--border); padding:0 32px; min-height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; flex-wrap:wrap; gap:12px; }
         .page-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
         .page-sub { font-size:12px; color:var(--muted); margin-top:2px; }
-        .topbar-right { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        .topbar-right{position:fixed;left:20cm;top:0;height:60px;display:flex;gap:10px;align-items:center;z-index:300;}
         .toolbar-select { background:var(--night3); border:1px solid var(--border2); border-radius:9px; padding:8px 14px; color:var(--white); font-family:'Outfit',sans-serif; font-size:13px; cursor:pointer; }
         .toolbar-select:focus { outline:none; border-color:var(--red); }
         .toolbar-bar { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
@@ -455,6 +455,7 @@
     <a href="tarification.html"  class="nav-item"><i class="fas fa-tags"></i> <span>Tarification</span></a>
     <a href="analytics.html"     class="nav-item"><i class="fas fa-chart-bar"></i> <span>Analytiques</span></a>
     <a href="facturation.html"   class="nav-item"><i class="fas fa-file-invoice-dollar"></i> <span>Facturation</span></a>
+    <a href="devis.html"         class="nav-item"><i class="fas fa-file-contract"></i> <span>Devis</span></a>
     <div class="sidebar-footer">
         <div class="user-chip">
             <div class="user-avatar" id="sideAvatar">SA</div>
@@ -1202,10 +1203,10 @@
     /* ── AUTH ── */
     async function init() {
         const { data:{session} } = await db.auth.getSession();
-        const codeUser = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
-        const userId = userId || codeUser?.id;
+        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
         if(!session && !codeUser) { window.location.href='../login/index.html'; return; }
-        const { data:user } = await db.from('utilisateurs').select('*').eq('id',userId).single();
+        const uid = session?.user?.id || codeUser?.id;
+        const { data:user } = await db.from('utilisateurs').select('*').eq('id',uid).single();
         if(!user || !['admin','super_admin'].includes(user.role)) {
             await db.auth.signOut();
             window.location.href='../login/index.html';
@@ -1216,7 +1217,7 @@
             document.getElementById('sideAvatar').textContent=initials;
             document.getElementById('sideName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
         }
-        document.getElementById('btnLogout').addEventListener('click', async()=>{ await db.auth.signOut(); sessionStorage.removeItem('colixo_user'); window.location.href='../login/index.html'; });
+        document.getElementById('btnLogout').addEventListener('click', async()=>{ await db.auth.signOut(); localStorage.removeItem('colixo_user'); window.location.href='../login/index.html'; });
         initMonthSelector();
         ['salAvs','salAc','salLpp','salIs','salAutres','salAlloc','salRemb','salPrimes'].forEach(function (id) {
             const el = document.getElementById(id);
@@ -2110,7 +2111,7 @@
         if (!f) { toast('error', 'Fiche introuvable'); return; }
         const emp = employesSalaire.find(e => e.id === f.employe_id);
         if (!emp || emp.role !== 'chauffeur') {
-            toast('info', 'L’envoi sur l’app concerne les chauffeurs (Colixo Driver).');
+            toast('info', "L'envoi sur l'app concerne les chauffeurs (Colixo Driver).");
             return;
         }
         const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -2126,7 +2127,7 @@
                 read: false
             }]);
             if (error) throw error;
-            toast('success', 'Notification envoyée sur l’app chauffeur');
+            toast('success', "Notification envoyee sur l'app chauffeur");
         } catch (e) {
             const msg = String(e.message || e || '').toLowerCase();
             if (msg.includes('policy') || msg.includes('permission') || msg.includes('row-level')) {

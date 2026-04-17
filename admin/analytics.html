@@ -12,8 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -78,8 +77,8 @@
         .user-chip { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:var(--night3); }
         .user-avatar { width:30px; height:30px; background:var(--red); border-radius:8px; display:grid; place-items:center; font-family:'Bebas Neue',cursive; font-size:13px; flex-shrink:0; }
         .user-name { font-size:12px; font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .btn-logout { background:none; border:none; cursor:pointer; color:var(--muted); font-size:13px; transition:color 0.2s; padding:4px; }
-        .btn-logout:hover { color:var(--red); }
+        .btn-logout{background:var(--night3);border:1px solid var(--border2);border-radius:8px;cursor:pointer;color:var(--muted);padding:0;width:32px;height:32px;display:grid;place-items:center;font-size:13px;flex-shrink:0;transition:all 0.2s;}
+        .btn-logout:hover{color:var(--white);border-color:var(--red);}
 
         /* ── MAIN ── */
         .main { margin-left:var(--sidebar); flex:1; display:flex; flex-direction:column; min-height:100vh; }
@@ -87,7 +86,7 @@
         /* ── TOPBAR ── */
         .topbar { background:var(--night2); border-bottom:1px solid var(--border); padding:0 32px; height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; }
         .page-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
-        .topbar-right { display:flex; gap:10px; align-items:center; }
+        .topbar-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
         .btn { font-family:'Outfit',sans-serif; font-weight:600; font-size:13px; padding:8px 18px; border-radius:9px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s; text-decoration:none; white-space:nowrap; }
         .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
         .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
@@ -211,7 +210,7 @@
     </a>
     <div class="nav-section">Navigation</div>
     <a href="dashboard.html" class="nav-item"><i class="fas fa-th-large"></i> <span>Dashboard</span></a>
-    <a href="dispatch.html"  class="nav-item"><i class="fas fa-map"></i> <span>Carte Dispatch</span></a>
+    <a href="transports-dispatch.html"  class="nav-item"><i class="fas fa-map"></i> <span>Dispatch unifié</span></a>
     <a href="new-transport.html" class="nav-item"><i class="fas fa-plus-circle"></i> <span>Nouveau transport</span></a>
     <a href="analytics.html" class="nav-item active"><i class="fas fa-chart-bar"></i> <span>Analytics</span></a>
     <a href="users.html"     class="nav-item"><i class="fas fa-users"></i> <span>Utilisateurs</span></a>
@@ -380,7 +379,7 @@
         <div class="chart-card" data-r style="margin-bottom:28px;">
             <div class="chart-head">
                 <div class="chart-title">DERNIERS TRANSPORTS</div>
-                <a href="dispatch.html" class="btn btn-ghost" style="font-size:11px;padding:6px 12px;">Voir tout</a>
+                <a href="transports-dispatch.html" class="btn btn-ghost" style="font-size:11px;padding:6px 12px;">Voir tout</a>
             </div>
             <div style="overflow-x:auto;">
                 <table class="recent-table">
@@ -443,20 +442,28 @@
     /* ── Auth ── */
     async function init() {
         const { data: { session } } = await db.auth.getSession();
-        if (!session && !sessionStorage.getItem('colixo_user')) { window.location.href = '../login/index.html'; return; }
-        const { data: user } = await db.from('utilisateurs').select('*').eq('id', userId).single();
-        if (!user || !['admin','super_admin'].includes(user.role)) {
-            await db.auth.signOut();
+        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+        if (!session && !codeUser) { window.location.href = '../login/index.html'; return; }
+        const uid = session?.user?.id || codeUser?.id;
+        const { data: user } = uid ? await db.from('utilisateurs').select('*').eq('id', uid).maybeSingle() : { data: null };
+        const effectiveRole = user?.role || codeUser?.role || '';
+        if (!['admin','super_admin'].includes(effectiveRole)) {
             window.location.href = '../login/index.html';
             return;
         }
-        if (user) {
-            const init = ((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
+        const displayUser = user || codeUser;
+        if (displayUser) {
+            const init = ((displayUser.prenom?.[0]||'')+(displayUser.nom?.[0]||'')).toUpperCase()||'SA';
             document.getElementById('sideAvatar').textContent = init;
-            document.getElementById('sideName').textContent   = [user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
+            document.getElementById('sideName').textContent   = [displayUser.prenom,displayUser.nom].filter(Boolean).join(' ')||'Admin';
         }
         document.getElementById('btnLogout').addEventListener('click', async () => {
+            if (window.colixoLogout) {
+                window.colixoLogout();
+                return;
+            }
             await db.auth.signOut();
+            localStorage.removeItem('colixo_user');
             window.location.href = '../login/index.html';
         });
         await loadData();
@@ -557,6 +564,9 @@
     /* ── Status donut ── */
     function renderStatusChart(orders) {
         const statuses = {
+            'pending_validation': { label:'Nouveau portail', color:'#f59e0b' },
+            'accepted_admin':     { label:'Validé admin',    color:'#3b82f6' },
+            'refused':            { label:'Refusé',          color:'#ef4444' },
             'pending':    { label:'En attente', color:'#f59e0b' },
             'planned':    { label:'Planifié',   color:'#3b82f6' },
             'urgent':     { label:'Urgent',     color:'#f97316' },
@@ -565,7 +575,10 @@
         };
         const counts = {};
         orders.forEach(o => {
-            const k = o.priority==='urgent' ? 'urgent' : (o.status||'pending');
+            let k = o.priority==='urgent' ? 'urgent' : (o.status||'pending');
+            if (o.admin_status === 'pending_validation') k = 'pending_validation';
+            else if (o.admin_status === 'refused' || o.status === 'refused') k = 'refused';
+            else if (o.admin_status === 'accepted' && (!o.status || o.status === 'pending')) k = 'accepted_admin';
             counts[k] = (counts[k]||0)+1;
         });
         const keys    = Object.keys(statuses).filter(k => counts[k]>0);
@@ -730,8 +743,10 @@
     /* ── Recent table ── */
     function renderRecentTable(orders) {
         document.getElementById('recentTable').innerHTML = orders.map(o => {
-            const status = o.priority==='urgent'?'urgent':(o.status||'pending');
-            const statusLabel = { pending:'En attente', planned:'Planifié', urgent:'URGENT', in_transit:'En route', delivered:'Livré' }[status]||status;
+            let status = o.priority==='urgent'?'urgent':(o.status||'pending');
+            if (o.admin_status === 'pending_validation') status = 'pending';
+            if (o.admin_status === 'refused' || o.status === 'refused') status = 'refused';
+            const statusLabel = { pending:'À valider', planned:'Planifié', urgent:'URGENT', in_transit:'En route', delivered:'Livré', refused:'Refusé' }[status]||status;
             const date = new Date(o.created_at).toLocaleDateString('fr-CH');
             return `<tr>
                 <td style="font-family:'Bebas Neue',cursive;letter-spacing:0.5px;color:var(--muted2);">${o.order_number||o.id.slice(0,8)}</td>

@@ -4,621 +4,903 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>Liste transports — Dispatch | Colixo</title>
+    <title>Transports & Dispatch | Colixo</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260419"></script>
-    <script src="../push-manager.js?v=20260419"></script>
+    <script data-cfasync="false" src="../vendor/supabase.umd.js"></script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <style>
-        :root {
-            --red:#e8311a; --night:#0a0a0f; --night2:#111118; --night3:#18181f; --surface:#1e1e28;
-            --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
-            --white:#fff; --muted:rgba(255,255,255,0.45); --muted2:rgba(255,255,255,0.65);
-            --green:#22c55e; --blue:#3b82f6; --yellow:#f59e0b; --orange:#f97316; --purple:#a855f7;
-        }
-        *,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Outfit',sans-serif; background:var(--night); color:var(--white); min-height:100vh; display:flex; flex-direction:column; }
-        .topbar {
-            background:var(--night2); border-bottom:1px solid var(--border); padding:0 20px; height:56px;
-            display:flex; align-items:center; gap:14px; flex-shrink:0;
-        }
-        .logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:18px; color:var(--white); text-decoration:none; }
-        .logo-mark { width:30px; height:30px; background:var(--red); border-radius:8px; display:grid; place-items:center; font-size:14px; }
-        .logo em { color:var(--red); font-style:normal; }
-        .tb-title { font-family:'Bebas Neue',cursive; font-size:15px; letter-spacing:2px; color:var(--muted2); flex:1; }
-        .btn {
-            font-family:'Outfit',sans-serif; font-weight:600; font-size:12px; padding:8px 14px; border-radius:8px;
-            border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; text-decoration:none;
-            transition:all 0.2s;
-        }
-        .btn-ghost { background:transparent; border:1px solid var(--border2); color:var(--muted2); }
-        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
-        .btn-red { background:var(--red); color:#fff; }
-        .btn-red:hover { filter:brightness(1.05); }
-        .tbl .btn { font-size:11px; padding:6px 10px; white-space:nowrap; }
-
-        .wrap { padding:20px 24px 40px; max-width:1680px; margin:0 auto; width:100%; flex:1; }
-        .head { margin-bottom:18px; display:flex; flex-wrap:wrap; align-items:center; gap:12px; justify-content:space-between; }
-        .head h1 { font-family:'Bebas Neue',cursive; font-size:26px; letter-spacing:1px; font-weight:400; }
-        .head p { font-size:13px; color:var(--muted); max-width:560px; line-height:1.5; }
-        .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
-        .toolbar input, .toolbar select {
-            padding:9px 12px; border-radius:9px; border:1px solid var(--border2); background:var(--night3);
-            color:var(--white); font-family:'Outfit',sans-serif; font-size:13px; min-width:200px;
-        }
-        .toolbar input:focus, .toolbar select:focus { outline:none; border-color:var(--red); }
-        .badge { font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; background:var(--surface); color:var(--muted2); }
-
-        .tbl-wrap { border:1px solid var(--border2); border-radius:14px; overflow:auto; background:var(--night2); max-height:calc(100vh - 260px); }
-        table.tbl { width:100%; min-width:1100px; border-collapse:collapse; font-size:13px; }
-        .tbl th {
-            position:sticky; top:0; z-index:2;
-            text-align:left; padding:11px 14px; font-size:10px; font-weight:700; letter-spacing:1px;
-            text-transform:uppercase; color:var(--muted); background:var(--night3); border-bottom:1px solid var(--border);
-        }
-        .tbl td { padding:11px 14px; border-top:1px solid var(--border); vertical-align:top; }
-        .tbl tbody tr { transition:background 0.12s; }
-        .tbl tbody tr:hover { background:rgba(255,255,255,0.03); }
-        .num { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:0.5px; color:var(--muted2); }
-        .addr { color:var(--muted2); line-height:1.35; max-width:220px; }
-        .mono { font-variant-numeric:tabular-nums; }
-        .type-cell { font-size:12px; line-height:1.35; }
-        .type-cell .t-sub { color:var(--muted); font-size:11px; }
-        .dt { font-size:12px; color:var(--muted); white-space:nowrap; }
-        .chip { display:inline-block; padding:2px 8px; border-radius:100px; font-size:10px; font-weight:700; text-transform:uppercase; }
-        .chip.pending { background:rgba(245,158,11,0.15); color:var(--yellow); }
-        .chip.urgent { background:rgba(249,115,22,0.15); color:var(--orange); }
-        .chip.planned { background:rgba(59,130,246,0.15); color:var(--blue); }
-        .chip.in_transit { background:rgba(168,85,247,0.15); color:var(--purple); }
-        .chip.delivered { background:rgba(34,197,94,0.15); color:var(--green); }
-        .empty { text-align:center; padding:48px 20px; color:var(--muted); font-size:14px; }
-
-        .toast {
-            position:fixed; bottom:20px; right:20px; padding:12px 16px; border-radius:10px; font-size:13px;
-            background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.45);
-            z-index:9999; transform:translateY(100px); opacity:0; transition:all 0.35s; max-width:min(420px,92vw);
-        }
-        .toast.show { transform:translateY(0); opacity:1; }
-
-        .tbl tbody tr.row-click { cursor:pointer; }
-        .tbl tbody tr.row-click:active { background:rgba(255,255,255,0.05); }
-        .modal-overlay {
-            display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.78); backdrop-filter:blur(8px);
-            align-items:center; justify-content:center; padding:20px;
-        }
-        .modal-overlay.open { display:flex; }
-        .modal-box {
-            background:var(--night3); border:1px solid var(--border2); border-radius:18px; width:100%; max-width:440px;
-            padding:22px 24px 20px; box-shadow:0 24px 80px rgba(0,0,0,0.55);
-        }
-        .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:16px; }
-        .modal-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; font-weight:400; }
-        .modal-close {
-            width:34px; height:34px; border:none; border-radius:10px; background:var(--surface); color:var(--muted2);
-            cursor:pointer; font-size:16px; line-height:1; flex-shrink:0;
-        }
-        .modal-close:hover { color:var(--white); background:var(--border2); }
-        .modal-route { font-size:13px; color:var(--muted2); line-height:1.45; margin-bottom:16px; word-break:break-word; }
-        .modal-field label {
-            display:block; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:8px;
-        }
-        .modal-field select {
-            width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border2); background:var(--night2);
-            color:var(--white); font-family:'Outfit',sans-serif; font-size:14px;
-        }
-        .modal-field select:focus { outline:none; border-color:var(--red); }
-        .modal-field select option { background:var(--night3); }
-        .modal-actions { display:flex; gap:10px; margin-top:22px; }
-        .modal-actions .btn { flex:1; justify-content:center; padding:11px; }
+:root{--red:#e8311a;--red-dark:#c0280f;--red-glow:rgba(232,49,26,0.18);--night:#0a0a0f;--night2:#111118;--night3:#18181f;--surface:#1e1e28;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--white:#fff;--muted:rgba(255,255,255,0.42);--muted2:rgba(255,255,255,0.68);--green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b;--orange:#f97316;--purple:#a855f7;--teal:#14b8a6;}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Outfit',sans-serif;font-size:14px;background:var(--night);color:var(--white);display:flex;flex-direction:column;}
+.topbar{background:var(--night2);border-bottom:1px solid var(--border);padding:0 18px;height:56px;display:flex;align-items:center;gap:14px;flex-shrink:0;}
+.logo{display:flex;align-items:center;gap:9px;font-family:'Bebas Neue',cursive;font-size:20px;color:var(--white);text-decoration:none;}
+.logo-mark{width:32px;height:32px;background:var(--red);border-radius:9px;display:grid;place-items:center;font-size:15px;}
+.logo em{color:var(--red);font-style:normal;}
+.spacer{flex:1;}
+.btn{font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;padding:9px 16px;border-radius:9px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none;transition:all 0.2s;white-space:nowrap;}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--muted2);}
+.btn-ghost:hover{color:var(--white);border-color:rgba(255,255,255,0.28);}
+.btn-red{background:var(--red);color:#fff;box-shadow:0 4px 14px var(--red-glow);}
+.btn-red:hover{background:var(--red-dark);}
+.btn-green{background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.28);color:var(--green);}
+.btn-green:hover{background:rgba(34,197,94,0.22);}
+.btn-sm{font-size:12px;padding:6px 11px;border-radius:7px;}
+.btn-xs{font-size:11px;padding:4px 8px;border-radius:6px;}
+.btn:disabled{opacity:0.5;cursor:not-allowed;}
+.workspace{display:flex;flex:1;overflow:hidden;}
+.panel-left{display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden;}
+.panel-right{width:340px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--night2);overflow:hidden;}
+.toolbar{padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid var(--border);background:var(--night2);flex-shrink:0;}
+.toolbar input,.toolbar select{padding:8px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--night3);color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;}
+.toolbar input{min-width:190px;}
+.toolbar select{min-width:128px;}
+.toolbar input:focus,.toolbar select:focus{outline:none;border-color:var(--red);}
+.badge-count{font-size:12px;font-weight:700;padding:5px 12px;border-radius:100px;background:var(--surface);color:var(--muted2);}
+.tbl-wrap{flex:1;overflow:auto;}
+table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
+.tbl th{position:sticky;top:0;z-index:2;text-align:left;padding:10px 12px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);background:var(--night3);border-bottom:1px solid var(--border);}
+.tbl td{padding:10px 12px;border-top:1px solid var(--border);vertical-align:middle;font-size:13px;}
+.tbl tbody tr{transition:background 0.1s,border-color 0.1s;cursor:grab;}
+.tbl tbody tr:hover{background:rgba(255,255,255,0.03);}
+.tbl tbody tr.drag-over-top{box-shadow:inset 0 2px 0 var(--blue);}
+.tbl tbody tr.drag-over-bottom{box-shadow:inset 0 -2px 0 var(--blue);}
+.tbl tbody tr.dragging{opacity:0.35;}
+.tbl tbody tr.in-tournee{background:rgba(59,130,246,0.04);}
+.tbl tbody tr.needs-review{background:rgba(245,158,11,0.08);}
+.tbl tbody tr.needs-review:hover{background:rgba(245,158,11,0.13);}
+.tbl tbody tr.portal-fresh{box-shadow:inset 3px 0 0 var(--yellow);}
+.num{font-family:'Bebas Neue',cursive;font-size:14px;letter-spacing:0.5px;color:var(--muted2);}
+.addr-lbl{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;letter-spacing:0.5px;}
+.addr-full{color:var(--white);line-height:1.45;font-size:15px;max-width:240px;word-break:break-word;font-weight:500;}
+.empty{text-align:center;padding:60px 20px;color:var(--muted);}
+.empty i{font-size:2.5rem;display:block;margin-bottom:14px;opacity:0.3;}
+.actions{display:flex;gap:4px;align-items:center;}
+.chip{display:inline-block;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;text-transform:uppercase;cursor:pointer;white-space:nowrap;}
+.chip.pending{background:rgba(245,158,11,0.14);color:var(--yellow);}
+.chip.urgent{background:rgba(249,115,22,0.14);color:var(--orange);}
+.chip.planned{background:rgba(59,130,246,0.14);color:var(--blue);}
+.chip.in_transit{background:rgba(168,85,247,0.14);color:var(--purple);}
+.chip.delivered{background:rgba(34,197,94,0.14);color:var(--green);}
+.chip.pending_validation{background:rgba(245,158,11,0.16);color:var(--yellow);}
+.chip.accepted{background:rgba(59,130,246,0.16);color:var(--blue);}
+.chip.refused{background:rgba(248,113,113,0.16);color:#f87171;}
+.chip.portal{background:rgba(245,158,11,0.1);color:var(--yellow);border:1px solid rgba(245,158,11,0.24);}
+.chip.dispatch-overdue{background:rgba(232,49,26,0.16);color:#fca5a5;}
+.chip.dispatch-24h{background:rgba(59,130,246,0.16);color:#93c5fd;}
+.chip.dispatch-48h{background:rgba(20,184,166,0.16);color:#99f6e4;}
+.chip.route-normal{background:rgba(34,197,94,0.14);color:var(--green);}
+.chip.route-tolerance{background:rgba(245,158,11,0.16);color:var(--yellow);}
+.chip.route-watch{background:rgba(249,115,22,0.16);color:var(--orange);}
+.chip.route-split{background:rgba(232,49,26,0.16);color:#fca5a5;}
+.type-pill{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;}
+.tp-standard{background:rgba(255,255,255,0.08);color:var(--muted2);}
+.tp-express{background:rgba(249,115,22,0.14);color:var(--orange);}
+.tp-prio{background:rgba(232,49,26,0.14);color:#f87171;}
+.tp-eco{background:rgba(34,197,94,0.14);color:var(--green);}
+.tp-vinologue{background:rgba(168,85,247,0.14);color:var(--purple);}
+.tp-same_day{background:rgba(20,184,166,0.14);color:var(--teal);}
+.rp-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.rp-title{font-family:'Bebas Neue',cursive;font-size:17px;letter-spacing:1px;}
+.rp-body{flex:1;overflow-y:auto;padding:10px;}
+.rp-body::-webkit-scrollbar{width:4px;}
+.rp-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+.t-card{background:var(--night3);border:1px solid var(--border2);border-radius:14px;margin-bottom:10px;overflow:hidden;transition:border-color 0.2s,box-shadow 0.2s;}
+.t-card.drop-hover{border-color:var(--blue);box-shadow:0 0 0 2px rgba(59,130,246,0.22);}
+.t-card-head{padding:12px 14px 6px;display:flex;align-items:center;gap:8px;}
+.t-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.t-name{font-weight:700;font-size:14px;flex:1;}
+.t-time{font-size:11px;color:var(--muted);white-space:nowrap;}
+.t-card-drv{padding:0 14px 6px;font-size:12px;color:var(--muted2);}
+.t-card-stats{padding:0 14px 8px;display:flex;gap:10px;flex-wrap:wrap;}
+.t-stat{font-size:11px;color:var(--muted2);display:flex;align-items:center;gap:4px;}
+.t-stat i{font-size:10px;color:var(--muted);}
+.t-transports{padding:0 10px 6px;}
+.t-tr-item{display:flex;align-items:center;justify-content:space-between;padding:4px 6px;border-radius:6px;font-size:11px;color:var(--muted2);background:rgba(255,255,255,0.03);margin-bottom:3px;}
+.t-drop-zone{border:1px dashed var(--border2);border-radius:8px;padding:10px;text-align:center;font-size:11px;color:var(--muted);margin:0 10px 8px;}
+.t-card-actions{padding:0 10px 10px;display:flex;gap:6px;}
+.t-card-actions .btn{flex:1;justify-content:center;font-size:11px;padding:7px 6px;}
+.toast{position:fixed;bottom:20px;right:20px;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:500;background:var(--night3);border:1px solid var(--border2);box-shadow:0 12px 40px rgba(0,0,0,0.5);z-index:9999;transform:translateY(100px);opacity:0;transition:all 0.3s;max-width:380px;}
+.toast.show{transform:translateY(0);opacity:1;}
+.overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.82);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;}
+.overlay.open{display:flex;}
+.mbox{background:var(--night3);border:1px solid var(--border2);border-radius:18px;width:100%;max-width:580px;padding:24px 26px 22px;box-shadow:0 24px 80px rgba(0,0,0,0.6);overflow-y:auto;max-height:92vh;}
+.mbox.sm{max-width:420px;}
+.mhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;}
+.mtitle{font-family:'Bebas Neue',cursive;font-size:24px;letter-spacing:1px;}
+.mclose{width:34px;height:34px;border:none;border-radius:9px;background:var(--surface);color:var(--muted2);cursor:pointer;font-size:16px;flex-shrink:0;}
+.mclose:hover{color:var(--white);}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.fgrid .s2{grid-column:1/-1;}
+.field label{display:block;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.field input,.field select,.field textarea{width:100%;padding:11px 13px;border-radius:9px;border:1px solid var(--border2);background:var(--night2);color:var(--white);font-family:'Outfit',sans-serif;font-size:14px;}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--red);}
+.field textarea{resize:vertical;min-height:60px;}
+.field select option{background:var(--night3);}
+.ac-wrap{position:relative;}
+.ac-list{position:absolute;top:100%;left:0;right:0;z-index:600;background:var(--night2);border:1px solid var(--border2);border-radius:9px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:none;margin-top:2px;}
+.ac-list.open{display:block;}
+.ac-item{padding:10px 13px;font-size:13px;cursor:pointer;color:var(--muted2);}
+.ac-item:hover{background:var(--night3);color:var(--white);}
+.sep{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:12px;grid-column:1/-1;}
+.mactions{display:flex;gap:10px;margin-top:20px;}
+.mactions .btn{flex:1;justify-content:center;padding:12px;}
+@media(max-width:1150px){.panel-right{width:290px;}}
+@media(max-width:900px){html,body{overflow:auto;}.workspace{flex-direction:column;overflow:visible;}.panel-right{width:100%;border-left:none;border-top:1px solid var(--border);}.tbl-wrap{max-height:55vh;}}
     </style>
 </head>
 <body>
 
 <header class="topbar">
-    <a href="dispatch.html" class="logo"><div class="logo-mark">🚚</div>Colixo <em>Dispatch</em></a>
-    <div class="tb-title">LISTE → DISPATCH</div>
-    <a href="dispatch.html" class="btn btn-ghost"><i class="fas fa-map-marked-alt"></i> Carte dispatch</a>
+    <a href="dashboard.html" class="logo"><div class="logo-mark">🚚</div>Colixo <em>Dispatch</em></a>
+    <span style="font-family:'Bebas Neue',cursive;font-size:15px;letter-spacing:2px;color:var(--muted2);">TRANSPORTS</span>
+    <div class="spacer"></div>
+    <a href="devis.html" class="btn btn-ghost btn-sm"><i class="fas fa-file-contract"></i> Devis</a>
+    <a href="tarification.html" class="btn btn-ghost btn-sm"><i class="fas fa-tags"></i> Tarification</a>
+    <button type="button" class="btn btn-ghost btn-sm" id="btnRefresh"><i class="fas fa-sync-alt"></i> Actualiser</button>
+    <button type="button" class="btn btn-red btn-sm" id="btnNew"><i class="fas fa-plus"></i> Nouveau transport</button>
 </header>
 
-<div class="wrap">
-    <div class="head">
-        <div>
-            <h1>Tous les transports</h1>
-            <p>Recherchez, filtrez, <strong>cliquez une ligne</strong> pour assigner un chauffeur, ou ouvrez la <strong>carte Dispatch</strong> pour glisser dans une tournée.</p>
+<div class="workspace">
+    <div class="panel-left">
+        <div class="toolbar">
+            <input type="search" id="q" placeholder="N°, adresse, destinataire…" title="Recherche">
+            <select id="filtreStatut" title="Statut">
+                <option value="actifs">Non livrés</option>
+                <option value="pending_validation">Nouveaux portail</option>
+                <option value="accepted_admin">Acceptés admin</option>
+                <option value="refused_admin">Refusés</option>
+                <option value="tous">Tous les statuts</option>
+                <option value="pending">En attente</option>
+                <option value="planned">Planifiés</option>
+                <option value="in_transit">En route</option>
+                <option value="delivered">Livrés</option>
+                <option value="urgent">Urgents</option>
+            </select>
+            <select id="filtreType" title="Type de service">
+                <option value="">Tous les types</option>
+                <option value="standard">Standard</option>
+                <option value="eco">Eco</option>
+                <option value="express">Express</option>
+                <option value="prio">Prioritaire</option>
+                <option value="same_day">Same Day</option>
+                <option value="vinologue">Vinologue</option>
+            </select>
+            <select id="filtreDispatch" title="Priorité dispatch">
+                <option value="">Toutes priorités dispatch</option>
+                <option value="48h_reporte">48h reporté</option>
+                <option value="24h">24h</option>
+                <option value="48h">48h</option>
+            </select>
+            <select id="filtreChauffeur" title="Chauffeur">
+                <option value="">Tous chauffeurs</option>
+                <option value="none">Non assignés</option>
+            </select>
+            <select id="triListe" title="Tri">
+                <option value="npa_asc">Canton / NPA ↑</option>
+                <option value="npa_desc">Canton / NPA ↓</option>
+                <option value="created_desc">Récents d'abord</option>
+                <option value="created_asc">Anciens d'abord</option>
+            </select>
+            <span class="badge-count" id="countBadge">—</span>
         </div>
-        <span class="badge" id="countBadge">0 transport</span>
+        <div class="tbl-wrap">
+            <table class="tbl">
+                <thead><tr>
+                    <th>N°</th><th>Statut</th><th>Type</th>
+                    <th>Adresse enlèvement</th><th>Adresse livraison</th>
+                    <th>Destinataire</th><th>Chauffeur</th>
+                    <th>Poids / Qté</th><th>Km / Min</th>
+                    <th>Tournée</th><th>Créé</th><th>Actions</th>
+                </tr></thead>
+                <tbody id="tbody"></tbody>
+            </table>
+            <div class="empty" id="empty" style="display:none;"><i class="fas fa-truck"></i>Aucun transport.</div>
+        </div>
     </div>
-    <div class="toolbar">
-        <input type="search" id="q" placeholder="Recherche n°, adresse, client…" autocomplete="off">
-        <select id="filtreStatut">
-            <option value="actifs">Non livrés uniquement</option>
-            <option value="tous">Tous les statuts</option>
-            <option value="pending">En attente</option>
-            <option value="urgent">Urgents</option>
-            <option value="planned">Planifiés</option>
-            <option value="in_transit">En route</option>
-            <option value="delivered">Livrés</option>
-        </select>
-        <select id="filtreCanton" title="Canton (NPA livraison)">
-            <option value="">Tous cantons</option>
-        </select>
-        <select id="triListe" title="Ordre d'affichage">
-            <option value="npa_asc">Tri : NPA livraison ↑</option>
-            <option value="npa_desc">Tri : NPA livraison ↓</option>
-            <option value="canton_asc">Tri : Canton (A→Z)</option>
-            <option value="created_desc">Tri : Date création (récent)</option>
-            <option value="created_asc">Tri : Date création (ancien)</option>
-        </select>
-        <button type="button" class="btn btn-ghost" id="btnRefresh"><i class="fas fa-sync-alt"></i> Actualiser</button>
-        <span class="badge" id="lastSync" title="Dernière relecture des données" style="font-size:11px;font-weight:500;color:var(--muted2);max-width:200px;">—</span>
-    </div>
-    <div class="tbl-wrap">
-        <table class="tbl">
-            <thead>
-                <tr>
-                    <th>N°</th>
-                    <th>Statut</th>
-                    <th>Type colis</th>
-                    <th>Service</th>
-                    <th>Qté</th>
-                    <th>Poids</th>
-                    <th>NPA liv.</th>
-                    <th>Canton</th>
-                    <th>Enlèvement</th>
-                    <th>Livraison</th>
-                    <th>Créé</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody id="tbody"></tbody>
-        </table>
-        <div class="empty" id="empty" style="display:none;">Aucun transport ne correspond.</div>
+
+    <div class="panel-right">
+        <div class="rp-header">
+            <span class="rp-title">Tournées</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnNewTournee"><i class="fas fa-plus"></i> Créer</button>
+        </div>
+        <div class="rp-body" id="tourneePanel">
+            <div style="text-align:center;padding:30px;color:var(--muted);font-size:13px;"><i class="fas fa-spinner fa-spin"></i></div>
+        </div>
     </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<div class="modal-overlay" id="modalAssign" role="dialog" aria-modal="true" aria-labelledby="modalAssignTitle">
-    <div class="modal-box">
-        <div class="modal-head">
-            <div>
-                <div class="modal-title" id="modalAssignTitle">Assigner un chauffeur</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="modalOrderNum"></div>
+<!-- MODAL NOUVEAU TRANSPORT -->
+<div class="overlay" id="modalNew">
+    <div class="mbox">
+        <div class="mhead"><div class="mtitle">Nouveau transport</div><button type="button" class="mclose" onclick="closeModal('modalNew')">✕</button></div>
+        <div class="fgrid">
+            <div class="sep">Enlèvement</div>
+            <div class="field s2"><label>Adresse d'enlèvement *</label><div class="ac-wrap"><input type="text" id="pickupInput" placeholder="Rue, NPA Ville…" autocomplete="off"><div class="ac-list" id="pickupList"></div></div></div>
+            <div class="sep">Livraison</div>
+            <div class="field s2"><label>Adresse de livraison *</label><div class="ac-wrap"><input type="text" id="deliveryInput" placeholder="Rue, NPA Ville…" autocomplete="off"><div class="ac-list" id="deliveryList"></div></div></div>
+            <div class="field"><label>Nom destinataire</label><input type="text" id="destName" placeholder="Prénom Nom"></div>
+            <div class="field"><label>Téléphone destinataire</label><input type="tel" id="destPhone" placeholder="+41 …"></div>
+            <div class="sep">Colis & Service</div>
+            <div class="field"><label>Type de service</label><select id="nSvcType"><option value="standard">Standard</option><option value="eco">Eco</option><option value="express">Express</option><option value="prio">Prioritaire</option><option value="same_day">Same Day</option><option value="vinologue">Vinologue</option></select></div>
+            <div class="field"><label>Type de colis</label><select id="nPkgType"><option value="colis">Colis</option><option value="document">Document</option><option value="palette">Palette</option><option value="fragile">Fragile</option></select></div>
+            <div class="field"><label>Quantité</label><input type="number" id="nQty" value="1" min="1"></div>
+            <div class="field"><label>Poids (kg)</label><input type="number" id="nWeight" placeholder="0.0" step="0.1" min="0"></div>
+            <div class="field"><label>Priorité</label><select id="nPriority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></div>
+            <div class="field"><label>Chauffeur (optionnel)</label><select id="nDriver"><option value="">— Aucun —</option></select></div>
+            <div class="field s2"><label>Tournée (optionnel)</label><select id="nTournee"><option value="">— Aucune —</option></select></div>
+            <div id="routeBadge" class="s2" style="display:none;grid-column:1/-1;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--green);display:none;align-items:center;gap:14px;">
+                <i class="fas fa-route"></i>
+                <span id="routeBadgeKm" style="font-weight:700;">—</span>
+                <span style="color:var(--muted)">·</span>
+                <span id="routeBadgeMin" style="font-weight:700;">—</span>
+                <span id="routeBadgeSpinner" style="margin-left:auto;font-size:11px;color:var(--muted);"></span>
             </div>
-            <button type="button" class="modal-close" id="modalAssignClose" aria-label="Fermer">✕</button>
+            <div class="field s2"><label>Instructions / Notes</label><textarea id="nInstructions" placeholder="Instructions spéciales…"></textarea></div>
         </div>
-        <div class="modal-route" id="modalOrderRoute"></div>
-        <input type="hidden" id="modalOrderId">
-        <div class="modal-field">
-            <label for="modalDriverSel">Chauffeur</label>
-            <select id="modalDriverSel">
-                <option value="">— Aucun chauffeur —</option>
-            </select>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalNew')">Annuler</button>
+            <button type="button" class="btn btn-red" id="btnSaveNew"><i class="fas fa-check"></i> Créer le transport</button>
         </div>
-        <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" id="modalBtnCancel">Annuler</button>
-            <button type="button" class="btn btn-red" id="modalBtnSave"><i class="fas fa-user-check"></i> Enregistrer</button>
+    </div>
+</div>
+
+<!-- MODAL ASSIGNER -->
+<div class="overlay" id="modalAssign">
+    <div class="mbox sm">
+        <div class="mhead"><div><div class="mtitle">Assigner</div><div style="font-size:12px;color:var(--muted);margin-top:3px;" id="modalAssignNum"></div></div><button type="button" class="mclose" onclick="closeModal('modalAssign')">✕</button></div>
+        <div style="font-size:12px;color:var(--muted2);margin-bottom:14px;line-height:1.4;" id="modalAssignRoute"></div>
+        <input type="hidden" id="modalAssignId">
+        <div class="fgrid">
+            <div class="field" id="drvFieldWrap"><label>Chauffeur</label><select id="modalDriverSel"><option value="">— Aucun —</option></select></div>
+            <div class="field" id="trnFieldWrap"><label>Tournée</label><select id="modalTourneeSel"><option value="">— Aucune —</option></select></div>
+        </div>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalAssign')">Annuler</button>
+            <button type="button" class="btn btn-red" id="modalBtnSave"><i class="fas fa-check"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL STATUT -->
+<div class="overlay" id="modalStatus">
+    <div class="mbox sm">
+        <div class="mhead"><div class="mtitle">Changer statut</div><button type="button" class="mclose" onclick="closeModal('modalStatus')">✕</button></div>
+        <div style="font-size:12px;color:var(--muted2);margin-bottom:14px;" id="modalStatusNum"></div>
+        <input type="hidden" id="modalStatusId">
+        <div class="field"><label>Nouveau statut</label><select id="modalStatusSel"><option value="pending">En attente</option><option value="planned">Planifié</option><option value="in_transit">En route</option><option value="delivered">Livré</option></select></div>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalStatus')">Annuler</button>
+            <button type="button" class="btn btn-red" id="btnSaveStatus"><i class="fas fa-check"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SUPPRIMER -->
+<div class="overlay" id="modalDelete">
+    <div class="mbox sm">
+        <div class="mhead"><div class="mtitle" style="color:#f87171;">Supprimer</div><button type="button" class="mclose" onclick="closeModal('modalDelete')">✕</button></div>
+        <p style="font-size:14px;color:var(--muted2);margin-bottom:20px;">Transport <strong id="deleteNum"></strong> — action irréversible.</p>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalDelete')">Annuler</button>
+            <button type="button" class="btn btn-red" id="btnConfirmDelete"><i class="fas fa-trash"></i> Supprimer</button>
+        </div>
+        <input type="hidden" id="deleteId">
+    </div>
+</div>
+
+<!-- MODAL NOUVELLE TOURNÉE -->
+<div class="overlay" id="modalNewTournee">
+    <div class="mbox sm">
+        <div class="mhead"><div class="mtitle">Nouvelle tournée</div><button type="button" class="mclose" onclick="closeModal('modalNewTournee')">✕</button></div>
+        <div class="fgrid">
+            <div class="field s2"><label>Nom *</label><input type="text" id="tNom" placeholder="Ex: Lausanne Matin"></div>
+            <div class="field"><label>Heure début</label><input type="time" id="tDebut" value="07:00"></div>
+            <div class="field"><label>Heure fin</label><input type="time" id="tFin" value="12:00"></div>
+            <div class="field"><label>Zone / Canton</label><input type="text" id="tZone" placeholder="VD, GE…"></div>
+            <div class="field"><label>Couleur</label><input type="color" id="tCouleur" value="#3b82f6" style="height:42px;cursor:pointer;padding:4px;"></div>
+            <div class="field s2"><label>Chauffeur du jour</label><select id="tChauffeur"><option value="">— Aucun —</option></select></div>
+            <div class="field s2"><label>Notes</label><textarea id="tNotes" placeholder="Notes…"></textarea></div>
+        </div>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalNewTournee')">Annuler</button>
+            <button type="button" class="btn btn-red" id="btnSaveTournee"><i class="fas fa-check"></i> Créer</button>
         </div>
     </div>
 </div>
 
 <script>
-(function () {
-    'use strict';
-    if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;">Configuration indisponible</div>';
-        return;
-    }
-    const db = window.SUPABASE_CLIENT;
-    const h = window.colixoHref || function (p) { return p; };
+(function(){
+'use strict';
+if(!window.SUPABASE_CLIENT){document.body.innerHTML='<div style="padding:40px;color:#e8311a;font-family:sans-serif;font-size:16px;">Configuration manquante.</div>';return;}
+var db=window.SUPABASE_CLIENT;
+var rows=[],chauffeurs=[],tournees=[];
+var pickupCoords=null,deliveryCoords=null,orderCounter=1;
+var displayOrder=[],dragId=null,dragSrcRow=null;
+var portalHighlightId=new URLSearchParams(window.location.search).get('highlight');
+var ROUTE_COST_DAY_CHF=320;
+var ROUTE_KM_TARGET=500;
+var ROUTE_KM_TOLERANCE=650;
 
-    var KAN_TO_ABBR = {
-        '01': 'ZH', '02': 'BE', '03': 'LU', '04': 'UR', '05': 'SZ', '06': 'OW', '07': 'NW', '08': 'GL', '09': 'ZG',
-        '10': 'FR', '11': 'SO', '12': 'BS', '13': 'BL', '14': 'SH', '15': 'AR', '16': 'AI', '17': 'SG', '18': 'GR', '19': 'AG',
-        '20': 'TG', '21': 'TI', '22': 'VD', '23': 'VS', '24': 'NE', '25': 'GE', '26': 'JU'
+function esc(s){if(s==null)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function fdate(d){return d?new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';}
+function nowCH(){var d=new Date(),off=-d.getTimezoneOffset(),s=off>=0?'+':'-',h=String(Math.floor(Math.abs(off)/60)).padStart(2,'0'),m=String(Math.abs(off)%60).padStart(2,'0');return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,-1)+s+h+':'+m;}
+function fmtMoney(n){return new Intl.NumberFormat('fr-CH',{style:'currency',currency:'CHF',minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);}
+function startOfToday(){var d=new Date();d.setHours(0,0,0,0);return d;}
+function createdDay(o){var d=o&&o.created_at?new Date(o.created_at):new Date();d.setHours(0,0,0,0);return d;}
+function dayDiffFromToday(o){return Math.round((startOfToday()-createdDay(o))/86400000);}
+function npaOf(o){var m=(o.delivery_address||'').match(/\b([1-9]\d{3})\b/);return m?parseInt(m[1]):99999;}
+function getAdminStatus(o){return o.admin_status||(o.status==='refused'?'refused':'accepted');}
+function isPortalFresh(o){return getAdminStatus(o)==='pending_validation';}
+function isClosedOrder(o){return['delivered','refused','cancelled'].indexOf(o.status)>=0||getAdminStatus(o)==='refused';}
+function getDispatchServiceLevel(o){
+    var k=o.service_type||o.speed||'standard';
+    return ['express','prio','same_day'].indexOf(k)>=0?'24h':'48h';
+}
+function getDispatchPriority(o){
+    if(isClosedOrder(o))return 'done';
+    var level=getDispatchServiceLevel(o);
+    if(level==='48h'&&dayDiffFromToday(o)>=1&&(!o.tournee_id||o.status==='pending'))return '48h_reporte';
+    return level;
+}
+function dispatchPriorityRank(o){
+    var p=getDispatchPriority(o);
+    return p==='48h_reporte'?0:(p==='24h'?1:(p==='48h'?2:3));
+}
+function dispatchChip(o){
+    var p=getDispatchPriority(o);
+    if(p==='done')return '';
+    var meta={
+        '48h_reporte':{cls:'dispatch-overdue',label:'48h reporté'},
+        '24h':{cls:'dispatch-24h',label:'24h'},
+        '48h':{cls:'dispatch-48h',label:'48h'}
+    }[p];
+    return meta?'<span class="chip '+meta.cls+'">'+meta.label+'</span>':'';
+}
+function routeHealth(km,count){
+    var density=km>0?(count/km):0;
+    if(km<=ROUTE_KM_TARGET)return{cls:'route-normal',label:'Normal',hint:'Zone dans la cible '+ROUTE_KM_TARGET+' km'};
+    if(km<=ROUTE_KM_TOLERANCE&&density>=0.15)return{cls:'route-tolerance',label:'Tolérance',hint:'Au-dessus de '+ROUTE_KM_TARGET+' km, mais densité acceptable'};
+    if(km<=ROUTE_KM_TOLERANCE)return{cls:'route-watch',label:'À surveiller',hint:'Tolérance km avec faible densité'};
+    return{cls:'route-split',label:'À découper',hint:'Au-delà de '+ROUTE_KM_TOLERANCE+' km'};
+}
+function orderRevenue(o){
+    var direct=parseFloat(o.price_chf);
+    if(!isNaN(direct)&&direct>0)return direct;
+    var fallbackByType={same_day:35,express:25,prio:18,vinologue:16,standard:12,eco:9};
+    var type=o.service_type||o.speed||'standard';
+    var qty=parseInt(o.quantity,10)||1;
+    return (fallbackByType[type]||12)*qty;
+}
+function routeVehiclesNeeded(km){return Math.max(1,Math.ceil((parseFloat(km)||0)/ROUTE_KM_TARGET)||1);}
+function routeEconomics(tr){
+    var revenue=tr.reduce(function(s,r){return s+orderRevenue(r);},0);
+    var km=Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.distance_km)||0);},0));
+    var vehicles=routeVehiclesNeeded(km);
+    var cost=vehicles*ROUTE_COST_DAY_CHF;
+    return{
+        revenue:revenue,
+        cost:cost,
+        result:revenue-cost,
+        vehicles:vehicles,
+        costPerKm:km>0?(cost/km):0
     };
-    var PKG_LABELS = { document: 'Document', colis: 'Colis', palette: 'Palette', fragile: 'Fragile' };
-    var SVC_LABELS = { standard: 'Standard', express: 'Express', same_day: 'Same Day' };
+}
+function adminChip(o){
+    var st=getAdminStatus(o),lbl={pending_validation:'Nouveau',accepted:'Validé',refused:'Refusé'}[st]||st;
+    return '<span class="chip '+esc(st)+'">'+esc(lbl)+'</span>';
+}
+async function getNotificationRecipients(order){
+    if(!order||!order.entreprise_id)return [];
+    var c=await db.from('utilisateurs').select('id').eq('entreprise_id',order.entreprise_id).eq('role','client');
+    if(c.data&&c.data.length)return c.data;
+    var d=await db.from('utilisateurs').select('id').eq('id',order.entreprise_id).maybeSingle();
+    return d.data?[d.data]:[];
+}
+async function notifyOrderDecision(order,title,body){
+    var users=await getNotificationRecipients(order);
+    for(var i=0;i<users.length;i++){
+        await db.from('notifications').insert([{user_id:users[i].id,title:title,body:body,read:false}]);
+    }
+}
 
-    var npaToKan = null;
-    var rows = [];
-    var chauffeurs = [];
+function toast(msg,ok){var t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=ok?'rgba(34,197,94,0.4)':'rgba(232,49,26,0.4)';t.classList.add('show');setTimeout(function(){t.classList.remove('show');},ok?4000:9000);}
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+window.closeModal=closeModal;
+document.querySelectorAll('.overlay').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)closeModal(m.id);});});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')document.querySelectorAll('.overlay.open').forEach(function(m){closeModal(m.id);});});
 
-    function nowCH() {
-        var d = new Date();
-        var off = -d.getTimezoneOffset();
-        var sign = off >= 0 ? '+' : '-';
-        var hh = String(Math.floor(Math.abs(off) / 60)).padStart(2, '0');
-        var mm = String(Math.abs(off) % 60).padStart(2, '0');
-        var local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-        return local.toISOString().slice(0, -1) + sign + hh + ':' + mm;
-    }
+var CHIP={pending:{c:'pending',l:'Attente'},planned:{c:'planned',l:'Planifié'},in_transit:{c:'in_transit',l:'En route'},delivered:{c:'delivered',l:'Livré'},urgent:{c:'urgent',l:'URGENT'}};
+function chipCls(o){
+    if(getAdminStatus(o)==='pending_validation')return'pending_validation';
+    if(getAdminStatus(o)==='refused')return'refused';
+    return o.priority==='urgent'?'urgent':(o.status||'pending');
+}
+function chipLbl(o){
+    if(getAdminStatus(o)==='pending_validation')return'À valider';
+    if(getAdminStatus(o)==='refused')return'Refusé';
+    return o.priority==='urgent'?'URGENT':((CHIP[o.status]||{l:o.status||'Attente'}).l);
+}
+var TPCLS={standard:'tp-standard',eco:'tp-eco',express:'tp-express',prio:'tp-prio',vinologue:'tp-vinologue',same_day:'tp-same_day'};
+var TPLBL={standard:'STD',eco:'ECO',express:'EXP',prio:'PRIO',vinologue:'VINO',same_day:'SAME DAY'};
+function typePill(o){var k=o.service_type||o.speed||'standard';return'<span class="type-pill '+(TPCLS[k]||'tp-standard')+'">'+(TPLBL[k]||esc(k))+'</span>';}
 
-    function showToast(msg, ok) {
-        var t = document.getElementById('toast');
-        t.textContent = msg;
-        t.style.borderColor = ok ? 'rgba(34,197,94,0.4)' : 'rgba(232,49,26,0.4)';
-        t.classList.add('show');
-        setTimeout(function () { t.classList.remove('show'); }, 4000);
-    }
+// ── CHAUFFEURS ──
+async function loadChauffeurs(){
+    var r=await db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur').order('nom');
+    chauffeurs=r.data||[];
+    ['filtreChauffeur','modalDriverSel','nDriver','tChauffeur'].forEach(function(id){
+        var sel=document.getElementById(id);if(!sel)return;
+        var prev=sel.value;
+        sel.innerHTML=id==='filtreChauffeur'?'<option value="">Tous chauffeurs</option><option value="none">Non assignés</option>':'<option value="">— Aucun —</option>';
+        chauffeurs.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=((c.prenom||'')+' '+(c.nom||'')).trim();sel.appendChild(o);});
+        if(prev)sel.value=prev;
+    });
+}
+function driverName(id){if(!id)return null;var c=chauffeurs.find(function(x){return x.id===id;});return c?((c.prenom||'')+' '+(c.nom||'')).trim():null;}
 
-    function populateDriverSelect(selectedId) {
-        var sel = document.getElementById('modalDriverSel');
-        sel.innerHTML = '';
-        var opt0 = document.createElement('option');
-        opt0.value = '';
-        opt0.textContent = '— Aucun chauffeur —';
-        sel.appendChild(opt0);
-        chauffeurs.forEach(function (c) {
-            var opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = (((c.prenom || '') + ' ' + (c.nom || '')).trim() || c.email || c.id);
-            sel.appendChild(opt);
-        });
-        sel.value = selectedId || '';
+// ── TOURNÉES ──
+async function loadTournees(){
+    var rt=await db.from('tournees').select('*').order('heure_debut');
+    tournees=rt.data||[];
+    if(tournees.length){
+        var today=new Date().toISOString().slice(0,10);
+        var ids=tournees.map(function(t){return t.id;});
+        var ra=await db.from('tournee_affectations').select('tournee_id,employe_id').eq('date',today).in('tournee_id',ids);
+        var aff=ra.data||[];
+        tournees.forEach(function(t){var a=aff.find(function(x){return x.tournee_id===t.id;});t._chauffeur_id=a?a.employe_id:null;});
     }
-
-    async function loadChauffeurs() {
-        var r = await db.from('utilisateurs').select('id,nom,prenom,email,actif').eq('role', 'chauffeur').order('nom');
-        if (r.error) throw r.error;
-        chauffeurs = (r.data || []).filter(function (c) { return c.actif !== false; });
-    }
-
-    function openModalAssign(orderId) {
-        var o = rows.find(function (x) { return x.id === orderId; });
-        if (!o) return;
-        document.getElementById('modalOrderId').value = orderId;
-        document.getElementById('modalOrderNum').textContent = o.order_number || o.id.slice(0, 8);
-        document.getElementById('modalOrderRoute').textContent =
-            (shortAddr(o.pickup_address) || '—') + ' → ' + (shortAddr(o.delivery_address) || '—');
-        populateDriverSelect(o.driver_id || '');
-        document.getElementById('modalAssign').classList.add('open');
-        document.getElementById('modalDriverSel').focus();
-    }
-
-    function closeModalAssign() {
-        document.getElementById('modalAssign').classList.remove('open');
-    }
-
-    async function saveDriverAssign() {
-        var id = document.getElementById('modalOrderId').value;
-        var driverId = document.getElementById('modalDriverSel').value || null;
-        var o = rows.find(function (x) { return x.id === id; });
-        if (!o) return;
-        var btn = document.getElementById('modalBtnSave');
-        btn.disabled = true;
-        try {
-            var payload = {};
-            if (driverId) {
-                payload.driver_id = driverId;
-                payload.assigned_at = nowCH();
-                if (!['delivered', 'in_transit', 'in_delivery', 'delivering'].includes(o.status || '')) {
-                    payload.status = 'planned';
-                }
-            } else {
-                payload.driver_id = null;
-                payload.assigned_at = null;
-            }
-            var up = await db.from('transport_orders_simple').update(payload).eq('id', id).select().single();
-            if (up.error) throw up.error;
-            if (driverId) {
-                try {
-                    await window.ColixoPush?.notifyDriver(
-                        driverId,
-                        '📦 Nouveau transport !',
-                        (o.order_number || '') + ' — ' + shortAddr(o.pickup_address) + ' → ' + shortAddr(o.delivery_address),
-                        { type: 'order_assigned' }
-                    );
-                } catch (e) { /* notification optionnelle */ }
-            }
-            showToast(driverId ? 'Chauffeur enregistré' : 'Chauffeur retiré', true);
-            closeModalAssign();
-            await load();
-        } catch (e) {
-            showToast('Erreur : ' + (e.message || e), false);
-        } finally {
-            btn.disabled = false;
-        }
-    }
-
-    function shortAddr(a) {
-        return a ? String(a).split(',').slice(0, 2).join(',').trim() : '—';
-    }
-    /** Premier code postal suisse à 4 chiffres trouvé dans le texte (livraison). */
-    function extractSwissNpa(str) {
-        if (!str) return '';
-        var m = String(str).match(/\b([1-9]\d{3})\b/);
-        return m ? m[1] : '';
-    }
-    function kanToAbbrDisplay(kanStr) {
-        if (!kanStr) return '—';
-        return kanStr.split(',').map(function (k) {
-            k = k.trim();
-            return KAN_TO_ABBR[k] || k;
-        }).join(' · ');
-    }
-    function chipClass(st) {
-        if (st === 'delivered') return 'delivered';
-        if (st === 'in_transit') return 'in_transit';
-        if (st === 'planned') return 'planned';
-        if (st === 'pending') return 'pending';
-        return 'pending';
-    }
-    function chipLabel(st, urgent) {
-        if (urgent === 'urgent') return 'URGENT';
-        var m = { pending: 'Attente', planned: 'Planifié', in_transit: 'En route', delivered: 'Livré' };
-        return m[st] || st || '—';
-    }
-
-    function dispatchUrl(id) {
-        return h('/admin/dispatch.html?highlight=' + encodeURIComponent(id));
-    }
-
-    function enrichRows() {
-        rows.forEach(function (o) {
-            o._npaDel = extractSwissNpa(o.delivery_address);
-            o._kan = (o._npaDel && npaToKan) ? (npaToKan[o._npaDel] || '') : '';
-        });
-    }
-
-    function sortList(list) {
-        var tri = document.getElementById('triListe').value;
-        var out = list.slice();
-        function npaNum(o) {
-            var n = parseInt(o._npaDel, 10);
-            return isNaN(n) ? 99999 : n;
-        }
-        function cantonSortKey(o) {
-            var s = kanToAbbrDisplay(o._kan);
-            return s === '—' ? 'zzz' : s;
-        }
-        out.sort(function (a, b) {
-            if (tri === 'npa_asc') return npaNum(a) - npaNum(b) || (a.order_number || '').localeCompare(b.order_number || '');
-            if (tri === 'npa_desc') return npaNum(b) - npaNum(a) || (a.order_number || '').localeCompare(b.order_number || '');
-            if (tri === 'canton_asc') {
-                var c = cantonSortKey(a).localeCompare(cantonSortKey(b), 'fr');
-                if (c !== 0) return c;
-                return npaNum(a) - npaNum(b);
-            }
-            if (tri === 'created_asc') return new Date(a.created_at || 0) - new Date(b.created_at || 0);
-            return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-        });
-        return out;
-    }
-
-    function applyFilter() {
-        var q = (document.getElementById('q').value || '').trim().toLowerCase();
-        var f = document.getElementById('filtreStatut').value;
-        var fc = document.getElementById('filtreCanton').value;
-        var list = rows.slice();
-        if (f === 'actifs') list = list.filter(function (o) { return o.status !== 'delivered'; });
-        else if (f !== 'tous') list = list.filter(function (o) {
-            if (f === 'urgent') return o.priority === 'urgent';
-            return (o.status || '') === f;
-        });
-        if (fc) {
-            list = list.filter(function (o) {
-                if (!o._kan) return false;
-                return o._kan.split(',').map(function (x) { return x.trim(); }).indexOf(fc) !== -1;
-            });
-        }
-        if (q) {
-            list = list.filter(function (o) {
-                var s = (o.order_number || '') + ' ' + (o.pickup_address || '') + ' ' + (o.delivery_address || '') + ' ' +
-                    (o.destinataire_nom || o.client_name || '') + ' ' + (o.package_type || '') + ' ' + (o.service_type || o.speed || '') + ' ' + (o._npaDel || '');
-                return s.toLowerCase().indexOf(q) !== -1;
-            });
-        }
-        list = sortList(list);
-        renderTable(list);
-    }
-
-    function renderTable(list) {
-        var tb = document.getElementById('tbody');
-        var empty = document.getElementById('empty');
-        document.getElementById('countBadge').textContent = list.length + ' transport' + (list.length > 1 ? 's' : '');
-        if (!list.length) {
-            tb.innerHTML = '';
-            empty.style.display = 'block';
-            return;
-        }
-        empty.style.display = 'none';
-        tb.innerHTML = list.map(function (o) {
-            var st = o.priority === 'urgent' ? 'urgent' : (o.status || 'pending');
-            var cc = o.priority === 'urgent' ? 'urgent' : chipClass(o.status || 'pending');
-            var created = o.created_at ? new Date(o.created_at).toLocaleString('fr-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-            var pkg = PKG_LABELS[o.package_type] || (o.package_type ? escapeHtml(String(o.package_type)) : '—');
-            var svcKey = o.service_type || o.speed;
-            var svc = SVC_LABELS[svcKey] || (svcKey ? escapeHtml(String(svcKey)) : '—');
-            var qty = (o.quantity != null && o.quantity !== '') ? String(o.quantity) : '—';
-            var w = (o.weight != null && o.weight !== '') ? (String(o.weight) + ' kg') : '—';
-            var npaCell = o._npaDel ? '<span class="mono">' + escapeHtml(o._npaDel) + '</span>' : '—';
-            var cantonCell = escapeHtml(kanToAbbrDisplay(o._kan));
-            return '<tr class="row-click" data-order-id="' + o.id + '">' +
-                '<td><span class="num">' + (o.order_number || o.id.slice(0, 8)) + '</span></td>' +
-                '<td><span class="chip ' + cc + '">' + chipLabel(o.status, o.priority) + '</span></td>' +
-                '<td class="type-cell">' + pkg + '</td>' +
-                '<td class="type-cell">' + svc + '</td>' +
-                '<td class="mono">' + escapeHtml(qty) + '</td>' +
-                '<td class="mono">' + escapeHtml(w) + '</td>' +
-                '<td>' + npaCell + '</td>' +
-                '<td class="type-cell" style="max-width:120px;">' + cantonCell + '</td>' +
-                '<td class="addr">' + escapeHtml(shortAddr(o.pickup_address)) + '</td>' +
-                '<td class="addr">' + escapeHtml(shortAddr(o.delivery_address)) + '</td>' +
-                '<td class="dt">' + created + '</td>' +
-                '<td><a class="btn btn-red" href="' + dispatchUrl(o.id) + '"><i class="fas fa-external-link-alt"></i> Dispatch</a></td>' +
-                '</tr>';
+    populateTourneeSelects();
+    renderTourneePanel();
+}
+function populateTourneeSelects(){
+    ['modalTourneeSel','nTournee'].forEach(function(id){
+        var sel=document.getElementById(id);if(!sel)return;
+        var prev=sel.value;
+        sel.innerHTML='<option value="">— Aucune —</option>';
+        tournees.forEach(function(t){var o=document.createElement('option');o.value=t.id;o.textContent=t.nom+(t.heure_debut?' ('+t.heure_debut+')':'');sel.appendChild(o);});
+        if(prev)sel.value=prev;
+    });
+}
+function tourneeTotals(tid){
+    var tr=rows.filter(function(r){return r.tournee_id===tid;});
+    var eco=routeEconomics(tr);
+    return{
+        count:tr.length,
+        weight:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.weight)||0);},0)*10)/10,
+        km:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.distance_km)||0);},0)),
+        min:Math.round(tr.reduce(function(s,r){return s+(parseFloat(r.duration_min)||0);},0)),
+        overdue48:tr.filter(function(r){return getDispatchPriority(r)==='48h_reporte';}).length,
+        d24:tr.filter(function(r){return getDispatchPriority(r)==='24h';}).length,
+        d48:tr.filter(function(r){return getDispatchPriority(r)==='48h';}).length,
+        revenue:eco.revenue,
+        cost:eco.cost,
+        result:eco.result,
+        vehicles:eco.vehicles,
+        costPerKm:eco.costPerKm
+    };
+}
+function renderTourneePanel(){
+    var panel=document.getElementById('tourneePanel');
+    if(!tournees.length){panel.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:13px;">Aucune tournée.<br><br>Créez votre première tournée avec le bouton ci-dessus.</div>';return;}
+    panel.innerHTML=tournees.map(function(t){
+        var tot=tourneeTotals(t.id);
+        var health=routeHealth(tot.km,tot.count);
+        var drv=driverName(t._chauffeur_id);
+        var col=t.couleur||'#3b82f6';
+        var trItems=rows.filter(function(r){return r.tournee_id===t.id;}).map(function(r){
+            return'<div class="t-tr-item"><span style="font-weight:600;">'+esc(r.order_number||r.id.slice(0,8))+'</span><span style="color:var(--muted);font-size:10px;flex:1;margin:0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc((r.delivery_address||'').split(',')[0])+'</span>'+(dispatchChip(r)?'<span style="margin-right:6px;">'+dispatchChip(r)+'</span>':'')+'<button type="button" onclick="removeFromTournee(\''+r.id+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;">✕</button></div>';
         }).join('');
-    }
+        return'<div class="t-card" id="tc-'+t.id+'" data-tournee-id="'+t.id+'" ondragover="onTDragOver(event,\''+t.id+'\')" ondragleave="onTDragLeave(\''+t.id+'\')" ondrop="onTDrop(event,\''+t.id+'\')">'
+            +'<div class="t-card-head"><div class="t-dot" style="background:'+esc(col)+'"></div><span class="t-name">'+esc(t.nom)+'</span><span class="t-time">'+esc(t.heure_debut||'')+(t.heure_fin?' – '+esc(t.heure_fin):'')+'</span></div>'
+            +'<div class="t-card-drv"><i class="fas fa-user" style="font-size:10px;margin-right:4px;color:var(--muted);"></i>'+(drv?'<strong>'+esc(drv)+'</strong>':'<span style="color:var(--muted)">Aucun chauffeur</span>')+'</div>'
+            +'<div class="t-card-stats"><span class="t-stat"><i class="fas fa-box"></i>'+tot.count+' transport'+(tot.count!==1?'s':'')+'</span>'+(tot.weight?'<span class="t-stat"><i class="fas fa-weight-hanging"></i>'+tot.weight+' kg</span>':'')+(tot.km?'<span class="t-stat"><i class="fas fa-road"></i>'+tot.km+' km</span>':'')+(tot.min?'<span class="t-stat"><i class="fas fa-clock"></i>'+Math.floor(tot.min/60)+'h'+String(tot.min%60).padStart(2,'0')+'</span>':'')+'<span class="chip '+health.cls+'" title="'+esc(health.hint)+'">'+health.label+'</span></div>'
+            +'<div class="t-card-stats">'+(tot.overdue48?'<span class="t-stat"><i class="fas fa-hourglass-end"></i>'+tot.overdue48+' reporté(s)</span>':'')+(tot.d24?'<span class="t-stat"><i class="fas fa-bolt"></i>'+tot.d24+' en 24h</span>':'')+(tot.d48?'<span class="t-stat"><i class="fas fa-calendar-day"></i>'+tot.d48+' en 48h</span>':'')+'</div>'
+            +'<div class="t-card-stats"><span class="t-stat"><i class="fas fa-truck"></i>'+tot.vehicles+' véhicule'+(tot.vehicles!==1?'s':'')+'</span><span class="t-stat"><i class="fas fa-sack-dollar"></i>CA '+fmtMoney(tot.revenue)+'</span><span class="t-stat"><i class="fas fa-wallet"></i>Coût '+fmtMoney(tot.cost)+'</span><span class="t-stat" style="color:'+(tot.result>=0?'var(--green)':'#f87171')+';"><i class="fas fa-chart-line"></i>Résultat '+fmtMoney(tot.result)+'</span>'+(tot.km?'<span class="t-stat"><i class="fas fa-gauge-high"></i>'+fmtMoney(tot.costPerKm)+'/km</span>':'')+'</div>'
+            +(trItems?'<div class="t-transports">'+trItems+'</div>':'')
+            +'<div class="t-drop-zone"><i class="fas fa-hand-point-up" style="margin-right:5px;opacity:0.5;"></i>Glisser un transport ici</div>'
+            +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
+        +'</div>';
+    }).join('');
+}
 
-    function escapeHtml(s) {
-        if (s == null) return '';
-        var d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
-    }
+// ── DRAG VERS TOURNÉE ──
+window.onTDragOver=function(e,tid){e.preventDefault();var c=document.getElementById('tc-'+tid);if(c)c.classList.add('drop-hover');};
+window.onTDragLeave=function(tid){var c=document.getElementById('tc-'+tid);if(c)c.classList.remove('drop-hover');};
+window.onTDrop=async function(e,tid){
+    e.preventDefault();var c=document.getElementById('tc-'+tid);if(c)c.classList.remove('drop-hover');
+    if(!dragId)return;
+    try{
+        var r=await db.from('transport_orders_simple').update({tournee_id:tid}).eq('id',dragId);
+        if(r.error)throw r.error;
+        var o=rows.find(function(x){return x.id===dragId;});if(o)o.tournee_id=tid;
+        var t=tournees.find(function(x){return x.id===tid;});
+        toast('Ajouté à «'+(t?t.nom:'tournée')+'»',true);
+        applyFilter();renderTourneePanel();
+    }catch(ex){toast('Erreur : '+(ex.message||ex),false);}
+    dragId=null;
+};
 
-    function fillCantonSelect() {
-        var sel = document.getElementById('filtreCanton');
-        sel.innerHTML = '<option value="">Tous cantons</option>';
-        Object.keys(KAN_TO_ABBR).map(function (k) { return { k: k, ab: KAN_TO_ABBR[k] }; })
-            .sort(function (a, b) { return a.ab.localeCompare(b.ab, 'fr'); })
-            .forEach(function (x) {
-                var opt = document.createElement('option');
-                opt.value = x.k;
-                opt.textContent = x.ab + ' (' + x.k + ')';
-                sel.appendChild(opt);
+// ── RETIRER D'UNE TOURNÉE ──
+window.removeFromTournee=async function(id){
+    try{var r=await db.from('transport_orders_simple').update({tournee_id:null}).eq('id',id);if(r.error)throw r.error;var o=rows.find(function(x){return x.id===id;});if(o)o.tournee_id=null;applyFilter();renderTourneePanel();}
+    catch(e){toast('Erreur : '+(e.message||e),false);}
+};
+
+// ── POUSSER TOURNÉE ──
+window.pushTournee=async function(tid){
+    var t=tournees.find(function(x){return x.id===tid;});if(!t)return;
+    if(!t._chauffeur_id){toast('Assignez un chauffeur avant de pousser.',false);return;}
+    var drv=driverName(t._chauffeur_id);
+    var tids=rows.filter(function(r){return r.tournee_id===tid&&r.status==='pending';}).map(function(r){return r.id;});
+    if(tids.length)await db.from('transport_orders_simple').update({status:'planned'}).in('id',tids);
+    try{if(window.ColixoPush&&window.ColixoPush.notifyDriver)await window.ColixoPush.notifyDriver(t._chauffeur_id,'🗺 Tournée : '+t.nom,rows.filter(function(r){return r.tournee_id===tid;}).length+' transports • '+(t.heure_debut||'')+' → '+(t.heure_fin||''),{type:'tournee_ready'});}catch(e){}
+    toast('Tournée «'+t.nom+'» poussée vers '+drv+' !',true);await load({silent:true});
+};
+
+// ── CHAUFFEUR PAR TOURNÉE ──
+window.assignChauffeurTournee=function(tid){
+    var t=tournees.find(function(x){return x.id===tid;});if(!t)return;
+    document.getElementById('modalAssignId').value='TOURNEE:'+tid;
+    document.getElementById('modalAssignNum').textContent='Tournée : '+t.nom;
+    document.getElementById('modalAssignRoute').textContent='Assignez le chauffeur du jour pour cette tournée.';
+    document.getElementById('modalDriverSel').value=t._chauffeur_id||'';
+    document.getElementById('trnFieldWrap').style.display='none';
+    openModal('modalAssign');
+};
+
+// ── SUPPRIMER TOURNÉE ──
+window.deleteTournee=async function(tid,nom){
+    if(!confirm('Supprimer «'+nom+'» ? Les transports seront désassignés.'))return;
+    await db.from('transport_orders_simple').update({tournee_id:null}).eq('tournee_id',tid);
+    await db.from('tournee_affectations').delete().eq('tournee_id',tid);
+    await db.from('tournees').delete().eq('id',tid);
+    toast('Tournée supprimée.',true);await loadTournees();await load({silent:true});
+};
+
+// ── DRAG REORDER DANS TABLEAU ──
+function setupTableDrag(){
+    var tbody=document.getElementById('tbody');
+    tbody.addEventListener('dragstart',function(e){
+        var tr=e.target.closest('tr[data-id]');if(!tr)return;
+        dragId=tr.getAttribute('data-id');dragSrcRow=tr;
+        tr.classList.add('dragging');
+        e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',dragId);
+    });
+    tbody.addEventListener('dragend',function(){
+        dragSrcRow=null;
+        tbody.querySelectorAll('tr').forEach(function(r){r.classList.remove('dragging','drag-over-top','drag-over-bottom');});
+    });
+    tbody.addEventListener('dragover',function(e){
+        e.preventDefault();
+        var tr=e.target.closest('tr[data-id]');if(!tr||tr===dragSrcRow)return;
+        tbody.querySelectorAll('tr').forEach(function(r){r.classList.remove('drag-over-top','drag-over-bottom');});
+        var rect=tr.getBoundingClientRect();
+        tr.classList.add(e.clientY<rect.top+rect.height/2?'drag-over-top':'drag-over-bottom');
+    });
+    tbody.addEventListener('drop',function(e){
+        e.preventDefault();
+        var tr=e.target.closest('tr[data-id]');if(!tr||tr===dragSrcRow||!dragSrcRow)return;
+        var srcId=dragSrcRow.getAttribute('data-id'),tgtId=tr.getAttribute('data-id');
+        var si=displayOrder.indexOf(srcId),ti=displayOrder.indexOf(tgtId);if(si<0||ti<0)return;
+        var rect=tr.getBoundingClientRect(),after=e.clientY>=rect.top+rect.height/2;
+        displayOrder.splice(si,1);ti=displayOrder.indexOf(tgtId);
+        displayOrder.splice(after?ti+1:ti,0,srcId);
+        tbody.querySelectorAll('tr').forEach(function(r){r.classList.remove('drag-over-top','drag-over-bottom');});
+        var sorted=displayOrder.map(function(id){return rows.find(function(r){return r.id===id;});}).filter(Boolean);
+        renderTable(sorted);
+    });
+}
+
+// ── LOAD ──
+var pollTimer=null;
+async function load(opts){
+    opts=opts||{};
+    try{var r=await db.from('transport_orders_simple').select('*').order('created_at',{ascending:false});if(r.error)throw r.error;rows=r.data||[];applyFilter();renderTourneePanel();}
+    catch(e){if(!opts.silent)toast('Erreur : '+(e.message||e),false);}
+}
+function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(function(){if(document.visibilityState==='visible')load({silent:true});},15000);}
+
+// ── FILTRES ──
+function applyFilter(){
+    var q=(document.getElementById('q').value||'').toLowerCase();
+    var f=document.getElementById('filtreStatut').value;
+    var ft=document.getElementById('filtreType').value;
+    var fd=document.getElementById('filtreDispatch').value;
+    var fc=document.getElementById('filtreChauffeur').value;
+    var tri=document.getElementById('triListe').value;
+    var list=rows.slice();
+    if(f==='pending_validation')list=list.filter(function(o){return getAdminStatus(o)==='pending_validation';});
+    else if(f==='accepted_admin')list=list.filter(function(o){return getAdminStatus(o)==='accepted';});
+    else if(f==='refused_admin')list=list.filter(function(o){return getAdminStatus(o)==='refused';});
+    else if(f==='actifs')list=list.filter(function(o){return o.status!=='delivered'&&getAdminStatus(o)!=='refused';});
+    else if(f==='urgent')list=list.filter(function(o){return o.priority==='urgent';});
+    else if(f!=='tous')list=list.filter(function(o){return(o.status||'')===f;});
+    if(ft)list=list.filter(function(o){return(o.service_type||o.speed||'standard')===ft;});
+    if(fd)list=list.filter(function(o){return getDispatchPriority(o)===fd;});
+    if(fc==='none')list=list.filter(function(o){return!o.driver_id;});
+    else if(fc)list=list.filter(function(o){return o.driver_id===fc;});
+    if(q)list=list.filter(function(o){return((o.order_number||'')+' '+(o.pickup_address||'')+' '+(o.delivery_address||'')+' '+(o.destinataire_nom||'')+(o.client_name||'')).toLowerCase().indexOf(q)!==-1;});
+    if(tri==='created_asc')list.sort(function(a,b){return new Date(a.created_at||0)-new Date(b.created_at||0);});
+    else if(tri==='created_desc')list.sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0);});
+    else if(tri==='npa_desc')list.sort(function(a,b){return npaOf(b)-npaOf(a);});
+    else list.sort(function(a,b){return npaOf(a)-npaOf(b)||new Date(a.created_at||0)-new Date(b.created_at||0);});
+    list.sort(function(a,b){
+        if(isPortalFresh(a)!==isPortalFresh(b))return isPortalFresh(a)?-1:1;
+        if(dispatchPriorityRank(a)!==dispatchPriorityRank(b))return dispatchPriorityRank(a)-dispatchPriorityRank(b);
+        if(portalHighlightId){
+            if(a.id===portalHighlightId&&b.id!==portalHighlightId)return-1;
+            if(b.id===portalHighlightId&&a.id!==portalHighlightId)return 1;
+        }
+        return 0;
+    });
+    displayOrder=list.map(function(o){return o.id;});
+    renderTable(list);
+    document.getElementById('countBadge').textContent=list.length+' transport'+(list.length!==1?'s':'');
+}
+
+function renderTable(list){
+    var tb=document.getElementById('tbody'),em=document.getElementById('empty');
+    if(!list.length){tb.innerHTML='';em.style.display='block';return;}
+    em.style.display='none';
+    tb.innerHTML=list.map(function(o){
+        var drv=driverName(o.driver_id);
+        var t=o.tournee_id?tournees.find(function(x){return x.id===o.tournee_id;}):null;
+        var gmUrl='https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(o.pickup_address||'')+'&destination='+encodeURIComponent(o.delivery_address||'');
+        var trClass=[o.tournee_id?'in-tournee':'',isPortalFresh(o)?'needs-review portal-fresh':'',portalHighlightId===o.id?'portal-fresh':''].filter(Boolean).join(' ');
+        var actionHtml='';
+        if(getAdminStatus(o)==='pending_validation'){
+            actionHtml+='<button type="button" class="btn btn-green btn-xs" onclick="acceptPortalOrder(\''+o.id+'\')" title="Accepter"><i class="fas fa-check"></i></button> ';
+            actionHtml+='<button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="refusePortalOrder(\''+o.id+'\')" title="Refuser"><i class="fas fa-times"></i></button> ';
+        }
+        return'<tr draggable="true" data-id="'+o.id+'"'+(trClass?' class="'+trClass+'"':'')+'>'
+            +'<td><span class="num">'+(o.order_number||o.id.slice(0,8))+'</span></td>'
+            +'<td><div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start;"><span class="chip '+chipCls(o)+'" onclick="openStatusModal(\''+o.id+'\')" title="Cliquer pour changer">'+chipLbl(o)+'</span>'+adminChip(o)+(dispatchChip(o)||'')+(isPortalFresh(o)?'<span class="chip portal">Portail client</span>':'')+'</div></td>'
+            +'<td>'+typePill(o)+'</td>'
+            +'<td><div class="addr-lbl">DÉPART</div><div class="addr-full">'+esc(o.pickup_address||'—')+'</div></td>'
+            +'<td><div class="addr-lbl">ARRIVÉE</div><div class="addr-full">'+esc(o.delivery_address||'—')+'</div></td>'
+            +'<td style="font-size:13px;">'+(o.destinataire_nom?'<strong>'+esc(o.destinataire_nom)+'</strong>'+(o.destinataire_tel?'<br><span style="font-size:11px;color:var(--muted)">'+esc(o.destinataire_tel)+'</span>':''):'<span style="color:var(--muted)">—</span>')+'</td>'
+            +'<td>'+(drv?'<span style="font-size:12px;color:var(--blue)"><i class="fas fa-user" style="font-size:10px;margin-right:3px;"></i>'+esc(drv)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
+            +'<td style="font-size:12px;color:var(--muted2);">'+(o.weight?o.weight+' kg':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.quantity||1)+' u</span></td>'
+            +'<td style="font-size:12px;color:var(--muted2);">'+(o.distance_km?Math.round(o.distance_km)+' km':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.duration_min?Math.round(o.duration_min)+' min':'—')+'</span></td>'
+            +'<td>'+(t?'<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--blue);"><span style="width:8px;height:8px;border-radius:50%;background:'+(t.couleur||'#3b82f6')+'"></span>'+esc(t.nom)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
+            +'<td style="font-size:11px;color:var(--muted);white-space:nowrap;">'+fdate(o.created_at)+'</td>'
+            +'<td class="actions">'
+                +actionHtml
+                +'<a class="btn btn-ghost btn-xs" href="'+gmUrl+'" target="_blank" title="Google Maps"><i class="fas fa-map-marked-alt"></i></a> '
+                +'<button type="button" class="btn btn-ghost btn-xs" onclick="openAssignModal(\''+o.id+'\')" title="Assigner"><i class="fas fa-user-check"></i></button> '
+                +'<button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="openDeleteModal(\''+o.id+'\',\''+esc(o.order_number||o.id.slice(0,8))+'\')" title="Supprimer"><i class="fas fa-trash"></i></button>'
+            +'</td>'
+        +'</tr>';
+    }).join('');
+}
+
+// ── STATUT ──
+function openStatusModal(id){
+    var o=rows.find(function(x){return x.id===id;});if(!o)return;
+    document.getElementById('modalStatusId').value=id;
+    document.getElementById('modalStatusNum').textContent=(o.order_number||o.id.slice(0,8))+' — '+(o.pickup_address||'').split(',')[0]+' → '+(o.delivery_address||'').split(',')[0];
+    document.getElementById('modalStatusSel').value=o.status||'pending';
+    openModal('modalStatus');
+}
+window.openStatusModal=openStatusModal;
+document.getElementById('btnSaveStatus').addEventListener('click',async function(){
+    var id=document.getElementById('modalStatusId').value,val=document.getElementById('modalStatusSel').value,btn=this;btn.disabled=true;
+    try{var r=await db.from('transport_orders_simple').update({status:val}).eq('id',id);if(r.error)throw r.error;var o=rows.find(function(x){return x.id===id;});if(o)o.status=val;applyFilter();toast('Statut mis à jour',true);closeModal('modalStatus');}
+    catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;}
+});
+
+window.acceptPortalOrder=async function(id){
+    var o=rows.find(function(x){return x.id===id;});if(!o)return;
+    try{
+        var r=await db.from('transport_orders_simple').update({admin_status:'accepted',validated_at:nowCH(),status:o.driver_id?'planned':'pending'}).eq('id',id);
+        if(r.error)throw r.error;
+        o.admin_status='accepted';
+        o.status=o.driver_id?'planned':'pending';
+        await notifyOrderDecision(o,'✅ Commande '+(o.order_number||'')+' acceptée','Votre transport a été validé par Colixo et entre en préparation.');
+        toast('Transport accepté',true);
+        applyFilter();
+    }catch(e){toast('Erreur : '+(e.message||e),false);}
+};
+window.refusePortalOrder=async function(id){
+    var o=rows.find(function(x){return x.id===id;});if(!o)return;
+    var note=window.prompt('Motif du refus ?','');
+    if(note===null)return;
+    note=String(note||'').trim();
+    if(!note){toast('Motif obligatoire',false);return;}
+    try{
+        var r=await db.from('transport_orders_simple').update({admin_status:'refused',admin_note:note,status:'refused'}).eq('id',id);
+        if(r.error)throw r.error;
+        o.admin_status='refused';
+        o.admin_note=note;
+        o.status='refused';
+        await notifyOrderDecision(o,'❌ Commande '+(o.order_number||'')+' refusée',note);
+        toast('Transport refusé',true);
+        applyFilter();
+    }catch(e){toast('Erreur : '+(e.message||e),false);}
+};
+
+// ── ASSIGNER ──
+function openAssignModal(id){
+    var o=rows.find(function(x){return x.id===id;});if(!o)return;
+    document.getElementById('modalAssignId').value=id;
+    document.getElementById('modalAssignNum').textContent=o.order_number||o.id.slice(0,8);
+    document.getElementById('modalAssignRoute').textContent=(o.pickup_address||'—')+' → '+(o.delivery_address||'—');
+    document.getElementById('modalDriverSel').value=o.driver_id||'';
+    document.getElementById('modalTourneeSel').value=o.tournee_id||'';
+    document.getElementById('trnFieldWrap').style.display='';
+    openModal('modalAssign');
+}
+window.openAssignModal=openAssignModal;
+document.getElementById('modalBtnSave').addEventListener('click',async function(){
+    var rawId=document.getElementById('modalAssignId').value,btn=this;btn.disabled=true;
+    try{
+        if(rawId.startsWith('TOURNEE:')){
+            var tid=rawId.replace('TOURNEE:','');
+            var drvId=document.getElementById('modalDriverSel').value||null;
+            var today=new Date().toISOString().slice(0,10);
+            await db.from('tournee_affectations').delete().eq('tournee_id',tid).eq('date',today);
+            if(drvId)await db.from('tournee_affectations').insert([{tournee_id:tid,date:today,employe_id:drvId}]);
+            var t=tournees.find(function(x){return x.id===tid;});if(t)t._chauffeur_id=drvId;
+            document.getElementById('trnFieldWrap').style.display='';
+            toast('Chauffeur assigné à la tournée',true);closeModal('modalAssign');renderTourneePanel();return;
+        }
+        var id=rawId,drvId=document.getElementById('modalDriverSel').value||null,tourneeId=document.getElementById('modalTourneeSel').value||null;
+        var payload={driver_id:drvId,assigned_at:drvId?nowCH():null,tournee_id:tourneeId};
+        if(drvId){
+            var o=rows.find(function(x){return x.id===id;});
+            if(o&&o.status==='pending'&&getAdminStatus(o)!=='pending_validation')payload.status='planned';
+        }
+        var r=await db.from('transport_orders_simple').update(payload).eq('id',id);
+        if(r.error)throw r.error;
+        var oo=rows.find(function(x){return x.id===id;});if(oo){oo.driver_id=drvId;oo.tournee_id=tourneeId;if(drvId&&oo.status==='pending'&&getAdminStatus(oo)!=='pending_validation')oo.status='planned';}
+        toast('Assigné',true);closeModal('modalAssign');applyFilter();renderTourneePanel();
+    }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;}
+});
+
+// ── SUPPRIMER ──
+function openDeleteModal(id,num){document.getElementById('deleteId').value=id;document.getElementById('deleteNum').textContent=num;openModal('modalDelete');}
+window.openDeleteModal=openDeleteModal;
+document.getElementById('btnConfirmDelete').addEventListener('click',async function(){
+    var id=document.getElementById('deleteId').value,btn=this;btn.disabled=true;
+    try{var r=await db.from('transport_orders_simple').delete().eq('id',id);if(r.error)throw r.error;toast('Supprimé',true);closeModal('modalDelete');await load({silent:true});}
+    catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;}
+});
+
+// ── NOUVELLE TOURNÉE ──
+document.getElementById('btnNewTournee').addEventListener('click',function(){
+    ['tNom','tZone','tNotes'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('tDebut').value='07:00';document.getElementById('tFin').value='12:00';
+    document.getElementById('tCouleur').value='#3b82f6';document.getElementById('tChauffeur').value='';
+    openModal('modalNewTournee');
+});
+document.getElementById('btnSaveTournee').addEventListener('click',async function(){
+    var nom=document.getElementById('tNom').value.trim();if(!nom){toast('Nom obligatoire',false);return;}
+    var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+    try{
+        var id=crypto.randomUUID();
+        var r=await db.from('tournees').insert([{id:id,nom:nom,heure_debut:document.getElementById('tDebut').value||null,heure_fin:document.getElementById('tFin').value||null,zone:document.getElementById('tZone').value.trim()||null,couleur:document.getElementById('tCouleur').value,notes:document.getElementById('tNotes').value.trim()||null,jours:[1,2,3,4,5]}]);
+        if(r.error)throw r.error;
+        var drvId=document.getElementById('tChauffeur').value;
+        if(drvId){var today=new Date().toISOString().slice(0,10);await db.from('tournee_affectations').insert([{tournee_id:id,date:today,employe_id:drvId}]);}
+        toast('Tournée «'+nom+'» créée !',true);closeModal('modalNewTournee');await loadTournees();
+    }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Créer';}
+});
+
+// ── AUTOCOMPLETE ──
+var gcTimers={};
+function setupAC(inputId,listId,which){
+    var inp=document.getElementById(inputId),lst=document.getElementById(listId);
+    inp.addEventListener('input',function(){clearTimeout(gcTimers[inputId]);var q=inp.value.trim();if(q.length<3){lst.classList.remove('open');return;}gcTimers[inputId]=setTimeout(function(){doGeocode(q,lst,inp,which);},400);});
+    inp.addEventListener('blur',function(){setTimeout(function(){lst.classList.remove('open');},200);});
+}
+var routeData=null;
+async function doGeocode(q,lst,inp,which){
+    try{
+        var r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=5&countrycodes=ch',{headers:{'Accept-Language':'fr'}});
+        var data=await r.json();lst.innerHTML='';if(!data||!data.length){lst.classList.remove('open');return;}
+        data.forEach(function(item){
+            var div=document.createElement('div');div.className='ac-item';div.textContent=item.display_name;
+            div.addEventListener('mousedown',function(){
+                inp.value=item.display_name;
+                if(which==='pickup')pickupCoords={lat:parseFloat(item.lat),lng:parseFloat(item.lon),label:item.display_name};
+                else deliveryCoords={lat:parseFloat(item.lat),lng:parseFloat(item.lon),label:item.display_name};
+                lst.classList.remove('open');
+                calculateRoute();
             });
-    }
-
-    /** Carte NPA→canton (optionnelle). Si 404 ou Safari bloque le fichier, la liste des transports charge quand même. */
-    async function loadNpaMap() {
-        if (npaToKan) return;
-        npaToKan = {};
-        try {
-            var v = (typeof window.COLIXO_ASSET_VERSION !== 'undefined') ? window.COLIXO_ASSET_VERSION : '1';
-            var path = (typeof h === 'function' ? h('/admin/swiss-npa-canton.json') : '/admin/swiss-npa-canton.json');
-            var url = path + (path.indexOf('?') === -1 ? '?' : '&') + 'v=' + encodeURIComponent(v);
-            var r = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            var data = await r.json();
-            if (data && typeof data === 'object') npaToKan = data;
-        } catch (e) {
-            console.warn('[transports-dispatch] Fichier NPA/canton ignoré (liste OK sans canton détaillé)', e && e.message);
-        }
-    }
-
-    var pollTimer = null;
-    var realtimeDebounce = null;
-    var visibleDebounce = null;
-    var silentLoadFailStreak = 0;
-
-    function setLastSyncLabel() {
-        var el = document.getElementById('lastSync');
-        if (!el) return;
-        el.textContent = 'Synchro ' + new Date().toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    }
-
-    /** silent : pas de toast d’erreur (polling / arrière-plan) */
-    async function load(opts) {
-        opts = opts || {};
-        if (!opts.silent) silentLoadFailStreak = 0;
-        try {
-            await loadNpaMap();
-            var r = await db.from('transport_orders_simple').select('*').order('created_at', { ascending: false });
-            if (r.error) throw r.error;
-            rows = r.data || [];
-            enrichRows();
-            applyFilter();
-            setLastSyncLabel();
-            silentLoadFailStreak = 0;
-        } catch (e) {
-            if (opts.silent) {
-                silentLoadFailStreak++;
-                console.warn('[transports-dispatch] rechargement silencieux échoué', e && e.message);
-                if (silentLoadFailStreak >= 3) {
-                    silentLoadFailStreak = 0;
-                    var el = document.getElementById('lastSync');
-                    if (el) el.textContent = 'Synchro impossible — cliquez Actualiser';
-                    showToast('Connexion données : vérifiez la session ou réessayez (Actualiser).', false);
-                }
-            } else {
-                document.getElementById('toast').textContent = 'Erreur chargement : ' + (e.message || e);
-                document.getElementById('toast').classList.add('show');
-                setTimeout(function () { document.getElementById('toast').classList.remove('show'); }, 5000);
-            }
-        }
-    }
-
-    function debouncedRealtimeReload() {
-        clearTimeout(realtimeDebounce);
-        realtimeDebounce = setTimeout(function () { load({ silent: true }); }, 400);
-    }
-
-    var POLL_MS = 8000;
-
-    function startPolling() {
-        stopPolling();
-        pollTimer = setInterval(function () {
-            if (document.visibilityState === 'visible') load({ silent: true });
-        }, POLL_MS);
-    }
-
-    function scheduleRefreshHooks() {
-        function tick() {
-            if (document.visibilityState === 'visible') load({ silent: true });
-        }
-        window.addEventListener('pageshow', function (e) {
-            if (e.persisted) tick();
+            lst.appendChild(div);
         });
-        window.addEventListener('online', function () { tick(); });
-    }
+        lst.classList.add('open');
+    }catch(e){lst.classList.remove('open');}
+}
+async function calculateRoute(){
+    var badge=document.getElementById('routeBadge');
+    var spin=document.getElementById('routeBadgeSpinner');
+    var kmEl=document.getElementById('routeBadgeKm');
+    var minEl=document.getElementById('routeBadgeMin');
+    if(!pickupCoords||!deliveryCoords){badge.style.display='none';routeData=null;return;}
+    badge.style.display='flex';
+    spin.textContent='Calcul…';kmEl.textContent='—';minEl.textContent='—';
+    try{
+        var url='https://router.project-osrm.org/route/v1/driving/'+pickupCoords.lng+','+pickupCoords.lat+';'+deliveryCoords.lng+','+deliveryCoords.lat+'?overview=false';
+        var res=await fetch(url);var json=await res.json();
+        if(json.code!=='Ok')throw new Error('Route introuvable');
+        var km=Math.round(json.routes[0].distance/100)/10;
+        var min=Math.round(json.routes[0].duration/60);
+        routeData={distance_km:km,duration_min:min};
+        kmEl.textContent=km+' km';
+        minEl.textContent=(min>=60?Math.floor(min/60)+'h'+String(min%60).padStart(2,'0'):min+' min');
+        spin.textContent='✓ Route calculée';
+    }catch(e){spin.textContent='Route non calculée';routeData=null;}
+}
+setupAC('pickupInput','pickupList','pickup');
+setupAC('deliveryInput','deliveryList','delivery');
+document.getElementById('pickupInput').addEventListener('input',function(){pickupCoords=null;routeData=null;document.getElementById('routeBadge').style.display='none';});
+document.getElementById('deliveryInput').addEventListener('input',function(){deliveryCoords=null;routeData=null;document.getElementById('routeBadge').style.display='none';});
 
-    function stopPolling() {
-        if (pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
+// ── NOUVEAU TRANSPORT ──
+async function initCounter(){var r=await db.from('transport_orders_simple').select('id',{count:'exact',head:true});orderCounter=(r.count||0)+1;}
+function genNum(){var d=new Date();return'COL-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'-'+String(orderCounter).padStart(4,'0');}
+document.getElementById('btnNew').addEventListener('click',function(){
+    ['pickupInput','deliveryInput','destName','destPhone','nInstructions'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('nQty').value='1';document.getElementById('nWeight').value='';
+    document.getElementById('nSvcType').value='standard';document.getElementById('nPkgType').value='colis';
+    document.getElementById('nPriority').value='normal';document.getElementById('nDriver').value='';document.getElementById('nTournee').value='';
+    pickupCoords=null;deliveryCoords=null;routeData=null;
+    document.getElementById('routeBadge').style.display='none';
+    orderCounter++;openModal('modalNew');
+});
+document.getElementById('btnSaveNew').addEventListener('click',async function(){
+    var pA=document.getElementById('pickupInput').value.trim(),dA=document.getElementById('deliveryInput').value.trim();
+    if(!pA){toast('Adresse enlèvement obligatoire',false);return;}
+    if(!dA){toast('Adresse livraison obligatoire',false);return;}
+    var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Création…';
+    try{
+        var drvId=document.getElementById('nDriver').value||null,tourneeId=document.getElementById('nTournee').value||null;
+        var payload={order_number:genNum(),pickup_address:pickupCoords?pickupCoords.label:pA,delivery_address:deliveryCoords?deliveryCoords.label:dA,pickup_lat:pickupCoords?pickupCoords.lat:null,pickup_lng:pickupCoords?pickupCoords.lng:null,delivery_lat:deliveryCoords?deliveryCoords.lat:null,delivery_lng:deliveryCoords?deliveryCoords.lng:null,service_type:document.getElementById('nSvcType').value,speed:document.getElementById('nSvcType').value,package_type:document.getElementById('nPkgType').value,quantity:parseInt(document.getElementById('nQty').value)||1,weight:parseFloat(document.getElementById('nWeight').value)||null,priority:document.getElementById('nPriority').value==='urgent'?'urgent':'normal',instructions:document.getElementById('nInstructions').value.trim()||null,driver_id:drvId,status:drvId?'planned':'pending',destinataire_nom:document.getElementById('destName').value.trim()||null,destinataire_tel:document.getElementById('destPhone').value.trim()||null,assigned_at:drvId?nowCH():null,tournee_id:tourneeId,distance_km:routeData?routeData.distance_km:null,duration_min:routeData?routeData.duration_min:null};
+        var r=await db.from('transport_orders_simple').insert([payload]);if(r.error)throw r.error;
+        toast(payload.order_number+' créé !',true);closeModal('modalNew');await load({silent:true});
+    }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Créer le transport';}
+});
+
+// ── EVENTS ──
+document.getElementById('q').addEventListener('input',applyFilter);
+document.getElementById('filtreStatut').addEventListener('change',applyFilter);
+document.getElementById('filtreType').addEventListener('change',applyFilter);
+document.getElementById('filtreDispatch').addEventListener('change',applyFilter);
+document.getElementById('filtreChauffeur').addEventListener('change',applyFilter);
+document.getElementById('triListe').addEventListener('change',applyFilter);
+document.getElementById('btnRefresh').addEventListener('click',function(){load();loadTournees();});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')load({silent:true});});
+
+// ── INIT ──
+(async function(){
+    try{
+        var qs=new URLSearchParams(window.location.search);
+        var view=qs.get('view');
+        if(view==='inbox'||view==='portal'||portalHighlightId){
+            document.getElementById('filtreStatut').value='pending_validation';
         }
-    }
-
-    document.getElementById('q').addEventListener('input', function () { applyFilter(); });
-    document.getElementById('filtreStatut').addEventListener('change', function () { applyFilter(); });
-    document.getElementById('filtreCanton').addEventListener('change', function () { applyFilter(); });
-    document.getElementById('triListe').addEventListener('change', function () { applyFilter(); });
-    document.getElementById('btnRefresh').addEventListener('click', function () { load(); });
-
-    document.getElementById('tbody').addEventListener('click', function (e) {
-        if (e.target.closest('a')) return;
-        var tr = e.target.closest('tr[data-order-id]');
-        if (tr) openModalAssign(tr.getAttribute('data-order-id'));
-    });
-    document.getElementById('modalAssignClose').addEventListener('click', closeModalAssign);
-    document.getElementById('modalBtnCancel').addEventListener('click', closeModalAssign);
-    document.getElementById('modalBtnSave').addEventListener('click', saveDriverAssign);
-    document.getElementById('modalAssign').addEventListener('click', function (e) {
-        if (e.target === e.currentTarget) closeModalAssign();
-    });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeModalAssign();
-    });
-
-    (async function auth() {
-        var _a = await db.auth.getSession();
-        if (!_a.data.session && !sessionStorage.getItem('colixo_user')) { window.location.href = '../login/index.html'; return; }
-        var u = await db.from('utilisateurs').select('role').eq('id', _a.data.userId).single();
-        if (!u.data || !['admin', 'super_admin'].includes(u.data.role)) {
-            await db.auth.signOut();
-            window.location.href = '../login/index.html';
-            return;
-        }
-        fillCantonSelect();
-        try {
-            await loadChauffeurs();
-        } catch (e) {
-            showToast('Chauffeurs : ' + (e.message || e), false);
-        }
-        await load();
+        var _a=await db.auth.getSession();
+        var cu=JSON.parse(localStorage.getItem('colixo_user')||'null');
+        if(!_a.data.session&&!cu){window.location.href='../login/index.html';return;}
+        var uid=(_a.data.session&&_a.data.session.user&&_a.data.session.user.id)||(cu&&cu.id);
+        var u=uid?await db.from('utilisateurs').select('role').eq('id',uid).single():{data:null};
+        var role=(u.data&&u.data.role)||(cu&&cu.role)||'';
+        if(!['admin','super_admin'].includes(role)){window.location.href='../login/index.html';return;}
+        await loadChauffeurs();
+        await loadTournees();
+        await initCounter();
+        await load({silent:true});
+        setupTableDrag();
         startPolling();
-        scheduleRefreshHooks();
-        setTimeout(function () { load({ silent: true }); }, 2500);
-        document.addEventListener('visibilitychange', function () {
-            if (document.visibilityState !== 'visible') return;
-            clearTimeout(visibleDebounce);
-            visibleDebounce = setTimeout(function () { load({ silent: true }); }, 150);
-        });
-        db.channel('td_list')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'transport_orders_simple' }, function () {
-                debouncedRealtimeReload();
-            })
-            .subscribe(function (status) {
-                if (status === 'SUBSCRIBED') {
-                    console.info('[transports-dispatch] Realtime : connecté (mise à jour instantanée)');
-                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                    console.warn('[transports-dispatch] Realtime :', status, '— rafraîchissement toutes les 30 s + au retour sur l’onglet');
-                }
-            });
-    })();
+        db.channel('td_rt').on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},function(){setTimeout(function(){load({silent:true});},500);}).subscribe();
+    }catch(ex){document.body.innerHTML='<div style="padding:40px;color:#e8311a;font-family:sans-serif;font-size:15px;">Erreur : '+ex.message+'</div>';}
+})();
 })();
 </script>
 </body>

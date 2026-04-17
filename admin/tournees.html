@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tournées — Colixo</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script data-cfasync="false" src="../config.js?v=20260462"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f16;--bg2:#161622;--bg3:#1e1e2e;--bg4:#252535;
+  --border:#2a2a3e;--border2:#353550;
+  --text:#e8e8f0;--text2:#9898b8;--text3:#6060a0;
+  --red:#e8311a;--blue:#4f8ef7;--green:#22c55e;
+  --orange:#f97316;--purple:#a855f7;--yellow:#eab308;
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;font-size:13px;min-height:100vh}
+
+/* ─── TOPBAR ─────────────────────────────────────── */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:56px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.logo{font-size:18px;font-weight:800;color:var(--red)}
+.page-title{font-size:14px;font-weight:600;flex:1}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;font:inherit;font-size:12px;transition:.15s;white-space:nowrap}
+.btn:hover{background:var(--bg4)}
+.btn-primary{background:var(--red);border-color:var(--red);color:#fff}
+.btn-primary:hover{background:#c72d16}
+.btn-green{background:rgba(34,197,94,.12);border-color:var(--green);color:var(--green)}
+.btn-blue{background:rgba(79,142,247,.12);border-color:var(--blue);color:var(--blue)}
+.btn-sm{padding:4px 9px;font-size:11px}
+
+/* ─── TABS ────────────────────────────────────────── */
+.tabs{display:flex;background:var(--bg2);border-bottom:2px solid var(--border);padding:0 20px;gap:4px}
+.tab{padding:12px 16px;border:none;background:none;color:var(--text2);cursor:pointer;font:inherit;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.15s}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+
+/* ─── LAYOUT ──────────────────────────────────────── */
+.content{padding:20px;max-width:1200px;padding-top:24px}
+
+/* ─── ALERT ───────────────────────────────────────── */
+.alert{padding:12px 16px;border-radius:10px;font-size:12px;margin-bottom:16px;display:none}
+.alert.show{display:flex;align-items:center;gap:10px}
+.alert-error{background:rgba(232,49,26,.12);border:1px solid rgba(232,49,26,.3);color:#fca5a5}
+.alert-success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#86efac}
+.alert-warn{background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.3);color:#fde68a}
+
+/* ─── SECTION TOURNÉES ────────────────────────────── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:15px;font-weight:700;color:var(--text)}
+
+/* Cards tournées */
+.t-grid{display:flex;flex-direction:column;gap:8px}
+.t-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;transition:.15s}
+.t-card:hover{border-color:var(--border2)}
+.t-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.t-main{flex:1;min-width:0}
+.t-name{font-weight:700;font-size:14px;color:var(--text)}
+.t-meta{font-size:11px;color:var(--text2);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap}
+.t-tag{display:inline-flex;align-items:center;gap:3px}
+.t-actions{display:flex;gap:6px;flex-shrink:0}
+.empty-state{text-align:center;padding:48px 20px;color:var(--text3)}
+.empty-state .ei{font-size:40px;margin-bottom:12px}
+.empty-state p{font-size:14px;margin-bottom:16px}
+
+/* ─── GRILLE PLANNING ─────────────────────────────── */
+.week-nav{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.week-label{font-weight:600;font-size:13px;min-width:200px;text-align:center}
+.planning-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border)}
+.planning-table{width:100%;border-collapse:collapse;min-width:700px}
+.planning-table th{background:var(--bg2);padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);position:sticky;top:56px;z-index:10}
+.planning-table th.th-tournee{text-align:left;width:180px;position:sticky;left:0;z-index:15}
+.planning-table td{border:1px solid var(--border);padding:6px;vertical-align:top;min-width:110px;background:var(--bg)}
+.planning-table td.td-tournee{background:var(--bg2);padding:10px 14px;position:sticky;left:0;z-index:5;border-right:2px solid var(--border2)}
+.td-name{font-weight:700;font-size:12px;color:var(--text)}
+.td-time{font-size:10px;color:var(--text3);margin-top:2px}
+.td-zone{font-size:10px;color:var(--text2);margin-top:2px}
+.day-cell{min-height:70px;cursor:pointer;position:relative;transition:.15s}
+.day-cell:hover{background:var(--bg3)}
+.day-cell.today{background:rgba(79,142,247,.05)}
+.day-cell.weekend{background:#0a0a14;opacity:.7;cursor:not-allowed}
+.day-cell.inactive{background:#080810;opacity:.4;cursor:not-allowed}
+
+/* Badge employé dans cellule */
+.emp-chip{border-radius:8px;padding:6px 8px;background:var(--bg3);border:1px solid var(--border2);position:relative;cursor:pointer}
+.ec-name{font-weight:700;font-size:12px}
+.ec-info{font-size:10px;color:var(--text2);margin-top:2px}
+.ec-absent{font-size:10px;font-weight:600;margin-top:3px;padding:1px 6px;border-radius:4px;display:inline-block}
+.ec-remove{position:absolute;top:3px;right:4px;font-size:11px;color:var(--red);opacity:0;cursor:pointer;font-weight:700}
+.emp-chip:hover .ec-remove{opacity:1}
+.ec-conflict{border-color:var(--red) !important}
+.cell-empty{color:var(--text3);font-size:11px;text-align:center;padding-top:6px;opacity:.5}
+.cell-plus{position:absolute;bottom:3px;right:3px;width:18px;height:18px;border-radius:50%;background:var(--bg4);border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text3);opacity:0}
+.day-cell:hover .cell-plus{opacity:1}
+.th-day-name{font-size:13px;font-weight:700;color:var(--text)}
+.th-day-date{font-size:10px;color:var(--text3);margin-top:1px}
+.today .th-day-name{color:var(--blue)}
+.weekend-th .th-day-name{color:var(--orange)}
+
+/* ─── ABSENCES ────────────────────────────────────── */
+.abs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.abs-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.abs-card-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.abs-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.abs-name{font-weight:700;font-size:13px}
+.abs-role{font-size:10px;color:var(--text2)}
+.abs-days{padding:8px 14px;display:flex;flex-direction:column;gap:2px}
+.abs-day{display:flex;align-items:center;gap:8px;padding:3px 0}
+.abs-day-label{width:28px;font-size:11px;color:var(--text2);flex-shrink:0}
+.abs-btn{padding:3px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font:inherit;font-size:11px;cursor:pointer;transition:.15s;min-width:90px;text-align:center}
+.abs-btn:hover{background:var(--bg4)}
+.abs-btn.maladie{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#fca5a5}
+.abs-btn.vacances{background:rgba(234,179,8,.15);border-color:rgba(234,179,8,.4);color:#fde68a}
+.abs-btn.absence{background:rgba(156,163,175,.15);border-color:rgba(156,163,175,.3);color:#d1d5db}
+.abs-btn.formation{background:rgba(168,85,247,.15);border-color:rgba(168,85,247,.4);color:#d8b4fe}
+.abs-warn{font-size:10px;color:var(--red);margin-left:4px}
+
+/* ─── MODAL ───────────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:420px;max-width:95vw;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:18px}
+.fields{display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field-row{display:flex;gap:10px}
+.field-row .field{flex:1}
+label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px}
+input,select,textarea{width:100%;padding:8px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font:inherit;font-size:13px;transition:.15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
+select option{background:var(--bg3)}
+.color-row{display:flex;gap:8px;flex-wrap:wrap}
+.c-dot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;flex-shrink:0;transition:.15s}
+.c-dot.active{border-color:#fff;transform:scale(1.2)}
+.day-checks{display:flex;gap:6px;flex-wrap:wrap}
+.day-check{display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;transition:.15s}
+.day-check input{display:none}
+.day-check.checked{background:rgba(79,142,247,.15);border-color:var(--blue);color:var(--blue)}
+.modal-footer{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.btn-ghost:hover{background:var(--bg3)}
+.btn-danger{background:rgba(232,49,26,.1);border-color:var(--red);color:var(--red)}
+.btn-danger:hover{background:rgba(232,49,26,.2)}
+
+/* Modal assignation — liste employés */
+.emp-list{display:flex;flex-direction:column;gap:4px;max-height:340px;overflow-y:auto}
+.emp-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:8px 0 4px}
+.emp-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;transition:.15s}
+.emp-item:hover{background:var(--bg4)}
+.emp-item.selected{border-color:var(--blue);background:rgba(79,142,247,.1)}
+.emp-item.absent-item{opacity:.5}
+.ei-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+.ei-name{font-weight:600;font-size:12px}
+.ei-sub{font-size:10px;color:var(--text2);margin-top:1px}
+.ei-badge{margin-left:auto;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600;flex-shrink:0}
+.badge-ok{background:rgba(34,197,94,.12);color:var(--green)}
+.badge-warn{background:rgba(249,115,22,.12);color:var(--orange)}
+.badge-err{background:rgba(232,49,26,.12);color:var(--red)}
+.badge-abs{background:rgba(239,68,68,.12);color:#fca5a5}
+.badge-aux{background:rgba(168,85,247,.12);color:var(--purple)}
+
+/* ─── SAVING INDICATOR ────────────────────────────── */
+.saving-toast{position:fixed;top:68px;right:16px;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;z-index:999;display:none;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.saving-toast.show{display:flex}
+.saving-toast.saving{background:rgba(79,142,247,.2);border:1px solid var(--blue);color:var(--blue)}
+.saving-toast.saved{background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green)}
+.saving-toast.error{background:rgba(232,49,26,.15);border:1px solid var(--red);color:#fca5a5}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">Colixo</div>
+  <div class="page-title">Tournées & Affectations</div>
+  <div style="display:flex;gap:8px;margin-left:auto">
+    <button class="btn btn-green" onclick="exportCSV()">⬇ Export</button>
+    <button class="btn" id="btnLogout">⏻</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab active" id="tab-tournees"    onclick="showTab('tournees')">🗺 Mes tournées</button>
+  <button class="tab"        id="tab-planning"    onclick="showTab('planning')">📅 Planning semaine</button>
+  <button class="tab"        id="tab-absences"    onclick="showTab('absences')">🤒 Absences <span id="absCount" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:10px;margin-left:3px">0</span></button>
+</div>
+
+<!-- SAVING TOAST -->
+<div class="saving-toast" id="savingToast"></div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- TAB 1 : MES TOURNÉES                          -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="view-tournees" class="content">
+  <div class="alert alert-warn" id="alertDb" style="display:none">
+    ⚠ Tables Supabase manquantes — exécutez <strong>tournees-fix.sql</strong> dans Supabase → SQL Editor.
+  </div>
+  <div class="alert alert-error" id="alertErr" style="display:none"></div>
+
+  <div class="section-header">
+    <div class="section-title">Vos tournées <span id="tourneeCount" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-danger" onclick="resetToutSupprimer()" title="Vider toutes les tournées et repartir de zéro">🗑 Tout supprimer</button>
+      <button class="btn btn-primary" onclick="openModalTournee()">+ Nouvelle tournée</button>
+    </div>
+  </div>
+
+  <div class="t-grid" id="tourneeList"></div>
+  <div class="empty-state" id="emptyTournee" style="display:none">
+    <div class="ei">🗺</div>
+    <p>Aucune tournée. Créez votre première tournée pour commencer.</p>
+    <button class="btn btn-primary" onclick="openModalTournee()">+ Créer une tournée</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- TAB 2 : PLANNING SEMAINE                      -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="view-planning" class="content" style="display:none">
+  <div class="week-nav">
+    <button class="btn" onclick="navWeek(-1)">‹ Sem. préc.</button>
+    <div class="week-label" id="weekLabel"></div>
+    <button class="btn" onclick="navWeek(1)">Sem. suiv. ›</button>
+    <button class="btn btn-blue" onclick="navWeek(0)">Aujourd'hui</button>
+    <button class="btn btn-green" onclick="autoAssign()" style="margin-left:auto">⚡ Affectation auto</button>
+  </div>
+
+  <div class="planning-wrap">
+    <table class="planning-table">
+      <thead id="planHead"></thead>
+      <tbody id="planBody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyPlanning" style="display:none">
+      <div class="ei">📅</div>
+      <p>Créez d'abord des tournées dans l'onglet "Mes tournées".</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- TAB 3 : ABSENCES                              -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="view-absences" class="content" style="display:none">
+  <div class="section-header" style="margin-bottom:14px">
+    <div>
+      <div class="section-title">Absences de la semaine</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:3px">Cliquez sur un jour pour changer le statut. Les absents sont exclus de l'affectation auto.</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div id="absWeekLabel" style="font-size:12px;color:var(--text2);align-self:center"></div>
+      <button class="btn btn-sm" onclick="navWeek(-1)">‹</button>
+      <button class="btn btn-sm" onclick="navWeek(1)">›</button>
+    </div>
+  </div>
+  <div class="abs-grid" id="absGrid"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- MODAL — TOURNÉE                               -->
+<!-- ══════════════════════════════════════════════ -->
+<div class="overlay" id="overlayTournee">
+<div class="modal">
+  <div class="modal-title" id="modalTourneeTitle">🗺 Nouvelle tournée</div>
+  <div class="fields">
+    <input type="hidden" id="tId">
+    <div class="field">
+      <label>Nom de la tournée *</label>
+      <input type="text" id="tNom" placeholder="Ex: Lausanne Matin">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Début</label>
+        <input type="time" id="tDebut" value="07:00">
+      </div>
+      <div class="field">
+        <label>Fin</label>
+        <input type="time" id="tFin" value="15:45">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Zone / Secteur</label>
+        <input type="text" id="tZone" placeholder="Ex: Vaud nord">
+      </div>
+      <div class="field">
+        <label>Véhicule</label>
+        <select id="tVehicle">
+          <option value="">— aucun —</option>
+          <option value="camionnette">Camionnette</option>
+          <option value="camion">Camion</option>
+          <option value="utilitaire">Utilitaire</option>
+          <option value="moto">Moto</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Jours actifs</label>
+      <div class="day-checks" id="dayChecks">
+        <label class="day-check checked"><input type="checkbox" value="1" checked> Lun</label>
+        <label class="day-check checked"><input type="checkbox" value="2" checked> Mar</label>
+        <label class="day-check checked"><input type="checkbox" value="3" checked> Mer</label>
+        <label class="day-check checked"><input type="checkbox" value="4" checked> Jeu</label>
+        <label class="day-check checked"><input type="checkbox" value="5" checked> Ven</label>
+        <label class="day-check"><input type="checkbox" value="6"> Sam</label>
+        <label class="day-check"><input type="checkbox" value="0"> Dim</label>
+      </div>
+    </div>
+    <div class="field">
+      <label>Couleur</label>
+      <div class="color-row" id="colorRow">
+        <div class="c-dot active" style="background:#4f8ef7" data-c="#4f8ef7" onclick="pickColor(this)"></div>
+        <div class="c-dot" style="background:#22c55e" data-c="#22c55e" onclick="pickColor(this)"></div>
+        <div class="c-dot" style="background:#f97316" data-c="#f97316" onclick="pickColor(this)"></div>
+        <div class="c-dot" style="background:#a855f7" data-c="#a855f7" onclick="pickColor(this)"></div>
+        <div class="c-dot" style="background:#e8311a" data-c="#e8311a" onclick="pickColor(this)"></div>
+        <div class="c-dot" style="background:#06b6d4" data-c="#06b6d4" onclick="pickColor(this)"></div>
+        <div class="c-dot" style="background:#eab308" data-c="#eab308" onclick="pickColor(this)"></div>
+        <div class="c-dot" style="background:#ec4899" data-c="#ec4899" onclick="pickColor(this)"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="tNotes" rows="2" placeholder="Instructions particulières…"></textarea>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-danger" id="btnDelTournee" style="display:none;margin-right:auto" onclick="deleteTournee()">🗑 Supprimer</button>
+    <button class="btn btn-ghost" onclick="closeOverlay('overlayTournee')">Annuler</button>
+    <button class="btn btn-primary" onclick="saveTournee()">💾 Enregistrer</button>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- MODAL — ASSIGNER EMPLOYÉ                      -->
+<!-- ══════════════════════════════════════════════ -->
+<div class="overlay" id="overlayAssign">
+<div class="modal">
+  <div class="modal-title" id="assignTitle">👷 Assigner un employé</div>
+  <div id="assignInfo" style="padding:10px 12px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);font-size:12px;margin-bottom:12px"></div>
+  <input type="hidden" id="aTourneeId">
+  <input type="hidden" id="aDate">
+  <div class="emp-list" id="empList"></div>
+  <div class="modal-footer">
+    <button class="btn btn-danger" id="btnUnassign" style="display:none;margin-right:auto" onclick="unassign()">↩ Retirer</button>
+    <button class="btn btn-ghost" onclick="closeOverlay('overlayAssign')">Fermer</button>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- SCRIPT                                        -->
+<!-- ══════════════════════════════════════════════ -->
+<script>
+(async function () {
+'use strict';
+
+// ── CONSTANTES ──────────────────────────────────
+const DAYS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+const MONTHS = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+const ROLE_COLORS = {chauffeur:'#4f8ef7',magasinier:'#22c55e',admin:'#f97316',super_admin:'#a855f7'};
+const ROLE_LABELS = {chauffeur:'Chauffeur',magasinier:'Magasinier',admin:'Admin',super_admin:'Super Admin'};
+const ABS_CYCLE = ['','maladie','vacances','absence','formation'];
+const ABS_LABELS = {maladie:'🤒 Maladie',vacances:'🏖 Vacances',absence:'🚫 Absence',formation:'📚 Formation'};
+const ABS_CSS   = {maladie:'maladie',vacances:'vacances',absence:'absence',formation:'formation'};
+const MAX_WEEK_H = 48;
+
+// ── ÉTAT ────────────────────────────────────────
+const db  = window.SUPABASE_CLIENT;
+let tournees     = [];   // [{id, nom, heure_debut, heure_fin, zone, vehicle, jours, couleur, notes}]
+let affectations = {};   // { 'tourneeId|date' : empId }
+let absences     = {};   // { 'empId|date' : 'maladie'|... }
+let employees    = [];
+let weekStart    = getMonday(new Date());
+let dbOk         = false; // tables Supabase existent ?
+let currentTab   = 'tournees';
+
+// ── INIT ─────────────────────────────────────────
+async function init() {
+  // Auth check
+  const raw = localStorage.getItem('colixo_user');
+  let cu = null; try { cu = JSON.parse(raw || 'null'); } catch(e){}
+  let session = null;
+  if (db) { try { const r = await db.auth.getSession(); session = r.data?.session; } catch(e){} }
+  if (!session && !cu) { location.href = '../login/index.html'; return; }
+  const role = cu?.role || 'admin';
+  if (!['admin','super_admin'].includes(role)) { location.href = '../login/index.html'; return; }
+
+  document.getElementById('btnLogout').addEventListener('click', async () => {
+    if (db) try { await db.auth.signOut(); } catch(e) {}
+    localStorage.removeItem('colixo_user');
+    location.href = '../login/index.html';
+  });
+
+  // Rendre les checkbox jours interactifs
+  document.querySelectorAll('.day-check').forEach(lbl => {
+    lbl.addEventListener('change', () => lbl.classList.toggle('checked', lbl.querySelector('input').checked));
+  });
+
+  // Charger données
+  loadLocal();
+  await loadEmployees();
+  await loadFromDb();
+  saveLocal();
+
+  renderWeekLabel();
+  renderAll();
+}
+
+// ── PERSISTANCE LOCAL ───────────────────────────
+function loadLocal() {
+  try { tournees     = JSON.parse(localStorage.getItem('cx_tournees')  || '[]'); } catch(e){ tournees=[]; }
+  try { affectations = JSON.parse(localStorage.getItem('cx_affect')    || '{}'); } catch(e){ affectations={}; }
+  try { absences     = JSON.parse(localStorage.getItem('cx_absences')  || '{}'); } catch(e){ absences={}; }
+}
+function saveLocal() {
+  localStorage.setItem('cx_tournees',  JSON.stringify(tournees));
+  localStorage.setItem('cx_affect',    JSON.stringify(affectations));
+  localStorage.setItem('cx_absences',  JSON.stringify(absences));
+}
+
+// ── SUPABASE ─────────────────────────────────────
+async function loadFromDb() {
+  if (!db) return;
+  try {
+    // Tournées
+    const r1 = await db.from('tournees').select('*').order('heure_debut');
+    if (r1.error) { if (r1.error.code === '42P01') { showAlert('alertDb'); return; } throw r1.error; }
+    tournees = r1.data || [];
+    dbOk = true;
+    hideAlert('alertDb');
+
+    // Affectations semaine courante
+    const d0 = fmt(weekStart), d1 = fmt(addDays(weekStart,6));
+    const r2 = await db.from('tournee_affectations').select('*').gte('date',d0).lte('date',d1);
+    if (!r2.error && r2.data) {
+      r2.data.forEach(a => { affectations[a.tournee_id+'|'+a.date] = a.employe_id; });
+    }
+
+    // Absences semaine courante
+    const r3 = await db.from('employe_absences').select('*').gte('date',d0).lte('date',d1);
+    if (!r3.error && r3.data) {
+      r3.data.forEach(a => { absences[a.employe_id+'|'+a.date] = a.type_absence; });
+    }
+  } catch(e) { showError('Erreur Supabase : ' + e.message); }
+}
+
+async function loadAffectSemaine() {
+  if (!db || !dbOk) return;
+  const d0 = fmt(weekStart), d1 = fmt(addDays(weekStart,6));
+  try {
+    const r = await db.from('tournee_affectations').select('*').gte('date',d0).lte('date',d1);
+    if (!r.error && r.data) {
+      r.data.forEach(a => { affectations[a.tournee_id+'|'+a.date] = a.employe_id; });
+    }
+    const r2 = await db.from('employe_absences').select('*').gte('date',d0).lte('date',d1);
+    if (!r2.error && r2.data) {
+      r2.data.forEach(a => { absences[a.employe_id+'|'+a.date] = a.type_absence; });
+    }
+  } catch(e) {}
+}
+
+async function loadEmployees() {
+  if (!db) { employees = demoEmp(); return; }
+  try {
+    const r = await db.from('utilisateurs')
+      .select('id,nom,prenom,role,code_usr,actif,taux_travail,type_contrat')
+      .eq('actif', true)
+      .in('role',['chauffeur','magasinier','admin','super_admin'])
+      .order('role').order('nom');
+    if (r.error) throw r.error;
+    employees = r.data || [];
+    if (employees.length === 0) employees = demoEmp();
+  } catch(e) { employees = demoEmp(); }
+}
+
+async function dbSaveTournee(t) {
+  if (!db || !dbOk) return;
+  setSaving('saving');
+  try {
+    // DELETE + INSERT évite les problèmes RLS avec upsert
+    await db.from('tournees').delete().eq('id', t.id);
+    const {error} = await db.from('tournees').insert([t]);
+    if (error) throw error;
+    setSaving('saved');
+  } catch(e) { setSaving('error', e.message); }
+}
+
+async function dbDeleteTournee(id) {
+  if (!db || !dbOk) return;
+  try { await db.from('tournees').delete().eq('id', id); } catch(e) {}
+}
+
+async function dbSetAffect(tourneeId, date, empId) {
+  if (!db || !dbOk) return;
+  setSaving('saving');
+  try {
+    // Toujours DELETE d'abord, puis INSERT si besoin
+    await db.from('tournee_affectations').delete()
+      .eq('tournee_id', tourneeId).eq('date', date);
+    if (empId) {
+      const {error} = await db.from('tournee_affectations')
+        .insert([{tournee_id: tourneeId, date, employe_id: empId}]);
+      if (error) throw error;
+    }
+    setSaving('saved');
+  } catch(e) { setSaving('error', e.message); }
+}
+
+async function dbSetAbsence(empId, date, type) {
+  if (!db || !dbOk) return;
+  try {
+    await db.from('employe_absences').delete().eq('employe_id', empId).eq('date', date);
+    if (type) {
+      await db.from('employe_absences').insert([{employe_id: empId, date, type_absence: type}]);
+    }
+  } catch(e) {}
+}
+
+function demoEmp() {
+  return [
+    {id:'d1',nom:'Martin',prenom:'Jean',role:'chauffeur',code_usr:'CHF-1001',actif:true,taux_travail:100,type_contrat:'fixe'},
+    {id:'d2',nom:'Dupont',prenom:'Marie',role:'chauffeur',code_usr:'CHF-1002',actif:true,taux_travail:80,type_contrat:'temps_partiel'},
+    {id:'d3',nom:'Blanc',prenom:'Pierre',role:'magasinier',code_usr:'MAG-2001',actif:true,taux_travail:100,type_contrat:'fixe'},
+    {id:'d4',nom:'Noir',prenom:'Sophie',role:'chauffeur',code_usr:'CHF-1003',actif:true,taux_travail:100,type_contrat:'auxiliaire'},
+  ];
+}
+
+// ── DATE UTILS ────────────────────────────────────
+function getMonday(d) {
+  const dt = new Date(d); dt.setHours(0,0,0,0);
+  const diff = dt.getDay()===0 ? -6 : 1-dt.getDay();
+  dt.setDate(dt.getDate()+diff); return dt;
+}
+function addDays(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function fmt(d) { return d.toISOString().slice(0,10); }
+function isoWeek(d) {
+  const dt=new Date(d); dt.setHours(0,0,0,0);
+  dt.setDate(dt.getDate()+3-(dt.getDay()+6)%7);
+  const w1=new Date(dt.getFullYear(),0,4);
+  return 1+Math.round(((dt-w1)/86400000-(3-(w1.getDay()+6)%7))/7);
+}
+function t2m(t) { const [h,m]=t.split(':').map(Number); return h*60+m; }
+function shiftDurH(t) {
+  let s=t2m(t.heure_debut), e=t2m(t.heure_fin);
+  if (e<=s) e+=1440;
+  const raw = e-s;
+  const pause = raw > 270 ? 45 : 0;
+  return (raw-pause)/60;
+}
+function nightH(t) {
+  let s=t2m(t.heure_debut), e=t2m(t.heure_fin);
+  if (e<=s) e+=1440;
+  let n=0;
+  for (let m=s; m<e; m++) { const h=Math.floor((m%1440)/60); if(h>=23||h<5) n++; }
+  return n/60;
+}
+function maxH(emp) { return Math.round(MAX_WEEK_H*(emp.taux_travail||100)/100*10)/10; }
+function isAux(emp) { return emp.type_contrat==='auxiliaire'; }
+
+// ── SEMAINE ────────────────────────────────────────
+window.navWeek = async function(dir) {
+  if (dir === 0) weekStart = getMonday(new Date());
+  else weekStart = addDays(weekStart, dir*7);
+  await loadAffectSemaine();
+  saveLocal();
+  renderWeekLabel();
+  renderAll();
+};
+
+function renderWeekLabel() {
+  const end = addDays(weekStart,6);
+  const f = d => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const txt = `Sem. ${isoWeek(weekStart)} — ${f(weekStart)} au ${f(end)} ${weekStart.getFullYear()}`;
+  document.getElementById('weekLabel').textContent = txt;
+  document.getElementById('absWeekLabel').textContent = txt;
+}
+
+// ── TABS ───────────────────────────────────────────
+window.showTab = function(tab) {
+  currentTab = tab;
+  ['tournees','planning','absences'].forEach(t => {
+    document.getElementById('view-'+t).style.display = t===tab ? '' : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+  renderAll();
+};
+
+// ── RENDER ALL ─────────────────────────────────────
+function renderAll() {
+  if (currentTab === 'tournees') renderTournees();
+  if (currentTab === 'planning') renderPlanning();
+  if (currentTab === 'absences') renderAbsences();
+  updateAbsBadge();
+}
+
+// ── RENDER TOURNÉES ────────────────────────────────
+function renderTournees() {
+  const list = document.getElementById('tourneeList');
+  const empty = document.getElementById('emptyTournee');
+  const count = document.getElementById('tourneeCount');
+  list.innerHTML = '';
+  if (count) count.textContent = tournees.length > 0 ? `(${tournees.length})` : '';
+  if (tournees.length === 0) { empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  tournees.forEach(t => {
+    const dur = shiftDurH(t).toFixed(1);
+    const nH  = nightH(t);
+    const jours = (t.jours||[1,2,3,4,5]).map(j=>DAYS[j]).join(', ');
+    const div = document.createElement('div'); div.className='t-card';
+    div.innerHTML = `
+      <div class="t-dot" style="background:${t.couleur||'#4f8ef7'}"></div>
+      <div class="t-main">
+        <div class="t-name">${esc(t.nom)}</div>
+        <div class="t-meta">
+          <span class="t-tag">🕐 ${t.heure_debut} → ${t.heure_fin} (${dur}h)</span>
+          ${t.zone ? `<span class="t-tag">📍 ${esc(t.zone)}</span>` : ''}
+          ${t.vehicle ? `<span class="t-tag">🚛 ${t.vehicle}</span>` : ''}
+          <span class="t-tag">📅 ${jours}</span>
+          ${nH>0 ? `<span class="t-tag" style="color:var(--purple)">🌙 ${nH.toFixed(1)}h nuit</span>` : ''}
+        </div>
+        ${t.notes ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">${esc(t.notes)}</div>` : ''}
+      </div>
+      <div class="t-actions">
+        <button class="btn btn-sm btn-blue" onclick="showTab('planning')">📅 Planifier</button>
+        <button class="btn btn-sm" onclick="openModalTournee('${t.id}')">✏ Modifier</button>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+// ── RENDER PLANNING ────────────────────────────────
+function renderPlanning() {
+  const head = document.getElementById('planHead');
+  const body = document.getElementById('planBody');
+  const empty = document.getElementById('emptyPlanning');
+  const table = document.querySelector('.planning-table');
+
+  if (tournees.length === 0) {
+    table.style.display = 'none'; empty.style.display = 'block'; return;
+  }
+  table.style.display = ''; empty.style.display = 'none';
+
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+
+  // HEAD
+  head.innerHTML = '';
+  const htr = document.createElement('tr');
+  const thT = document.createElement('th'); thT.className='th-tournee'; thT.textContent='Tournée'; htr.appendChild(thT);
+  days.forEach(d => {
+    const isNow = fmt(d)===fmt(new Date());
+    const isWE = d.getDay()===0||d.getDay()===6;
+    const th = document.createElement('th');
+    th.className = (isNow?'today ':'')+(isWE?'weekend-th':'');
+    th.innerHTML = `<div class="th-day-name">${DAYS[d.getDay()]}</div><div class="th-day-date">${d.getDate()} ${MONTHS[d.getMonth()]}</div>`;
+    htr.appendChild(th);
+  });
+  head.appendChild(htr);
+
+  // BODY
+  body.innerHTML = '';
+  tournees.forEach(t => {
+    const tr = document.createElement('tr');
+    // Col tournée
+    const tdT = document.createElement('td'); tdT.className='td-tournee';
+    tdT.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="width:8px;height:8px;border-radius:50%;background:${t.couleur||'#4f8ef7'};margin-top:3px;flex-shrink:0"></div>
+        <div>
+          <div class="td-name">${esc(t.nom)}</div>
+          <div class="td-time">${t.heure_debut}→${t.heure_fin} · ${shiftDurH(t).toFixed(1)}h</div>
+          ${t.zone?`<div class="td-zone">📍 ${esc(t.zone)}</div>`:''}
+        </div>
+      </div>`;
+    tr.appendChild(tdT);
+
+    // Cols jours
+    days.forEach(d => {
+      const dateStr = fmt(d);
+      const isWE = d.getDay()===0||d.getDay()===6;
+      const isNow = dateStr===fmt(new Date());
+      const joursActifs = t.jours||[1,2,3,4,5];
+      const actif = joursActifs.includes(d.getDay());
+
+      const td = document.createElement('td');
+      td.className = 'day-cell' + (isNow?' today':'') + (isWE?' weekend':'') + (!actif?' inactive':'');
+
+      if (!actif) {
+        td.innerHTML = '<div style="text-align:center;padding-top:12px;color:var(--text3);font-size:16px">—</div>';
+        td.style.cursor='not-allowed';
+        tr.appendChild(td); return;
+      }
+
+      const key = t.id+'|'+dateStr;
+      const empId = affectations[key];
+      const emp = empId ? employees.find(e=>e.id===empId) : null;
+
+      if (emp) {
+        const absType = absences[emp.id+'|'+dateStr] || '';
+        const color = ROLE_COLORS[emp.role]||'#888';
+        const wH = empWeekH(emp.id, days);
+        const mH = maxH(emp);
+        const conflict = wH > mH;
+        td.innerHTML = `
+          <div class="emp-chip ${conflict?'ec-conflict':''}" onclick="openAssign('${t.id}','${dateStr}',event)">
+            <div class="ec-name" style="color:${color}">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+            <div class="ec-info">${wH.toFixed(1)}h/${mH}h sem. ${isAux(emp)?'· ⚡':''} ${(emp.taux_travail||100)<100?`· ${emp.taux_travail}%`:''}</div>
+            ${absType ? `<div class="ec-absent ${ABS_CSS[absType]||''}">${ABS_LABELS[absType]||absType}</div>` : ''}
+            ${conflict ? '<div style="font-size:10px;color:var(--red);margin-top:2px">⚠ max dépassé</div>' : ''}
+            <span class="ec-remove" onclick="removeAffect('${t.id}','${dateStr}',event)">✕</span>
+          </div>`;
+      } else {
+        td.innerHTML = '<div class="cell-empty">Libre</div><div class="cell-plus">+</div>';
+        td.onclick = () => openAssign(t.id, dateStr);
+      }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+// ── RENDER ABSENCES ────────────────────────────────
+function renderAbsences() {
+  const grid = document.getElementById('absGrid'); grid.innerHTML='';
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  const visEmp = employees.filter(e=>['chauffeur','magasinier'].includes(e.role));
+  if (visEmp.length===0) { grid.innerHTML='<div style="color:var(--text3);font-size:13px">Aucun employé trouvé.</div>'; return; }
+
+  visEmp.forEach(emp => {
+    const color = ROLE_COLORS[emp.role]||'#888';
+    const init = (emp.prenom[0]||'')+(emp.nom[0]||'');
+    const nbAbs = days.filter(d=>absences[emp.id+'|'+fmt(d)]).length;
+    const card = document.createElement('div'); card.className='abs-card';
+
+    let daysHtml = '';
+    days.forEach(d => {
+      const dateStr = fmt(d);
+      const key = emp.id+'|'+dateStr;
+      const type = absences[key]||'';
+      const isWE = d.getDay()===0||d.getDay()===6;
+      // Avertissement si absent mais assigné
+      const assigned = tournees.some(t=>(t.jours||[1,2,3,4,5]).includes(d.getDay()) && affectations[t.id+'|'+dateStr]===emp.id);
+      daysHtml += `
+        <div class="abs-day">
+          <span class="abs-day-label">${DAYS[d.getDay()]}</span>
+          <button class="abs-btn ${ABS_CSS[type]||''}" onclick="cycleAbsence('${emp.id}','${dateStr}')">
+            ${type ? ABS_LABELS[type] : (isWE?'WE':'✓ Présent')}
+          </button>
+          ${type&&assigned ? '<span class="abs-warn">⚠ assigné</span>' : ''}
+        </div>`;
+    });
+
+    card.innerHTML = `
+      <div class="abs-card-head">
+        <div class="abs-avatar" style="background:${color}22;color:${color}">${init}</div>
+        <div style="flex:1">
+          <div class="abs-name">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+          <div class="abs-role">${ROLE_LABELS[emp.role]||emp.role} ${isAux(emp)?'· ⚡ Aux.':''} ${(emp.taux_travail||100)<100?`· ${emp.taux_travail}%`:''}</div>
+        </div>
+        ${nbAbs>0?`<div style="font-size:11px;color:var(--red);font-weight:700">${nbAbs}j absent</div>`:'<div style="font-size:11px;color:var(--green)">✓</div>'}
+      </div>
+      <div class="abs-days">${daysHtml}</div>`;
+    grid.appendChild(card);
+  });
+}
+
+function updateAbsBadge() {
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  let n=0;
+  employees.forEach(e=>days.forEach(d=>{ if(absences[e.id+'|'+fmt(d)]) n++; }));
+  const badge = document.getElementById('absCount');
+  badge.textContent=n; badge.style.display=n>0?'':'none';
+}
+
+// ── HELPERS STATS ──────────────────────────────────
+function empWeekH(empId, days) {
+  let h=0;
+  days.forEach(d => {
+    tournees.forEach(t => {
+      if (affectations[t.id+'|'+fmt(d)]===empId) h+=shiftDurH(t);
+    });
+  });
+  return h;
+}
+
+// ── ACTIONS AFFECTATIONS ───────────────────────────
+window.openAssign = function(tourneeId, dateStr, e) {
+  if (e) e.stopPropagation();
+  const t = tournees.find(x=>x.id===tourneeId);
+  if (!t) return;
+  document.getElementById('aTourneeId').value = tourneeId;
+  document.getElementById('aDate').value = dateStr;
+  document.getElementById('assignTitle').textContent = `👷 ${esc(t.nom)} — ${dateStr}`;
+  const dur = shiftDurH(t).toFixed(1);
+  const nH  = nightH(t);
+  document.getElementById('assignInfo').innerHTML =
+    `<strong>${t.heure_debut} → ${t.heure_fin}</strong> · ${dur}h${nH>0?` · 🌙 <span style="color:var(--purple)">${nH.toFixed(1)}h nuit</span>`:''}${t.zone?` · 📍${esc(t.zone)}`:''}`;
+
+  const currentEmpId = affectations[tourneeId+'|'+dateStr];
+  document.getElementById('btnUnassign').style.display = currentEmpId ? '' : 'none';
+
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  const list = document.getElementById('empList');
+  list.innerHTML = '';
+
+  // Séparation fixes / auxiliaires
+  const fixedEmps = employees.filter(e=>!isAux(e)&&['chauffeur','magasinier'].includes(e.role));
+  const auxEmps   = employees.filter(e=>isAux(e));
+
+  function empItem(emp) {
+    const color   = ROLE_COLORS[emp.role]||'#888';
+    const init    = (emp.prenom[0]||'')+(emp.nom[0]||'');
+    const isSelected = currentEmpId === emp.id;
+    const absType = absences[emp.id+'|'+dateStr]||'';
+    const wH      = empWeekH(emp.id, days);
+    const mH      = maxH(emp);
+    const newWH   = wH + shiftDurH(t);
+    const taux    = emp.taux_travail||100;
+
+    let badgeText='', badgeCls='badge-ok';
+    if (absType) { badgeText=ABS_LABELS[absType]; badgeCls='badge-abs'; }
+    else if (isSelected) { badgeText='✓ Assigné'; badgeCls='badge-ok'; }
+    else if (newWH > mH) { badgeText=`${newWH.toFixed(0)}h > ${mH}h`; badgeCls='badge-err'; }
+    else if (newWH > mH*0.9) { badgeText=`${wH.toFixed(0)}/${mH}h`; badgeCls='badge-warn'; }
+    else { badgeText=`${wH.toFixed(0)}/${mH}h`; badgeCls='badge-ok'; }
+
+    const item = document.createElement('div');
+    item.className='emp-item'+(isSelected?' selected':'')+(absType?' absent-item':'');
+    item.innerHTML=`
+      <div class="ei-avatar" style="background:${color}22;color:${color}">${init}</div>
+      <div style="flex:1">
+        <div class="ei-name" style="${absType?'text-decoration:line-through;opacity:.6':''}">${esc(emp.prenom)} ${esc(emp.nom)}</div>
+        <div class="ei-sub">${ROLE_LABELS[emp.role]||emp.role}${taux<100?` · ${taux}%`:''}${isAux(emp)?' · ⚡ Aux.':''} · ${esc(emp.code_usr||'')}</div>
+      </div>
+      <div class="ei-badge ${badgeCls}">${badgeText}</div>`;
+    item.onclick = () => assignEmp(tourneeId, dateStr, emp.id);
+    return item;
+  }
+
+  if (fixedEmps.length > 0) {
+    const lbl=document.createElement('div'); lbl.className='emp-section-label'; lbl.textContent='Employés fixes';
+    list.appendChild(lbl);
+    fixedEmps.forEach(e=>list.appendChild(empItem(e)));
+  }
+  if (auxEmps.length > 0) {
+    const lbl=document.createElement('div'); lbl.className='emp-section-label'; lbl.style.color='var(--purple)'; lbl.textContent='⚡ Auxiliaires à la demande';
+    list.appendChild(lbl);
+    auxEmps.forEach(e=>list.appendChild(empItem(e)));
+  }
+
+  document.getElementById('overlayAssign').classList.add('open');
+};
+
+async function assignEmp(tourneeId, dateStr, empId) {
+  affectations[tourneeId+'|'+dateStr] = empId;
+  saveLocal();
+  closeOverlay('overlayAssign');
+  renderAll();
+  await dbSetAffect(tourneeId, dateStr, empId);
+}
+
+window.removeAffect = async function(tourneeId, dateStr, e) {
+  if (e) e.stopPropagation();
+  delete affectations[tourneeId+'|'+dateStr];
+  saveLocal();
+  renderAll();
+  await dbSetAffect(tourneeId, dateStr, null);
+};
+
+window.unassign = async function() {
+  const tid = document.getElementById('aTourneeId').value;
+  const date = document.getElementById('aDate').value;
+  delete affectations[tid+'|'+date];
+  saveLocal();
+  closeOverlay('overlayAssign');
+  renderAll();
+  await dbSetAffect(tid, date, null);
+};
+
+// ── AUTO-AFFECTATION ───────────────────────────────
+window.autoAssign = function() {
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  let assigned=0, skipped=0;
+  tournees.forEach(t => {
+    days.forEach(d => {
+      const dayNum=d.getDay(), dateStr=fmt(d);
+      if (!(t.jours||[1,2,3,4,5]).includes(dayNum)) return;
+      const key=t.id+'|'+dateStr;
+      if (affectations[key]) return; // déjà assigné
+
+      // Candidats disponibles
+      const candidates = employees
+        .filter(emp => {
+          if (!['chauffeur','magasinier'].includes(emp.role)) return false;
+          if (absences[emp.id+'|'+dateStr]) return false; // absent
+          const wH = empWeekH(emp.id, days);
+          if (wH + shiftDurH(t) > maxH(emp)) return false; // dépasse quota
+          // Pas d'overlap avec autre tournée ce jour
+          const alreadyOnDay = tournees.some(ot=>ot.id!==t.id && affectations[ot.id+'|'+dateStr]===emp.id && timesOverlap(t,ot));
+          return !alreadyOnDay;
+        })
+        .sort((a,b) => {
+          // Fixes avant auxiliaires, puis le moins chargé
+          if (isAux(a) !== isAux(b)) return isAux(a)?1:-1;
+          return empWeekH(a.id,days)/maxH(a) - empWeekH(b.id,days)/maxH(b);
+        });
+
+      if (candidates.length > 0) {
+        affectations[key] = candidates[0].id;
+        assigned++;
+      } else skipped++;
+    });
+  });
+  saveLocal();
+  // Sauvegarder en DB async
+  Object.entries(affectations).forEach(([k,empId]) => {
+    const [tid,...rest] = k.split('|'); const date=rest.join('|');
+    if(tid && date) dbSetAffect(tid,date,empId);
+  });
+  renderAll();
+  alert(`⚡ Terminé : ${assigned} affectations créées${skipped>0?`, ${skipped} sans candidat disponible.`:'.'}`) ;
+};
+
+function timesOverlap(t1,t2) {
+  let s1=t2m(t1.heure_debut), e1=t2m(t1.heure_fin);
+  let s2=t2m(t2.heure_debut), e2=t2m(t2.heure_fin);
+  if(e1<=s1) e1+=1440; if(e2<=s2) e2+=1440;
+  return s1<e2 && s2<e1;
+}
+
+// ── CYCLE ABSENCE ──────────────────────────────────
+window.cycleAbsence = async function(empId, dateStr) {
+  const key = empId+'|'+dateStr;
+  const cur  = absences[key]||'';
+  const idx  = ABS_CYCLE.indexOf(cur);
+  const next = ABS_CYCLE[(idx+1)%ABS_CYCLE.length];
+  if (next) absences[key]=next; else delete absences[key];
+  saveLocal();
+  renderAbsences();
+  updateAbsBadge();
+  if (currentTab==='planning') renderPlanning();
+  await dbSetAbsence(empId, dateStr, next||null);
+};
+
+// ── MODAL TOURNÉE ──────────────────────────────────
+window.openModalTournee = function(id) {
+  const t = id ? tournees.find(x=>x.id===id) : null;
+  document.getElementById('tId').value = t?.id||'';
+  document.getElementById('tNom').value = t?.nom||'';
+  document.getElementById('tDebut').value = t?.heure_debut||'07:00';
+  document.getElementById('tFin').value = t?.heure_fin||'15:45';
+  document.getElementById('tZone').value = t?.zone||'';
+  document.getElementById('tVehicle').value = t?.vehicle||'';
+  document.getElementById('tNotes').value = t?.notes||'';
+  document.getElementById('modalTourneeTitle').textContent = t ? '✏ Modifier la tournée' : '🗺 Nouvelle tournée';
+  document.getElementById('btnDelTournee').style.display = t ? '' : 'none';
+
+  const jours = t?.jours||[1,2,3,4,5];
+  document.querySelectorAll('.day-check').forEach(lbl => {
+    const cb = lbl.querySelector('input');
+    cb.checked = jours.includes(parseInt(cb.value));
+    lbl.classList.toggle('checked', cb.checked);
+  });
+
+  const col = t?.couleur||'#4f8ef7';
+  document.querySelectorAll('.c-dot').forEach(d => d.classList.toggle('active', d.dataset.c===col));
+
+  document.getElementById('overlayTournee').classList.add('open');
+};
+
+window.saveTournee = async function() {
+  const nom = document.getElementById('tNom').value.trim();
+  if (!nom) { alert('Le nom est obligatoire.'); return; }
+  const jours = Array.from(document.querySelectorAll('.day-check input:checked')).map(c=>parseInt(c.value));
+  if (jours.length===0) { alert('Sélectionnez au moins un jour.'); return; }
+  const col = document.querySelector('.c-dot.active')?.dataset.c||'#4f8ef7';
+  const existId = document.getElementById('tId').value;
+  const t = {
+    id:          existId || crypto.randomUUID(),
+    nom,
+    heure_debut: document.getElementById('tDebut').value,
+    heure_fin:   document.getElementById('tFin').value,
+    zone:        document.getElementById('tZone').value.trim()||null,
+    vehicle:     document.getElementById('tVehicle').value||null,
+    notes:       document.getElementById('tNotes').value.trim()||null,
+    jours, couleur: col
+  };
+  const idx = tournees.findIndex(x=>x.id===t.id);
+  if (idx>=0) tournees[idx]=t; else tournees.push(t);
+  saveLocal();
+  closeOverlay('overlayTournee');
+  renderAll();
+  await dbSaveTournee(t);
+};
+
+window.deleteTournee = async function() {
+  const id = document.getElementById('tId').value;
+  if (!id||!confirm('Supprimer cette tournée et toutes ses affectations ?')) return;
+  Object.keys(affectations).forEach(k=>{ if(k.startsWith(id+'|')) delete affectations[k]; });
+  tournees = tournees.filter(t=>t.id!==id);
+  saveLocal();
+  closeOverlay('overlayTournee');
+  renderAll();
+  await dbDeleteTournee(id);
+};
+
+window.resetToutSupprimer = async function() {
+  if (!confirm('Supprimer TOUTES les tournées et affectations ?\n\nCette action est irréversible.')) return;
+  // Vider localStorage
+  localStorage.removeItem('cx_tournees');
+  localStorage.removeItem('cx_affect');
+  localStorage.removeItem('cx_absences');
+  tournees = []; affectations = {}; absences = {};
+  // Vider Supabase
+  if (db && dbOk) {
+    try {
+      await db.from('tournee_affectations').delete().neq('id', 0);
+      await db.from('tournees').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch(e) {}
+  }
+  renderAll();
+};
+
+window.pickColor = function(el) {
+  document.querySelectorAll('.c-dot').forEach(d=>d.classList.remove('active'));
+  el.classList.add('active');
+};
+
+// ── EXPORT CSV ─────────────────────────────────────
+window.exportCSV = function() {
+  const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  let csv = 'Tournée;Zone;Horaire;Durée(h);Date;Jour;Employé;Rôle;Code;Taux;Heures nuit;Majoration 10%\n';
+  tournees.forEach(t => {
+    days.forEach(d => {
+      const dateStr=fmt(d);
+      if (!(t.jours||[1,2,3,4,5]).includes(d.getDay())) return;
+      const key=t.id+'|'+dateStr;
+      const emp = employees.find(e=>e.id===affectations[key]);
+      const dur=shiftDurH(t).toFixed(2), nH=nightH(t).toFixed(2);
+      csv+=`"${t.nom}";"${t.zone||''}";"${t.heure_debut}–${t.heure_fin}";${dur};${dateStr};${DAYS[d.getDay()]};"${emp?emp.prenom+' '+emp.nom:'NON ASSIGNÉ'}";"${emp?ROLE_LABELS[emp.role]||emp.role:''}";"${emp?emp.code_usr||'':''}";${emp?emp.taux_travail||100:''};${nH};${(nH*0.1).toFixed(2)}\n`;
+    });
+  });
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`tournees_sem${isoWeek(weekStart)}_${weekStart.getFullYear()}.csv`;
+  a.click();
+};
+
+// ── UI UTILS ───────────────────────────────────────
+window.closeOverlay = function(id) { document.getElementById(id).classList.remove('open'); };
+document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e=>{ if(e.target===o) o.classList.remove('open'); }));
+
+function showAlert(id) { document.getElementById(id).classList.add('show'); }
+function hideAlert(id) { document.getElementById(id).classList.remove('show'); }
+function showError(msg) {
+  const el=document.getElementById('alertErr');
+  el.textContent='❌ '+msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 6000);
+}
+
+let savingTimer;
+function setSaving(state, msg) {
+  const el = document.getElementById('savingToast');
+  clearTimeout(savingTimer);
+  el.className='saving-toast show '+state;
+  if (state==='saving') el.innerHTML='⏳ Enregistrement…';
+  else if (state==='saved') { el.innerHTML='✓ Enregistré'; savingTimer=setTimeout(()=>el.classList.remove('show'),2000); }
+  else { el.innerHTML='❌ Erreur : '+(msg||''); savingTimer=setTimeout(()=>el.classList.remove('show'),5000); }
+}
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── START ──────────────────────────────────────────
+init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facture Colixo</title>
+    <script src="js/colixo-facture-document.js?v=20260423"></script>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; background: #f4f4f8; }
+        #loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #f4f4f8; z-index: 9; gap: 12px; flex-direction: column; }
+        .spinner { width: 40px; height: 40px; border: 3px solid #ddd; border-top-color: #e8311a; border-radius: 50%; animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #err { display: none; max-width: 480px; margin: 48px auto; padding: 24px; background: #fff; border-radius: 12px; color: #b91c1c; }
+    </style>
+</head>
+<body>
+<div id="loader"><div class="spinner"></div><div>Chargement de la facture…</div></div>
+<div id="err"></div>
+<script>
+(function(){
+    const errEl = document.getElementById('err');
+    const loader = document.getElementById('loader');
+    function fail(msg) {
+        loader.style.display = 'none';
+        errEl.style.display = 'block';
+        errEl.textContent = msg || 'Lien invalide ou données manquantes.';
+    }
+    const D = window.ColixoFactureDoc;
+    if (!D) { fail('Script colixo-facture-document.js manquant.'); return; }
+    const raw = (location.hash || '').replace(/^#/, '');
+    if (!raw.startsWith('data=')) { fail(); return; }
+    let data;
+    try {
+        data = JSON.parse(decodeURIComponent(escape(atob(raw.slice(5)))));
+    } catch (e) {
+        fail('Impossible de lire les données de la facture.');
+        return;
+    }
+    const f = data.f;
+    const lignes = data.lignes || [];
+    const ent = data.ent || {};
+    if (!f) { fail(); return; }
+
+    (async function () {
+        try {
+            const qr = await D.generateQrBillBase64ForFacture(f, ent);
+            const html = D.buildFactureHtmlDocument(f, lignes, ent, qr, false);
+            document.open();
+            document.write(html);
+            document.close();
+        } catch (e) {
+            console.error(e);
+            fail("Erreur d'affichage de la facture.");
+        }
+    })();
+})();
+</script>
+</body>
+</html>

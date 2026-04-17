@@ -12,8 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <style>
         :root{
             --red:#e8311a;--red-dark:#c0280f;
@@ -42,12 +41,12 @@
         .user-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--night3);}
         .user-av{width:30px;height:30px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-family:'Bebas Neue',cursive;font-size:13px;flex-shrink:0;}
         .user-name{font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-        .btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;}
+        .btn-logout{background:var(--night3);border:1px solid var(--border2);border-radius:8px;cursor:pointer;color:var(--muted);padding:0;width:32px;height:32px;display:grid;place-items:center;font-size:13px;flex-shrink:0;transition:all 0.2s;}
 
         .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
         .topbar{background:var(--night2);border-bottom:1px solid var(--border);padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
-        .page-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;}
-        .topbar-right{display:flex;gap:10px;align-items:center;}
+        .page-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+        .topbar-right{position:fixed;left:20cm;top:0;height:60px;display:flex;gap:8px;align-items:center;z-index:300;}
 
         /* PERIOD SELECT */
         .period-bar{background:var(--night2);border-bottom:1px solid var(--border);padding:10px 32px;display:flex;gap:10px;align-items:center;}
@@ -978,7 +977,7 @@
         const tb=document.getElementById('fluxTable');
         if(!tb) return;
         if(!withBal.length){
-            tb.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-txt">Aucune écriture sur cette période. Exécutez le script SQL <code>compta_journal_flux_schema.sql</code> dans Supabase si la table n’existe pas encore, puis « Nouvelle écriture ».</div></div></td></tr>';
+            tb.innerHTML="<tr><td colspan=\"11\"><div class=\"empty\"><div class=\"empty-txt\">Aucune ecriture sur cette periode. Executez le script SQL <code>compta_journal_flux_schema.sql</code> dans Supabase si la table n'existe pas encore, puis Nouvelle ecriture.</div></div></td></tr>";
             return;
         }
         const entLabel=e=>e==='colixo'?'Colixo':'Brimot';
@@ -1510,7 +1509,7 @@
     window.deleteVehicule = async function(id) {
         if(!confirm('Supprimer ce véhicule ?')) return;
         const { error } = await db.from('vehicules').update({actif:false}).eq('id',id);
-        if(error){ toast('error', error.message || 'Impossible d’archiver'); return; }
+        if(error){ toast('error', error.message || "Impossible d'archiver"); return; }
         toast('success','Véhicule archivé');
         await loadAll();
     };
@@ -1558,16 +1557,16 @@
     /* ── AUTH ── */
     async function init() {
         const{data:{session}}=await db.auth.getSession();
-        const codeUser=JSON.parse(sessionStorage.getItem('colixo_user')||'null');
+        const codeUser=JSON.parse(localStorage.getItem('colixo_user')||'null');
         if(!session && !codeUser){window.location.href='../login/index.html';return;}
         const userId=session?.user?.id||codeUser?.id;
         const{data:user}=await db.from('utilisateurs').select('*').eq('id',userId).single();
-        if(!user||!['admin','super_admin'].includes(user.role)){sessionStorage.removeItem('colixo_user');window.location.href='../login/index.html';return;}
+        if(!user||!['admin','super_admin'].includes(user.role)){localStorage.removeItem('colixo_user');window.location.href='../login/index.html';return;}
         if(user){
             document.getElementById('sbAv').textContent=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
             document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
         }
-        document.getElementById('btnLogout').addEventListener('click',async()=>{await db.auth.signOut();sessionStorage.removeItem('colixo_user');window.location.href='../login/index.html';});
+        document.getElementById('btnLogout').addEventListener('click',async()=>{await db.auth.signOut();localStorage.removeItem('colixo_user');window.location.href='../login/index.html';});
         // Populate chauffeur select in modal
         const{data:ch}=await db.from('utilisateurs').select('id,nom,prenom').eq('role','chauffeur');
         document.getElementById('mChauffeur').innerHTML='<option value="">— Aucun —</option>'+(ch||[]).map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');

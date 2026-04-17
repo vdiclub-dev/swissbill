@@ -2,16 +2,42 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <!-- colixo-build:20260463 -->
+    <script>
+    (function(){try{
+      var BUILD='20260463';
+      try{
+        if(localStorage.getItem('colixo_deploy')!==BUILD){
+          localStorage.setItem('colixo_deploy',BUILD);
+          sessionStorage.removeItem('colixo_index_bust');
+          sessionStorage.removeItem('colixo_login_bust');
+        }
+      }catch(e){}
+      var u=new URL(location.href);
+      if(u.searchParams.has('cx')){
+        u.searchParams.delete('cx');
+        history.replaceState(null,'',u.pathname+u.search+u.hash);
+        return;
+      }
+      if(sessionStorage.getItem('colixo_login_bust')==='1')return;
+      sessionStorage.setItem('colixo_login_bust','1');
+      u.searchParams.set('cx',Date.now());
+      location.replace(u.toString());
+    }catch(e){}})();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Connexion — Colixo</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../config.js"></script>
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script data-cfasync="false" src="../config.js?v=20260463"></script>
+    
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -60,10 +86,11 @@
 
         .field{margin-bottom:14px;}
         .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+        .code-wrap{position:relative;}
 
         /* Input code grand format */
         .field input.code-field{
-            width:100%;padding:18px 15px;
+            width:100%;padding:18px 58px 18px 15px;
             background:var(--night3);
             border:1.5px solid var(--border2);
             border-radius:11px;
@@ -75,8 +102,21 @@
             text-transform:uppercase;
             transition:border-color 0.2s,box-shadow 0.2s;
         }
+        .field input.code-field.is-masked{
+            -webkit-text-security: disc;
+        }
         .field input.code-field:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px var(--red-glow);}
         .field input.code-field::placeholder{color:rgba(255,255,255,0.15);letter-spacing:4px;font-size:20px;}
+        .toggle-code{
+            position:absolute;right:10px;top:50%;transform:translateY(-50%);
+            width:40px;height:40px;border:none;border-radius:10px;
+            background:rgba(255,255,255,0.04);color:var(--muted2);
+            display:grid;place-items:center;cursor:pointer;
+            transition:background .2s,color .2s,transform .2s;
+            font-size:18px;font-family:inherit;line-height:1;
+        }
+        .toggle-code:hover{background:rgba(255,255,255,0.08);color:var(--white);}
+        .toggle-code:focus{outline:none;box-shadow:0 0 0 3px var(--red-glow);color:var(--white);}
 
         /* Input standard (admin) */
         .field input.std-field{
@@ -93,6 +133,14 @@
 
         .code-hint{text-align:center;font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6;}
         .code-hint strong{color:var(--muted2);}
+
+        .login-tabs{display:flex;gap:0;margin-bottom:24px;background:var(--night3);border-radius:12px;padding:4px;border:1px solid var(--border2);}
+        .login-tabs button{flex:1;padding:12px 14px;border:none;border-radius:10px;background:transparent;color:var(--muted);font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s,color .2s;}
+        .login-tabs button.active{background:var(--red);color:#fff;box-shadow:0 4px 16px var(--red-glow);}
+        .login-tabs button:not(.active):hover{color:var(--white);}
+        .panel-register{display:none;}
+        .panel-register.active{display:block;}
+        .reg-note{font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:16px;padding:12px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:10px;}
 
         .btn-submit{
             width:100%;padding:15px;
@@ -142,33 +190,62 @@
         <div class="logo-mark">🚚</div>
         <div class="logo-text">Coli<em>xo</em></div>
     </div>
-    <div class="subtitle">Entrez votre code d'accès<br>pour accéder à votre espace Colixo</div>
+    <div class="subtitle" id="loginSubtitle">Connexion uniquement avec le code fourni par Colixo</div>
 
     <div class="error-box" id="errorBox"></div>
 
-    <!-- ── FORMULAIRE CODE (principal) ── -->
+    <div class="login-tabs" role="tablist">
+        <button type="button" class="active" id="tabConnexion" role="tab" aria-selected="true">Connexion</button>
+        <button type="button" id="tabInscription" role="tab" aria-selected="false">Demande d'accès</button>
+    </div>
+
+    <!-- ── CODE ── -->
     <form id="formCode">
         <div class="field">
             <label>Code d'accès</label>
-            <input
-                type="text"
-                id="codeInput"
-                class="code-field"
-                placeholder="USR-XXXX"
-                maxlength="8"
-                autocomplete="off"
-                autocorrect="off"
-                autocapitalize="characters"
-                spellcheck="false"
-                required>
+            <div class="code-wrap">
+                <input
+                    type="text"
+                    id="codeInput"
+                    class="code-field is-masked"
+                    placeholder="Code d'accès"
+                    maxlength="8"
+                    inputmode="text"
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                    required>
+                <input type="hidden" id="codeInputRaw" value="">
+                <button type="button" class="toggle-code" id="toggleCode" aria-label="Afficher le code" aria-pressed="false" title="Afficher le code">👁</button>
+            </div>
         </div>
         <div class="code-hint">
-            Code fourni par Colixo · Exemple : <strong>USR-A3F9</strong>
+            3 lettres, tiret, 4 chiffres · Le code reste masqué pendant la saisie.
         </div>
         <button type="submit" class="btn-submit">
             <i class="fas fa-arrow-right"></i> Accéder à mon espace
         </button>
     </form>
+
+    <!-- ── DEMANDE (pas de mot de passe — l'admin valide et vous envoie un code) ── -->
+    <div id="panelRegister" class="panel-register" aria-hidden="true">
+        <p class="reg-note">
+            Remplissez le formulaire. <strong>Aucun mot de passe</strong> : notre équipe traite votre demande, définit votre rôle et vous communique votre <strong>code d'accès</strong> (format XXX-1234).
+        </p>
+        <form id="formRegister">
+            <div class="field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="field"><label>Prénom *</label><input type="text" id="regPrenom" class="std-field" required autocomplete="given-name"></div>
+                <div class="field"><label>Nom *</label><input type="text" id="regNom" class="std-field" required autocomplete="family-name"></div>
+            </div>
+            <div class="field"><label>Email *</label><input type="email" id="regEmail" class="std-field" required autocomplete="email"></div>
+            <div class="field"><label>Téléphone</label><input type="tel" id="regTel" class="std-field" autocomplete="tel"></div>
+            <div class="field"><label>Entreprise</label><input type="text" id="regEntreprise" class="std-field" placeholder="Nom de la société" autocomplete="organization"></div>
+            <div class="field"><label>Adresse</label><input type="text" id="regAdresse" class="std-field" placeholder="Rue, NPA, ville" autocomplete="street-address"></div>
+            <div class="field"><label>Message</label><textarea id="regMessage" class="std-field" rows="3" placeholder="Besoin particulier, volume, etc." style="min-height:72px;resize:vertical;"></textarea></div>
+            <button type="submit" class="btn-submit"><i class="fas fa-paper-plane"></i> Envoyer la demande</button>
+        </form>
+    </div>
 
 </div>
 
@@ -176,11 +253,63 @@
 (function () {
     'use strict';
 
+    /* config.js est injecté dans le <head> : sans attendre l’événement « load », ce script
+       s’exécutait avant la fin du chargement → SUPABASE_CONFIG encore absent (sans erreur console). */
+    function colixoLoginApp() {
+
     if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
-        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:500px;"><h2>❌ config.js manquant</h2><p>Le fichier config.js est introuvable.</p></div>';
+        if (new URLSearchParams(location.search).get('logout') === '1') {
+            try { localStorage.removeItem('colixo_user'); } catch (e) {}
+            var h0 = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
+            window.location.replace(h0);
+        }
+        var hint = '';
+        if (window.SUPABASE_CONFIG && !window.SUPABASE_CLIENT) {
+            hint = '<p style="margin-top:12px;font-size:14px;opacity:.9">' + (window.COLIXO_SUPABASE_INIT_ERROR || 'Initialisation du client Supabase impossible (réseau, bloqueur, SDK).') + '</p>';
+        } else {
+            hint = '<p>Le fichier <code>config.js</code> n’a pas pu être chargé (404 ou mauvais chemin). Vérifiez le déploiement à la racine ou sous-dossier, ou rechargez en forcé (Cmd+Shift+R).</p>';
+        }
+        document.body.innerHTML = '<div style="padding:40px;color:#e8311a;font-family:sans-serif;max-width:520px;"><h2>❌ config.js manquant</h2>' + hint + '</div>';
         return;
     }
     const db = window.SUPABASE_CLIENT;
+
+    if (new URLSearchParams(location.search).get('switch') === '1') {
+        (async function () {
+            try { await db.auth.signOut(); } catch (e) {}
+            try { localStorage.removeItem('colixo_user'); } catch (e) {}
+        })();
+    }
+
+    if (new URLSearchParams(location.search).get('logout') === '1') {
+        (async function () {
+            try { await db.auth.signOut(); } catch (e) {}
+            try { localStorage.removeItem('colixo_user'); } catch (e) {}
+            var hOut = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
+            window.location.replace(hOut);
+        })();
+        return;
+    }
+
+    function showLoginTab(which) {
+        var isReg = which === 'register';
+        document.getElementById('tabConnexion').classList.toggle('active', !isReg);
+        document.getElementById('tabInscription').classList.toggle('active', isReg);
+        document.getElementById('tabConnexion').setAttribute('aria-selected', !isReg);
+        document.getElementById('tabInscription').setAttribute('aria-selected', isReg);
+        document.getElementById('formCode').style.display = isReg ? 'none' : 'block';
+        document.getElementById('panelRegister').classList.toggle('active', isReg);
+        document.getElementById('panelRegister').setAttribute('aria-hidden', !isReg);
+        document.getElementById('loginSubtitle').innerHTML = isReg
+            ? 'Demande d\'accès — <strong>pas de mot de passe</strong>, uniquement un code après validation'
+            : 'Connexion uniquement avec le code fourni par Colixo';
+        clearError();
+    }
+    document.getElementById('tabConnexion').addEventListener('click', function () { showLoginTab('login'); });
+    document.getElementById('tabInscription').addEventListener('click', function () { showLoginTab('register'); });
+    if (new URLSearchParams(window.location.search).get('register') === '1') {
+        showLoginTab('register');
+    }
 
     /* ── Helpers UI ── */
     const toastEl  = document.getElementById('toast');
@@ -206,10 +335,106 @@
         document.getElementById('errorBox').style.display = 'none';
     }
 
-    /* ── Formatage code en majuscules automatique ── */
-    document.getElementById('codeInput').addEventListener('input', function () {
-        this.value = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    /* ── Formatage du code d'accès ── */
+    const codeInput = document.getElementById('codeInput');
+    const codeInputRaw = document.getElementById('codeInputRaw');
+    const toggleCode = document.getElementById('toggleCode');
+
+    function normalizeAccessCode(value) {
+        return String(value || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8);
+    }
+
+    function isCodeVisible() {
+        return !codeInput.classList.contains('is-masked');
+    }
+
+    function maskAccessCode(value) {
+        return '•'.repeat(String(value || '').length);
+    }
+
+    function renderCodeInput() {
+        const raw = codeInputRaw.value || '';
+        codeInput.value = isCodeVisible() ? raw : maskAccessCode(raw);
+    }
+
+    function updateRawCode(nextValue) {
+        codeInputRaw.value = normalizeAccessCode(nextValue);
+        renderCodeInput();
+        requestAnimationFrame(() => {
+            const pos = codeInput.value.length;
+            try { codeInput.setSelectionRange(pos, pos); } catch (e) {}
+        });
+    }
+
+    codeInput.addEventListener('keydown', function (e) {
+        const key = e.key;
+
+        if (key === 'Tab' || key === 'Enter') return;
+
+        if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'x'].includes(key.toLowerCase())) return;
+
+        if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'v') {
+            e.preventDefault();
+            return;
+        }
+
+        if (key === 'Backspace') {
+            e.preventDefault();
+            updateRawCode((codeInputRaw.value || '').slice(0, -1));
+            return;
+        }
+
+        if (key === 'Delete') {
+            e.preventDefault();
+            updateRawCode('');
+            return;
+        }
+
+        if (key.startsWith('Arrow') || key === 'Home' || key === 'End') {
+            e.preventDefault();
+            requestAnimationFrame(() => {
+                const pos = codeInput.value.length;
+                try { codeInput.setSelectionRange(pos, pos); } catch (err) {}
+            });
+            return;
+        }
+
+        if (key.length === 1) {
+            e.preventDefault();
+            updateRawCode((codeInputRaw.value || '') + key);
+        }
     });
+
+    codeInput.addEventListener('paste', function (e) {
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
+        updateRawCode((codeInputRaw.value || '') + pasted);
+    });
+
+    codeInput.addEventListener('focus', function () {
+        renderCodeInput();
+        requestAnimationFrame(() => {
+            const pos = codeInput.value.length;
+            try { codeInput.setSelectionRange(pos, pos); } catch (e) {}
+        });
+    });
+
+    codeInput.addEventListener('input', function () {
+        renderCodeInput();
+    });
+
+    toggleCode.addEventListener('click', function () {
+        const isVisible = !codeInput.classList.contains('is-masked');
+        codeInput.classList.toggle('is-masked', isVisible);
+        this.setAttribute('aria-pressed', String(!isVisible));
+        this.setAttribute('aria-label', isVisible ? 'Afficher le code' : 'Masquer le code');
+        this.setAttribute('title', isVisible ? 'Afficher le code' : 'Masquer le code');
+        this.textContent = isVisible ? '👁' : '🙈';
+        renderCodeInput();
+        codeInput.focus();
+    });
+
+    renderCodeInput();
 
     /* ── Redirection selon rôle ── */
     function redirectByRole(role) {
@@ -218,25 +443,68 @@
             admin:       '/admin/dashboard.html',
             chauffeur:   '/admin/driver-app.html',
             magasinier:  '/magasinier/dashboard.html',
-            client:      '/admin/client/portal.html'
+            client:      '/admin/client/portal.html',
+            gestionnaire: '/admin/client/portal.html',
+            comptable: '/admin/client/portal.html',
+            sous_utilisateur: '/admin/client/portal.html'
         };
-        window.location.href = routes[role] || '/admin/client/portal.html';
+        const path = routes[role] || '/admin/client/portal.html';
+        window.location.href = (typeof window.colixoHref === 'function') ? window.colixoHref(path) : path;
     }
 
-    /* ── Vérifier session existante (code USR déjà connecté) ── */
-    const existingUser = sessionStorage.getItem('colixo_user');
-    if (existingUser) {
-        try { redirectByRole(JSON.parse(existingUser).role); } catch(e) {}
-    }
+    /* Ne pas auto-rediriger depuis localStorage :
+       l'utilisateur peut vouloir changer de compte depuis l'écran de connexion
+       (ex. quitter le portail client puis se connecter en super admin). */
+
+    /* ── DEMANDE D'ACCÈS (table demandes_inscription — exécuter demandes_inscription.sql dans Supabase) ── */
+    document.getElementById('formRegister').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        clearError();
+        var prenom = document.getElementById('regPrenom').value.trim();
+        var nom = document.getElementById('regNom').value.trim();
+        var email = document.getElementById('regEmail').value.trim();
+        if (!prenom || !nom || !email) {
+            showError('❌ Prénom, nom et email sont requis.');
+            return;
+        }
+        showLoad();
+        try {
+            var payload = {
+                prenom: prenom,
+                nom: nom,
+                email: email,
+                telephone: document.getElementById('regTel').value.trim() || null,
+                entreprise_nom: document.getElementById('regEntreprise').value.trim() || null,
+                adresse: document.getElementById('regAdresse').value.trim() || null,
+                message: document.getElementById('regMessage').value.trim() || null
+            };
+            var ins = await db.from('demandes_inscription').insert([payload]);
+            if (ins.error) throw ins.error;
+            toast('success', "Demande enregistree. L'acces au tableau de bord n'est possible qu'avec un code : vous le recevrez apres validation par l'equipe.");
+            document.getElementById('formRegister').reset();
+            showLoginTab('login');
+        } catch (err) {
+            var msg = (err && err.message) ? err.message : String(err);
+            if (msg.indexOf('relation') !== -1 && msg.indexOf('does not exist') !== -1) {
+                showError('❌ Table non créée : exécutez le fichier SQL demandes_inscription.sql dans Supabase.');
+            } else {
+                showError('❌ ' + msg);
+            }
+        } finally {
+            hideLoad();
+        }
+    });
 
     /* ── CONNEXION PAR CODE ── */
     document.getElementById('formCode').addEventListener('submit', async function (e) {
         e.preventDefault();
         clearError();
 
-        const code = document.getElementById('codeInput').value.trim().toUpperCase();
-        if (!code || code.length < 4) {
-            showError('❌ Code invalide. Format attendu : USR-XXXX');
+        const code = normalizeAccessCode(codeInputRaw.value || codeInput.value);
+        var okStandard = /^[A-Z]{3}-\d{4}$/.test(code);
+        var okLegacy = /^[A-Z]{2,4}-[A-Z0-9]{4,10}$/.test(code);
+        if (!code || (!okStandard && !okLegacy)) {
+            showError('❌ Format attendu : trois lettres, tiret, quatre chiffres (ex. CLT-7290). Les anciens codes restent acceptés.');
             return;
         }
 
@@ -244,23 +512,34 @@
         try {
             const { data: user, error } = await db
                 .from('utilisateurs')
-                .select('id, role, nom, prenom, code_acces')
-                .eq('code_acces', code)
-                .single();
+                .select('id, role, nom, prenom, code_usr, actif')
+                .eq('code_usr', code)
+                .maybeSingle();
 
-            if (error || !user) {
+            if (error) {
+                hideLoad();
+                showError('❌ Erreur : ' + error.message);
+                return;
+            }
+            if (!user) {
                 hideLoad();
                 showError('❌ Code introuvable. Vérifiez votre code.');
                 return;
             }
 
+            if (user.actif === false) {
+                hideLoad();
+                showError('❌ Compte désactivé. Contactez votre administrateur.');
+                return;
+            }
+
             /* Stocker le profil en sessionStorage pour les pages suivantes */
-            sessionStorage.setItem('colixo_user', JSON.stringify({
+            localStorage.setItem('colixo_user', JSON.stringify({
                 id:     user.id,
                 role:   user.role,
                 nom:    user.nom,
                 prenom: user.prenom,
-                code:   user.code_acces
+                code:   user.code_usr
             }));
 
             toast('success', 'Bienvenue ! Redirection en cours…');
@@ -272,7 +551,13 @@
         }
     });
 
+    }
 
+    if (document.readyState === 'complete') {
+        colixoLoginApp();
+    } else {
+        window.addEventListener('load', colixoLoginApp);
+    }
 })();
 </script>
 </body>

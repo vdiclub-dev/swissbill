@@ -9,7 +9,7 @@ async function startScanner() {
         
         // Vérifier si on est en HTTPS (obligatoire pour la caméra sur mobile)
         if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            throw new Error('La caméra nécessite une connexion HTTPS. Utilisez https://vdiclub-dev.github.io/swissbill/');
+            throw new Error('La caméra nécessite une connexion HTTPS. Ouvrez cette page via le domaine sécurisé du site.');
         }
         
         // Vérifier si le navigateur supporte les permissions
@@ -211,11 +211,14 @@ function handleScanResult(result) {
 function processQRCodeData(data) {
     try {
         // Analyser les données du QR code
-        // Format attendu: "invoice:ID" ou "client:EMAIL" ou "product:CODE"
+        // Format attendu: "invoice:ID" ou "client:EMAIL" ou "product:CODE" ou "order:ID"
         
         if (data.startsWith('invoice:')) {
             const invoiceId = data.replace('invoice:', '');
             loadInvoiceFromQR(invoiceId);
+        } else if (data.startsWith('order:')) {
+            const orderId = data.replace('order:', '');
+            loadOrderFromQR(orderId);
         } else if (data.startsWith('client:')) {
             const clientEmail = data.replace('client:', '');
             loadClientFromQR(clientEmail);
@@ -228,6 +231,24 @@ function processQRCodeData(data) {
         }
     } catch (error) {
         console.error('Erreur lors du traitement des données QR:', error);
+    }
+}
+
+async function loadOrderFromQR(orderId) {
+    try {
+        if (!orderId) throw new Error('ID de commande manquant');
+
+        const baseDispatch = (window.colixoHref && typeof window.colixoHref === 'function')
+            ? window.colixoHref('/admin/dispatch.html')
+            : '/admin/dispatch.html';
+
+        const target = `${baseDispatch}?highlight=${encodeURIComponent(orderId)}`;
+
+        stopScanner();
+        window.location.href = target;
+    } catch (error) {
+        console.error('Erreur lors du chargement de la commande:', error);
+        alert('Erreur: Impossible d’ouvrir la commande depuis le QR code');
     }
 }
 

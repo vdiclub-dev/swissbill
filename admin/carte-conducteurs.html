@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260419"></script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         html, body { width:100%; height:100%; overflow:hidden; background:#0a0a0f; }
@@ -37,7 +37,7 @@
         .live { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--green); background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25); padding:4px 12px; border-radius:100px; }
         .live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:lp 1.5s infinite; }
         @keyframes lp { 0%,100%{opacity:1} 50%{opacity:0.35} }
-        .tb-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+        .tb-right{position:fixed;left:20cm;top:0;height:28px;display:flex;gap:10px;align-items:center;z-index:300;}
         .tb-link { font-size:13px; color:var(--muted); text-decoration:none; }
         .tb-link:hover { color:var(--white); }
 
@@ -211,7 +211,7 @@
     function fmtSpeed(kmh) {
         if (kmh == null || isNaN(kmh)) return 'Vitesse : —';
         const n = Number(kmh);
-        if (n < 1) return 'À l’arrêt';
+        if (n < 1) return "A l'arret";
         return '≈ ' + n.toFixed(0) + ' km/h';
     }
 
@@ -343,7 +343,7 @@
             if (isMissingTableError(em)) {
                 toast('Table driver_live_positions introuvable sur ce projet Supabase — exécutez driver_live_positions_schema.sql (bon projet ?).', true);
             } else if (em.includes('schema cache') || /PGRST002/i.test(em)) {
-                toast('Supabase n’a pas encore rechargé le schéma — Dashboard → Project Settings → API → « Reload schema », ou attendez 1–2 min.', true);
+                toast("Supabase n'a pas encore recharge le schema - Dashboard > Project Settings > API > Reload schema, ou attendez 1-2 min.", true);
             } else if (isMissingColumnError(em)) {
                 toast('Colonnes manquantes — exécutez driver_live_positions_add_telemetry.sql', true);
             } else {
@@ -362,14 +362,20 @@
 
     (async function init() {
         const { data: { session } } = await db.auth.getSession();
-        const codeUser = JSON.parse(sessionStorage.getItem('colixo_user') || 'null');
-        const userId = userId || codeUser?.id;
+        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
         if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
-        const { data: user } = await db.from('utilisateurs').select('role').eq('id', userId).single();
-        if (!user || !['admin', 'super_admin'].includes(user.role)) {
-            await db.auth.signOut();
-            window.location.replace('../login/index.html');
-            return;
+        const uid = session?.user?.id || codeUser?.id;
+        if (codeUser) {
+            if (!['admin', 'super_admin'].includes(codeUser.role)) {
+                window.location.replace('../login/index.html'); return;
+            }
+        } else {
+            const { data: user } = await db.from('utilisateurs').select('role').eq('id', uid).single();
+            if (!user || !['admin', 'super_admin'].includes(user.role)) {
+                await db.auth.signOut();
+                window.location.replace('../login/index.html');
+                return;
+            }
         }
 
         map = L.map('map', { zoomControl: false, attributionControl: false }).setView(CH_CENTER, 8);

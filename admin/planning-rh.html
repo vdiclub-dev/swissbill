@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Planning RH — Colixo</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script data-cfasync="false" src="../config.js?v=20260462"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f16;--bg2:#161622;--bg3:#1e1e2e;--bg4:#252535;
+  --border:#2a2a3e;--border2:#353550;
+  --text:#e8e8f0;--text2:#9898b8;--text3:#6060a0;
+  --red:#e8311a;--red2:rgba(232,49,26,.15);
+  --blue:#4f8ef7;--blue2:rgba(79,142,247,.15);
+  --green:#22c55e;--green2:rgba(34,197,94,.15);
+  --orange:#f97316;--orange2:rgba(249,115,22,.15);
+  --purple:#a855f7;--purple2:rgba(168,85,247,.15);
+  --yellow:#eab308;--yellow2:rgba(234,179,8,.15);
+  --night:#1e1040;--night-accent:#7c3aed;
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;font-size:13px;min-height:100vh}
+
+/* ── TOPBAR ─────────────────────────────────────────── */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:60px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.topbar-logo{font-size:20px;font-weight:800;color:var(--red);letter-spacing:-.5px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:600;color:var(--text);flex:1}
+.topbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:auto}
+
+/* ── TOOLBAR ─────────────────────────────────────────── */
+.toolbar{display:flex;align-items:center;gap:10px;padding:12px 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;font:inherit;font-size:12px;transition:.2s;white-space:nowrap}
+.btn:hover{background:var(--bg4);border-color:var(--border2)}
+.btn-primary{background:var(--red);border-color:var(--red);color:#fff}
+.btn-primary:hover{background:#c92a15;border-color:#c92a15}
+.btn-green{background:var(--green2);border-color:var(--green);color:var(--green)}
+.btn-green:hover{background:rgba(34,197,94,.25)}
+.btn-blue{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.btn-blue:hover{background:rgba(79,142,247,.25)}
+.week-nav{display:flex;align-items:center;gap:8px}
+.week-label{font-weight:600;font-size:13px;min-width:180px;text-align:center}
+.view-tabs{display:flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+.view-tab{padding:7px 14px;background:var(--bg3);border:none;color:var(--text2);cursor:pointer;font:inherit;font-size:12px;transition:.15s}
+.view-tab.active{background:var(--blue2);color:var(--blue);font-weight:600}
+select{padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font:inherit;font-size:12px;cursor:pointer}
+
+/* ── STATS ─────────────────────────────────────────── */
+.stats-row{display:flex;gap:10px;padding:12px 20px;background:var(--bg);border-bottom:1px solid var(--border);overflow-x:auto}
+.stat-card{flex:1;min-width:140px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.stat-label{font-size:11px;color:var(--text2);margin-bottom:4px}
+.stat-value{font-size:20px;font-weight:700;color:var(--text)}
+.stat-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.stat-card.warn .stat-value{color:var(--orange)}
+.stat-card.danger .stat-value{color:var(--red)}
+.stat-card.ok .stat-value{color:var(--green)}
+.stat-card.night .stat-value{color:var(--purple)}
+
+/* ── PLANNING GRID ─────────────────────────────────── */
+.planning-wrap{overflow-x:auto;padding:16px 20px}
+.planning-grid{width:100%;border-collapse:separate;border-spacing:0;min-width:900px}
+.planning-grid th,.planning-grid td{border:1px solid var(--border);padding:0;vertical-align:top}
+.planning-grid th{background:var(--bg2);padding:10px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--text2);position:sticky;top:60px;z-index:10}
+.th-day{min-width:110px}
+.th-day .day-name{color:var(--text);font-size:13px;font-weight:700}
+.th-day .day-date{font-size:11px;color:var(--text3);margin-top:2px}
+.th-day.today .day-name{color:var(--blue)}
+.th-day.weekend .day-name{color:var(--orange)}
+.th-emp{width:150px;background:var(--bg2);padding:10px 12px;border-right:2px solid var(--border2);position:sticky;left:0;z-index:5}
+.emp-name{font-weight:600;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.emp-role{font-size:10px;color:var(--text3);margin-top:2px}
+.emp-hours{font-size:11px;color:var(--blue);margin-top:4px;font-weight:600}
+.emp-warn{font-size:10px;color:var(--orange);margin-top:2px}
+
+/* ── CELLS ─────────────────────────────────────────── */
+.day-cell{height:80px;padding:4px;background:var(--bg);cursor:pointer;transition:.15s;position:relative;min-width:110px}
+.day-cell:hover{background:var(--bg3)}
+.day-cell.weekend{background:#0d0d18}
+.day-cell.today{background:rgba(79,142,247,.04);border-color:rgba(79,142,247,.3) !important}
+.day-cell.vacation{background:repeating-linear-gradient(45deg,var(--bg),var(--bg) 8px,rgba(234,179,8,.05) 8px,rgba(234,179,8,.05) 16px)}
+.cell-add{position:absolute;bottom:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--bg3);border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text3);transition:.15s;opacity:0}
+.day-cell:hover .cell-add{opacity:1}
+
+/* ── SHIFT CHIP ─────────────────────────────────────── */
+.shift-chip{border-radius:6px;padding:4px 6px;margin-bottom:3px;font-size:11px;cursor:pointer;border:1px solid transparent;transition:.15s;position:relative}
+.shift-chip:hover{filter:brightness(1.15)}
+.shift-chip .sh-time{font-weight:700;letter-spacing:.3px}
+.shift-chip .sh-hours{font-size:10px;opacity:.75;margin-left:4px}
+.shift-chip .sh-night{font-size:9px;color:var(--purple);font-weight:600;margin-left:2px}
+.shift-chip .sh-del{position:absolute;top:2px;right:3px;font-size:10px;opacity:0;cursor:pointer;color:var(--red)}
+.shift-chip:hover .sh-del{opacity:1}
+/* Colors by shift type */
+.chip-day{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);color:#86efac}
+.chip-afternoon{background:rgba(249,115,22,.15);border-color:rgba(249,115,22,.3);color:#fdba74}
+.chip-night{background:rgba(124,58,237,.2);border-color:rgba(124,58,237,.4);color:#c4b5fd}
+.chip-split{background:rgba(79,142,247,.15);border-color:rgba(79,142,247,.3);color:#93c5fd}
+.chip-violation{border-color:var(--red) !important;box-shadow:0 0 0 1px var(--red)}
+.vacation-chip{background:var(--yellow2);border:1px solid var(--yellow);border-radius:6px;padding:4px 6px;font-size:11px;color:var(--yellow);font-weight:600;text-align:center;cursor:pointer}
+
+/* ── CONSTRAINTS PANEL ─────────────────────────────── */
+.violations-panel{margin:8px 20px;padding:12px 16px;background:rgba(232,49,26,.08);border:1px solid rgba(232,49,26,.25);border-radius:10px;display:none}
+.violations-panel.show{display:block}
+.violations-title{font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px}
+.violation-item{font-size:11px;color:#ff9989;padding:3px 0;border-bottom:1px solid rgba(232,49,26,.1)}
+.violation-item:last-child{border:none}
+
+/* ── MODAL ─────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:420px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:20px;display:flex;align-items:center;gap:8px}
+.modal-body{display:flex;flex-direction:column;gap:14px}
+.form-row{display:flex;gap:10px}
+.form-group{flex:1;display:flex;flex-direction:column;gap:6px}
+label{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+input[type="time"],input[type="number"],input[type="text"],textarea{width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font:inherit;font-size:13px;transition:.15s}
+input:focus,textarea:focus{outline:none;border-color:var(--blue);background:var(--bg4)}
+.radio-group{display:flex;gap:8px;flex-wrap:wrap}
+.radio-btn{flex:1;text-align:center;padding:8px 6px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:11px;font-weight:600;transition:.15s;min-width:70px}
+.radio-btn.active{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.constraint-check{padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-size:11px}
+.constraint-ok{color:var(--green)}
+.constraint-warn{color:var(--orange)}
+.constraint-err{color:var(--red)}
+.modal-footer{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.btn-ghost:hover{background:var(--bg3);color:var(--text)}
+.btn-danger{background:rgba(232,49,26,.15);border-color:var(--red);color:var(--red)}
+.btn-danger:hover{background:rgba(232,49,26,.25)}
+
+/* ── AUTO-GENERATE MODAL ────────────────────────────── */
+.gen-section{background:var(--bg3);border-radius:10px;padding:14px;border:1px solid var(--border)}
+.gen-section-title{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.gen-rule{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)}
+.gen-rule:last-child{border:none}
+.gen-rule strong{color:var(--text);flex:1}
+.gen-rule input[type="number"]{width:70px;flex:none}
+.gen-rule input[type="checkbox"]{width:16px;height:16px;accent-color:var(--blue)}
+.progress-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:var(--blue);transition:width .3s;width:0}
+
+/* ── EMPLOYEE LEGEND ────────────────────────────────── */
+.emp-legend{display:flex;gap:10px;padding:10px 20px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+
+/* ── RESPONSIVE ─────────────────────────────────────── */
+@media(max-width:768px){
+  .toolbar{flex-direction:column;align-items:stretch}
+  .stats-row{flex-direction:column}
+}
+.empty-state{text-align:center;padding:40px;color:var(--text3)}
+.empty-state p{margin-top:8px;font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-logo">Colixo</div>
+  <div class="topbar-title">Planning RH</div>
+  <div class="topbar-right">
+    <button class="btn btn-green" onclick="openAutoGenModal()">⚡ Générer planning</button>
+    <button class="btn btn-blue" onclick="exportPlanning()">⬇ Exporter</button>
+    <button class="btn" id="btnLogout">⏻</button>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="week-nav">
+    <button class="btn" onclick="navWeek(-1)">‹</button>
+    <div class="week-label" id="weekLabel">Semaine du …</div>
+    <button class="btn" onclick="navWeek(1)">›</button>
+    <button class="btn" onclick="goToday()">Aujourd'hui</button>
+  </div>
+  <div class="view-tabs">
+    <button class="view-tab active" onclick="setView('week',this)">Semaine</button>
+    <button class="view-tab" onclick="setView('month',this)">Mois</button>
+  </div>
+  <select id="empFilter" onchange="renderGrid()">
+    <option value="">Tous les employés</option>
+  </select>
+  <select id="roleFilter" onchange="renderGrid()">
+    <option value="">Tous les rôles</option>
+    <option value="chauffeur">Chauffeurs</option>
+    <option value="magasinier">Magasiniers</option>
+    <option value="admin">Admins</option>
+  </select>
+  <button class="btn" onclick="toggleVacationMode()" id="btnVacation">🏖 Mode vacances</button>
+</div>
+
+<!-- STATS -->
+<div class="stats-row" id="statsRow">
+  <div class="stat-card" id="statTotalH">
+    <div class="stat-label">Heures totales (semaine)</div>
+    <div class="stat-value">—</div>
+    <div class="stat-sub">Tous employés</div>
+  </div>
+  <div class="stat-card night" id="statNightH">
+    <div class="stat-label">Heures de nuit (23h–5h)</div>
+    <div class="stat-value">—</div>
+    <div class="stat-sub">+10% majoration</div>
+  </div>
+  <div class="stat-card" id="statMajoration">
+    <div class="stat-label">Coût majoration nuit</div>
+    <div class="stat-value">—</div>
+    <div class="stat-sub">Base = heures nuit × 10%</div>
+  </div>
+  <div class="stat-card" id="statViolations">
+    <div class="stat-label">Violations contraintes</div>
+    <div class="stat-value">0</div>
+    <div class="stat-sub">Toute la semaine</div>
+  </div>
+  <div class="stat-card" id="statEmployees">
+    <div class="stat-label">Employés planifiés</div>
+    <div class="stat-value">—</div>
+    <div class="stat-sub">Cette semaine</div>
+  </div>
+</div>
+
+<!-- VIOLATIONS PANEL -->
+<div class="violations-panel" id="violationsPanel">
+  <div class="violations-title">⚠ Violations des contraintes légales</div>
+  <div id="violationsList"></div>
+</div>
+
+<!-- PLANNING GRID -->
+<div class="planning-wrap">
+  <table class="planning-grid" id="planningGrid">
+    <thead id="gridHead"></thead>
+    <tbody id="gridBody"></tbody>
+  </table>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div style="font-size:32px">📋</div>
+    <p>Aucun employé trouvé. Vérifiez que des utilisateurs existent dans Supabase.</p>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="loadDemoData()">Charger données de démonstration</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- MODAL — AJOUTER / MODIFIER SHIFT -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="shiftModal">
+<div class="modal">
+  <div class="modal-title" id="shiftModalTitle">➕ Ajouter un service</div>
+  <div class="modal-body">
+    <input type="hidden" id="shiftId">
+    <input type="hidden" id="shiftEmpId">
+    <input type="hidden" id="shiftDate">
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Début de service</label>
+        <input type="time" id="shiftStart" value="08:00" oninput="updateConstraintCheck()">
+      </div>
+      <div class="form-group">
+        <label>Fin de service</label>
+        <input type="time" id="shiftEnd" value="17:00" oninput="updateConstraintCheck()">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Type de pause (obligatoire toutes les 4h30)</label>
+      <div class="radio-group" id="pauseType">
+        <div class="radio-btn active" data-val="bloc" onclick="selectPause(this)">Bloc 45 min</div>
+        <div class="radio-btn" data-val="split" onclick="selectPause(this)">15 + 30 min</div>
+        <div class="radio-btn" data-val="none" onclick="selectPause(this)">< 4h30 (pas de pause)</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Notes (optionnel)</label>
+      <input type="text" id="shiftNotes" placeholder="Ex: Livraisons Lausanne">
+    </div>
+
+    <!-- Vérification contraintes en temps réel -->
+    <div class="constraint-check" id="constraintCheck">
+      <div>Saisissez les heures pour vérifier les contraintes…</div>
+    </div>
+
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-danger" id="btnDeleteShift" onclick="deleteShift()" style="display:none;margin-right:auto">🗑 Supprimer</button>
+    <button class="btn btn-ghost" onclick="closeModal('shiftModal')">Annuler</button>
+    <button class="btn btn-primary" onclick="saveShift()">💾 Enregistrer</button>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- MODAL — AUTO-GÉNÉRATION -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="autoGenModal">
+<div class="modal" style="width:480px">
+  <div class="modal-title">⚡ Générer planning automatique</div>
+  <div class="modal-body">
+
+    <div class="gen-section">
+      <div class="gen-section-title">Période</div>
+      <div class="gen-rule">
+        <strong>Semaine à planifier</strong>
+        <span id="genWeekLabel" style="color:var(--blue);font-size:12px;font-weight:600">—</span>
+      </div>
+    </div>
+
+    <div class="gen-section">
+      <div class="gen-section-title">Règles de travail (selon convention)</div>
+      <div class="gen-rule">
+        <strong>Max heures/jour</strong>
+        <input type="number" id="genMaxDay" value="12" min="4" max="12">h
+      </div>
+      <div class="gen-rule">
+        <strong>Max heures/semaine</strong>
+        <input type="number" id="genMaxWeek" value="48" min="20" max="48">h
+      </div>
+      <div class="gen-rule">
+        <strong>Max jours/semaine</strong>
+        <input type="number" id="genMaxDays" value="5" min="1" max="7">j
+      </div>
+      <div class="gen-rule">
+        <strong>Repos entre services</strong>
+        <input type="number" id="genMinRest" value="9" min="8" max="12">h
+      </div>
+      <div class="gen-rule">
+        <strong>Inclure week-end si besoin</strong>
+        <input type="checkbox" id="genWeekend">
+      </div>
+    </div>
+
+    <div class="gen-section">
+      <div class="gen-section-title">Horaires préférentiels</div>
+      <div class="gen-rule">
+        <strong>Matin (8h–16h30)</strong>
+        <input type="number" id="genMorningPct" value="50" min="0" max="100">%
+      </div>
+      <div class="gen-rule">
+        <strong>Après-midi (12h–20h30)</strong>
+        <input type="number" id="genAfternoonPct" value="30" min="0" max="100">%
+      </div>
+      <div class="gen-rule">
+        <strong>Nuit (20h–8h)</strong>
+        <input type="number" id="genNightPct" value="20" min="0" max="100">%
+      </div>
+    </div>
+
+    <div class="gen-section">
+      <div class="gen-section-title">Vacances</div>
+      <div class="gen-rule">
+        <strong>Semaines de vacances/an</strong>
+        <input type="number" id="genVacMin" value="4" min="4" max="6">
+        –
+        <input type="number" id="genVacMax" value="5" min="4" max="6">
+      </div>
+    </div>
+
+    <div id="genProgress" style="display:none">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:6px" id="genProgressLabel">Génération en cours…</div>
+      <div class="progress-bar"><div class="progress-fill" id="genProgressFill"></div></div>
+    </div>
+
+    <div id="genResult" style="display:none;padding:10px 12px;border-radius:8px;background:var(--green2);border:1px solid var(--green);font-size:12px;color:var(--green)"></div>
+
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-ghost" onclick="closeModal('autoGenModal')">Fermer</button>
+    <button class="btn btn-primary" onclick="runAutoGen()">⚡ Générer</button>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SCRIPTS -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+(async function(){
+'use strict';
+
+// ── CONFIG ────────────────────────────────────────────────
+const CONSTRAINTS = {
+  MAX_SHIFT_HOURS: 12,        // heures max par service
+  BREAK_EVERY_MINUTES: 270,   // pause obligatoire toutes les 4h30
+  BREAK_MINUTES: 45,          // durée pause (45 min)
+  MIN_REST_HOURS: 9,          // repos minimum entre deux services
+  MAX_DAYS_WEEK: 5,           // jours max par semaine
+  MAX_HOURS_WEEK: 48,         // heures max par semaine
+  NIGHT_START: 23 * 60,       // 23h en minutes
+  NIGHT_END: 5 * 60,          // 5h en minutes
+  NIGHT_BONUS: 0.10,          // 10% majoration
+};
+
+const ROLE_COLORS = {
+  chauffeur:  '#4f8ef7',
+  magasinier: '#22c55e',
+  admin:      '#f97316',
+  super_admin:'#a855f7',
+  client:     '#eab308',
+};
+const ROLE_LABELS = {
+  chauffeur:'Chauffeur',magasinier:'Magasinier',admin:'Admin',super_admin:'Super Admin',client:'Client'
+};
+
+// ── STATE ─────────────────────────────────────────────────
+let db = window.SUPABASE_CLIENT;
+let employees = [];
+let shifts = {}; // { 'empId_YYYY-MM-DD': [shift, ...] }
+let currentWeekStart = getMonday(new Date());
+let vacationMode = false;
+let currentView = 'week';
+let editingShiftKey = null;
+
+// ── INIT ──────────────────────────────────────────────────
+async function init() {
+  const raw = localStorage.getItem('colixo_user');
+  let codeUser = null;
+  try { codeUser = JSON.parse(raw || 'null'); } catch(e){}
+  let session = null;
+  if (db) { try { const r = await db.auth.getSession(); session = r.data?.session; } catch(e){} }
+  if (!session && !codeUser) { window.location.href = '../login/index.html'; return; }
+  const user = session?.user || codeUser;
+  const role = codeUser?.role || 'admin';
+  if (!['admin','super_admin'].includes(role)) { window.location.href = '../login/index.html'; return; }
+
+  document.getElementById('btnLogout').addEventListener('click', async () => {
+    if (db) try { await db.auth.signOut(); } catch(e){}
+    localStorage.removeItem('colixo_user');
+    window.location.href = '../login/index.html';
+  });
+
+  await loadEmployees();
+  await loadShifts();
+  renderWeekLabel();
+  renderGrid();
+}
+
+// ── DATE UTILS ────────────────────────────────────────────
+function getMonday(d) {
+  const dt = new Date(d); dt.setHours(0,0,0,0);
+  const day = dt.getDay(), diff = (day === 0 ? -6 : 1 - day);
+  dt.setDate(dt.getDate() + diff);
+  return dt;
+}
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function fmtDate(d) { return d.toISOString().slice(0,10); }
+function fmtDay(d) { return d.toLocaleDateString('fr-CH',{weekday:'short',day:'numeric',month:'short'}); }
+function fmtDayShort(d) { return d.toLocaleDateString('fr-CH',{weekday:'short'}); }
+function isToday(d) { return fmtDate(d) === fmtDate(new Date()); }
+function isWeekend(d) { return d.getDay() === 0 || d.getDay() === 6; }
+function timeToMin(t) { const [h,m]=t.split(':').map(Number); return h*60+m; }
+function minToTime(m) { const h=Math.floor(m/60)%24, min=m%60; return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`; }
+
+// ── SUPABASE — EMPLOYEES ──────────────────────────────────
+async function loadEmployees() {
+  if (!db) { employees = getDemoEmployees(); }
+  else {
+    try {
+      const { data, error } = await db
+        .from('utilisateurs')
+        .select('id, nom, prenom, role, code_usr, actif')
+        .eq('actif', true)
+        .in('role', ['chauffeur','magasinier','admin','super_admin'])
+        .order('role').order('nom');
+      if (error) throw error;
+      employees = data || [];
+    } catch(e) {
+      console.warn('Supabase employees:', e.message);
+      employees = getDemoEmployees();
+    }
+  }
+  populateEmpFilter();
+}
+
+// ── SUPABASE — SHIFTS ─────────────────────────────────────
+async function loadShifts() {
+  const weekEnd = fmtDate(addDays(currentWeekStart, 6));
+  const weekSt  = fmtDate(currentWeekStart);
+  if (!db) { /* keep local */ return; }
+  try {
+    const { data, error } = await db
+      .from('planning_shifts')
+      .select('*')
+      .gte('date', weekSt)
+      .lte('date', weekEnd);
+    if (error) {
+      // Table may not exist — use localStorage fallback
+      console.info('[Planning] Table planning_shifts inexistante, mode local');
+    } else {
+      // Merge into shifts
+      (data || []).forEach(s => {
+        const key = s.employe_id + '_' + s.date;
+        if (!shifts[key]) shifts[key] = [];
+        if (!shifts[key].find(x => x.id === s.id)) shifts[key].push(s);
+      });
+    }
+  } catch(e) {}
+}
+
+async function saveShiftToDb(shift) {
+  if (!db) return shift;
+  try {
+    const { data, error } = await db
+      .from('planning_shifts')
+      .upsert([shift], { onConflict: 'id' })
+      .select().single();
+    if (error) throw error;
+    return data;
+  } catch(e) {
+    console.warn('[Planning] Save shift:', e.message);
+    return shift;
+  }
+}
+
+async function deleteShiftFromDb(id) {
+  if (!db || !id || id.startsWith('local_')) return;
+  try {
+    await db.from('planning_shifts').delete().eq('id', id);
+  } catch(e) {}
+}
+
+// ── DEMO DATA ─────────────────────────────────────────────
+function getDemoEmployees() {
+  return [
+    {id:'demo-1',nom:'Martin',prenom:'Jean',role:'chauffeur',code_usr:'CHF-1001',actif:true},
+    {id:'demo-2',nom:'Dupont',prenom:'Marie',role:'chauffeur',code_usr:'CHF-1002',actif:true},
+    {id:'demo-3',nom:'Blanc',prenom:'Pierre',role:'magasinier',code_usr:'MAG-2001',actif:true},
+    {id:'demo-4',nom:'Noir',prenom:'Sophie',role:'magasinier',code_usr:'MAG-2002',actif:true},
+    {id:'demo-5',nom:'Gris',prenom:'Lucas',role:'chauffeur',code_usr:'CHF-1003',actif:true},
+  ];
+}
+
+window.loadDemoData = function() {
+  employees = getDemoEmployees();
+  populateEmpFilter();
+  document.getElementById('emptyState').style.display = 'none';
+  renderGrid();
+};
+
+// ── FILTER ────────────────────────────────────────────────
+function populateEmpFilter() {
+  const sel = document.getElementById('empFilter');
+  sel.innerHTML = '<option value="">Tous les employés</option>';
+  employees.forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = `${e.prenom} ${e.nom}`;
+    sel.appendChild(opt);
+  });
+}
+
+function getFilteredEmployees() {
+  const empF = document.getElementById('empFilter').value;
+  const roleF = document.getElementById('roleFilter').value;
+  return employees.filter(e =>
+    (!empF || e.id === empF) && (!roleF || e.role === roleF)
+  );
+}
+
+// ── WEEK NAV ──────────────────────────────────────────────
+window.navWeek = async function(dir) {
+  currentWeekStart = addDays(currentWeekStart, dir * 7);
+  await loadShifts();
+  renderWeekLabel();
+  renderGrid();
+};
+
+window.goToday = function() {
+  currentWeekStart = getMonday(new Date());
+  loadShifts().then(() => { renderWeekLabel(); renderGrid(); });
+};
+
+window.setView = function(v, btn) {
+  currentView = v;
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderGrid();
+};
+
+function renderWeekLabel() {
+  const end = addDays(currentWeekStart, 6);
+  const fmt = d => d.toLocaleDateString('fr-CH',{day:'numeric',month:'short'});
+  document.getElementById('weekLabel').textContent =
+    `Sem. ${getISOWeek(currentWeekStart)} — ${fmt(currentWeekStart)} au ${fmt(end)} ${currentWeekStart.getFullYear()}`;
+  document.getElementById('genWeekLabel').textContent =
+    `${fmt(currentWeekStart)} → ${fmt(end)} ${currentWeekStart.getFullYear()}`;
+}
+
+function getISOWeek(d) {
+  const date = new Date(d); date.setHours(0,0,0,0);
+  date.setDate(date.getDate() + 3 - (date.getDay()+6)%7);
+  const week1 = new Date(date.getFullYear(),0,4);
+  return 1+Math.round(((date-week1)/86400000-(3-(week1.getDay()+6)%7))/7);
+}
+
+// ── RENDER GRID ───────────────────────────────────────────
+function renderGrid() {
+  const filtered = getFilteredEmployees();
+  if (filtered.length === 0) {
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('planningGrid').style.display = 'none';
+    return;
+  }
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('planningGrid').style.display = '';
+
+  const days = Array.from({length:7}, (_,i) => addDays(currentWeekStart, i));
+
+  // HEAD
+  const head = document.getElementById('gridHead');
+  head.innerHTML = '';
+  const tr = document.createElement('tr');
+  const thEmp = document.createElement('th');
+  thEmp.textContent = 'Employé';
+  thEmp.style.width = '150px';
+  tr.appendChild(thEmp);
+  days.forEach(d => {
+    const th = document.createElement('th');
+    th.className = 'th-day' + (isToday(d) ? ' today' : '') + (isWeekend(d) ? ' weekend' : '');
+    th.innerHTML = `<div class="day-name">${fmtDayShort(d).charAt(0).toUpperCase()+fmtDayShort(d).slice(1)}</div><div class="day-date">${d.getDate()} ${d.toLocaleDateString('fr-CH',{month:'short'})}</div>`;
+    tr.appendChild(th);
+  });
+  head.appendChild(tr);
+
+  // BODY
+  const body = document.getElementById('gridBody');
+  body.innerHTML = '';
+  const color = ROLE_COLORS;
+
+  filtered.forEach(emp => {
+    const empShifts = getWeekShifts(emp.id);
+    const stats = calcEmpWeekStats(emp.id, days);
+    const violations = getEmpViolations(emp.id, days);
+
+    const row = document.createElement('tr');
+
+    // Employee cell
+    const tdEmp = document.createElement('td');
+    tdEmp.className = 'th-emp';
+    tdEmp.innerHTML = `
+      <div class="emp-name" title="${emp.code_usr||''}">${emp.prenom} ${emp.nom}</div>
+      <div class="emp-role" style="color:${color[emp.role]||'#888'}">${ROLE_LABELS[emp.role]||emp.role}</div>
+      <div class="emp-hours">${stats.totalH.toFixed(1)}h <span style="color:var(--text3);font-weight:400">/ 48h</span></div>
+      ${stats.nightH > 0 ? `<div style="font-size:10px;color:var(--purple)">🌙 ${stats.nightH.toFixed(1)}h nuit</div>` : ''}
+      ${violations.length > 0 ? `<div class="emp-warn">⚠ ${violations.length} violation${violations.length>1?'s':''}</div>` : ''}
+    `;
+    row.appendChild(tdEmp);
+
+    // Day cells
+    days.forEach(d => {
+      const td = document.createElement('td');
+      const dateStr = fmtDate(d);
+      const isVac = isVacationDay(emp.id, dateStr);
+      td.className = 'day-cell' +
+        (isToday(d) ? ' today' : '') +
+        (isWeekend(d) ? ' weekend' : '') +
+        (isVac ? ' vacation' : '');
+      td.onclick = (e) => { if(e.target.classList.contains('sh-del')) return; cellClick(emp, dateStr, e); };
+
+      let html = '';
+      if (isVac) {
+        html += `<div class="vacation-chip" onclick="toggleVacation('${emp.id}','${dateStr}')">🏖 Vacances</div>`;
+      } else {
+        const key = emp.id + '_' + dateStr;
+        const dayShifts = shifts[key] || [];
+        dayShifts.forEach(s => {
+          const dur = shiftDuration(s);
+          const nightMin = calcNightMinutes(s);
+          const type = getShiftType(s);
+          const viol = hasViolation(emp.id, dateStr, s);
+          html += `<div class="shift-chip chip-${type} ${viol?'chip-violation':''}"
+            onclick="openEditShift('${emp.id}','${dateStr}','${s.id}',event)">
+            <span class="sh-time">${s.heure_debut}–${s.heure_fin}</span>
+            <span class="sh-hours">${dur.toFixed(1)}h</span>
+            ${nightMin > 0 ? `<span class="sh-night">🌙</span>` : ''}
+            <span class="sh-del" onclick="quickDelete('${emp.id}','${dateStr}','${s.id}',event)">✕</span>
+          </div>`;
+        });
+        if (!vacationMode) {
+          html += `<div class="cell-add">+</div>`;
+        } else {
+          html += `<div class="cell-add" onclick="toggleVacation('${emp.id}','${dateStr}',event)">🏖</div>`;
+        }
+      }
+      td.innerHTML = html;
+      row.appendChild(td);
+    });
+
+    body.appendChild(row);
+  });
+
+  updateStats(filtered, days);
+}
+
+// ── SHIFT HELPERS ─────────────────────────────────────────
+function getWeekShifts(empId) {
+  const result = [];
+  for (let i = 0; i < 7; i++) {
+    const d = fmtDate(addDays(currentWeekStart, i));
+    const k = empId + '_' + d;
+    if (shifts[k]) result.push(...shifts[k]);
+  }
+  return result;
+}
+
+function shiftDuration(s) {
+  let start = timeToMin(s.heure_debut), end = timeToMin(s.heure_fin);
+  if (end <= start) end += 24 * 60; // overnight
+  const rawMin = end - start;
+  const pauseMin = (s.pause_type === 'none') ? 0 : (s.pause_minutes || 0);
+  return (rawMin - pauseMin) / 60;
+}
+
+function getShiftType(s) {
+  const start = timeToMin(s.heure_debut), end = timeToMin(s.heure_fin);
+  if (start >= 20 * 60 || (end <= 8 * 60 && end < start)) return 'night';
+  if (start >= 12 * 60) return 'afternoon';
+  if (s.pause_type === 'split') return 'split';
+  return 'day';
+}
+
+function calcNightMinutes(s) {
+  let start = timeToMin(s.heure_debut), end = timeToMin(s.heure_fin);
+  if (end <= start) end += 24 * 60;
+  let nightMin = 0;
+  for (let m = start; m < end; m++) {
+    const t = m % (24 * 60);
+    if (t >= CONSTRAINTS.NIGHT_START || t < CONSTRAINTS.NIGHT_END) nightMin++;
+  }
+  return nightMin;
+}
+
+function calcEmpWeekStats(empId, days) {
+  let totalH = 0, nightH = 0;
+  days.forEach(d => {
+    const key = empId + '_' + fmtDate(d);
+    (shifts[key] || []).forEach(s => {
+      totalH += shiftDuration(s);
+      nightH += calcNightMinutes(s) / 60;
+    });
+  });
+  return { totalH, nightH };
+}
+
+// ── VACATION ──────────────────────────────────────────────
+let vacations = {}; // { 'empId_date': true }
+
+function isVacationDay(empId, dateStr) { return !!vacations[empId + '_' + dateStr]; }
+
+window.toggleVacation = function(empId, dateStr, e) {
+  if (e) { e.stopPropagation(); }
+  const key = empId + '_' + dateStr;
+  if (vacations[key]) delete vacations[key]; else vacations[key] = true;
+  saveVacations();
+  renderGrid();
+};
+
+function saveVacations() { localStorage.setItem('colixo_vacations', JSON.stringify(vacations)); }
+function loadVacations() {
+  try { vacations = JSON.parse(localStorage.getItem('colixo_vacations') || '{}'); } catch(e) { vacations = {}; }
+}
+
+window.toggleVacationMode = function() {
+  vacationMode = !vacationMode;
+  const btn = document.getElementById('btnVacation');
+  btn.style.background = vacationMode ? 'rgba(234,179,8,.2)' : '';
+  btn.style.borderColor = vacationMode ? 'var(--yellow)' : '';
+  btn.style.color = vacationMode ? 'var(--yellow)' : '';
+  renderGrid();
+};
+
+// ── CONSTRAINT CHECK ──────────────────────────────────────
+function getEmpViolations(empId, days) {
+  const violations = [];
+  let weekH = 0, daysWorked = 0;
+  const allShifts = [];
+
+  days.forEach(d => {
+    const key = empId + '_' + fmtDate(d);
+    const dayShifts = shifts[key] || [];
+    if (dayShifts.length > 0) daysWorked++;
+    dayShifts.forEach(s => {
+      const dur = shiftDuration(s);
+      weekH += dur;
+      allShifts.push({ date: fmtDate(d), ...s, durationH: dur });
+      // Max 12h
+      if (dur > CONSTRAINTS.MAX_SHIFT_HOURS) {
+        violations.push({ empId, date: fmtDate(d), msg: `Service > 12h (${dur.toFixed(1)}h)` });
+      }
+    });
+  });
+
+  // Max 5 days
+  if (daysWorked > CONSTRAINTS.MAX_DAYS_WEEK) {
+    violations.push({ empId, msg: `${daysWorked} jours travaillés (max 5)` });
+  }
+  // Max 48h/week
+  if (weekH > CONSTRAINTS.MAX_HOURS_WEEK) {
+    violations.push({ empId, msg: `${weekH.toFixed(1)}h/semaine (max 48h)` });
+  }
+  // Min rest 9h between shifts
+  allShifts.sort((a,b) => (a.date+a.heure_debut).localeCompare(b.date+b.heure_debut));
+  for (let i = 1; i < allShifts.length; i++) {
+    const prev = allShifts[i-1], curr = allShifts[i];
+    const prevEnd = prev.date + 'T' + prev.heure_fin;
+    const currStart = curr.date + 'T' + curr.heure_debut;
+    const diffH = (new Date(currStart) - new Date(prevEnd)) / 3600000;
+    if (diffH < CONSTRAINTS.MIN_REST_HOURS && diffH > -1) {
+      violations.push({ empId, date: curr.date, msg: `Repos de ${diffH.toFixed(1)}h (min 9h) entre services` });
+    }
+  }
+  return violations;
+}
+
+function hasViolation(empId, dateStr, shift) {
+  const days = Array.from({length:7}, (_,i) => addDays(currentWeekStart, i));
+  return getEmpViolations(empId, days).some(v => v.date === dateStr);
+}
+
+// ── STATS ─────────────────────────────────────────────────
+function updateStats(filtered, days) {
+  let totalH = 0, nightH = 0, violations = [], planned = 0;
+  filtered.forEach(emp => {
+    const s = calcEmpWeekStats(emp.id, days);
+    totalH += s.totalH; nightH += s.nightH;
+    const v = getEmpViolations(emp.id, days);
+    violations.push(...v.map(x => ({ ...x, empName: `${emp.prenom} ${emp.nom}` })));
+    const ws = getWeekShifts(emp.id);
+    if (ws.length > 0) planned++;
+  });
+
+  setStatCard('statTotalH', `${totalH.toFixed(1)}h`, '', totalH > 240 ? 'warn' : '');
+  setStatCard('statNightH', `${nightH.toFixed(1)}h`, '+10% sur ces heures', 'night');
+  setStatCard('statMajoration', `+${(nightH * 0.1).toFixed(1)}h`, 'équivalent majoré', '');
+  setStatCard('statViolations', violations.length, violations.length > 0 ? 'À corriger' : 'Tout est correct',
+    violations.length > 0 ? 'danger' : 'ok');
+  setStatCard('statEmployees', `${planned}/${filtered.length}`, 'avec au moins 1 service', '');
+
+  // Violations panel
+  const panel = document.getElementById('violationsPanel');
+  const list = document.getElementById('violationsList');
+  if (violations.length > 0) {
+    panel.classList.add('show');
+    list.innerHTML = violations.map(v =>
+      `<div class="violation-item">⚠ <strong>${v.empName}</strong>${v.date ? ` (${v.date})` : ''} — ${v.msg}</div>`
+    ).join('');
+  } else {
+    panel.classList.remove('show');
+  }
+}
+
+function setStatCard(id, val, sub, cls) {
+  const card = document.getElementById(id);
+  card.querySelector('.stat-value').textContent = val;
+  if (sub !== undefined) card.querySelector('.stat-sub').textContent = sub;
+  card.className = 'stat-card' + (cls ? ' ' + cls : '');
+  if (id === 'statNightH') card.classList.add('night');
+}
+
+// ── CELL CLICK ────────────────────────────────────────────
+function cellClick(emp, dateStr, e) {
+  if (vacationMode) { toggleVacation(emp.id, dateStr); return; }
+  openAddShift(emp.id, dateStr);
+}
+
+// ── MODAL — SHIFT ─────────────────────────────────────────
+window.openAddShift = function(empId, dateStr) {
+  editingShiftKey = null;
+  document.getElementById('shiftId').value = '';
+  document.getElementById('shiftEmpId').value = empId;
+  document.getElementById('shiftDate').value = dateStr;
+  document.getElementById('shiftStart').value = '08:00';
+  document.getElementById('shiftEnd').value = '17:00';
+  document.getElementById('shiftNotes').value = '';
+  selectPauseByVal('bloc');
+  const emp = employees.find(e => e.id === empId);
+  document.getElementById('shiftModalTitle').textContent =
+    `➕ Service — ${emp ? emp.prenom + ' ' + emp.nom : ''} — ${dateStr}`;
+  document.getElementById('btnDeleteShift').style.display = 'none';
+  updateConstraintCheck();
+  document.getElementById('shiftModal').classList.add('open');
+};
+
+window.openEditShift = function(empId, dateStr, shiftId, e) {
+  if (e) e.stopPropagation();
+  const key = empId + '_' + dateStr;
+  const shift = (shifts[key] || []).find(s => s.id === shiftId);
+  if (!shift) return;
+  editingShiftKey = key;
+  document.getElementById('shiftId').value = shiftId;
+  document.getElementById('shiftEmpId').value = empId;
+  document.getElementById('shiftDate').value = dateStr;
+  document.getElementById('shiftStart').value = shift.heure_debut;
+  document.getElementById('shiftEnd').value = shift.heure_fin;
+  document.getElementById('shiftNotes').value = shift.notes || '';
+  selectPauseByVal(shift.pause_type || 'bloc');
+  const emp = employees.find(e => e.id === empId);
+  document.getElementById('shiftModalTitle').textContent =
+    `✏ Modifier service — ${emp ? emp.prenom + ' ' + emp.nom : ''} — ${dateStr}`;
+  document.getElementById('btnDeleteShift').style.display = '';
+  updateConstraintCheck();
+  document.getElementById('shiftModal').classList.add('open');
+};
+
+window.saveShift = async function() {
+  const empId  = document.getElementById('shiftEmpId').value;
+  const dateStr = document.getElementById('shiftDate').value;
+  const start  = document.getElementById('shiftStart').value;
+  const end    = document.getElementById('shiftEnd').value;
+  const pauseType = document.querySelector('#pauseType .radio-btn.active')?.dataset.val || 'bloc';
+  const notes  = document.getElementById('shiftNotes').value.trim();
+  const existingId = document.getElementById('shiftId').value;
+
+  if (!start || !end) { alert('Saisissez les heures de début et fin.'); return; }
+
+  const pauseMin = pauseType === 'none' ? 0 : CONSTRAINTS.BREAK_MINUTES;
+
+  const shift = {
+    id: existingId || 'local_' + Date.now(),
+    employe_id: empId,
+    date: dateStr,
+    heure_debut: start,
+    heure_fin: end,
+    pause_type: pauseType,
+    pause_minutes: pauseMin,
+    notes: notes || null,
+  };
+
+  const saved = await saveShiftToDb(shift);
+  const finalShift = saved || shift;
+
+  const key = empId + '_' + dateStr;
+  if (!shifts[key]) shifts[key] = [];
+  if (existingId) {
+    const idx = shifts[key].findIndex(s => s.id === existingId);
+    if (idx >= 0) shifts[key][idx] = finalShift; else shifts[key].push(finalShift);
+  } else {
+    shifts[key].push(finalShift);
+  }
+
+  closeModal('shiftModal');
+  renderGrid();
+};
+
+window.deleteShift = async function() {
+  const empId  = document.getElementById('shiftEmpId').value;
+  const dateStr = document.getElementById('shiftDate').value;
+  const id     = document.getElementById('shiftId').value;
+  if (!id) return;
+  if (!confirm('Supprimer ce service ?')) return;
+  await deleteShiftFromDb(id);
+  const key = empId + '_' + dateStr;
+  if (shifts[key]) shifts[key] = shifts[key].filter(s => s.id !== id);
+  closeModal('shiftModal');
+  renderGrid();
+};
+
+window.quickDelete = async function(empId, dateStr, id, e) {
+  e.stopPropagation();
+  await deleteShiftFromDb(id);
+  const key = empId + '_' + dateStr;
+  if (shifts[key]) shifts[key] = shifts[key].filter(s => s.id !== id);
+  renderGrid();
+};
+
+// ── CONSTRAINT CHECK (MODAL) ──────────────────────────────
+window.updateConstraintCheck = function() {
+  const start = document.getElementById('shiftStart').value;
+  const end   = document.getElementById('shiftEnd').value;
+  const empId = document.getElementById('shiftEmpId').value;
+  const dateStr = document.getElementById('shiftDate').value;
+  const pauseType = document.querySelector('#pauseType .radio-btn.active')?.dataset.val || 'bloc';
+  const el = document.getElementById('constraintCheck');
+  if (!start || !end || !empId || !dateStr) { el.innerHTML = '<div>Saisissez les heures…</div>'; return; }
+
+  let startMin = timeToMin(start), endMin = timeToMin(end);
+  if (endMin <= startMin) endMin += 24*60;
+  const rawMin = endMin - startMin;
+  const pauseMin = pauseType === 'none' ? 0 : CONSTRAINTS.BREAK_MINUTES;
+  const workedH = (rawMin - pauseMin) / 60;
+  const nightMin = calcNightMinutesRaw(startMin, endMin);
+  const checks = [];
+
+  // 1. Duration
+  if (workedH > CONSTRAINTS.MAX_SHIFT_HOURS) {
+    checks.push({ok:false, msg:`Durée ${workedH.toFixed(1)}h — dépasse le max 12h ❌`});
+  } else {
+    checks.push({ok:true, msg:`Durée ${workedH.toFixed(1)}h travaillées ✓`});
+  }
+
+  // 2. Break needed
+  const needBreak = rawMin > CONSTRAINTS.BREAK_EVERY_MINUTES;
+  if (needBreak && pauseType === 'none') {
+    checks.push({ok:false, msg:`Service > 4h30 : pause de 45 min obligatoire ❌`});
+  } else if (needBreak) {
+    const pauseLabel = pauseType === 'split' ? '15+30 min' : '45 min bloc';
+    checks.push({ok:true, msg:`Pause ${pauseLabel} incluse ✓`});
+  } else {
+    checks.push({ok:null, msg:`Service < 4h30 — pas de pause obligatoire`});
+  }
+
+  // 3. Night hours
+  if (nightMin > 0) {
+    checks.push({ok:null, msg:`🌙 ${(nightMin/60).toFixed(1)}h de nuit (23h–5h) → +10% majoration`});
+  }
+
+  // 4. Check rest from previous shift
+  const days = Array.from({length:7}, (_,i) => addDays(currentWeekStart, i));
+  const dayIdx = days.findIndex(d => fmtDate(d) === dateStr);
+  if (dayIdx > 0) {
+    const prevDate = fmtDate(days[dayIdx-1]);
+    const prevKey = empId + '_' + prevDate;
+    const prevShifts = (shifts[prevKey] || []);
+    if (prevShifts.length > 0) {
+      const lastPrev = prevShifts[prevShifts.length-1];
+      const prevEndMin = timeToMin(lastPrev.heure_fin);
+      const restMin = startMin - prevEndMin + (startMin < prevEndMin ? 24*60 : 0);
+      const restH = restMin / 60;
+      if (restH < CONSTRAINTS.MIN_REST_HOURS) {
+        checks.push({ok:false, msg:`Repos de ${restH.toFixed(1)}h depuis dernier service (min 9h) ❌`});
+      } else {
+        checks.push({ok:true, msg:`Repos de ${restH.toFixed(1)}h depuis dernier service ✓`});
+      }
+    }
+  }
+
+  // 5. Weekly hours
+  const weekH = calcWeeklyHours(empId, dateStr) + workedH;
+  if (weekH > CONSTRAINTS.MAX_HOURS_WEEK) {
+    checks.push({ok:false, msg:`Total semaine ${weekH.toFixed(1)}h — dépasse 48h ❌`});
+  } else {
+    checks.push({ok:true, msg:`Total semaine estimé ${weekH.toFixed(1)}h / 48h ✓`});
+  }
+
+  el.innerHTML = checks.map(c => {
+    const cls = c.ok === true ? 'constraint-ok' : c.ok === false ? 'constraint-err' : 'constraint-warn';
+    return `<div class="${cls}" style="padding:2px 0;border-bottom:1px solid var(--border);font-size:11px">${c.msg}</div>`;
+  }).join('');
+};
+
+function calcNightMinutesRaw(startMin, endMin) {
+  const NS = CONSTRAINTS.NIGHT_START, NE = CONSTRAINTS.NIGHT_END + 24*60;
+  let nightMin = 0;
+  for (let m = startMin; m < endMin; m++) {
+    const t = m % (24*60);
+    if (t >= NS || t < CONSTRAINTS.NIGHT_END) nightMin++;
+  }
+  return nightMin;
+}
+
+function calcWeeklyHours(empId, excludeDate) {
+  let h = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = fmtDate(addDays(currentWeekStart, i));
+    if (d === excludeDate) continue;
+    const key = empId + '_' + d;
+    (shifts[key] || []).forEach(s => h += shiftDuration(s));
+  }
+  return h;
+}
+
+// ── PAUSE RADIO ───────────────────────────────────────────
+window.selectPause = function(el) {
+  document.querySelectorAll('#pauseType .radio-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  updateConstraintCheck();
+};
+function selectPauseByVal(val) {
+  document.querySelectorAll('#pauseType .radio-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === val);
+  });
+}
+
+// ── AUTO-GENERATE ─────────────────────────────────────────
+window.openAutoGenModal = function() {
+  document.getElementById('genProgress').style.display = 'none';
+  document.getElementById('genResult').style.display = 'none';
+  document.getElementById('autoGenModal').classList.add('open');
+};
+
+const TEMPLATES = {
+  morning:   { start: '07:00', end: '15:45', pause: 'bloc' },
+  morning2:  { start: '08:00', end: '16:45', pause: 'bloc' },
+  afternoon: { start: '12:00', end: '20:45', pause: 'bloc' },
+  afternoon2:{ start: '13:00', end: '21:45', pause: 'bloc' },
+  evening:   { start: '16:00', end: '23:45', pause: 'bloc' },
+  night:     { start: '21:00', end: '05:45', pause: 'bloc' },
+  night2:    { start: '22:00', end: '06:45', pause: 'bloc' },
+  long:      { start: '06:00', end: '18:45', pause: 'bloc' },
+};
+
+window.runAutoGen = async function() {
+  const maxDay   = parseInt(document.getElementById('genMaxDay').value) || 12;
+  const maxWeek  = parseInt(document.getElementById('genMaxWeek').value) || 48;
+  const maxDays  = parseInt(document.getElementById('genMaxDays').value) || 5;
+  const minRest  = parseInt(document.getElementById('genMinRest').value) || 9;
+  const wkend    = document.getElementById('genWeekend').checked;
+  const morPct   = parseInt(document.getElementById('genMorningPct').value) || 50;
+  const aftPct   = parseInt(document.getElementById('genAfternoonPct').value) || 30;
+
+  const emps = getFilteredEmployees();
+  if (emps.length === 0) { alert('Aucun employé sélectionné.'); return; }
+
+  document.getElementById('genProgress').style.display = 'block';
+  document.getElementById('genResult').style.display = 'none';
+
+  const days = Array.from({length:7}, (_,i) => addDays(currentWeekStart, i));
+  let totalShifts = 0;
+
+  for (let ei = 0; ei < emps.length; ei++) {
+    const emp = emps[ei];
+    const pct = Math.round((ei / emps.length) * 100);
+    document.getElementById('genProgressFill').style.width = pct + '%';
+    document.getElementById('genProgressLabel').textContent = `${emp.prenom} ${emp.nom}… (${ei+1}/${emps.length})`;
+
+    // Clear existing week shifts for this emp
+    days.forEach(d => { const k = emp.id + '_' + fmtDate(d); shifts[k] = []; });
+
+    let daysWorked = 0, weekH = 0;
+    let lastAbsEnd = null; // minutes absolues depuis lundi 00h00
+
+    // Keep mon-fri first, weekend last
+    const dayIdxs = days.map((_,i) => i);
+    const workdays = dayIdxs.filter(i => !isWeekend(days[i]));
+    const weekend  = dayIdxs.filter(i => isWeekend(days[i]));
+    const order = wkend ? [...workdays, ...weekend] : workdays;
+
+    // Pattern fixe par employé (matin / après-midi / nuit)
+    const rand = Math.random();
+    let pattern;
+    if (rand < morPct/100) pattern = ['morning','morning2'];
+    else if (rand < (morPct+aftPct)/100) pattern = ['afternoon','afternoon2'];
+    else pattern = ['evening','night','night2'];
+
+    for (const di of order) {
+      if (daysWorked >= maxDays) break;
+      if (weekH >= maxWeek - 7) break;
+
+      const d = days[di];
+      const dateStr = fmtDate(d);
+      if (isVacationDay(emp.id, dateStr)) continue;
+
+      const tmpl = TEMPLATES[pattern[Math.floor(Math.random()*pattern.length)]];
+      const startMin = timeToMin(tmpl.start);
+      const rawEnd   = timeToMin(tmpl.end);
+      const endMin   = rawEnd <= startMin ? rawEnd + 24*60 : rawEnd; // gérer service de nuit
+      const dur = (endMin - startMin - CONSTRAINTS.BREAK_MINUTES) / 60;
+
+      if (dur > maxDay) continue;
+      if (weekH + dur > maxWeek) continue;
+
+      // Temps absolu depuis lundi 00h00
+      const absStart = di * 24 * 60 + startMin;
+      const absEnd   = di * 24 * 60 + endMin;
+
+      // Vérifier repos minimum depuis le dernier service
+      if (lastAbsEnd !== null && (absStart - lastAbsEnd) < minRest * 60) continue;
+
+      const shift = {
+        id: 'local_' + emp.id + '_' + dateStr + '_' + Date.now(),
+        employe_id: emp.id,
+        date: dateStr,
+        heure_debut: tmpl.start,
+        heure_fin: tmpl.end,
+        pause_type: tmpl.pause,
+        pause_minutes: CONSTRAINTS.BREAK_MINUTES,
+        notes: null,
+      };
+
+      const key = emp.id + '_' + dateStr;
+      if (!shifts[key]) shifts[key] = [];
+      shifts[key].push(shift);
+      daysWorked++;
+      weekH += dur;
+      lastAbsEnd = absEnd;
+      totalShifts++;
+
+      await new Promise(r => setTimeout(r, 5));
+    }
+  }
+
+  document.getElementById('genProgressFill').style.width = '100%';
+  await new Promise(r => setTimeout(r, 300));
+  document.getElementById('genProgress').style.display = 'none';
+
+  const result = document.getElementById('genResult');
+  result.style.display = 'block';
+  result.textContent = `✓ Planning généré : ${totalShifts} services pour ${emps.length} employé(s) — toutes les contraintes légales sont respectées.`;
+
+  renderGrid();
+};
+
+// ── EXPORT ────────────────────────────────────────────────
+window.exportPlanning = function() {
+  const days = Array.from({length:7}, (_,i) => addDays(currentWeekStart, i));
+  const filtered = getFilteredEmployees();
+  let csv = 'Employé;Rôle;Code;Date;Jour;Début;Fin;Durée(h);Heures nuit;Majoration 10%;Pause;Notes\n';
+  filtered.forEach(emp => {
+    days.forEach(d => {
+      const key = emp.id + '_' + fmtDate(d);
+      (shifts[key] || []).forEach(s => {
+        const dur = shiftDuration(s).toFixed(2);
+        const nightH = (calcNightMinutes(s)/60).toFixed(2);
+        const maj = (calcNightMinutes(s)/60*0.1).toFixed(2);
+        const pause = s.pause_type === 'none' ? 'Aucune' : s.pause_type === 'split' ? '15+30 min' : '45 min';
+        csv += `${emp.prenom} ${emp.nom};${ROLE_LABELS[emp.role]||emp.role};${emp.code_usr||''};${s.date};${fmtDay(d)};${s.heure_debut};${s.heure_fin};${dur};${nightH};${maj};${pause};"${s.notes||''}"\n`;
+      });
+    });
+  });
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `planning_colixo_sem${getISOWeek(currentWeekStart)}_${currentWeekStart.getFullYear()}.csv`;
+  a.click();
+};
+
+// ── MODAL UTILS ───────────────────────────────────────────
+window.closeModal = function(id) {
+  document.getElementById(id).classList.remove('open');
+};
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+
+// ── START ─────────────────────────────────────────────────
+loadVacations();
+init();
+})();
+</script>
+
+<!-- SQL helper comment -->
+<!--
+Pour activer la persistance Supabase, exécutez dans l'éditeur SQL Supabase :
+
+CREATE TABLE IF NOT EXISTS planning_shifts (
+  id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  employe_id   UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+  date         DATE NOT NULL,
+  heure_debut  TIME NOT NULL,
+  heure_fin    TIME NOT NULL,
+  pause_type   TEXT DEFAULT 'bloc',
+  pause_minutes INT DEFAULT 45,
+  notes        TEXT,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  created_by   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_planning_date ON planning_shifts (date);
+CREATE INDEX IF NOT EXISTS idx_planning_emp  ON planning_shifts (employe_id);
+-->
+</body>
+</html>
