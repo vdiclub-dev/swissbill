@@ -1217,7 +1217,6 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
         {event:'*',schema:'public',table:'transport_orders_simple'},
         async ()=> {
             try{
-                // Transports (stat-card) + commandes en attente (liste/badge)
                 await Promise.all([loadTransports(), loadCommandes()]);
                 if(document.getElementById('sec-transports')?.classList.contains('active')) renderTransports();
             } catch(e){
@@ -1225,6 +1224,41 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
             }
         }
     ).subscribe();
+
+    // ── Notifications temps réel ──
+    const _notifUserId = (function(){
+        try { const u = JSON.parse(localStorage.getItem('colixo_user')||'null'); return u?.id||null; } catch(e){ return null; }
+    })();
+    if(_notifUserId) {
+        db.channel('notif-'+_notifUserId).on(
+            'postgres_changes',
+            {event:'INSERT',schema:'public',table:'notifications',filter:'user_id=eq.'+_notifUserId},
+            function(payload){
+                const n = payload.new;
+                // Toast visuel
+                const t = document.getElementById('toast');
+                if(t){
+                    t.querySelector('#toastIco').textContent='🚚';
+                    t.querySelector('#toastTxt').textContent=(n.title||'')+(n.body?' — '+n.body:'');
+                    t.className='toast info show';
+                    setTimeout(()=>t.classList.remove('show'),6000);
+                }
+                // Son
+                try{ new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAA…').play(); }catch(e){}
+                // Notification navigateur
+                if(Notification.permission==='granted'){
+                    new Notification(n.title||'Colixo',{body:n.body||'',icon:'/favicon.svg'});
+                }
+                // Rafraîchir le badge commandes
+                loadCommandes();
+            }
+        ).subscribe();
+
+        // Demander permission notifications au premier chargement
+        if(Notification.permission==='default'){
+            setTimeout(()=>Notification.requestPermission(),2000);
+        }
+    }
     hideLoad();
 }
 

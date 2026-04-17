@@ -1075,6 +1075,28 @@
             if(error) throw error;
 
             currentOrderId = order.id;
+
+            // Notifier tous les admins/super_admins
+            try {
+                const { data: admins } = await db.from('utilisateurs')
+                    .select('id')
+                    .in('role', ['admin', 'super_admin']);
+                if (admins && admins.length) {
+                    const clientName = client?.nom || client?.prenom || 'Client';
+                    const dest = orderData.destination_ville || orderData.destination_address || '';
+                    await db.from('notifications').insert(
+                        admins.map(a => ({
+                            user_id:    a.id,
+                            title:      '🚚 Nouveau transport',
+                            body:       `${clientName} → ${dest}`,
+                            data:       JSON.stringify({ order_id: order.id, type: 'new_transport' }),
+                            read:       false,
+                            created_at: new Date().toISOString()
+                        }))
+                    );
+                }
+            } catch(e) { console.warn('Notif admins:', e); }
+
             toast('✅ Commande envoyée avec succès !');
             resetForm();
             loadOrders();
