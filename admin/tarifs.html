@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colixo — Gestion des tarifs</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script data-cfasync="false" src="../config.js?v=20260462"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    :root {
+      --red:#e8311a; --night:#0a0a0f; --night2:#111118; --night3:#18181f; --surface:#1e1e28;
+      --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+      --white:#ffffff; --muted:rgba(255,255,255,0.38); --muted2:rgba(255,255,255,0.6);
+      --green:#22c55e; --blue:#3b82f6; --yellow:#f59e0b; --orange:#f97316;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Outfit', sans-serif; background: var(--night); color: var(--white); min-height: 100vh; }
+
+    .topbar { background: var(--night2); border-bottom: 1px solid var(--border); padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .logo { display: flex; align-items: center; gap: 10px; font-family: 'Bebas Neue', cursive; font-size: 18px; }
+    .logo-mark { width: 30px; height: 30px; background: var(--red); border-radius: 7px; display: grid; place-items: center; font-size: 14px; }
+    .back-link { display: inline-flex; align-items: center; gap: 7px; color: var(--muted2); font-size: 13px;
+      font-weight: 600; text-decoration: none; padding: 7px 14px; border-radius: 9px;
+      border: 1px solid var(--border2); background: var(--night3); transition: .15s; }
+    .back-link:hover { color: var(--white); border-color: rgba(255,255,255,.25); }
+
+    .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+    .page-title { font-family: 'Bebas Neue', cursive; font-size: 26px; margin-bottom: 4px; }
+    .page-sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+
+    /* ── Section card ── */
+    .section-card { background: var(--night2); border: 1px solid var(--border2); border-radius: 18px;
+      overflow: hidden; margin-bottom: 24px; }
+    .section-head { padding: 18px 22px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .section-head h2 { font-family: 'Bebas Neue', cursive; font-size: 17px; letter-spacing: .5px; }
+    .section-head p { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+    /* ── Table ── */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th { padding: 11px 16px; text-align: left; color: var(--muted); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.02); }
+    tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover td { background: rgba(255,255,255,.018); }
+    tbody tr.editing td { background: rgba(59,130,246,.05); }
+
+    td.td-nom { font-weight: 600; }
+    td.td-ref { font-family: monospace; color: var(--muted2); font-size: 13px; }
+    td.td-poids { color: var(--muted2); }
+    td.td-prix { font-weight: 800; font-family: 'Bebas Neue', cursive; font-size: 18px;
+      color: var(--green); letter-spacing: .4px; }
+    td.td-actif { }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .dot.on { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,.5); }
+    .dot.off { background: #555; }
+
+    /* Inputs inside table */
+    td input[type="text"], td input[type="number"] {
+      background: var(--night3); border: 1.5px solid var(--border2); color: var(--white);
+      border-radius: 8px; padding: 7px 10px; font-size: 14px; font-family: 'Outfit', sans-serif;
+      outline: none; width: 100%; transition: .15s; }
+    td input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+    td input[type="checkbox"] { accent-color: var(--green); width: 16px; height: 16px; cursor: pointer; }
+    td.td-actions { white-space: nowrap; }
+
+    /* Buttons */
+    .btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 12px; padding: 6px 12px;
+      border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center;
+      gap: 5px; transition: .15s; text-decoration: none; }
+    .btn-edit { background: rgba(59,130,246,.12); color: #93c5fd; border: 1px solid rgba(59,130,246,.2); }
+    .btn-edit:hover { background: rgba(59,130,246,.22); }
+    .btn-save { background: rgba(34,197,94,.14); color: #86efac; border: 1px solid rgba(34,197,94,.25); }
+    .btn-save:hover { background: rgba(34,197,94,.24); }
+    .btn-del { background: rgba(232,49,26,.1); color: #fca5a5; border: 1px solid rgba(232,49,26,.2); }
+    .btn-del:hover { background: rgba(232,49,26,.2); }
+    .btn-cancel { background: rgba(255,255,255,.06); color: var(--muted2); border: 1px solid var(--border2); }
+    .btn-cancel:hover { background: rgba(255,255,255,.1); }
+    .btn-primary { background: var(--red); color: white; border: none; padding: 8px 16px; }
+    .btn-primary:hover { background: #c0280f; }
+    .btn-group { display: flex; gap: 5px; align-items: center; }
+
+    /* Add row */
+    .add-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px;
+      padding: 14px 16px; background: rgba(255,255,255,.02); border-top: 1px solid var(--border); align-items: end; }
+    .add-row .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; font-weight: 700; text-transform: uppercase; }
+    .add-row input { background: var(--night3); border: 1.5px solid var(--border2); color: var(--white);
+      border-radius: 9px; padding: 9px 12px; font-size: 14px; font-family: 'Outfit', sans-serif; outline: none; width: 100%; }
+    .add-row input:focus { border-color: rgba(232,49,26,.6); }
+    .empty-row td { text-align: center; color: var(--muted); padding: 28px; font-style: italic; font-size: 13px; }
+
+    /* Client prices section */
+    .client-bar { display: flex; align-items: center; gap: 14px; padding: 16px 22px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .client-bar label { font-size: 13px; color: var(--muted2); font-weight: 600; white-space: nowrap; }
+    .client-bar select { background: var(--night3); border: 1.5px solid var(--border2); color: var(--white);
+      border-radius: 9px; padding: 9px 14px; font-size: 14px; font-family: 'Outfit', sans-serif; outline: none;
+      min-width: 260px; max-width: 360px; cursor: pointer; }
+    .client-bar select:focus { border-color: rgba(232,49,26,.5); }
+
+    .remise-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
+      border-radius: 6px; font-size: 12px; font-weight: 700; }
+    .remise-pct { background: rgba(245,158,11,.12); color: #fcd34d; border: 1px solid rgba(245,158,11,.2); }
+    .remise-fixe { background: rgba(34,197,94,.1); color: #86efac; border: 1px solid rgba(34,197,94,.2); }
+    .remise-none { color: var(--muted); font-size: 13px; }
+    .contrainte-badge { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 11px;
+      background: rgba(168,85,247,.12); color: #d8b4fe; border: 1px solid rgba(168,85,247,.2); }
+
+    /* Override modal / inline form */
+    .override-form { display: none; background: rgba(59,130,246,.05); border: 1px solid rgba(59,130,246,.15);
+      border-radius: 10px; padding: 14px 16px; margin-top: 8px; }
+    .override-form.open { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
+    .override-form .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; font-weight: 700; text-transform: uppercase; }
+    .override-form input, .override-form select {
+      background: var(--night3); border: 1.5px solid var(--border2); color: var(--white);
+      border-radius: 8px; padding: 8px 10px; font-size: 14px; font-family: 'Outfit', sans-serif; outline: none; width: 100%; }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 22px; right: 22px; padding: 12px 18px; border-radius: 12px;
+      font-size: 14px; font-weight: 700; z-index: 9999; display: none; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+    .toast.show { display: block; }
+    .toast.ok { background: #166534; color: #86efac; border: 1px solid rgba(34,197,94,.3); }
+    .toast.err { background: #7f1d1d; color: #fca5a5; border: 1px solid rgba(232,49,26,.3); }
+    .toast.info { background: #1e3a5f; color: #93c5fd; border: 1px solid rgba(59,130,246,.3); }
+
+    @media (max-width: 700px) {
+      .add-row { grid-template-columns: 1fr 1fr; }
+      .override-form.open { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><div class="logo-mark">C</div>COLIXO</div>
+  <a class="back-link" href="dashboard.html"><i class="fas fa-arrow-left"></i> Dashboard</a>
+</div>
+
+<div class="page">
+  <div class="page-title">Gestion des tarifs</div>
+  <div class="page-sub">Créez, modifiez et supprimez vos produits tarifaires. Définissez des prix spéciaux par client.</div>
+
+  <!-- ── PRODUITS ── -->
+  <div class="section-card">
+    <div class="section-head">
+      <div>
+        <h2>Produits &amp; tarifs</h2>
+        <p>Chaque produit est identifié par un nom, une référence, un poids minimum et un prix de base.</p>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table id="produitsTable">
+        <thead>
+          <tr>
+            <th style="width:28%">Nom du produit</th>
+            <th style="width:12%">Réf.</th>
+            <th style="width:16%">Poids &gt;= (kg)</th>
+            <th style="width:14%">Prix (CHF)</th>
+            <th style="width:8%">Actif</th>
+            <th style="width:22%"></th>
+          </tr>
+        </thead>
+        <tbody id="produitsTbody">
+          <tr class="empty-row"><td colspan="6">Chargement...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="add-row">
+      <div class="field"><label>Nom du produit</label><input id="new-nom" type="text" placeholder="Ex: Eco standard" /></div>
+      <div class="field"><label>Réf.</label><input id="new-ref" type="text" placeholder="ECO-1" /></div>
+      <div class="field"><label>Poids &gt;= (kg)</label><input id="new-poids" type="number" step="0.1" min="0" placeholder="0" value="0" /></div>
+      <div class="field"><label>Prix (CHF)</label><input id="new-prix" type="number" step="0.05" min="0" placeholder="0.00" /></div>
+      <button class="btn btn-primary" onclick="addProduit()"><i class="fas fa-plus"></i> Ajouter</button>
+    </div>
+  </div>
+
+  <!-- ── PRIX CLIENTS ── -->
+  <div class="section-card">
+    <div class="section-head">
+      <div>
+        <h2>Prix spéciaux par client</h2>
+        <p>Remise en % ou prix fixe. Contraintes possibles : 2e colis même client, volume, etc.</p>
+      </div>
+    </div>
+    <div class="client-bar">
+      <label><i class="fas fa-user"></i> Client :</label>
+      <select id="clientSelect" onchange="onClientChange(this.value)">
+        <option value="">— Sélectionnez un client —</option>
+      </select>
+    </div>
+    <div id="clientPrixContent">
+      <div style="padding:24px 22px; color:var(--muted); font-size:13px; font-style:italic;">
+        Sélectionnez un client pour voir et modifier ses tarifs personnalisés.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const db = window.SUPABASE_CLIENT;
+  if (!db) { document.body.innerHTML = '<div style="padding:40px;color:#fca5a5;font-family:monospace">Supabase non initialise. Verifiez config.js.</div>'; }
+
+  const u = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+  if (!u) window.location.replace('../login/index.html');
+
+  let produits = [];
+  let clients = [];
+  let selectedClientId = '';
+
+  // ── Toast ──
+  let _tt;
+  function toast(msg, type) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + (type || 'ok');
+    clearTimeout(_tt);
+    _tt = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function money(v) { return 'CHF ' + Number(v || 0).toFixed(2); }
+
+  // ── Load products ──
+  async function loadProduits() {
+    const { data, error } = await db.from('produits_tarif').select('*').order('ordre').order('nom');
+    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
+    produits = data || [];
+    renderProduits();
+  }
+
+  function renderProduits() {
+    const tbody = document.getElementById('produitsTbody');
+    if (!produits.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Aucun produit. Ajoutez-en un ci-dessous.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = produits.map(p => produitRow(p)).join('');
+  }
+
+  function produitRow(p) {
+    return '<tr id="pr-' + p.id + '">' +
+      '<td class="td-nom">' + esc(p.nom) + '</td>' +
+      '<td class="td-ref">' + esc(p.ref || '—') + '</td>' +
+      '<td class="td-poids">&gt;= ' + Number(p.poids_min).toFixed(1) + ' kg</td>' +
+      '<td class="td-prix">' + Number(p.prix).toFixed(2) + '</td>' +
+      '<td class="td-actif"><span class="dot ' + (p.actif ? 'on' : 'off') + '"></span></td>' +
+      '<td class="td-actions"><div class="btn-group">' +
+        '<button class="btn btn-edit" onclick="startEdit(\'' + p.id + '\')"><i class="fas fa-pen"></i> Modifier</button>' +
+        '<button class="btn btn-del" onclick="deleteProduit(\'' + p.id + '\')"><i class="fas fa-trash"></i></button>' +
+      '</div></td>' +
+    '</tr>';
+  }
+
+  function produitEditRow(p) {
+    return '<tr id="pr-' + p.id + '" class="editing">' +
+      '<td><input id="e-nom-' + p.id + '" type="text" value="' + esc(p.nom) + '" style="min-width:120px" /></td>' +
+      '<td><input id="e-ref-' + p.id + '" type="text" value="' + esc(p.ref || '') + '" style="max-width:80px" /></td>' +
+      '<td><input id="e-poids-' + p.id + '" type="number" step="0.1" min="0" value="' + p.poids_min + '" style="max-width:80px" /></td>' +
+      '<td><input id="e-prix-' + p.id + '" type="number" step="0.05" min="0" value="' + p.prix + '" style="max-width:80px" /></td>' +
+      '<td><input id="e-actif-' + p.id + '" type="checkbox"' + (p.actif ? ' checked' : '') + ' /></td>' +
+      '<td class="td-actions"><div class="btn-group">' +
+        '<button class="btn btn-save" onclick="saveEdit(\'' + p.id + '\')"><i class="fas fa-check"></i> Sauver</button>' +
+        '<button class="btn btn-cancel" onclick="cancelEdit(\'' + p.id + '\')">Annuler</button>' +
+      '</div></td>' +
+    '</tr>';
+  }
+
+  function startEdit(id) {
+    const p = produits.find(x => x.id === id);
+    if (!p) return;
+    const row = document.getElementById('pr-' + id);
+    if (row) row.outerHTML = produitEditRow(p);
+  }
+
+  function cancelEdit(id) {
+    const p = produits.find(x => x.id === id);
+    if (!p) return;
+    const row = document.getElementById('pr-' + id);
+    if (row) row.outerHTML = produitRow(p);
+  }
+
+  async function saveEdit(id) {
+    const nom = document.getElementById('e-nom-' + id).value.trim();
+    const ref = document.getElementById('e-ref-' + id).value.trim();
+    const poids_min = parseFloat(document.getElementById('e-poids-' + id).value) || 0;
+    const prix = parseFloat(document.getElementById('e-prix-' + id).value) || 0;
+    const actif = document.getElementById('e-actif-' + id).checked;
+    if (!nom) { toast('Le nom est obligatoire.', 'err'); return; }
+    const { error } = await db.from('produits_tarif').update({ nom, ref, poids_min, prix, actif, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
+    const p = produits.find(x => x.id === id);
+    Object.assign(p, { nom, ref, poids_min, prix, actif });
+    const row = document.getElementById('pr-' + id);
+    if (row) row.outerHTML = produitRow(p);
+    toast('Produit mis a jour.');
+    if (selectedClientId) renderClientPrix(selectedClientId);
+  }
+
+  async function deleteProduit(id) {
+    const p = produits.find(x => x.id === id);
+    if (!confirm('Supprimer "' + (p ? p.nom : id) + '" ? Cette action est irreversible.')) return;
+    const { error } = await db.from('produits_tarif').delete().eq('id', id);
+    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
+    produits = produits.filter(x => x.id !== id);
+    const row = document.getElementById('pr-' + id);
+    if (row) row.remove();
+    if (!produits.length) renderProduits();
+    toast('Produit supprime.', 'info');
+    if (selectedClientId) renderClientPrix(selectedClientId);
+  }
+
+  async function addProduit() {
+    const nom = document.getElementById('new-nom').value.trim();
+    const ref = document.getElementById('new-ref').value.trim();
+    const poids_min = parseFloat(document.getElementById('new-poids').value) || 0;
+    const prix = parseFloat(document.getElementById('new-prix').value) || 0;
+    if (!nom) { toast('Le nom du produit est obligatoire.', 'err'); return; }
+    const ordre = produits.length + 1;
+    const { data, error } = await db.from('produits_tarif').insert({ nom, ref, poids_min, prix, actif: true, ordre }).select().single();
+    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
+    produits.push(data);
+    document.getElementById('new-nom').value = '';
+    document.getElementById('new-ref').value = '';
+    document.getElementById('new-poids').value = '0';
+    document.getElementById('new-prix').value = '';
+    renderProduits();
+    toast('Produit ajoute.');
+    if (selectedClientId) renderClientPrix(selectedClientId);
+  }
+
+  // ── Clients ──
+  async function loadClients() {
+    const { data } = await db.from('utilisateurs').select('id, code_acces, nom, prenom, entreprise').order('code_acces').limit(200);
+    clients = data || [];
+    if (!clients.length) {
+      const { data: d2 } = await db.from('utilisateurs').select('*').limit(200);
+      clients = d2 || [];
+    }
+    const sel = document.getElementById('clientSelect');
+    clients.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      const parts = [c.entreprise, c.nom, c.prenom].filter(Boolean);
+      opt.textContent = (parts.length ? parts.join(' ') : c.id) + (c.code_acces ? ' [' + c.code_acces + ']' : '');
+      sel.appendChild(opt);
+    });
+  }
+
+  function onClientChange(clientId) {
+    selectedClientId = clientId;
+    if (!clientId) {
+      document.getElementById('clientPrixContent').innerHTML =
+        '<div style="padding:24px 22px;color:var(--muted);font-size:13px;font-style:italic;">Selectionnez un client pour voir et modifier ses tarifs personnalises.</div>';
+      return;
+    }
+    renderClientPrix(clientId);
+  }
+
+  async function renderClientPrix(clientId) {
+    const container = document.getElementById('clientPrixContent');
+    container.innerHTML = '<div style="padding:20px 22px;color:var(--muted);font-size:13px;">Chargement...</div>';
+
+    const { data: overrides } = await db.from('prix_speciaux')
+      .select('*').eq('client_id', clientId);
+    const ovMap = {};
+    (overrides || []).forEach(o => { ovMap[o.produit_id] = o; });
+
+    if (!produits.length) {
+      container.innerHTML = '<div style="padding:20px 22px;color:var(--muted);font-size:13px;font-style:italic;">Aucun produit defini.</div>';
+      return;
+    }
+
+    let html = '<div class="tbl-wrap"><table><thead><tr>' +
+      '<th style="width:22%">Produit</th>' +
+      '<th style="width:10%">Ref.</th>' +
+      '<th style="width:14%">Poids >=</th>' +
+      '<th style="width:14%">Prix catalogue</th>' +
+      '<th style="width:16%">Remise / Prix special</th>' +
+      '<th style="width:14%">Contrainte</th>' +
+      '<th></th>' +
+    '</tr></thead><tbody>';
+
+    produits.forEach(p => {
+      const ov = ovMap[p.id];
+      let remiseHtml = '<span class="remise-none">—</span>';
+      if (ov) {
+        if (ov.type_remise === 'pct') {
+          remiseHtml = '<span class="remise-badge remise-pct"><i class="fas fa-percent"></i> -' + Number(ov.valeur).toFixed(1) + '%</span>';
+        } else {
+          remiseHtml = '<span class="remise-badge remise-fixe">CHF ' + Number(ov.valeur).toFixed(2) + '</span>';
+        }
+      }
+      const contrainteHtml = ov && ov.contrainte
+        ? '<span class="contrainte-badge">' + esc(ov.contrainte) + '</span>'
+        : '<span style="color:var(--muted);font-size:12px">—</span>';
+
+      html += '<tr id="cr-' + p.id + '">' +
+        '<td class="td-nom">' + esc(p.nom) + '</td>' +
+        '<td class="td-ref">' + esc(p.ref || '—') + '</td>' +
+        '<td class="td-poids">&gt;= ' + Number(p.poids_min).toFixed(1) + ' kg</td>' +
+        '<td class="td-prix">' + Number(p.prix).toFixed(2) + '</td>' +
+        '<td>' + remiseHtml + '</td>' +
+        '<td>' + contrainteHtml + '</td>' +
+        '<td class="td-actions"><div class="btn-group">' +
+          '<button class="btn btn-edit" onclick="openOverrideForm(\'' + clientId + '\',\'' + p.id + '\',' + p.prix + ')"><i class="fas fa-pen"></i></button>' +
+          (ov ? '<button class="btn btn-del" onclick="removeOverride(\'' + clientId + '\',\'' + p.id + '\')"><i class="fas fa-times"></i></button>' : '') +
+        '</div></td>' +
+      '</tr>' +
+      '<tr id="of-' + p.id + '" style="display:none"><td colspan="7" style="padding:0 16px 12px">' +
+        '<div id="ofform-' + p.id + '" class="override-form"></div>' +
+      '</td></tr>';
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  }
+
+  function openOverrideForm(clientId, produitId, prixCat) {
+    // Close any open form
+    document.querySelectorAll('.override-form.open').forEach(f => {
+      f.classList.remove('open');
+      f.closest('tr').style.display = 'none';
+    });
+
+    const tr = document.getElementById('of-' + produitId);
+    const form = document.getElementById('ofform-' + produitId);
+    if (!tr || !form) return;
+    tr.style.display = '';
+    form.className = 'override-form open';
+
+    const CONTRAINTES = ['', '2e colis meme client', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
+
+    form.innerHTML =
+      '<div class="field"><label>Type de remise</label>' +
+        '<select id="ov-type-' + produitId + '" onchange="updateOverridePreview(\'' + produitId + '\',' + prixCat + ')">' +
+          '<option value="fixe">Prix fixe (CHF)</option>' +
+          '<option value="pct">Remise en %</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="field"><label id="ov-val-label-' + produitId + '">Prix special (CHF)</label>' +
+        '<input id="ov-val-' + produitId + '" type="number" step="0.05" min="0" placeholder="0.00" ' +
+          'oninput="updateOverridePreview(\'' + produitId + '\',' + prixCat + ')" />' +
+      '</div>' +
+      '<div class="field"><label>Contrainte</label>' +
+        '<select id="ov-ctr-' + produitId + '">' +
+          CONTRAINTES.map(c => '<option value="' + esc(c) + '">' + (c || '— Aucune —') + '</option>').join('') +
+        '</select>' +
+      '</div>' +
+      '<div class="field" style="align-self:end">' +
+        '<div id="ov-preview-' + produitId + '" style="font-size:12px;color:var(--muted);margin-bottom:6px;"></div>' +
+        '<div class="btn-group">' +
+          '<button class="btn btn-save" onclick="saveOverride(\'' + clientId + '\',\'' + produitId + '\',' + prixCat + ')"><i class="fas fa-check"></i> Appliquer</button>' +
+          '<button class="btn btn-cancel" onclick="closeOverrideForm(\'' + produitId + '\')">Annuler</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function updateOverridePreview(produitId, prixCat) {
+    const type = document.getElementById('ov-type-' + produitId).value;
+    const valInput = document.getElementById('ov-val-' + produitId);
+    const label = document.getElementById('ov-val-label-' + produitId);
+    const preview = document.getElementById('ov-preview-' + produitId);
+    const val = parseFloat(valInput.value) || 0;
+    if (type === 'pct') {
+      label.textContent = 'Remise (%)';
+      valInput.placeholder = 'Ex: 10';
+      const final = Math.max(0, prixCat * (1 - val / 100));
+      preview.textContent = val > 0 ? 'Prix final : CHF ' + final.toFixed(2) : '';
+    } else {
+      label.textContent = 'Prix special (CHF)';
+      valInput.placeholder = '0.00';
+      preview.textContent = val > 0 ? 'Economie : CHF ' + Math.max(0, prixCat - val).toFixed(2) : '';
+    }
+  }
+
+  function closeOverrideForm(produitId) {
+    const tr = document.getElementById('of-' + produitId);
+    const form = document.getElementById('ofform-' + produitId);
+    if (tr) tr.style.display = 'none';
+    if (form) form.className = 'override-form';
+  }
+
+  async function saveOverride(clientId, produitId, prixCat) {
+    const type_remise = document.getElementById('ov-type-' + produitId).value;
+    const valeur = parseFloat(document.getElementById('ov-val-' + produitId).value);
+    const contrainte = document.getElementById('ov-ctr-' + produitId).value;
+    if (isNaN(valeur) || valeur < 0) { toast('Valeur invalide.', 'err'); return; }
+    if (type_remise === 'pct' && valeur > 100) { toast('La remise ne peut pas depasser 100%.', 'err'); return; }
+    const { error } = await db.from('prix_speciaux').upsert({
+      client_id: clientId, produit_id: produitId, type_remise, valeur, contrainte, actif: true
+    }, { onConflict: 'client_id,produit_id' });
+    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
+    toast('Prix special applique.');
+    closeOverrideForm(produitId);
+    renderClientPrix(clientId);
+  }
+
+  async function removeOverride(clientId, produitId) {
+    if (!confirm('Retirer ce prix special ? Le tarif catalogue sera applique.')) return;
+    const { error } = await db.from('prix_speciaux').delete().eq('client_id', clientId).eq('produit_id', produitId);
+    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
+    toast('Prix special retire.', 'info');
+    renderClientPrix(clientId);
+  }
+
+  // ── Init ──
+  (async function init() {
+    await Promise.all([loadProduits(), loadClients()]);
+  })();
+</script>
+</body>
+</html>
