@@ -1,1 +1,284 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colixo - Acceptation des CGV</title>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b0b0f;
+      color: #ffffff;
+    }
+
+    .wrap {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 20px;
+    }
+
+    .card {
+      background: #141419;
+      border: 1px solid #2a2a35;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    .accent {
+      color: #ff8a1d;
+    }
+
+    .muted {
+      color: #b9b9c7;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .cgv-box {
+      background: #101015;
+      border: 1px solid #30303b;
+      border-radius: 12px;
+      padding: 18px;
+      max-height: 420px;
+      overflow: auto;
+      line-height: 1.55;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-top: 18px;
+      line-height: 1.5;
+    }
+
+    .check-row input {
+      margin-top: 4px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: #ff7a00;
+      color: #fff;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #2a2a35;
+      color: #fff;
+    }
+
+    .status {
+      margin-top: 14px;
+      font-size: 14px;
+      color: #b9b9c7;
+    }
+
+    a {
+      color: #ff9d3b;
+    }
+
+    .meta {
+      margin-top: 12px;
+      padding: 12px;
+      background: #111116;
+      border: 1px solid #2c2c37;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #d9d9e3;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Acceptation des <span class="accent">Conditions Générales</span></h1>
+      <p class="muted">
+        Avant d’accéder au portail client Colixo, vous devez accepter la version en vigueur
+        des Conditions Générales de Transport.
+      </p>
+      <div id="cgvMeta" class="meta">Chargement de la version active...</div>
+    </div>
+
+    <div class="card">
+      <h2 id="cgvTitle">Conditions Générales</h2>
+      <div id="cgvContent" class="cgv-box">
+        Chargement...
+      </div>
+
+      <label class="check-row">
+        <input type="checkbox" id="acceptCgvCheckbox">
+        <span>
+          Je confirme avoir pris connaissance des Conditions Générales de Transport Colixo
+          et j’accepte leur application à l’utilisation du portail client et aux prestations commandées.
+        </span>
+      </label>
+
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" id="logoutBtn">Se déconnecter</button>
+        <button type="button" class="btn-primary" id="acceptBtn" disabled>J’accepte et continuer</button>
+      </div>
+
+      <div id="statusMsg" class="status"></div>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/orders.js"></script>
+
+  <script>
+    async function ensureProfileExists(user) {
+      const { data: existingProfile, error: selectError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (selectError) {
+        throw selectError;
+      }
+
+      if (existingProfile) return existingProfile;
+
+      const profilePayload = {
+        id: user.id,
+        email: user.email || null,
+        full_name: user.user_metadata?.full_name || null,
+        company_name: user.user_metadata?.company_name || null
+      };
+
+      const { data: newProfile, error: insertError } = await supabase
+        .from("profiles")
+        .insert(profilePayload)
+        .select("*")
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      return newProfile;
+    }
+
+    async function getClientIp() {
+      try {
+        const res = await fetch("https://api.ipify.org?format=json");
+        const data = await res.json();
+        return data.ip || null;
+      } catch (e) {
+        console.warn("IP non récupérée", e);
+        return null;
+      }
+    }
+
+    async function main() {
+      const statusMsg = document.getElementById("statusMsg");
+      const checkbox = document.getElementById("acceptCgvCheckbox");
+      const acceptBtn = document.getElementById("acceptBtn");
+      const logoutBtn = document.getElementById("logoutBtn");
+      const cgvTitle = document.getElementById("cgvTitle");
+      const cgvContent = document.getElementById("cgvContent");
+      const cgvMeta = document.getElementById("cgvMeta");
+
+      try {
+        const user = await requireAuth();
+        if (!user) return;
+
+        const profile = await ensureProfileExists(user);
+        const currentCgv = await getActiveCgvVersion();
+
+        cgvTitle.textContent = currentCgv.title || "Conditions Générales de Transport";
+        cgvContent.innerHTML = currentCgv.content_html || "<p>Aucun contenu disponible.</p>";
+        cgvMeta.innerHTML = `
+          <strong>Version active :</strong> ${currentCgv.version_code || "-"}<br>
+          <strong>Utilisateur :</strong> ${profile.company_name || profile.full_name || user.email || "-"}
+        `;
+
+        if (profile.cgv_version_accepted === currentCgv.version_code) {
+          window.location.href = "dashboard.html";
+          return;
+        }
+
+        checkbox.addEventListener("change", () => {
+          acceptBtn.disabled = !checkbox.checked;
+        });
+
+        logoutBtn.addEventListener("click", async () => {
+          await supabase.auth.signOut();
+          window.location.href = "login.html";
+        });
+
+        acceptBtn.addEventListener("click", async () => {
+          if (!checkbox.checked) return;
+
+          acceptBtn.disabled = true;
+          statusMsg.textContent = "Enregistrement de votre acceptation...";
+
+          try {
+            const acceptedAt = new Date().toISOString();
+            const ip = await getClientIp();
+
+            const updatePayload = {
+              cgv_version_accepted: currentCgv.version_code,
+              cgv_accepted_at: acceptedAt,
+              cgv_accept_ip: ip,
+              cgv_accept_user_agent: navigator.userAgent
+            };
+
+            const { error: updateError } = await supabase
+              .from("profiles")
+              .update(updatePayload)
+              .eq("id", user.id);
+
+            if (updateError) {
+              throw updateError;
+            }
+
+            statusMsg.textContent = "Acceptation enregistrée. Redirection...";
+            window.location.href = "dashboard.html";
+          } catch (err) {
+            console.error(err);
+            statusMsg.textContent = "Erreur : " + (err.message || "impossible d'enregistrer l'acceptation");
+            acceptBtn.disabled = false;
+          }
+        });
+
+      } catch (err) {
+        console.error(err);
+        statusMsg.textContent = "Erreur de chargement.";
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
