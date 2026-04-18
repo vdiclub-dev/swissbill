@@ -162,9 +162,7 @@
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (error) throw error;
-
     return data || {
       version_code: "v1.0_colixo_2026",
       title: "Conditions Générales de Transport Colixo",
@@ -172,41 +170,12 @@
     };
   }
 
-  async function ensureProfileExists(user) {
-    const { data: existingProfile, error: selectError } = await db
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (selectError) throw selectError;
-    if (existingProfile) return existingProfile;
-
-    const profilePayload = {
-      id: user.id,
-      email: user.email || null,
-      full_name: user.user_metadata?.full_name || null,
-      company_name: user.user_metadata?.company_name || null
-    };
-
-    const { data: newProfile, error: insertError } = await db
-      .from("profiles")
-      .insert(profilePayload)
-      .select("*")
-      .single();
-
-    if (insertError) throw insertError;
-    return newProfile;
-  }
-
   async function getClientIp() {
     try {
       const res = await fetch("https://api.ipify.org?format=json");
       const data = await res.json();
       return data.ip || null;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   async function main() {
@@ -218,29 +187,39 @@
     const cgvContent = document.getElementById("cgvContent");
     const cgvMeta = document.getElementById("cgvMeta");
 
-    if (!db) {
-      throw new Error("SUPABASE_CLIENT introuvable dans config.js");
+    if (!db) throw new Error("SUPABASE_CLIENT introuvable dans config.js");
+
+    // Récupère l'utilisateur : session Supabase OU code USR (localStorage)
+    let userId = null;
+    let userName = null;
+    const { data: { session } } = await db.auth.getSession();
+    if (session?.user) {
+      userId = session.user.id;
+      userName = session.user.email;
+    } else {
+      try {
+        const cu = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+        if (cu?.id) { userId = cu.id; userName = [cu.prenom, cu.nom].filter(Boolean).join(' ') || cu.email || '-'; }
+      } catch (e) {}
     }
 
-    const { data: { session } } = await db.auth.getSession();
-
-    if (!session?.user) {
+    if (!userId) {
       window.location.href = "login/index.html";
       return;
     }
 
-    const user = session.user;
-    const profile = await ensureProfileExists(user);
+    // Charge l'utilisateur depuis utilisateurs (pour CGV USR code)
+    const { data: utilisateur } = await db.from('utilisateurs').select('*').eq('id', userId).maybeSingle();
     const currentCgv = await getActiveCgvVersion();
 
     cgvTitle.textContent = currentCgv.title || "Conditions Générales";
     cgvContent.innerHTML = currentCgv.content_html || "<p>Aucun contenu disponible.</p>";
     cgvMeta.innerHTML = `
       <strong>Version active :</strong> ${currentCgv.version_code || "-"}<br>
-      <strong>Utilisateur :</strong> ${profile.company_name || profile.full_name || user.email || "-"}
+      <strong>Utilisateur :</strong> ${utilisateur ? ([utilisateur.prenom, utilisateur.nom].filter(Boolean).join(' ') || utilisateur.email || '-') : userName}
     `;
 
-    if (profile.cgv_version_accepted === currentCgv.version_code) {
+    if (utilisateur?.cgv_version_accepted === currentCgv.version_code) {
       window.location.href = "admin/client/portal.html";
       return;
     }
@@ -251,6 +230,7 @@
 
     logoutBtn.addEventListener("click", async () => {
       await db.auth.signOut();
+      try { localStorage.removeItem('colixo_user'); } catch(e) {}
       window.location.href = "login/index.html";
     });
 
@@ -259,20 +239,23 @@
         acceptBtn.disabled = true;
         statusMsg.textContent = "Enregistrement de votre acceptation...";
 
-        const acceptedAt = new Date().toISOString();
         const ip = await getClientIp();
 
         const { error } = await db
-          .from("profiles")
-          .update({
-            cgv_version_accepted: currentCgv.version_code,
-            cgv_accepted_at: acceptedAt,
-            cgv_accept_ip: ip,
-            cgv_accept_user_agent: navigator.userAgent
-          })
-          .eq("id", user.id);
+          .from("utilisateurs")
+          .update({ cgv_version_accepted: currentCgv.version_code })
+          .eq("id", userId);
 
         if (error) throw error;
+
+        // Met à jour le localStorage si USR code
+        try {
+          const cu = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+          if (cu?.id === userId) {
+            cu.cgv_version_accepted = currentCgv.version_code;
+            localStorage.setItem('colixo_user', JSON.stringify(cu));
+          }
+        } catch(e) {}
 
         statusMsg.textContent = "Acceptation enregistrée. Redirection...";
         window.location.href = "admin/client/portal.html";
