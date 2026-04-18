@@ -140,7 +140,7 @@ window.SUPABASE_CONFIG = {
     // URL canonique du projet Supabase Colixo.
     url: "https://iubbsnntcreneakbdkmv.supabase.co",
     // Clé publique navigateur utilisée pour Auth + API côté client.
-    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y"
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1YmJzbm50Y3JlbmVha2Jka212Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzI1MDYsImV4cCI6MjA4ODE0ODUwNn0.FzMgCZxNIej1skSIc8UAGiODcZEZW1GCWZwBfonm_1Y"
 };
 
 // ------------------------------------------------------------
@@ -236,7 +236,7 @@ try {
         : null;
     window.SUPABASE_CLIENT = window.supabase.createClient(
         window.SUPABASE_CONFIG.url,
-        window.SUPABASE_CONFIG.key,
+        window.SUPABASE_CONFIG.anonKey,
         {
             global: {
                 fetch: function (url, options) {

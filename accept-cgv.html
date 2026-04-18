@@ -6,6 +6,7 @@
   <title>Colixo - Acceptation des CGV</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script data-cfasync="false" src="config.js?v=20260462"></script>
 
   <style>
     body {
@@ -150,13 +151,8 @@
     </div>
   </div>
 
-<script data-cfasync="false" src="config.js?v=20260462"></script>
-
 <script>
-  const db = supabase.createClient(
-    window.SUPABASE_CONFIG.url,
-    window.SUPABASE_CONFIG.key
-  );
+  const db = window.SUPABASE_CLIENT;
 
   async function getActiveCgvVersion() {
     const { data, error } = await db
@@ -222,13 +218,18 @@
     const cgvContent = document.getElementById("cgvContent");
     const cgvMeta = document.getElementById("cgvMeta");
 
-    const { data: { user } } = await db.auth.getUser();
+    if (!db) {
+      throw new Error("SUPABASE_CLIENT introuvable dans config.js");
+    }
 
-    if (!user) {
+    const { data: { session } } = await db.auth.getSession();
+
+    if (!session?.user) {
       window.location.href = "login/index.html";
       return;
     }
 
+    const user = session.user;
     const profile = await ensureProfileExists(user);
     const currentCgv = await getActiveCgvVersion();
 
