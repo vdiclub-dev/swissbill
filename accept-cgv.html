@@ -150,124 +150,144 @@
     </div>
   </div>
 
-  <script>
-    async function ensureProfileExists(user) {
-      const db = window.SUPABASE_CLIENT;
-
-      const { data: existingProfile, error: selectError } = await db
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (selectError) throw selectError;
-      if (existingProfile) return existingProfile;
-
-      const profilePayload = {
-        id: user.id,
-        email: user.email || null,
-        full_name: user.user_metadata?.full_name || null,
-        company_name: user.user_metadata?.company_name || null
-      };
-
-      const { data: newProfile, error: insertError } = await db
-        .from("profiles")
-        .insert(profilePayload)
-        .select("*")
-        .single();
-
-      if (insertError) throw insertError;
-      return newProfile;
-    }
-
-    async function getClientIp() {
-      try {
-        const res = await fetch("https://api.ipify.org?format=json");
-        const data = await res.json();
-        return data.ip || null;
-      } catch (e) {
-        return null;
-      }
-    }
-
-    async function main() {
-      const db = window.SUPABASE_CLIENT;
-      const statusMsg = document.getElementById("statusMsg");
-      const checkbox = document.getElementById("acceptCgvCheckbox");
-      const acceptBtn = document.getElementById("acceptBtn");
-      const logoutBtn = document.getElementById("logoutBtn");
-      const cgvTitle = document.getElementById("cgvTitle");
-      const cgvContent = document.getElementById("cgvContent");
-      const cgvMeta = document.getElementById("cgvMeta");
-
-      const { data: { user } } = await db.auth.getUser();
-      if (!user) {
-        window.location.href = "login/index.html";
-        return;
-      }
-
-      const profile = await ensureProfileExists(user);
-      const currentCgv = await getActiveCgvVersion();
-
-      cgvTitle.textContent = currentCgv.title || "Conditions Générales";
-      cgvContent.innerHTML = currentCgv.content_html || "<p>Aucun contenu disponible.</p>";
-      cgvMeta.innerHTML = `
-        <strong>Version active :</strong> ${currentCgv.version_code || "-"}<br>
-        <strong>Utilisateur :</strong> ${profile.company_name || profile.full_name || user.email || "-"}
-      `;
-
-      if (profile.cgv_version_accepted === currentCgv.version_code) {
-        window.location.href = "admin/client/portal.html";
-        return;
-      }
-
-      checkbox.addEventListener("change", () => {
-        acceptBtn.disabled = !checkbox.checked;
-      });
-
-      logoutBtn.addEventListener("click", async () => {
-        await db.auth.signOut();
-        window.location.href = "login/index.html";
-      });
-
-      acceptBtn.addEventListener("click", async () => {
-        try {
-          acceptBtn.disabled = true;
-          statusMsg.textContent = "Enregistrement de votre acceptation...";
-
-          const acceptedAt = new Date().toISOString();
-          const ip = await getClientIp();
-
-          const { error } = await db
-            .from("profiles")
-            .update({
-              cgv_version_accepted: currentCgv.version_code,
-              cgv_accepted_at: acceptedAt,
-              cgv_accept_ip: ip,
-              cgv_accept_user_agent: navigator.userAgent
-            })
-            .eq("id", user.id);
-
-          if (error) throw error;
-
-          statusMsg.textContent = "Acceptation enregistrée. Redirection...";
-          window.location.href = "admin/client/portal.html";
-        } catch (err) {
-          console.error(err);
-          statusMsg.textContent = "Erreur : " + (err?.message || err);
-          acceptBtn.disabled = false;
-        }
-      });
-    }
-
-    main().catch(err => {
-      console.error("Erreur détaillée accept-cgv:", err);
-      document.getElementById("statusMsg").textContent =
-        "Erreur de chargement : " + (err?.message || err);
-    });
-  </script>
 <script data-cfasync="false" src="config.js?v=20260462"></script>
-<script src="js/auth.js"></script>
-<script src="js/orders.js"></script>
+
+<script>
+  const db = supabase.createClient(
+    window.SUPABASE_CONFIG.url,
+    window.SUPABASE_CONFIG.anonKey
+  );
+
+  async function getActiveCgvVersion() {
+    const { data, error } = await db
+      .from("cgv_versions")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return data || {
+      version_code: "v1.0_colixo_2026",
+      title: "Conditions Générales de Transport Colixo",
+      content_html: "<p>Aucune version active trouvée.</p>"
+    };
+  }
+
+  async function ensureProfileExists(user) {
+    const { data: existingProfile, error: selectError } = await db
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (selectError) throw selectError;
+    if (existingProfile) return existingProfile;
+
+    const profilePayload = {
+      id: user.id,
+      email: user.email || null,
+      full_name: user.user_metadata?.full_name || null,
+      company_name: user.user_metadata?.company_name || null
+    };
+
+    const { data: newProfile, error: insertError } = await db
+      .from("profiles")
+      .insert(profilePayload)
+      .select("*")
+      .single();
+
+    if (insertError) throw insertError;
+    return newProfile;
+  }
+
+  async function getClientIp() {
+    try {
+      const res = await fetch("https://api.ipify.org?format=json");
+      const data = await res.json();
+      return data.ip || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function main() {
+    const statusMsg = document.getElementById("statusMsg");
+    const checkbox = document.getElementById("acceptCgvCheckbox");
+    const acceptBtn = document.getElementById("acceptBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const cgvTitle = document.getElementById("cgvTitle");
+    const cgvContent = document.getElementById("cgvContent");
+    const cgvMeta = document.getElementById("cgvMeta");
+
+    const { data: { user } } = await db.auth.getUser();
+
+    if (!user) {
+      window.location.href = "login/index.html";
+      return;
+    }
+
+    const profile = await ensureProfileExists(user);
+    const currentCgv = await getActiveCgvVersion();
+
+    cgvTitle.textContent = currentCgv.title || "Conditions Générales";
+    cgvContent.innerHTML = currentCgv.content_html || "<p>Aucun contenu disponible.</p>";
+    cgvMeta.innerHTML = `
+      <strong>Version active :</strong> ${currentCgv.version_code || "-"}<br>
+      <strong>Utilisateur :</strong> ${profile.company_name || profile.full_name || user.email || "-"}
+    `;
+
+    if (profile.cgv_version_accepted === currentCgv.version_code) {
+      window.location.href = "admin/client/portal.html";
+      return;
+    }
+
+    checkbox.addEventListener("change", () => {
+      acceptBtn.disabled = !checkbox.checked;
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      await db.auth.signOut();
+      window.location.href = "login/index.html";
+    });
+
+    acceptBtn.addEventListener("click", async () => {
+      try {
+        acceptBtn.disabled = true;
+        statusMsg.textContent = "Enregistrement de votre acceptation...";
+
+        const acceptedAt = new Date().toISOString();
+        const ip = await getClientIp();
+
+        const { error } = await db
+          .from("profiles")
+          .update({
+            cgv_version_accepted: currentCgv.version_code,
+            cgv_accepted_at: acceptedAt,
+            cgv_accept_ip: ip,
+            cgv_accept_user_agent: navigator.userAgent
+          })
+          .eq("id", user.id);
+
+        if (error) throw error;
+
+        statusMsg.textContent = "Acceptation enregistrée. Redirection...";
+        window.location.href = "admin/client/portal.html";
+      } catch (err) {
+        console.error(err);
+        statusMsg.textContent = "Erreur : " + (err?.message || err);
+        acceptBtn.disabled = false;
+      }
+    });
+  }
+
+  main().catch(err => {
+    console.error("Erreur détaillée accept-cgv:", err);
+    document.getElementById("statusMsg").textContent =
+      "Erreur de chargement : " + (err?.message || err);
+  });
+</script>
 </body>
 </html>
