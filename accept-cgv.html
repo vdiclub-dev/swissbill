@@ -150,23 +150,17 @@
     </div>
   </div>
 
-  <script src="js/config.js"></script>
-  <script src="js/supabase-client.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/orders.js"></script>
-
   <script>
     async function ensureProfileExists(user) {
-      const { data: existingProfile, error: selectError } = await supabase
+      const db = window.SUPABASE_CLIENT;
+
+      const { data: existingProfile, error: selectError } = await db
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (selectError) {
-        throw selectError;
-      }
-
+      if (selectError) throw selectError;
       if (existingProfile) return existingProfile;
 
       const profilePayload = {
@@ -176,16 +170,13 @@
         company_name: user.user_metadata?.company_name || null
       };
 
-      const { data: newProfile, error: insertError } = await supabase
+      const { data: newProfile, error: insertError } = await db
         .from("profiles")
         .insert(profilePayload)
         .select("*")
         .single();
 
-      if (insertError) {
-        throw insertError;
-      }
-
+      if (insertError) throw insertError;
       return newProfile;
     }
 
@@ -195,12 +186,12 @@
         const data = await res.json();
         return data.ip || null;
       } catch (e) {
-        console.warn("IP non récupérée", e);
         return null;
       }
     }
 
     async function main() {
+      const db = window.SUPABASE_CLIENT;
       const statusMsg = document.getElementById("statusMsg");
       const checkbox = document.getElementById("acceptCgvCheckbox");
       const acceptBtn = document.getElementById("acceptBtn");
@@ -209,80 +200,71 @@
       const cgvContent = document.getElementById("cgvContent");
       const cgvMeta = document.getElementById("cgvMeta");
 
-      try {
-        const user = await requireAuth();
-        if (!user) return;
+      const { data: { user } } = await db.auth.getUser();
+      if (!user) {
+        window.location.href = "login/index.html";
+        return;
+      }
 
-        const profile = await ensureProfileExists(user);
-        const currentCgv = await getActiveCgvVersion();
+      const profile = await ensureProfileExists(user);
+      const currentCgv = await getActiveCgvVersion();
 
-        cgvTitle.textContent = currentCgv.title || "Conditions Générales de Transport";
-        cgvContent.innerHTML = currentCgv.content_html || "<p>Aucun contenu disponible.</p>";
-        cgvMeta.innerHTML = `
-          <strong>Version active :</strong> ${currentCgv.version_code || "-"}<br>
-          <strong>Utilisateur :</strong> ${profile.company_name || profile.full_name || user.email || "-"}
-        `;
+      cgvTitle.textContent = currentCgv.title || "Conditions Générales";
+      cgvContent.innerHTML = currentCgv.content_html || "<p>Aucun contenu disponible.</p>";
+      cgvMeta.innerHTML = `
+        <strong>Version active :</strong> ${currentCgv.version_code || "-"}<br>
+        <strong>Utilisateur :</strong> ${profile.company_name || profile.full_name || user.email || "-"}
+      `;
 
-        if (profile.cgv_version_accepted === currentCgv.version_code) {
-          window.location.href = "dashboard.html";
-          return;
-        }
+      if (profile.cgv_version_accepted === currentCgv.version_code) {
+        window.location.href = "admin/client/portal.html";
+        return;
+      }
 
-        checkbox.addEventListener("change", () => {
-          acceptBtn.disabled = !checkbox.checked;
-        });
+      checkbox.addEventListener("change", () => {
+        acceptBtn.disabled = !checkbox.checked;
+      });
 
-        logoutBtn.addEventListener("click", async () => {
-          await supabase.auth.signOut();
-          window.location.href = "login.html";
-        });
+      logoutBtn.addEventListener("click", async () => {
+        await db.auth.signOut();
+        window.location.href = "login/index.html";
+      });
 
-        acceptBtn.addEventListener("click", async () => {
-          if (!checkbox.checked) return;
-
+      acceptBtn.addEventListener("click", async () => {
+        try {
           acceptBtn.disabled = true;
           statusMsg.textContent = "Enregistrement de votre acceptation...";
 
-          try {
-            const acceptedAt = new Date().toISOString();
-            const ip = await getClientIp();
+          const acceptedAt = new Date().toISOString();
+          const ip = await getClientIp();
 
-            const updatePayload = {
+          const { error } = await db
+            .from("profiles")
+            .update({
               cgv_version_accepted: currentCgv.version_code,
               cgv_accepted_at: acceptedAt,
               cgv_accept_ip: ip,
               cgv_accept_user_agent: navigator.userAgent
-            };
+            })
+            .eq("id", user.id);
 
-            const { error: updateError } = await supabase
-              .from("profiles")
-              .update(updatePayload)
-              .eq("id", user.id);
+          if (error) throw error;
 
-            if (updateError) {
-              throw updateError;
-            }
-
-            statusMsg.textContent = "Acceptation enregistrée. Redirection...";
-            window.location.href = "dashboard.html";
-          } catch (err) {
-            console.error(err);
-            statusMsg.textContent = "Erreur : " + (err.message || "impossible d'enregistrer l'acceptation");
-            acceptBtn.disabled = false;
-          }
-        });
-
-      } catch (err) {
-        console.error(err);
-        statusMsg.textContent = "Erreur de chargement.";
-      }
+          statusMsg.textContent = "Acceptation enregistrée. Redirection...";
+          window.location.href = "admin/client/portal.html";
+        } catch (err) {
+          console.error(err);
+          statusMsg.textContent = "Erreur : " + (err?.message || err);
+          acceptBtn.disabled = false;
+        }
+      });
     }
 
     main().catch(err => {
-  console.error("Erreur détaillée accept-cgv:", err);
-  document.getElementById("statusMsg").textContent =
-    "Erreur de chargement : " + (err?.message || err);
-});
+      console.error("Erreur détaillée accept-cgv:", err);
+      document.getElementById("statusMsg").textContent =
+        "Erreur de chargement : " + (err?.message || err);
+    });
   </script>
 <script data-cfasync="false" src="config.js?v=20260462"></script>
 <script src="js/auth.js"></script>
