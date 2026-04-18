@@ -203,10 +203,12 @@
 
 <script>
   const db = window.SUPABASE_CLIENT;
-  if (!db) { document.body.innerHTML = '<div style="padding:40px;color:#fca5a5;font-family:monospace">Supabase non initialise. Verifiez config.js.</div>'; }
+  if (!db) {
+    document.querySelector('.page').innerHTML = '<div style="padding:40px;color:#fca5a5;font-size:16px;font-weight:700;">Erreur : Supabase non initialise.<br><small style="font-weight:400;color:#aaa">Verifiez que config.js est charge avant ce script.</small></div>';
+  }
 
   const u = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-  if (!u) window.location.replace('../login/index.html');
+  if (!u && db) window.location.replace('../login/index.html');
 
   let produits = [];
   let clients = [];
@@ -229,10 +231,20 @@
 
   // ── Load products ──
   async function loadProduits() {
-    const { data, error } = await db.from('produits_tarif').select('*').order('ordre').order('nom');
-    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
-    produits = data || [];
-    renderProduits();
+    if (!db) return;
+    try {
+      const { data, error } = await db.from('produits_tarif').select('*').order('ordre').order('nom');
+      if (error) { showTableError('produitsTbody', 6, error.message); return; }
+      produits = data || [];
+      renderProduits();
+    } catch (e) {
+      showTableError('produitsTbody', 6, e.message);
+    }
+  }
+
+  function showTableError(tbodyId, cols, msg) {
+    const el = document.getElementById(tbodyId);
+    if (el) el.innerHTML = '<tr><td colspan="' + cols + '" style="padding:20px;color:#fca5a5;font-size:13px;">Erreur : ' + esc(msg) + '</td></tr>';
   }
 
   function renderProduits() {
@@ -512,7 +524,13 @@
 
   // ── Init ──
   (async function init() {
-    await Promise.all([loadProduits(), loadClients()]);
+    if (!db) return;
+    try {
+      await Promise.all([loadProduits(), loadClients()]);
+    } catch (e) {
+      toast('Erreur init: ' + e.message, 'err');
+      console.error('Init error:', e);
+    }
   })();
 </script>
 </body>
