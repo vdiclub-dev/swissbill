@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colixo - Signature transport</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <link rel="stylesheet" href="css/style.css" />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b0b0f;
+      color: #fff;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 30px auto;
+      padding: 20px;
+    }
+
+    .card {
+      background: #141419;
+      border: 1px solid #2a2a35;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 10px 16px;
+    }
+
+    .summary-grid div:nth-child(odd) {
+      color: #ff8a1d;
+      font-weight: bold;
+    }
+
+    .signature-wrap {
+      margin-top: 20px;
+    }
+
+    #signaturePad {
+      width: 100%;
+      height: 220px;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #ccc;
+      display: block;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .btn-primary {
+      background: #ff7a00;
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #2a2a35;
+      color: #fff;
+    }
+
+    .check-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 16px;
+      line-height: 1.5;
+    }
+
+    .check-row input {
+      margin-top: 4px;
+    }
+
+    .muted {
+      color: #bbb;
+      font-size: 14px;
+    }
+
+    .cgv-box {
+      background: #111116;
+      border: 1px solid #2f2f3b;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 15px;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    a {
+      color: #ff9d3b;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Validation et signature du transport</h1>
+      <p class="muted">Vérifie les informations, accepte les CGV et signe pour valider définitivement la commande.</p>
+    </div>
+
+    <div class="card">
+      <h2>Résumé de la commande</h2>
+      <div id="orderSummary" class="summary-grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Conditions Générales de Transport</h2>
+      <div id="cgvTitle"></div>
+      <div id="cgvContent" class="cgv-box"></div>
+
+      <label class="check-row">
+        <input type="checkbox" id="acceptCgv">
+        <span>
+          J’accepte les Conditions Générales de Transport de Colixo ainsi que la limitation de responsabilité applicable à cette commande.
+        </span>
+      </label>
+
+      <div class="signature-wrap">
+        <label for="signaturePad"><strong>Signature du client</strong></label>
+        <canvas id="signaturePad"></canvas>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" id="clearSignature">Effacer la signature</button>
+        <button type="button" class="btn-primary" id="signAndValidateBtn" disabled>Signer et valider</button>
+      </div>
+
+      <div id="statusMsg" class="status muted"></div>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/audit.js"></script>
+  <script src="js/orders.js"></script>
+  <script src="js/signature.js"></script>
+  <script src="js/pdf.js"></script>
+
+  <script>
+    function getOrderIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("id");
+    }
+
+    function renderSummary(order) {
+      const el = document.getElementById("orderSummary");
+
+      const entries = [
+        ["Référence", order.reference || ""],
+        ["Enlèvement", order.pickup_address || ""],
+        ["Livraison", order.delivery_address || ""],
+        ["Type colis", order.package_type || ""],
+        ["Poids", order.package_weight ? `${order.package_weight} kg` : ""],
+        ["Valeur déclarée", `CHF ${Number(order.declared_value || 0).toFixed(2)}`],
+        ["Service", order.service_level || ""],
+        ["Prix HT", `CHF ${Number(order.price_ht || 0).toFixed(2)}`],
+        ["TVA", `${Number(order.tva_rate || 0).toFixed(1)} %`],
+        ["Prix TTC", `CHF ${Number(order.price_ttc || 0).toFixed(2)}`]
+      ];
+
+      el.innerHTML = entries.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join("");
+    }
+
+    async function main() {
+      try {
+        const user = await requireAuth();
+        if (!user) return;
+
+        const profile = await getCurrentProfile();
+        const orderId = getOrderIdFromUrl();
+        if (!orderId) throw new Error("Commande introuvable");
+
+        const order = await getOrderById(orderId);
+        if (order.locked) {
+          document.getElementById("statusMsg").textContent = "Cette commande est déjà signée et verrouillée.";
+          return;
+        }
+
+        const cgv = await getActiveCgvVersion();
+
+        renderSummary(order);
+        document.getElementById("cgvTitle").innerHTML = `<strong>${cgv.title}</strong> — version ${cgv.version_code}`;
+        document.getElementById("cgvContent").innerHTML = cgv.content_html;
+
+        const pad = initSignaturePad(
+          "signaturePad",
+          "clearSignature",
+          "acceptCgv",
+          "signAndValidateBtn"
+        );
+
+        document.getElementById("signAndValidateBtn").addEventListener("click", async () => {
+          const statusMsg = document.getElementById("statusMsg");
+          const btn = document.getElementById("signAndValidateBtn");
+          btn.disabled = true;
+          statusMsg.textContent = "Validation en cours...";
+
+          try {
+            const signatureData = pad.getSignatureDataUrl();
+            if (!signatureData) throw new Error("Signature manquante");
+
+            const ip = await getClientIp();
+            const signatureName =
+              profile?.company_name ||
+              profile?.full_name ||
+              user.email ||
+              "Client";
+
+            const signedAt = new Date().toISOString();
+
+            const { error: signError } = await supabase
+              .from("orders")
+              .update({
+                accepted_cgv: true,
+                accepted_cgv_at: signedAt,
+                cgv_version: cgv.version_code,
+                signature_name: signatureName,
+                signature_data: signatureData,
+                signature_ip: ip,
+                signature_user_agent: navigator.userAgent,
+                signed_at: signedAt,
+                status: "signed",
+                locked: true
+              })
+              .eq("id", order.id);
+
+            if (signError) throw signError;
+
+            await addAuditLog(order.id, "ORDER_SIGNED", {
+              cgv_version: cgv.version_code,
+              signed_at: signedAt,
+              signature_ip: ip
+            });
+
+            const refreshedOrder = await getOrderById(order.id);
+            const pdfBlob = await generateSignedOrderPdf(refreshedOrder, cgv);
+            const pdfUrl = await uploadSignedPdf(order.id, pdfBlob);
+
+            const { error: pdfError } = await supabase
+              .from("orders")
+              .update({
+                pdf_url: pdfUrl,
+                pdf_generated_at: new Date().toISOString()
+              })
+              .eq("id", order.id);
+
+            if (pdfError) throw pdfError;
+
+            await addAuditLog(order.id, "PDF_GENERATED", {
+              pdf_url: pdfUrl
+            });
+
+            statusMsg.innerHTML = `Commande validée. PDF généré. <a href="${pdfUrl}" target="_blank" rel="noopener">Ouvrir le PDF signé</a>`;
+          } catch (err) {
+            console.error(err);
+            statusMsg.textContent = "Erreur : " + (err.message || "validation impossible");
+            btn.disabled = false;
+          }
+        });
+      } catch (err) {
+        console.error(err);
+        document.getElementById("statusMsg").textContent = "Erreur de chargement.";
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>

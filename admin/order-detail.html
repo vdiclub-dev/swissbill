@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colixo Admin - Détail commande</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background:#101014; color:#fff; margin:0; }
+    .wrap { max-width:1000px; margin:30px auto; padding:20px; }
+    .card { background:#17171d; border:1px solid #2c2c35; border-radius:16px; padding:20px; margin-bottom:20px; }
+    .grid { display:grid; grid-template-columns:220px 1fr; gap:10px 16px; }
+    .grid div:nth-child(odd) { color:#ff8e28; font-weight:bold; }
+    img { max-width:320px; background:#fff; border-radius:10px; }
+    a { color:#ff9b2f; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Détail commande</h1>
+      <div id="orderDetail" class="grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Signature</h2>
+      <div id="signatureBox"></div>
+    </div>
+
+    <div class="card">
+      <h2>Audit</h2>
+      <div id="auditBox"></div>
+    </div>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/supabase-client.js"></script>
+
+  <script>
+    function getOrderIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("id");
+    }
+
+    async function main() {
+      const orderId = getOrderIdFromUrl();
+      if (!orderId) return;
+
+      const { data: order, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .single();
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      const detail = document.getElementById("orderDetail");
+      const pairs = [
+        ["Référence", order.reference],
+        ["Statut", order.status],
+        ["Client", order.signature_name],
+        ["Enlèvement", order.pickup_address],
+        ["Livraison", order.delivery_address],
+        ["Type colis", order.package_type],
+        ["Poids", order.package_weight],
+        ["Valeur déclarée", order.declared_value],
+        ["Prix HT", order.price_ht],
+        ["TVA", order.tva_rate],
+        ["Prix TTC", order.price_ttc],
+        ["CGV acceptées", order.accepted_cgv ? "Oui" : "Non"],
+        ["Version CGV", order.cgv_version],
+        ["Date signature", order.signed_at ? new Date(order.signed_at).toLocaleString("fr-CH") : ""],
+        ["IP signature", order.signature_ip],
+        ["User Agent", order.signature_user_agent],
+        ["PDF", order.pdf_url ? `<a href="${order.pdf_url}" target="_blank">Télécharger</a>` : "-"]
+      ];
+
+      detail.innerHTML = pairs.map(([k, v]) => `<div>${k}</div><div>${v ?? ""}</div>`).join("");
+
+      const signatureBox = document.getElementById("signatureBox");
+      signatureBox.innerHTML = order.signature_data
+        ? `<img src="${order.signature_data}" alt="Signature client">`
+        : `<p>Aucune signature enregistrée.</p>`;
+
+      const { data: logs } = await supabase
+        .from("order_audit_logs")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: false });
+
+      const auditBox = document.getElementById("auditBox");
+      auditBox.innerHTML = (logs || []).map(log => `
+        <div style="padding:10px 0;border-bottom:1px solid #2a2a33;">
+          <strong>${log.action}</strong><br>
+          <small>${new Date(log.created_at).toLocaleString("fr-CH")}</small><br>
+          <code>${JSON.stringify(log.details || {})}</code>
+        </div>
+      `).join("");
+    }
+
+    main().catch(console.error);
+  </script>
+</body>
+</html>
