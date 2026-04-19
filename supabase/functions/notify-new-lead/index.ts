@@ -64,12 +64,6 @@ Deno.serve(async (req) => {
     });
   }
 
-  if (payload.table && payload.table !== "demandes_inscription") {
-    return new Response(JSON.stringify({ ok: true, skipped: "wrong table" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
   const to = Deno.env.get("NOTIFY_TO_EMAIL")?.trim();
   const from = (
@@ -81,34 +75,76 @@ Deno.serve(async (req) => {
     return new Response("Server misconfigured", { status: 500, headers: corsHeaders });
   }
 
-  const prenom = String(record.prenom ?? "").trim();
-  const nom = String(record.nom ?? "").trim();
-  const email = String(record.email ?? "—").trim();
-  const telephone = String(record.telephone ?? "—").trim();
-  const entreprise = String(record.entreprise_nom ?? "—").trim();
-  const adresse = String(record.adresse ?? "—").trim();
-  const message = String(record.message ?? "—").trim();
-  const statut = String(record.statut ?? "en_attente").trim();
-  const createdAt = String(record.created_at ?? "—").trim();
-  const id = String(record.id ?? "—").trim();
+  let subject: string;
+  let text: string;
 
-  const subject =
-    entreprise && entreprise !== "—"
+  if (payload.table === "quote_requests") {
+    const company  = String(record.company_name   ?? "—");
+    const contact  = String(record.contact_name   ?? "—");
+    const email    = String(record.email          ?? "—");
+    const phone    = String(record.phone          ?? "—");
+    const interest = String(record.interest_type  ?? "—");
+    const volume   = String(record.monthly_volume ?? "—");
+    const message  = String(record.message        ?? "—");
+    const service  = String(record.calc_service_label ?? "—");
+    const weight   = record.calc_weight_kg   != null ? `${record.calc_weight_kg} kg`   : "—";
+    const dist     = record.calc_distance_km != null ? `${record.calc_distance_km} km` : "—";
+    const total    = record.calc_total_chf   != null ? `${Number(record.calc_total_chf).toFixed(2)} CHF` : "—";
+    const opts     = Array.isArray(record.calc_selected_options) && record.calc_selected_options.length
+      ? (record.calc_selected_options as string[]).join(", ") : "aucune";
+
+    subject = `[Colixo] Nouveau devis — ${company}`;
+    text =
+      `Nouvelle demande de devis reçue sur colixo.ch\n\n` +
+      `── CLIENT ──────────────────────────\n` +
+      `Société   : ${company}\n` +
+      `Contact   : ${contact}\n` +
+      `E-mail    : ${email}\n` +
+      `Téléphone : ${phone}\n` +
+      `Offre     : ${interest}\n` +
+      `Volume    : ${volume}\n\n` +
+      `── CALCULATEUR ─────────────────────\n` +
+      `Service   : ${service}\n` +
+      `Poids     : ${weight}\n` +
+      `Distance  : ${dist}\n` +
+      `Options   : ${opts}\n` +
+      `Estimation: ${total}\n\n` +
+      `── MESSAGE ──────────────────────────\n` +
+      `${message}\n`;
+  } else if (!payload.table || payload.table === "demandes_inscription") {
+    const prenom = String(record.prenom ?? "").trim();
+    const nom = String(record.nom ?? "").trim();
+    const email = String(record.email ?? "—").trim();
+    const telephone = String(record.telephone ?? "—").trim();
+    const entreprise = String(record.entreprise_nom ?? "—").trim();
+    const adresse = String(record.adresse ?? "—").trim();
+    const message = String(record.message ?? "—").trim();
+    const statut = String(record.statut ?? "en_attente").trim();
+    const createdAt = String(record.created_at ?? "—").trim();
+    const id = String(record.id ?? "—").trim();
+
+    subject = entreprise && entreprise !== "—"
       ? `[Colixo] Nouvelle demande : ${entreprise}`
       : `[Colixo] Nouvelle demande : ${prenom} ${nom}`.trim();
+    text =
+      `Nouvelle demande reçue sur le site Colixo.\n\n` +
+      `Prénom : ${prenom || "—"}\n` +
+      `Nom : ${nom || "—"}\n` +
+      `Email : ${email || "—"}\n` +
+      `Téléphone : ${telephone || "—"}\n` +
+      `Entreprise : ${entreprise || "—"}\n` +
+      `Adresse : ${adresse || "—"}\n` +
+      `Statut : ${statut || "—"}\n` +
+      `Créée le : ${createdAt || "—"}\n` +
+      `ID : ${id || "—"}\n\n` +
+      `Message :\n${message || "—"}\n`;
+  } else {
+    return new Response(JSON.stringify({ ok: true, skipped: "wrong table" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
-  const text =
-    `Nouvelle demande reçue sur le site Colixo.\n\n` +
-    `Prénom : ${prenom || "—"}\n` +
-    `Nom : ${nom || "—"}\n` +
-    `Email : ${email || "—"}\n` +
-    `Téléphone : ${telephone || "—"}\n` +
-    `Entreprise : ${entreprise || "—"}\n` +
-    `Adresse : ${adresse || "—"}\n` +
-    `Statut : ${statut || "—"}\n` +
-    `Créée le : ${createdAt || "—"}\n` +
-    `ID : ${id || "—"}\n\n` +
-    `Message :\n${message || "—"}\n`;
+  const replyTo = String(record.email ?? "").trim() || undefined;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -121,7 +157,7 @@ Deno.serve(async (req) => {
       to: [to],
       subject,
       text,
-      reply_to: email && email !== "—" ? email : undefined,
+      reply_to: replyTo,
     }),
   });
 
