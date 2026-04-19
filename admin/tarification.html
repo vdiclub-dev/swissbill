@@ -251,32 +251,13 @@
         <!-- PANE GRILLE STANDARD -->
         <div class="pane" id="pane-grille">
             <div class="card">
-                <div class="card-head"><div class="card-title">GRILLE TARIFAIRE STANDARD</div></div>
+                <div class="card-head">
+                    <div class="card-title">GRILLE TARIFAIRE STANDARD</div>
+                    <a href="tarifs.html" class="btn btn-ghost btn-sm"><i class="fas fa-sliders-h"></i> Gérer les tarifs</a>
+                </div>
                 <div style="padding:24px;">
-                    <div style="font-size:13px;color:var(--muted2);margin-bottom:20px;">Ces tarifs s'appliquent aux clients sans tarif négocié spécifique.</div>
-
-                    <div class="sec-title">📦 TARIFS PAR POIDS</div>
-                    <div class="tarif-grid">
-                        <div class="tarif-box"><div class="tarif-lbl">0 — 2 kg</div><div class="tarif-val" id="std-2kg">8.50 CHF</div></div>
-                        <div class="tarif-box"><div class="tarif-lbl">2 — 10 kg</div><div class="tarif-val" id="std-10kg">11.50 CHF</div></div>
-                        <div class="tarif-box"><div class="tarif-lbl">10 — 30 kg</div><div class="tarif-val" id="std-30kg">20.50 CHF</div></div>
-                        <div class="tarif-box"><div class="tarif-lbl">ECO (-24h)</div><div class="tarif-val" id="std-eco">7.50 CHF</div></div>
-                    </div>
-
-                    <div class="sec-title">⭐ TARIF VIGNOLOGUE</div>
-                    <div class="tarif-grid" style="grid-template-columns:repeat(4,1fr);">
-                        <div class="tarif-box special"><div class="tarif-lbl">< 5 kg</div><div class="tarif-val">7.00 CHF</div></div>
-                        <div class="tarif-box special"><div class="tarif-lbl">< 10 kg</div><div class="tarif-val">7.50 CHF</div></div>
-                        <div class="tarif-box special"><div class="tarif-lbl">< 20 kg</div><div class="tarif-val">12.00 CHF</div></div>
-                        <div class="tarif-box special"><div class="tarif-lbl">< 30 kg</div><div class="tarif-val">18.00 CHF</div></div>
-                    </div>
-
-                    <div class="sec-title">⚡ SUPPLÉMENTS</div>
-                    <div class="tarif-grid">
-                        <div class="tarif-box"><div class="tarif-lbl">Express (+6h)</div><div class="tarif-val">+5.00 CHF</div></div>
-                        <div class="tarif-box"><div class="tarif-lbl">Urgent (immédiat)</div><div class="tarif-val">+10.00 CHF</div></div>
-                        <div class="tarif-box"><div class="tarif-lbl">Nuit</div><div class="tarif-val">+25.00 CHF</div></div>
-                    </div>
+                    <div style="font-size:13px;color:var(--muted2);margin-bottom:20px;">Ces tarifs s'appliquent aux clients sans tarif négocié spécifique. Modifiez-les depuis <a href="tarifs.html" style="color:var(--red);text-decoration:none;font-weight:600;">Gestion des tarifs</a>.</div>
+                    <div id="grilleProduits" style="color:var(--muted);font-size:13px;">Chargement...</div>
                 </div>
             </div>
         </div>
@@ -456,7 +437,7 @@
 if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">config.js manquant</div>';return;}
 const db=window.SUPABASE_CLIENT;
 
-let entreprises=[], tarifsClients=[], tarifsSpeciaux=[];
+let entreprises=[], tarifsClients=[], tarifsSpeciaux=[], produitsTarif=[];
 let selectedTarifType='standard', pecEnabled=false, actifEnabled=true;
 
 // ── UTILS ──
@@ -478,19 +459,39 @@ window.switchTab=function(name){
 // ── LOAD DATA ──
 async function loadAll(){
     showLoad();
-    const [{data:ents},{data:tc},{data:ts}]=await Promise.all([
+    const [{data:ents},{data:tc},{data:ts},{data:pt}]=await Promise.all([
         db.from('entreprises').select('*').order('nom'),
         db.from('tarifs_clients').select('*').order('created_at',{ascending:false}),
-        db.from('tarifs_speciaux').select('*').order('created_at',{ascending:false})
+        db.from('tarifs_speciaux').select('*').order('created_at',{ascending:false}),
+        db.from('produits_tarif').select('*').eq('actif',true).order('ordre').order('nom')
     ]);
     entreprises=ents||[];
     tarifsClients=tc||[];
     tarifsSpeciaux=ts||[];
+    produitsTarif=pt||[];
 
     populateEntrepriseSelects();
     renderTarifsClients();
     renderTarifsSpeciaux();
+    renderGrilleProduits();
     hideLoad();
+}
+
+function renderGrilleProduits(){
+    const el=document.getElementById('grilleProduits');
+    if(!el)return;
+    if(!produitsTarif.length){el.innerHTML='<div style="color:var(--muted);font-style:italic;">Aucun produit configuré — <a href="tarifs.html" style="color:var(--red);">Ajouter des tarifs</a></div>';return;}
+    el.innerHTML=`<table class="tbl" style="background:var(--surface);border-radius:12px;overflow:hidden;">
+        <thead><tr>
+            <th>Produit</th><th>Réf</th><th>Poids min</th><th>Prix</th>
+        </tr></thead>
+        <tbody>${produitsTarif.map(p=>`<tr>
+            <td style="font-weight:600;">${p.nom}</td>
+            <td><span style="font-size:11px;background:rgba(59,130,246,0.1);color:var(--blue);padding:2px 8px;border-radius:100px;">${p.ref||'—'}</span></td>
+            <td style="color:var(--muted2);">${p.poids_min>0?'≥ '+p.poids_min+' kg':'—'}</td>
+            <td><span style="font-family:'Bebas Neue',cursive;font-size:18px;color:var(--green);">${parseFloat(p.prix).toFixed(2)}</span> <span style="font-size:11px;color:var(--muted);">CHF</span></td>
+        </tr>`).join('')}</tbody>
+    </table>`;
 }
 
 function populateEntrepriseSelects(){
