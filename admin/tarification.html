@@ -123,6 +123,15 @@
         .sec-title{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#888;margin:20px 0 10px;display:flex;align-items:center;gap:8px;}
         .sec-title::after{content:'';flex:1;height:1px;background:#e8eaef;}
 
+        /* RABAIS VOLUME */
+        .rabais-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;}
+        .rabais-tile{padding:8px 4px;text-align:center;font-size:11px;color:#555;background:#f4f5f7;border:2px solid #e2e4e9;border-radius:8px;cursor:pointer;transition:all 0.15s;line-height:1.4;}
+        .rabais-tile b{display:block;font-size:14px;font-family:'Bebas Neue',cursive;letter-spacing:0.5px;}
+        .rabais-tile:hover{border-color:#6366f1;color:#3730a3;}
+        .rabais-tile.active{border-color:var(--green);background:rgba(16,185,129,0.08);color:#065f46;font-weight:600;}
+        .rabais-tile.active b{color:var(--green);}
+        .rabais-section-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px;}
+
         /* TOGGLE */
         .toggle-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:#f4f5f7;border:1px solid #e2e4e9;border-radius:6px;cursor:pointer;margin-bottom:8px;}
         .toggle-row label{color:#444;font-size:13px;}
@@ -375,6 +384,16 @@
             <div class="field"><label>Descente cave vignologue (CHF)</label><input type="number" id="sSupplCave" step="0.5" placeholder="8.00"></div>
             <div class="field"><label>Recherche colis hôtel (CHF)</label><input type="number" id="sSupplHotel" step="0.5" placeholder="12.00"></div>
         </div>
+
+        <div class="rabais-section-label">Rabais volume mensuel</div>
+        <div class="rabais-grid" id="rabaisGrid">
+            <div class="rabais-tile active" onclick="setRabais(0)" data-pct="0">Aucun<b>—</b></div>
+            <div class="rabais-tile" onclick="setRabais(2)" data-pct="2">≥ 500 CHF<b>2%</b></div>
+            <div class="rabais-tile" onclick="setRabais(4)" data-pct="4">≥ 1000 CHF<b>4%</b></div>
+            <div class="rabais-tile" onclick="setRabais(6)" data-pct="6">≥ 1500 CHF<b>6%</b></div>
+            <div class="rabais-tile" onclick="setRabais(8)" data-pct="8">≥ 2000 CHF<b>8%</b></div>
+        </div>
+        <input type="hidden" id="rabaisVolumePct" value="0">
 
         <div class="toggle-row" onclick="toggleActif()">
             <div class="toggle-sw on" id="toggleActif"></div>
@@ -667,6 +686,11 @@ window.toggleActif=function(){
     document.getElementById('toggleActif').classList.toggle('on',actifEnabled);
 };
 
+window.setRabais=function(pct){
+    document.getElementById('rabaisVolumePct').value=pct;
+    document.querySelectorAll('#rabaisGrid .rabais-tile').forEach(t=>t.classList.toggle('active',Number(t.dataset.pct)===pct));
+};
+
 window.updateNomClient=function(){
     const entId=document.getElementById('tarifEntreprise').value;
     const ent=entreprises.find(e=>e.id===entId);
@@ -709,6 +733,7 @@ window.openModal=function(id){
         pecEnabled=false; actifEnabled=true;
         document.getElementById('togglePEC').classList.remove('on');
         document.getElementById('toggleActif').classList.add('on');
+        setRabais(0);
         document.getElementById('pecFields').style.display='none';
         selectTarifType('standard');
         renderProduitsGrilleModal({});
@@ -745,6 +770,7 @@ window.editTarif=function(id){
     actifEnabled=t.actif!==false;
     document.getElementById('togglePEC').classList.toggle('on',pecEnabled);
     document.getElementById('toggleActif').classList.toggle('on',actifEnabled);
+    setRabais(Number(t.rabais_volume_pct||0));
     document.getElementById('pecFields').style.display=pecEnabled?'block':'none';
     selectTarifType(t.tarif_type||'standard');
     loadPrixSpeciauxClient(t.entreprise_id).then(overrides=>renderProduitsGrilleModal(overrides));
@@ -773,6 +799,7 @@ window.saveTarif=async function(){
         suppl_recherche_colis_hotel:n(document.getElementById('sSupplHotel').value)||12,
         actif:actifEnabled,
         option_prise_en_charge:pecEnabled,
+        rabais_volume_pct:Number(document.getElementById('rabaisVolumePct').value)||0,
         montant_prise_en_charge:pecEnabled?n(document.getElementById('fMontantPEC').value):null,
     };
 
