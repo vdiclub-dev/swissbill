@@ -487,7 +487,7 @@ function renderAbonnements(){
         const previewColis=a.nb_colis_inclus>0?`${a.nb_colis_inclus} colis inclus/mois${a.prix_colis_sup>0?' · sup. '+a.prix_colis_sup+' CHF/colis':''}`:'';
         return`<div class="abn-row${a.actif?' abn-actif':''}">
             <div class="abn-grid">
-                <div class="abn-field"><label>Nom</label><input type="text" value="${h(a.nom)}" placeholder="ex: BASIC" oninput="abonnements[${i}].nom=this.value;renderAbonnements()"></div>
+                <div class="abn-field"><label>Nom</label><input type="text" value="${h(a.nom)}" placeholder="ex: BASIC" oninput="abonnements[${i}].nom=this.value"></div>
                 <div class="abn-field"><label>CHF / mois</label><input type="number" value="${a.prix_mensuel||''}" step="1" placeholder="99" oninput="abonnements[${i}].prix_mensuel=parseFloat(this.value)||0"></div>
                 <div class="abn-field"><label>Colis / mois</label><input type="number" value="${a.nb_colis_inclus||''}" step="1" placeholder="50" oninput="abonnements[${i}].nb_colis_inclus=parseInt(this.value)||0"></div>
                 <div class="abn-field"><label>CHF / colis sup.</label><input type="number" value="${a.prix_colis_sup||''}" step="0.1" placeholder="5.00" oninput="abonnements[${i}].prix_colis_sup=parseFloat(this.value)||0"></div>
@@ -903,10 +903,12 @@ window.saveTarif=async function(){
         let affectedRows=0;
 
         // Compatibilite schema cache: retire automatiquement les colonnes inconnues puis retente.
+        // On garde une copie des abonnements pour les sauvegarder après si la colonne est retirée.
+        const abonnementsBackup = workPayload.abonnements;
         for(let i=0;i<8;i++){
             const res=id
                 ? await db.from('tarifs_clients').update(workPayload).eq('id',id).select('id')
-                : await db.from('tarifs_clients').insert([workPayload]).select('id');
+                : await db.from('tarifs_clients').insert([workPayload]).select('id,abonnements');
             error=res.error;
             affectedRows=Array.isArray(res.data) ? res.data.length : 0;
             if(!error) break;
@@ -920,6 +922,11 @@ window.saveTarif=async function(){
         }
 
         if(error)throw error;
+
+        // Si abonnements a été retiré par le fallback, tenter de le sauvegarder seul (colonne peut-être absente)
+        if(usedColumnFallback && !('abonnements' in workPayload) && abonnementsBackup !== undefined && id){
+            await db.from('tarifs_clients').update({abonnements: abonnementsBackup}).eq('id', id);
+        }
         if(id && affectedRows === 0){
             throw new Error('Aucune ligne mise a jour dans Supabase (verifiez les droits RLS ou l identifiant du tarif).');
         }
