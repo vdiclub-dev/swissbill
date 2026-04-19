@@ -903,15 +903,20 @@ window.saveTarif=async function(){
         let affectedRows=0;
 
         // Compatibilite schema cache: retire automatiquement les colonnes inconnues puis retente.
-        // On garde une copie des abonnements pour les sauvegarder après si la colonne est retirée.
         const abonnementsBackup = workPayload.abonnements;
+        let savedId = id || null;
+        let savedRes = null;
         for(let i=0;i<8;i++){
             const res=id
                 ? await db.from('tarifs_clients').update(workPayload).eq('id',id).select('id')
-                : await db.from('tarifs_clients').insert([workPayload]).select('id,abonnements');
+                : await db.from('tarifs_clients').insert([workPayload]).select('id');
             error=res.error;
+            savedRes=res;
             affectedRows=Array.isArray(res.data) ? res.data.length : 0;
-            if(!error) break;
+            if(!error){
+                if(!id && res.data?.[0]?.id) savedId = res.data[0].id;
+                break;
+            }
             const msg=String(error.message||'');
             const m=msg.match(/Could not find the '([^']+)' column/i);
             if(!m || !m[1]) break;
@@ -923,9 +928,9 @@ window.saveTarif=async function(){
 
         if(error)throw error;
 
-        // Si abonnements a été retiré par le fallback, tenter de le sauvegarder seul (colonne peut-être absente)
-        if(usedColumnFallback && !('abonnements' in workPayload) && abonnementsBackup !== undefined && id){
-            await db.from('tarifs_clients').update({abonnements: abonnementsBackup}).eq('id', id);
+        // Si abonnements a été retiré par le fallback, le sauvegarder séparément (nouveau ou existant)
+        if(!('abonnements' in workPayload) && abonnementsBackup !== undefined && savedId){
+            await db.from('tarifs_clients').update({abonnements: abonnementsBackup}).eq('id', savedId);
         }
         if(id && affectedRows === 0){
             throw new Error('Aucune ligne mise a jour dans Supabase (verifiez les droits RLS ou l identifiant du tarif).');
