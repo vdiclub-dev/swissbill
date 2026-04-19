@@ -85,8 +85,9 @@
         .svc-btn.selected{border-color:var(--red);background:rgba(232,49,26,0.08);}
         .svc-price{font-size:12px;font-weight:700;color:var(--green);margin-top:4px;}
 
-        .tarif-box{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:12px;text-align:center;}
+        .tarif-box{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:all .2s;}
         .tarif-box.special{border-color:rgba(34,197,94,0.35);background:rgba(34,197,94,0.05);}
+        .tarif-box.active-tarif{border-color:var(--red);background:rgba(232,49,26,0.08);}
         .tarif-label{font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.3;}
         .tarif-price{font-family:'Bebas Neue',cursive;font-size:20px;color:var(--green);}
 
@@ -581,17 +582,17 @@
         if(prixSpeiciaux.length && produits.length) {
             prixSpeiciaux.forEach(ps => {
                 const p = produits.find(x => String(x.id) === String(ps.produit_id));
-                if(p) items.push({ label: p.nom + (p.ref?' ['+p.ref+']':'') + (p.poids_min>0?' ≥'+p.poids_min+'kg':''), prix: ps.valeur, negocie: ps.type_remise==='fixe' && ps.valeur !== Number(p.prix) });
+                if(p && !isOptionProduct(p)) items.push({ pid: p.id, label: p.nom + (p.poids_min>0?' ≥'+p.poids_min+'kg':''), prix: ps.valeur, negocie: ps.type_remise==='fixe' && ps.valeur !== Number(p.prix) });
             });
         } else if(produits.length) {
-            produits.forEach(p => items.push({ label: p.nom + (p.ref?' ['+p.ref+']':'') + (p.poids_min>0?' ≥'+p.poids_min+'kg':''), prix: p.prix, negocie: false }));
+            produits.filter(p=>!isOptionProduct(p)).forEach(p => items.push({ pid: p.id, label: p.nom + (p.poids_min>0?' ≥'+p.poids_min+'kg':''), prix: p.prix, negocie: false }));
         }
 
         if(!items.length) {
             grid.innerHTML = '<div class="tarif-box"><div class="tarif-label">Tarif standard</div><div class="tarif-price">—</div></div>';
             return;
         }
-        grid.innerHTML = items.map(it => `<div class="tarif-box${it.negocie?' special':''}">
+        grid.innerHTML = items.map(it => `<div class="tarif-box${it.negocie?' special':''}${it.pid&&String(it.pid)===String(selectedService)?' active-tarif':''}" data-pid="${it.pid||''}" onclick="${it.pid?`selectService('${it.pid}')`:''}" >
             <div class="tarif-label">${it.label}</div>
             <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.negocie?' <span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
         </div>`).join('');
@@ -694,8 +695,7 @@
             return `<div class="svc-btn${isFirst?' selected':''}" data-svc="${p.id}" onclick="selectService('${p.id}')">
                 <div class="svc-icon">${icon}</div>
                 <div class="svc-name">${p.nom}</div>
-                <div class="svc-delay">${p.ref||''}</div>
-                <div class="svc-price">${fmt(price)} CHF</div>
+                <div class="svc-delay" style="font-size:10px;color:var(--muted);">${p.ref||''}</div>
             </div>`;
         }).join('');
         // Auto-select first
@@ -933,6 +933,8 @@
     window.selectService = function(svc) {
         selectedService = String(svc);
         document.querySelectorAll('.svc-btn').forEach(b => b.classList.toggle('selected', String(b.dataset.svc) === String(svc)));
+        // Highlight active product in tarif grid
+        document.querySelectorAll('.tarif-box[data-pid]').forEach(b => b.classList.toggle('active-tarif', String(b.dataset.pid) === String(svc)));
         updateTotalPrice();
     };
 
