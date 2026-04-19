@@ -321,10 +321,7 @@
                     <div class="svc-btn selected" data-svc="__loading__"><div class="svc-icon">⏳</div><div class="svc-name">Chargement</div></div>
                 </div>
 
-                <div class="toggle-row" onclick="toggleNuit()">
-                    <div class="toggle-sw" id="toggleNuit"></div>
-                    <div class="toggle-lbl">🌙 Livraison de nuit (+25 CHF)</div>
-                </div>
+                <div id="optionsContainer"></div>
 
                 <div class="colis-total"><span>PRIX TOTAL ESTIMÉ</span><span id="totalPrice">0 CHF</span></div>
                 <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;" id="priceDetail"></div>
@@ -601,13 +598,66 @@
     }
 
     const SVC_ICON_MAP = [
-        {refs:['ECO','ECONO'],    icon:'🐢'},
+        {refs:['ECO','ECONO'],           icon:'🐢'},
         {refs:['FOR','FORFAIT','FRF','FIX'], icon:'💰'},
-        {refs:['EXP','RAP'],      icon:'⚡'},
-        {refs:['URG','IMM'],      icon:'🔥'},
-        {refs:['PEC','PRISE'],    icon:'🚐'},
-        {refs:['LIV','LIVR'],     icon:'📬'},
+        {refs:['EXP','RAP'],             icon:'⚡'},
+        {refs:['URG','IMM'],             icon:'🔥'},
+        {refs:['PEC','PRISE'],           icon:'🚐'},
+        {refs:['LIV','LIVR'],            icon:'📬'},
+        {refs:['VIG','VIGN','VINO'],     icon:'🍷'},
     ];
+
+    const OPT_PREFIX = ['OPT','SUP','OPTION'];
+    const OPT_ICON_MAP = [
+        {refs:['OPT_NUIT','OPT_N','SUP_N'],   icon:'🌙'},
+        {refs:['OPT_TEL','OPT_PHONE'],         icon:'📞'},
+        {refs:['OPT_ETAGE','OPT_ETA'],         icon:'🏢'},
+        {refs:['OPT_FRAGILE','OPT_FRA'],       icon:'⚠️'},
+        {refs:['OPT_CAVE','OPT_CAV'],          icon:'🍷'},
+        {refs:['OPT_RETRAIT','OPT_RET'],       icon:'🔄'},
+        {refs:['OPT_AVIS','OPT_AVI'],          icon:'📋'},
+    ];
+
+    function isOptionProduct(p){
+        const r=(p.ref||'').toUpperCase();
+        return OPT_PREFIX.some(pfx=>r.startsWith(pfx));
+    }
+
+    function getOptIcon(ref){
+        const r=(ref||'').toUpperCase();
+        for(const m of OPT_ICON_MAP){ if(m.refs.some(x=>r.startsWith(x))) return m.icon; }
+        return '➕';
+    }
+
+    let selectedOptions=new Set();
+
+    function renderOptions(){
+        const container=document.getElementById('optionsContainer');
+        if(!container) return;
+        const pool=getAssignedProduits().filter(p=>isOptionProduct(p));
+        if(!pool.length){ container.innerHTML=''; return; }
+        container.innerHTML=`<div class="form-section"><i class="fas fa-plus-circle" style="color:var(--blue)"></i> OPTIONS SUPPLÉMENTAIRES</div>`
+            +pool.map(p=>{
+                const price=getProduitPrice(p);
+                const on=selectedOptions.has(String(p.id));
+                return `<div class="toggle-row" onclick="toggleOption('${p.id}')" style="justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div class="toggle-sw${on?' on':''}" id="optToggle_${p.id}"></div>
+                        <span>${getOptIcon(p.ref)} ${p.nom}</span>
+                    </div>
+                    <span style="color:var(--green);font-weight:700;font-size:13px;white-space:nowrap;">+${fmt(price)} CHF</span>
+                </div>`;
+            }).join('');
+    }
+
+    window.toggleOption=function(produitId){
+        const id=String(produitId);
+        if(selectedOptions.has(id)) selectedOptions.delete(id);
+        else selectedOptions.add(id);
+        const sw=document.getElementById('optToggle_'+id);
+        if(sw) sw.classList.toggle('on',selectedOptions.has(id));
+        updateTotalPrice();
+    };
 
     function getSvcIcon(ref){
         const r=(ref||'').toUpperCase();
@@ -631,7 +681,7 @@
     function renderServiceButtons(){
         const grid=document.getElementById('serviceGrid');
         if(!grid) return;
-        const pool=getAssignedProduits();
+        const pool=getAssignedProduits().filter(p=>!isOptionProduct(p));
         if(!pool.length){
             grid.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px;">Aucun service disponible — contactez Colixo.</div>';
             return;
@@ -656,6 +706,7 @@
 
     function updateServicePrices(){
         renderServiceButtons();
+        renderOptions();
     }
 
     function getPrixParColis(poids, produitId){
@@ -696,12 +747,24 @@
         }
         let serviceSuppl = getServiceSuppl(selectedService);
         let supplTotal = serviceSuppl * colisList.reduce((s,c)=>s+c.qty,0);
-        let nuitSuppl = nightDelivery ? (clientTarif?.suppl_nuit_chf || 25) : 0;
-        let total = baseTotal + supplTotal + nuitSuppl;
+        const qtyTotal = colisList.reduce((s,c)=>s+c.qty,0);
+        let optionsTotal=0;
+        const optLabels=[];
+        selectedOptions.forEach(pid=>{
+            const p=clientProduits.find(x=>String(x.id)===pid);
+            if(p){ const v=getProduitPrice(p)*qtyTotal; optionsTotal+=v; optLabels.push(p.nom+' +'+fmt(v)+' CHF'); }
+        });
+        // night_delivery fallback (if no OPT_NUIT product)
+        const hasNuitOpt=clientProduits.some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
+        let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
+        let total = baseTotal + supplTotal + optionsTotal + nuitSuppl;
         document.getElementById('totalPrice').textContent = fmt(total) + ' CHF';
         const selProduit = clientProduits.find(p=>String(p.id)===String(selectedService));
         let serviceName = selProduit ? selProduit.nom : selectedService;
-        document.getElementById('priceDetail').innerHTML = `${serviceName}: Base ${fmt(baseTotal)} CHF | Suppl: +${fmt(supplTotal)} CHF${nightDelivery ? ' | Nuit: +'+fmt(nuitSuppl)+' CHF' : ''}`;
+        const detailParts=[`${serviceName}: ${fmt(baseTotal)} CHF`];
+        if(optLabels.length) detailParts.push(...optLabels);
+        if(nuitSuppl) detailParts.push('Nuit +'+fmt(nuitSuppl)+' CHF');
+        document.getElementById('priceDetail').innerHTML = detailParts.join(' · ');
         return total;
     }
 
@@ -875,7 +938,8 @@
 
     window.toggleNuit = function() {
         nightDelivery = !nightDelivery;
-        document.getElementById('toggleNuit').classList.toggle('on', nightDelivery);
+        const sw = document.getElementById('toggleNuit');
+        if(sw) sw.classList.toggle('on', nightDelivery);
         updateTotalPrice();
     };
 
@@ -1095,7 +1159,8 @@
                 weight: poidsTotal,
                 quantity: qtyTotal,
                 service_type: (clientProduits.find(p=>String(p.id)===String(selectedService))?.ref || selectedService),
-                night_delivery: nightDelivery,
+                night_delivery: nightDelivery || [...selectedOptions].some(pid=>{ const p=clientProduits.find(x=>String(x.id)===pid); return p&&isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'); }),
+                options_refs: [...selectedOptions].map(pid=>clientProduits.find(x=>String(x.id)===pid)?.ref||pid).filter(Boolean).join(','),
                 instructions: document.getElementById('destInstructions').value,
                 price_chf: prixTotal,       // ✅ CORRIGÉ: price_estime → price_chf
                 status: 'pending',
@@ -1159,10 +1224,10 @@
         document.getElementById('toggleSaveAddress').classList.remove('on');
         colisList = [{id:Date.now(), poids:1, qty:1, type:'colis'}];
         renderColis();
-        selectedService = 'normal';
         nightDelivery = false;
-        document.getElementById('toggleNuit').classList.remove('on');
-        document.querySelectorAll('.svc-btn').forEach(b => b.classList.toggle('selected', b.dataset.svc === 'normal'));
+        selectedOptions = new Set();
+        renderServiceButtons();
+        renderOptions();
         updateTotalPrice();
     }
 
