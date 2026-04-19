@@ -669,6 +669,7 @@
     let currentUserRole = null;
     let distanceKm = null;
     let _distTimer = null;
+    let colisExpediesMonth = 0;
 
     function getClientScopeId() {
         return client?.entreprise_id || client?.id || null;
@@ -755,7 +756,7 @@
         document.getElementById('abnBannerPrix').textContent = abn.prix_mensuel ? `${Number(abn.prix_mensuel).toFixed(2)} CHF/mois` : '';
 
         // Compter les colis expédiés ce mois
-        let colisExpedies = 0;
+        colisExpediesMonth = 0;
         const scopeId = getClientScopeId();
         if(scopeId && abn.nb_colis_inclus > 0){
             const now = new Date();
@@ -766,8 +767,9 @@
                 .eq('entreprise_id', scopeId)
                 .gte('created_at', debut)
                 .lt('created_at', fin);
-            colisExpedies = (orders||[]).reduce((s,r)=>s+(Number(r.quantity)||1), 0);
+            colisExpediesMonth = (orders||[]).reduce((s,r)=>s+(Number(r.quantity)||1), 0);
         }
+        const colisExpedies = colisExpediesMonth;
 
         const chips=[];
         if(abn.nb_colis_inclus>0){
@@ -1291,7 +1293,19 @@
             kmCost = Math.round(extraKm * extraKmRate * 100) / 100;
         }
 
-        let subtotal = baseTotal + optionsTotal + nuitSuppl + kmCost;
+        // Supplément colis hors quota mensuel
+        let colisSup = 0;
+        if(activeAbn && activeAbn.nb_colis_inclus > 0 && activeAbn.prix_colis_sup > 0){
+            const dejaExpedies = colisExpediesMonth;
+            const quota = activeAbn.nb_colis_inclus;
+            const prisSurQuota = Math.max(0, dejaExpedies - quota);
+            const cetteCommande = qtyTotal;
+            // Combien de colis de cette commande tombent hors quota
+            const horsQuota = Math.max(0, dejaExpedies + cetteCommande - quota) - prisSurQuota;
+            if(horsQuota > 0) colisSup = Math.round(horsQuota * activeAbn.prix_colis_sup * 100) / 100;
+        }
+
+        let subtotal = baseTotal + optionsTotal + nuitSuppl + kmCost + colisSup;
 
         const rabaisPct = Number(clientTarif?.rabais_volume_pct||0);
         const rabaisMontant = rabaisPct > 0 ? subtotal * rabaisPct / 100 : 0;
@@ -1304,6 +1318,7 @@
         const detailParts=[`${serviceName}: ${fmt(baseTotal)} CHF`];
         if(distanceKm != null) detailParts.push(`📍 ${distanceKm} km`);
         if(kmCost > 0) detailParts.push(`Dépassement km +${fmt(kmCost)} CHF`);
+        if(colisSup > 0) detailParts.push(`Colis hors forfait +${fmt(colisSup)} CHF`);
         if(optLabels.length) detailParts.push(...optLabels);
         if(nuitSuppl) detailParts.push('Nuit +'+fmt(nuitSuppl)+' CHF');
         if(rabaisMontant>0) detailParts.push(`Rabais volume ${rabaisPct}% −${fmt(rabaisMontant)} CHF`);
