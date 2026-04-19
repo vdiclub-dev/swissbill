@@ -567,34 +567,34 @@
         clientTarif = tarifData || { prix_inf_2kg:8.5, prix_inf_10kg:11.5, prix_inf_30kg:20.5, prix_eco:7.5, suppl_express:5, suppl_urgent:10, suppl_nuit_chf:25 };
         clientProduits = produitsData||[];
         clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), Number(r.valeur)]));
-        updateTarifDisplay(prixData||[], produitsData||[]);
         updateServicePrices();
         renderColis();
         updateTotalPrice();
     }
 
-    function updateTarifDisplay(prixSpeiciaux, produits){
+    function updateTarifDisplay(){
         const grid = document.getElementById('tarifGrid');
         if(!grid) return;
-
-        // Build display from prix_speciaux (client-specific products) or all products (standard)
-        let items = [];
-        if(prixSpeiciaux.length && produits.length) {
-            prixSpeiciaux.forEach(ps => {
-                const p = produits.find(x => String(x.id) === String(ps.produit_id));
-                if(p && !isOptionProduct(p)) items.push({ pid: p.id, label: p.nom + (p.poids_min>0?' ≥'+p.poids_min+'kg':''), prix: ps.valeur, negocie: ps.type_remise==='fixe' && ps.valeur !== Number(p.prix) });
-            });
-        } else if(produits.length) {
-            produits.filter(p=>!isOptionProduct(p)).forEach(p => items.push({ pid: p.id, label: p.nom + (p.poids_min>0?' ≥'+p.poids_min+'kg':''), prix: p.prix, negocie: false }));
-        }
-
-        if(!items.length) {
-            grid.innerHTML = '<div class="tarif-box"><div class="tarif-label">Tarif standard</div><div class="tarif-price">—</div></div>';
+        const poids = colisList.length ? (colisList[0].poids||1) : 1;
+        const pool = getAssignedProduits().filter(p=>!isOptionProduct(p));
+        if(!pool.length){
+            grid.innerHTML='<div class="tarif-box"><div class="tarif-label">Tarif standard</div><div class="tarif-price">—</div></div>';
             return;
         }
-        grid.innerHTML = items.map(it => `<div class="tarif-box${it.negocie?' special':''}${it.pid&&String(it.pid)===String(selectedService)?' active-tarif':''}" data-pid="${it.pid||''}" onclick="${it.pid?`selectService('${it.pid}')`:''}" >
+        // One box per unique ref — price adapts to current poids
+        const seen=new Set(), refs=[];
+        pool.forEach(p=>{ const r=svcRef(p); if(!seen.has(r)){seen.add(r);refs.push(r);} });
+        const items=refs.map(ref=>{
+            const prods=pool.filter(p=>svcRef(p)===ref);
+            const best=bestProdForPoids(prods,poids);
+            const prix=getProduitPrice(best);
+            const negocie=clientPrixMap[String(best.id)]!=null && Number(clientPrixMap[String(best.id)])!==Number(best.prix);
+            return {ref, label:best.nom, prix, negocie, active:selectedService===ref};
+        });
+        grid.style.gridTemplateColumns=`repeat(${Math.min(items.length,4)},1fr)`;
+        grid.innerHTML=items.map(it=>`<div class="tarif-box${it.negocie?' special':''}${it.active?' active-tarif':''}" onclick="selectService('${it.ref}')">
             <div class="tarif-label">${it.label}</div>
-            <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.negocie?' <span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
+            <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.negocie?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
         </div>`).join('');
     }
 
@@ -679,6 +679,14 @@
             : clientProduits;
     }
 
+    // helpers: get normalized ref and best product for a given poids
+    function svcRef(p){ return ((p.ref||p.nom)||'').toUpperCase(); }
+    function bestProdForPoids(prods, poids){
+        const eligible=prods.filter(p=>poids>=Number(p.poids_min||0));
+        const src=eligible.length?eligible:prods;
+        return src.sort((a,b)=>Number(b.poids_min)-Number(a.poids_min))[0];
+    }
+
     function renderServiceButtons(){
         const grid=document.getElementById('serviceGrid');
         if(!grid) return;
@@ -687,32 +695,31 @@
             grid.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px;">Aucun service disponible — contactez Colixo.</div>';
             return;
         }
-        grid.style.gridTemplateColumns=`repeat(${Math.min(pool.length,4)},1fr)`;
-        grid.innerHTML=pool.map((p,i)=>{
-            const price=getProduitPrice(p);
-            const icon=getSvcIcon(p.ref);
-            const isFirst=i===0;
-            return `<div class="svc-btn${isFirst?' selected':''}" data-svc="${p.id}" onclick="selectService('${p.id}')">
-                <div class="svc-icon">${icon}</div>
+        // Deduplicate by ref — one button per service
+        const seen=new Set(), unique=[];
+        pool.forEach(p=>{ const r=svcRef(p); if(!seen.has(r)){seen.add(r);unique.push(p);} });
+        if(!selectedService||!unique.find(p=>svcRef(p)===selectedService)) selectedService=svcRef(unique[0]);
+        grid.style.gridTemplateColumns=`repeat(${Math.min(unique.length,4)},1fr)`;
+        grid.innerHTML=unique.map(p=>{
+            const ref=svcRef(p);
+            return `<div class="svc-btn${selectedService===ref?' selected':''}" data-svc="${ref}" onclick="selectService('${ref}')">
+                <div class="svc-icon">${getSvcIcon(ref)}</div>
                 <div class="svc-name">${p.nom}</div>
-                <div class="svc-delay" style="font-size:10px;color:var(--muted);">${p.ref||''}</div>
+                <div class="svc-delay" style="font-size:10px;color:var(--muted);">${ref}</div>
             </div>`;
         }).join('');
-        // Auto-select first
-        const first=pool[0];
-        if(first) selectedService=String(first.id);
-        updateTotalPrice();
     }
 
     function updateServicePrices(){
         renderServiceButtons();
+        updateTarifDisplay();
         renderOptions();
     }
 
-    function getPrixParColis(poids, produitId){
-        // Look up by product ID
-        const produit=clientProduits.find(p=>String(p.id)===String(produitId));
-        if(produit) return getProduitPrice(produit);
+    function getPrixParColis(poids, ref){
+        // Find all products matching this ref, pick best tier for poids
+        const pool=getAssignedProduits().filter(p=>!isOptionProduct(p)&&svcRef(p)===String(ref).toUpperCase());
+        if(pool.length) return getProduitPrice(bestProdForPoids(pool,poids));
         // Fallback to clientTarif weight-based
         if(!clientTarif) return 0;
         if(clientTarif.tarif_type==='forfait') return parseFloat(clientTarif.montant_forfait)||0;
@@ -783,8 +790,8 @@
                         <div class="colis-badge">${c.type === 'colis' ? '📦 Colis' : '📬 Enveloppe'}</div>
                     </div>
                     <div class="colis-body" id="colis-body-${c.id}">
-                        <div class="colis-field"><label>Poids (kg)</label><input type="number" value="${c.poids}" step="0.1" onchange="updateColis(${idx}, 'poids', this.value)"></div>
-                        <div class="colis-field"><label>Quantité</label><input type="number" value="${c.qty}" min="1" onchange="updateColis(${idx}, 'qty', this.value)"></div>
+                        <div class="colis-field"><label>Poids (kg)</label><input type="number" value="${c.poids}" step="0.1" oninput="updateColis(${idx}, 'poids', this.value)"></div>
+                        <div class="colis-field"><label>Quantité</label><input type="number" value="${c.qty}" min="1" oninput="updateColis(${idx}, 'qty', this.value)"></div>
                         <div class="colis-actions">
                             ${colisList.length > 1 ? `<div class="colis-delete" onclick="removeColis(${idx})"><i class="fas fa-trash"></i></div>` : ''}
                         </div>
@@ -797,8 +804,10 @@
 
     window.updateColis = function(idx, field, value){
         if(field === 'poids') colisList[idx].poids = parseFloat(value) || 0;
-        if(field === 'qty') colisList[idx].qty = parseInt(value) || 1;
-        renderColis();
+        if(field === 'qty')   colisList[idx].qty   = parseInt(value)   || 1;
+        // Recalculate price without re-rendering the form (preserves focus)
+        updateTarifDisplay();
+        updateTotalPrice();
     };
     window.toggleColisBody = function(id){ const body = document.getElementById('colis-body-'+id); if(body) body.classList.toggle('open'); };
     window.addColis = function(){ colisList.push({id:Date.now()+Math.random(), poids:1, qty:1, type:'colis'}); renderColis(); };
@@ -930,11 +939,10 @@
         });
     }
 
-    window.selectService = function(svc) {
-        selectedService = String(svc);
-        document.querySelectorAll('.svc-btn').forEach(b => b.classList.toggle('selected', String(b.dataset.svc) === String(svc)));
-        // Highlight active product in tarif grid
-        document.querySelectorAll('.tarif-box[data-pid]').forEach(b => b.classList.toggle('active-tarif', String(b.dataset.pid) === String(svc)));
+    window.selectService = function(ref) {
+        selectedService = String(ref).toUpperCase();
+        document.querySelectorAll('.svc-btn').forEach(b => b.classList.toggle('selected', b.dataset.svc === selectedService));
+        updateTarifDisplay();
         updateTotalPrice();
     };
 
@@ -1160,7 +1168,7 @@
                 destinataire_tel: document.getElementById('destTel').value.trim() || null,
                 weight: poidsTotal,
                 quantity: qtyTotal,
-                service_type: (clientProduits.find(p=>String(p.id)===String(selectedService))?.ref || selectedService),
+                service_type: selectedService,
                 night_delivery: nightDelivery || [...selectedOptions].some(pid=>{ const p=clientProduits.find(x=>String(x.id)===pid); return p&&isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'); }),
                 options_refs: [...selectedOptions].map(pid=>clientProduits.find(x=>String(x.id)===pid)?.ref||pid).filter(Boolean).join(','),
                 instructions: document.getElementById('destInstructions').value,
