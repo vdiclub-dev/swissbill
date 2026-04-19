@@ -1167,8 +1167,9 @@
             distanceKm = await getRouteDistanceKm(from, to);
             resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
 
-            const included = Number(clientTarif?.included_km || 0);
-            const rate = Number(clientTarif?.extra_km_rate || 0);
+            const _abn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
+            const included = Number(_abn?.km_inclus ?? clientTarif?.included_km ?? 0);
+            const rate = Number(_abn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
             if (included > 0 && rate > 0 && distanceKm > included) {
                 const extra = Math.round((distanceKm - included) * 10) / 10;
                 const cost = Math.round(extra * rate * 100) / 100;
@@ -1220,10 +1221,11 @@
         const hasNuitOpt=clientProduits.some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
         let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
 
-        // Overage km cost
+        // Overage km cost — active abonnement overrides tarif base settings
         let kmCost = 0;
-        const includedKm = Number(clientTarif?.included_km || 0);
-        const extraKmRate = Number(clientTarif?.extra_km_rate || 0);
+        const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
+        const includedKm = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
+        const extraKmRate = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
         if (distanceKm != null && includedKm > 0 && extraKmRate > 0 && distanceKm > includedKm) {
             const extraKm = Math.round((distanceKm - includedKm) * 10) / 10;
             kmCost = Math.round(extraKm * extraKmRate * 100) / 100;

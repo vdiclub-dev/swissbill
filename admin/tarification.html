@@ -124,6 +124,20 @@
         .sec-title::after{content:'';flex:1;height:1px;background:#e8eaef;}
 
         /* RABAIS VOLUME */
+        /* ABONNEMENTS */
+        .abn-row{background:#f8f9fb;border:1.5px solid #e2e4e9;border-radius:10px;padding:14px;margin-bottom:10px;transition:border-color .15s;}
+        .abn-row.abn-actif{border-color:#22c55e;background:#f0fdf4;}
+        .abn-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;}
+        .abn-field label{font-size:10px;font-weight:700;color:#888;text-transform:uppercase;display:block;margin-bottom:4px;letter-spacing:.5px;}
+        .abn-field input{width:100%;padding:8px 10px;border:1px solid #e2e4e9;border-radius:8px;font-size:13px;font-family:'Outfit',sans-serif;color:#1a1a2e;background:#fff;}
+        .abn-field input:focus{outline:none;border-color:#6366f1;}
+        .abn-footer{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:8px;border-top:1px solid #e8eaef;flex-wrap:wrap;}
+        .abn-active-badge{font-size:11px;font-weight:700;color:#16a34a;background:#dcfce7;padding:2px 8px;border-radius:6px;}
+        .abn-del{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:7px 10px;color:#ef4444;cursor:pointer;font-size:13px;flex-shrink:0;}
+        .abn-add{width:100%;background:rgba(245,158,11,.07);border:1.5px dashed #f59e0b;color:#b45309;border-radius:10px;padding:10px;font-weight:700;cursor:pointer;font-size:13px;font-family:'Outfit',sans-serif;margin-bottom:6px;}
+        .abn-preview{font-size:12px;color:#555;background:#f0f0f5;border-radius:8px;padding:8px 12px;margin-top:10px;line-height:1.6;}
+        @media(max-width:640px){.abn-grid{grid-template-columns:1fr 1fr;}}
+
         .rabais-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;}
         .rabais-tile{padding:8px 4px;text-align:center;font-size:11px;color:#555;background:#f4f5f7;border:2px solid #e2e4e9;border-radius:8px;cursor:pointer;transition:all 0.15s;line-height:1.4;}
         .rabais-tile b{display:block;font-size:14px;font-family:'Bebas Neue',cursive;letter-spacing:0.5px;}
@@ -385,6 +399,12 @@
             <div class="field"><label>Recherche colis hôtel (CHF)</label><input type="number" id="sSupplHotel" step="0.5" placeholder="12.00"></div>
         </div>
 
+        <!-- ABONNEMENTS MENSUELS -->
+        <div class="sec-title">📱 ABONNEMENTS MENSUELS</div>
+        <div style="font-size:12px;color:#666;margin-bottom:12px;">Définissez les formules d'abonnement pour ce client. Le supplément km est ajouté automatiquement dans le portail.</div>
+        <div id="abonnementsContainer"></div>
+        <button type="button" class="abn-add" onclick="addAbonnement()">+ Ajouter un abonnement</button>
+
         <div class="rabais-section-label">Rabais volume mensuel</div>
         <div class="rabais-grid" id="rabaisGrid">
             <div class="rabais-tile active" onclick="setRabais(0)" data-pct="0">Aucun<b>—</b></div>
@@ -453,12 +473,54 @@ const db=window.SUPABASE_CLIENT;
 
 let entreprises=[], tarifsClients=[], tarifsSpeciaux=[], produitsTarif=[];
 let selectedTarifType='standard', pecEnabled=false, actifEnabled=true;
+let abonnements=[];
+
+function renderAbonnements(){
+    const c=document.getElementById('abonnementsContainer'); if(!c) return;
+    if(!abonnements.length){
+        c.innerHTML='<div style="text-align:center;padding:14px;color:#aaa;font-size:13px;border:1px dashed #e2e4e9;border-radius:10px;margin-bottom:10px;">Aucun abonnement défini</div>';
+        return;
+    }
+    c.innerHTML=abonnements.map((a,i)=>{
+        const h=s=>String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        const preview=a.km_inclus>0?`${a.km_inclus} km inclus/course · sup. ${a.prix_km_sup||0} CHF/km`:'';
+        const previewColis=a.nb_colis_inclus>0?`${a.nb_colis_inclus} colis inclus/mois`:'';
+        return`<div class="abn-row${a.actif?' abn-actif':''}">
+            <div class="abn-grid">
+                <div class="abn-field"><label>Nom</label><input type="text" value="${h(a.nom)}" placeholder="ex: BASIC" oninput="abonnements[${i}].nom=this.value;renderAbonnements()"></div>
+                <div class="abn-field"><label>CHF / mois</label><input type="number" value="${a.prix_mensuel||''}" step="1" placeholder="99" oninput="abonnements[${i}].prix_mensuel=parseFloat(this.value)||0"></div>
+                <div class="abn-field"><label>Colis / mois</label><input type="number" value="${a.nb_colis_inclus||''}" step="1" placeholder="50" oninput="abonnements[${i}].nb_colis_inclus=parseInt(this.value)||0"></div>
+                <div class="abn-field"><label>KM inclus / course</label><input type="number" value="${a.km_inclus||''}" step="1" placeholder="30" oninput="abonnements[${i}].km_inclus=parseFloat(this.value)||0"></div>
+                <div class="abn-field"><label>CHF / km sup.</label><input type="number" value="${a.prix_km_sup||''}" step="0.1" placeholder="1.50" oninput="abonnements[${i}].prix_km_sup=parseFloat(this.value)||0"></div>
+                <button class="abn-del" onclick="removeAbonnement(${i})">✕</button>
+            </div>
+            <div class="abn-footer">
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:#555;font-weight:600;">
+                    <input type="checkbox" ${a.actif?'checked':''} onchange="setAbonnementActif(${i},this.checked)"> Abonnement actif pour ce client
+                </label>
+                ${a.actif?'<span class="abn-active-badge">● EN COURS</span>':''}
+            </div>
+            ${preview||previewColis?`<div class="abn-preview">${[previewColis,preview].filter(Boolean).join(' · ')}</div>`:''}
+        </div>`;
+    }).join('');
+}
+window.addAbonnement=function(){
+    abonnements.push({nom:'',prix_mensuel:0,nb_colis_inclus:0,km_inclus:0,prix_km_sup:0,actif:false});
+    renderAbonnements();
+};
+window.removeAbonnement=function(i){abonnements.splice(i,1);renderAbonnements();};
+window.setAbonnementActif=function(i,checked){
+    abonnements.forEach((a,j)=>{a.actif=(j===i&&checked);});
+    renderAbonnements();
+};
 
 // ── UTILS ──
 function toast(msg,dur=3000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function showLoad(){document.getElementById('loader').classList.add('on');}
 function hideLoad(){document.getElementById('loader').classList.remove('on');}
-function openModal(id){const m=document.getElementById(id);if(m){m.style.display='flex';m.classList.add('open');}}
+function openModal(id){const m=document.getElementById(id);if(m){m.style.display='flex';m.classList.add('open');}
+    if(id==='modalTarif'){abonnements=[];renderAbonnements();}
+}
 function closeModal(id){const m=document.getElementById(id);if(m){m.style.display='none';m.classList.remove('open');}}
 window.closeModal=closeModal;
 function fmt(v){return v!=null?parseFloat(v).toFixed(2):'—';}
@@ -774,6 +836,8 @@ window.editTarif=function(id){
     document.getElementById('pecFields').style.display=pecEnabled?'block':'none';
     selectTarifType(t.tarif_type||'standard');
     loadPrixSpeciauxClient(t.entreprise_id).then(overrides=>renderProduitsGrilleModal(overrides));
+    abonnements=Array.isArray(t.abonnements)?t.abonnements.map(a=>Object.assign({nom:'',prix_mensuel:0,nb_colis_inclus:0,km_inclus:0,prix_km_sup:0,actif:false},a)):[];
+    renderAbonnements();
     const m=document.getElementById('modalTarif');
     if(m){m.style.display='flex';m.classList.add('open');}
 };
@@ -801,6 +865,7 @@ window.saveTarif=async function(){
         option_prise_en_charge:pecEnabled,
         rabais_volume_pct:Number(document.getElementById('rabaisVolumePct').value)||0,
         montant_prise_en_charge:pecEnabled?n(document.getElementById('fMontantPEC').value):null,
+        abonnements:abonnements,
     };
 
     if(selectedTarifType==='standard'){
