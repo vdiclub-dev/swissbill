@@ -745,7 +745,7 @@
         updateTotalPrice();
     }
 
-    function updateAbnBanner(){
+    async function updateAbnBanner(){
         const banner = document.getElementById('abnBanner');
         if(!banner) return;
         const abn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
@@ -753,10 +753,33 @@
         banner.style.display='block';
         document.getElementById('abnBannerNom').textContent = abn.nom || 'Abonnement';
         document.getElementById('abnBannerPrix').textContent = abn.prix_mensuel ? `${Number(abn.prix_mensuel).toFixed(2)} CHF/mois` : '';
+
+        // Compter les colis expédiés ce mois
+        let colisExpedies = 0;
+        const scopeId = getClientScopeId();
+        if(scopeId && abn.nb_colis_inclus > 0){
+            const now = new Date();
+            const debut = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+            const fin   = new Date(now.getFullYear(), now.getMonth()+1, 1).toISOString();
+            const { data: orders } = await db.from('transport_orders_simple')
+                .select('quantity')
+                .eq('entreprise_id', scopeId)
+                .gte('created_at', debut)
+                .lt('created_at', fin);
+            colisExpedies = (orders||[]).reduce((s,r)=>s+(Number(r.quantity)||1), 0);
+        }
+
         const chips=[];
-        if(abn.nb_colis_inclus>0) chips.push(`📦 ${abn.nb_colis_inclus} colis inclus/mois`);
-        if(abn.km_inclus>0)       chips.push(`📍 ${abn.km_inclus} km inclus/course`);
-        if(abn.prix_km_sup>0)     chips.push(`➕ ${Number(abn.prix_km_sup).toFixed(2)} CHF/km sup.`);
+        if(abn.nb_colis_inclus>0){
+            const restants = Math.max(0, abn.nb_colis_inclus - colisExpedies);
+            const depasse = colisExpedies > abn.nb_colis_inclus;
+            const label = depasse
+                ? `📦 ${colisExpedies}/${abn.nb_colis_inclus} colis · <span style="color:#f87171;">+${colisExpedies-abn.nb_colis_inclus} hors forfait</span>`
+                : `📦 ${colisExpedies}/${abn.nb_colis_inclus} colis · ${restants} restants`;
+            chips.push(label);
+        }
+        if(abn.km_inclus>0)   chips.push(`📍 ${abn.km_inclus} km inclus/course`);
+        if(abn.prix_km_sup>0) chips.push(`➕ ${Number(abn.prix_km_sup).toFixed(2)} CHF/km sup.`);
         document.getElementById('abnBannerDetails').innerHTML = chips.map(c=>`<span class="abn-chip">${c}</span>`).join('');
     }
 
@@ -1735,6 +1758,7 @@
 
             toast('✅ Commande envoyée avec succès !');
             resetForm();
+            updateAbnBanner();
             loadOrders();
             document.querySelector('.ptab[data-pane="orders"]').click();
         } catch(e) {
