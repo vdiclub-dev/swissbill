@@ -566,30 +566,50 @@ function renderTarifsSpeciaux(){
     }).join('');
 }
 
-// ── PRODUITS GRILLE MODAL ──
+// ── PRODUITS GRILLE MODAL (checkboxes) ──
 function renderProduitsGrilleModal(overrides){
+    // overrides = { produit_id: valeur } — only products assigned to this client
     const el=document.getElementById('produitsGrilleModal');
     if(!el)return;
     if(!produitsTarif.length){
         el.innerHTML='<div style="padding:12px;color:var(--muted);font-style:italic;">Aucun produit — <a href="tarifs.html" style="color:var(--red);">Configurer les tarifs</a></div>';
         return;
     }
+    const checkedIds=new Set(Object.keys(overrides).map(String));
     el.innerHTML=`<table class="tbl" style="background:var(--surface);border-radius:12px;overflow:hidden;margin-bottom:8px;">
         <thead><tr>
-            <th>Produit</th><th>Réf</th><th>Prix standard</th><th>Prix négocié (CHF)</th>
+            <th style="width:40px;text-align:center;">✓</th>
+            <th>Produit</th><th>Réf</th><th>Standard</th><th>Prix négocié (CHF)</th>
         </tr></thead>
-        <tbody>${produitsTarif.map(p=>`<tr>
-            <td style="font-weight:600;">${p.nom}${p.poids_min>0?' <span style="font-size:10px;color:var(--muted);">≥'+p.poids_min+'kg</span>':''}</td>
-            <td><span style="font-size:11px;background:rgba(59,130,246,0.1);color:var(--blue);padding:2px 8px;border-radius:100px;">${p.ref||'—'}</span></td>
-            <td style="color:var(--muted2);">${parseFloat(p.prix).toFixed(2)} CHF</td>
-            <td><input type="number" step="0.01" min="0" placeholder="${parseFloat(p.prix).toFixed(2)}"
-                value="${overrides[p.id]||''}"
-                data-produit-id="${p.id}"
-                class="prix-neg-inp"
-                style="width:100px;background:var(--night3);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;"></td>
-        </tr>`).join('')}</tbody>
-    </table>`;
+        <tbody>${produitsTarif.map(p=>{
+            const pid=String(p.id);
+            const on=checkedIds.has(pid);
+            const val=overrides[p.id]!=null?parseFloat(overrides[p.id]).toFixed(2):'';
+            return `<tr data-pid="${pid}" style="${on?'background:rgba(34,197,94,0.04);':''}">
+                <td style="text-align:center;"><input type="checkbox" class="prix-neg-chk" data-produit-id="${pid}" ${on?'checked':''} onchange="toggleProduitRow(this)" style="width:16px;height:16px;accent-color:var(--green);cursor:pointer;"></td>
+                <td style="font-weight:600;">${p.nom}${p.poids_min>0?` <span style="font-size:10px;color:var(--muted)">≥${p.poids_min}kg</span>`:''}</td>
+                <td><span style="font-size:11px;background:rgba(59,130,246,0.1);color:var(--blue);padding:2px 8px;border-radius:100px;">${p.ref||'—'}</span></td>
+                <td style="color:var(--muted2);">${parseFloat(p.prix).toFixed(2)} CHF</td>
+                <td><input type="number" step="0.01" min="0"
+                    placeholder="${parseFloat(p.prix).toFixed(2)}"
+                    value="${val}"
+                    data-produit-id="${pid}"
+                    class="prix-neg-inp"
+                    ${!on?'disabled':''}
+                    style="width:110px;background:${on?'var(--night3)':'rgba(255,255,255,0.02)'};border:1px solid var(--border2);border-radius:6px;padding:6px 10px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;opacity:${on?'1':'0.3'};"></td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">Cochez les prestations applicables. Laissez le prix vide pour appliquer le tarif standard.</div>`;
 }
+
+window.toggleProduitRow=function(chk){
+    const pid=chk.dataset.produitId;
+    const inp=document.querySelector(`.prix-neg-inp[data-produit-id="${pid}"]`);
+    const row=chk.closest('tr');
+    if(inp){inp.disabled=!chk.checked;inp.style.opacity=chk.checked?'1':'0.3';inp.style.background=chk.checked?'var(--night3)':'rgba(255,255,255,0.02)';}
+    if(row) row.style.background=chk.checked?'rgba(34,197,94,0.04)':'';
+};
 
 async function loadPrixSpeciauxClient(entreprise_id){
     if(!entreprise_id)return{};
@@ -600,14 +620,17 @@ async function loadPrixSpeciauxClient(entreprise_id){
 }
 
 async function savePrixSpeciaux(entreprise_id){
-    const inputs=document.querySelectorAll('.prix-neg-inp');
-    if(!inputs.length)return;
-    const toUpsert=[], toDelete=[];
-    inputs.forEach(inp=>{
-        const pid=inp.dataset.produitId;
-        const val=inp.value.trim();
-        if(val!==''&&!isNaN(parseFloat(val))){
-            toUpsert.push({client_id:entreprise_id,produit_id:pid,type_remise:'fixe',valeur:parseFloat(val)});
+    const checkboxes=document.querySelectorAll('.prix-neg-chk');
+    if(!checkboxes.length)return;
+    const toUpsert=[],toDelete=[];
+    checkboxes.forEach(chk=>{
+        const pid=chk.dataset.produitId;
+        const inp=document.querySelector(`.prix-neg-inp[data-produit-id="${pid}"]`);
+        if(chk.checked){
+            const produit=produitsTarif.find(p=>String(p.id)===pid);
+            const custom=inp&&inp.value.trim()!==''?parseFloat(inp.value):null;
+            const valeur=custom!==null?custom:(produit?Number(produit.prix):null);
+            toUpsert.push({client_id:entreprise_id,produit_id:pid,type_remise:custom!==null?'fixe':'standard',valeur});
         } else {
             toDelete.push(pid);
         }
