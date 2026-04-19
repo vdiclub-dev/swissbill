@@ -588,9 +588,12 @@
             const prods=pool.filter(p=>svcRef(p)===ref);
             const best=bestProdForPoids(prods,poids);
             const unitPrice=getProduitPrice(best);
-            const calcPrice=best.prix_par_kg?unitPrice*poids:unitPrice;
+            const incr=Number(best.increment_par_kg||0);
+            const calcPrice= incr>0 ? unitPrice+poids*incr : best.prix_par_kg ? unitPrice*poids : unitPrice;
             const negocie=clientPrixMap[String(best.id)]!=null && Number(clientPrixMap[String(best.id)])!==Number(best.prix);
-            const suffix=best.prix_par_kg?`<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)} CHF/kg</span>`:'';
+            const suffix= incr>0
+                ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)}+${incr.toFixed(2)}/kg</span>`
+                : best.prix_par_kg ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)} CHF/kg</span>` : '';
             return {ref, label:best.nom, prix:calcPrice, negocie, active:selectedService===ref, suffix};
         });
         grid.style.gridTemplateColumns=`repeat(${Math.min(items.length,4)},1fr)`;
@@ -724,6 +727,8 @@
         if(pool.length){
             const best=bestProdForPoids(pool,poids);
             const unitPrice=getProduitPrice(best);
+            const incr=Number(best.increment_par_kg||0);
+            if(incr>0) return unitPrice + poids*incr;
             return best.prix_par_kg ? unitPrice*poids : unitPrice;
         }
         // Fallback to clientTarif weight-based
