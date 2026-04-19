@@ -298,6 +298,7 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
         <div class="mhead"><div class="mtitle">Nouvelle tournée</div><button type="button" class="mclose" onclick="closeModal('modalNewTournee')">✕</button></div>
         <div class="fgrid">
             <div class="field s2"><label>Nom *</label><input type="text" id="tNom" placeholder="Ex: Lausanne Matin"></div>
+            <div class="field s2"><label>Date *</label><input type="date" id="tDate"></div>
             <div class="field"><label>Heure début</label><input type="time" id="tDebut" value="07:00"></div>
             <div class="field"><label>Heure fin</label><input type="time" id="tFin" value="12:00"></div>
             <div class="field"><label>Zone / Canton</label><input type="text" id="tZone" placeholder="VD, GE…"></div>
@@ -774,19 +775,21 @@ document.getElementById('btnConfirmDelete').addEventListener('click',async funct
 // ── NOUVELLE TOURNÉE ──
 document.getElementById('btnNewTournee').addEventListener('click',function(){
     ['tNom','tZone','tNotes'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('tDate').value=new Date().toISOString().slice(0,10);
     document.getElementById('tDebut').value='07:00';document.getElementById('tFin').value='12:00';
     document.getElementById('tCouleur').value='#3b82f6';document.getElementById('tChauffeur').value='';
     openModal('modalNewTournee');
 });
 document.getElementById('btnSaveTournee').addEventListener('click',async function(){
     var nom=document.getElementById('tNom').value.trim();if(!nom){toast('Nom obligatoire',false);return;}
+    var dateVal=document.getElementById('tDate').value;if(!dateVal){toast('Date obligatoire',false);return;}
     var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
     try{
         var id=crypto.randomUUID();
-        var r=await db.from('tournees').insert([{id:id,nom:nom,heure_debut:document.getElementById('tDebut').value||null,heure_fin:document.getElementById('tFin').value||null,zone:document.getElementById('tZone').value.trim()||null,couleur:document.getElementById('tCouleur').value,notes:document.getElementById('tNotes').value.trim()||null,jours:[1,2,3,4,5]}]);
+        var r=await db.from('tournees').insert([{id:id,nom:nom,date:dateVal,heure_debut:document.getElementById('tDebut').value||null,heure_fin:document.getElementById('tFin').value||null,zone:document.getElementById('tZone').value.trim()||null,couleur:document.getElementById('tCouleur').value,notes:document.getElementById('tNotes').value.trim()||null,jours:[1,2,3,4,5]}]);
         if(r.error)throw r.error;
         var drvId=document.getElementById('tChauffeur').value;
-        if(drvId){var today=new Date().toISOString().slice(0,10);await db.from('tournee_affectations').insert([{tournee_id:id,date:today,employe_id:drvId}]);}
+        if(drvId){await db.from('tournee_affectations').insert([{tournee_id:id,date:dateVal,employe_id:drvId}]);}
         toast('Tournée «'+nom+'» créée !',true);closeModal('modalNewTournee');await loadTournees();
     }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Créer';}
 });
