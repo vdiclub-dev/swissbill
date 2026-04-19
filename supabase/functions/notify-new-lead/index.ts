@@ -78,7 +78,24 @@ Deno.serve(async (req) => {
   let subject: string;
   let text: string;
 
-  if (payload.table === "quote_requests") {
+  if (payload.table === "quota_alert") {
+    const r = record;
+    const nom      = String(r.client_nom       ?? "—");
+    const abn      = String(r.abonnement_nom   ?? "—");
+    const used     = String(r.colis_utilises   ?? "—");
+    const quota    = String(r.quota            ?? "—");
+    const pct      = String(r.pourcentage      ?? "—");
+    const seuil    = Number(r.threshold) >= 100 ? "DÉPASSÉ" : "80%";
+
+    subject = `[Colixo] ⚠️ Quota ${seuil} — ${nom}`;
+    text =
+      `Alerte consommation abonnement\n\n` +
+      `Client    : ${nom}\n` +
+      `Abonnement: ${abn}\n` +
+      `Utilisé   : ${used} / ${quota} colis (${pct}%)\n` +
+      `Seuil     : ${seuil}\n\n` +
+      `Consultez le tableau de bord Consommation pour plus de détails.`;
+  } else if (payload.table === "quote_requests") {
     const company  = String(record.company_name   ?? "—");
     const contact  = String(record.contact_name   ?? "—");
     const email    = String(record.email          ?? "—");

@@ -1247,6 +1247,44 @@
         updateTotalPrice();
     };
 
+    async function checkQuotaAlert() {
+        const abn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
+        if(!abn || !abn.nb_colis_inclus) return;
+        const used = colisExpediesMonth;
+        const quota = abn.nb_colis_inclus;
+        const pct = used / quota;
+        // Seuils : alerte à 80% et à 100% (dépassement)
+        const threshold = pct >= 1 ? 100 : pct >= 0.8 ? 80 : 0;
+        if(!threshold) return;
+        // Éviter d'envoyer l'alerte plusieurs fois : stocker en localStorage
+        const storageKey = `quota_alert_${getClientScopeId()}_${new Date().getFullYear()}_${new Date().getMonth()}_${threshold}`;
+        if(localStorage.getItem(storageKey)) return;
+        localStorage.setItem(storageKey, '1');
+
+        const nom = clientEntreprise?.nom || client?.email || 'Client';
+        const supabaseUrl = window.SUPABASE_CONFIG?.url || window.COLIXO_SUPABASE_URL;
+        const supabaseKey = window.SUPABASE_CONFIG?.anonKey || window.COLIXO_SUPABASE_ANON_KEY;
+        try {
+            await fetch(`${supabaseUrl}/functions/v1/notify-new-lead`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': supabaseKey, 'Authorization': 'Bearer ' + supabaseKey },
+                body: JSON.stringify({
+                    type: 'quota_alert',
+                    table: 'quota_alert',
+                    record: {
+                        client_nom: nom,
+                        abonnement_nom: abn.nom || 'Abonnement',
+                        colis_utilises: used,
+                        quota: quota,
+                        pourcentage: Math.round(pct * 100),
+                        threshold,
+                        entreprise_id: getClientScopeId()
+                    }
+                })
+            });
+        } catch(e) { console.warn('Quota alert:', e); }
+    }
+
     function scheduleDistanceCalc() {
         clearTimeout(_distTimer);
         _distTimer = setTimeout(() => window.calcDistance(), 1200);
@@ -1772,7 +1810,8 @@
 
             toast('✅ Commande envoyée avec succès !');
             resetForm();
-            updateAbnBanner();
+            await updateAbnBanner();
+            checkQuotaAlert();
             loadOrders();
             document.querySelector('.ptab[data-pane="orders"]').click();
         } catch(e) {
