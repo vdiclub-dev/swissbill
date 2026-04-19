@@ -587,14 +587,16 @@
         const items=refs.map(ref=>{
             const prods=pool.filter(p=>svcRef(p)===ref);
             const best=bestProdForPoids(prods,poids);
-            const prix=getProduitPrice(best);
+            const unitPrice=getProduitPrice(best);
+            const calcPrice=best.prix_par_kg?unitPrice*poids:unitPrice;
             const negocie=clientPrixMap[String(best.id)]!=null && Number(clientPrixMap[String(best.id)])!==Number(best.prix);
-            return {ref, label:best.nom, prix, negocie, active:selectedService===ref};
+            const suffix=best.prix_par_kg?`<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)} CHF/kg</span>`:'';
+            return {ref, label:best.nom, prix:calcPrice, negocie, active:selectedService===ref, suffix};
         });
         grid.style.gridTemplateColumns=`repeat(${Math.min(items.length,4)},1fr)`;
         grid.innerHTML=items.map(it=>`<div class="tarif-box${it.negocie?' special':''}${it.active?' active-tarif':''}" onclick="selectService('${it.ref}')">
             <div class="tarif-label">${it.label}</div>
-            <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.negocie?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
+            <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
         </div>`).join('');
     }
 
@@ -719,7 +721,11 @@
     function getPrixParColis(poids, ref){
         // Find all products matching this ref, pick best tier for poids
         const pool=getAssignedProduits().filter(p=>!isOptionProduct(p)&&svcRef(p)===String(ref).toUpperCase());
-        if(pool.length) return getProduitPrice(bestProdForPoids(pool,poids));
+        if(pool.length){
+            const best=bestProdForPoids(pool,poids);
+            const unitPrice=getProduitPrice(best);
+            return best.prix_par_kg ? unitPrice*poids : unitPrice;
+        }
         // Fallback to clientTarif weight-based
         if(!clientTarif) return 0;
         if(clientTarif.tarif_type==='forfait') return parseFloat(clientTarif.montant_forfait)||0;
