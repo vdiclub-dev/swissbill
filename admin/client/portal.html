@@ -381,9 +381,13 @@
                     <div class="field"><label>Prénom *</label><input type="text" id="customPickupPrenom" placeholder="Prénom"></div>
                     <div class="field"><label>Nom *</label><input type="text" id="customPickupNom" placeholder="Nom"></div>
                   </div>
-                  <div class="field"><label>Entreprise</label><input type="text" id="customPickupEntreprise" placeholder="Nom de la société (optionnel)"></div>
+                  <div class="field"><label>Entreprise / Société</label><input type="text" id="customPickupEntreprise" placeholder="Nom de la société (optionnel)"></div>
                   <div class="field"><label>Téléphone *</label><input type="text" id="customPickupTel" placeholder="+41 79 000 00 00"></div>
-                  <div class="field"><label>Adresse *</label><input type="text" id="customPickupAddress" placeholder="Rue, numéro, NPA, Ville"></div>
+                  <div class="field"><label>Rue et numéro *</label><input type="text" id="customPickupAddress" placeholder="Rue, numéro"></div>
+                  <div class="field-row">
+                    <div class="field"><label>Ville *</label><input type="text" id="customPickupVille" placeholder="ex: Lausanne"></div>
+                    <div class="field"><label>Code postal *</label><input type="text" id="customPickupNpa" placeholder="ex: 1003"></div>
+                  </div>
                 </div>
               </div>
 
@@ -1048,7 +1052,10 @@
     function getPickupAddressString() {
         const pickupType = document.querySelector('input[name="pickupType"]:checked')?.value;
         if (pickupType === 'custom') {
-            return document.getElementById('customPickupAddress').value.trim();
+            const rue   = document.getElementById('customPickupAddress')?.value.trim() || '';
+            const npa   = document.getElementById('customPickupNpa')?.value.trim() || '';
+            const ville = document.getElementById('customPickupVille')?.value.trim() || '';
+            return [rue, npa, ville, 'Suisse'].filter(Boolean).join(' ');
         }
         if (clientEntreprise) {
             return `${clientEntreprise.adresse || ''} ${clientEntreprise.npa || ''} ${clientEntreprise.ville || ''} Suisse`.trim();
@@ -1523,11 +1530,14 @@
                 const customNom = document.getElementById('customPickupNom').value.trim();
                 const customEntreprise = document.getElementById('customPickupEntreprise').value.trim();
                 const customTel = document.getElementById('customPickupTel').value.trim();
-                const customAddr = document.getElementById('customPickupAddress').value.trim();
+                const customAddr  = document.getElementById('customPickupAddress')?.value.trim() || '';
+                const customVille = document.getElementById('customPickupVille')?.value.trim() || '';
+                const customNpa2  = document.getElementById('customPickupNpa')?.value.trim() || '';
                 if(!customAddr) { toast("Adresse d'enlèvement requise"); hideLoad(); return; }
                 if(!customPrenom && !customNom) { toast("Nom du contact requis"); hideLoad(); return; }
                 const contactName = [customPrenom, customNom].filter(Boolean).join(' ');
-                pickupAddr = `${contactName}${customEntreprise ? ' ('+customEntreprise+')' : ''} - ${customAddr}${customTel ? ' · ☎ '+customTel : ''}`;
+                const fullCustomAddr = [customAddr, customNpa2, customVille].filter(Boolean).join(', ');
+                pickupAddr = `${contactName}${customEntreprise ? ' ('+customEntreprise+')' : ''} - ${fullCustomAddr}${customTel ? ' · ☎ '+customTel : ''}`;
             }
 
             const poidsTotal = colisList.reduce((s,c) => s + (c.poids * c.qty), 0);
@@ -1604,7 +1614,8 @@
 
     function resetForm() {
         ['destinataireNom','livAdresse','livNpa','livVille','destTel','destInstructions',
-         'customPickupAddress','customPickupPrenom','customPickupNom','customPickupEntreprise',
+         'customPickupAddress','customPickupNpa','customPickupVille',
+         'customPickupPrenom','customPickupNom','customPickupEntreprise',
          'customPickupTel','searchRecipient','pkgDescription'].forEach(id => {
             const el = document.getElementById(id); if(el) el.value = '';
         });
@@ -2427,9 +2438,9 @@
         const expNomEl = document.getElementById('expediteurNom');
         if(expNomEl) expNomEl.value = name;
         const expTelEl = document.getElementById('expediteurTel');
-        if(expTelEl && client.telephone) expTelEl.value = client.telephone;
+        if(expTelEl) expTelEl.value = client.telephone || client.tel || client.phone || '';
         const expEmailEl = document.getElementById('expediteurEmail');
-        if(expEmailEl && client.email) expEmailEl.value = client.email;
+        if(expEmailEl) expEmailEl.value = client.email || '';
     }
     checkSession();
     
