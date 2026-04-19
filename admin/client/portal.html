@@ -1636,6 +1636,10 @@
                 await loadSavedAddresses();
             }
 
+            const hasNuit = nightDelivery || [...selectedOptions].some(pid=>{ const p=clientProduits.find(x=>String(x.id)===pid); return p&&isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'); });
+            const optsStr = [...selectedOptions].map(pid=>clientProduits.find(x=>String(x.id)===pid)?.ref||pid).filter(Boolean).join(',');
+
+            // Colonnes de base (toujours présentes)
             const orderData = {
                 order_number: envNum,
                 entreprise_id: getClientScopeId(),
@@ -1646,16 +1650,25 @@
                 weight: poidsTotal,
                 quantity: qtyTotal,
                 service_type: selectedService,
-                night_delivery: nightDelivery || [...selectedOptions].some(pid=>{ const p=clientProduits.find(x=>String(x.id)===pid); return p&&isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'); }),
-                options_refs: [...selectedOptions].map(pid=>clientProduits.find(x=>String(x.id)===pid)?.ref||pid).filter(Boolean).join(','),
                 instructions: document.getElementById('destInstructions').value,
                 price_chf: prixTotal,
-                distance_km: distanceKm,
                 status: 'pending',
                 admin_status: 'pending_validation'
             };
 
-            const { data: order, error } = await db.from('transport_orders_simple').insert([orderData]).select().single();
+            // Colonnes optionnelles — ajoutez-les si elles manquent (voir SQL ci-dessous)
+            const optionalCols = {
+                night_delivery: hasNuit,
+                options_refs: optsStr || null,
+                distance_km: distanceKm
+            };
+            // Tenter d'abord avec toutes les colonnes, sinon sans les optionnelles
+            let insertData = { ...orderData, ...optionalCols };
+            let { data: order, error } = await db.from('transport_orders_simple').insert([insertData]).select().single();
+            if (error && (error.message?.includes('column') || error.code === '42703' || error.code === 'PGRST204')) {
+                // Colonnes manquantes → insérer sans les optionnelles
+                ({ data: order, error } = await db.from('transport_orders_simple').insert([orderData]).select().single());
+            }
             if(error) throw error;
 
             currentOrderId = order.id;
