@@ -754,25 +754,39 @@
     }
 
     function updateTotalPrice(){
+        const qtyTotal = colisList.reduce((s,c)=>s+c.qty, 0);
+
+        // Base service price — getPrixParColis already handles prix_par_kg × poids
         let baseTotal = 0;
         for(const c of colisList) {
             baseTotal += getPrixParColis(c.poids, selectedService) * c.qty;
         }
-        let serviceSuppl = getServiceSuppl(selectedService);
-        let supplTotal = serviceSuppl * colisList.reduce((s,c)=>s+c.qty,0);
-        const qtyTotal = colisList.reduce((s,c)=>s+c.qty,0);
+
+        // Options — per colis; if prix_par_kg, multiply by poids of each colis
         let optionsTotal=0;
         const optLabels=[];
         selectedOptions.forEach(pid=>{
             const p=clientProduits.find(x=>String(x.id)===pid);
-            if(p){ const v=getProduitPrice(p)*qtyTotal; optionsTotal+=v; optLabels.push(p.nom+' +'+fmt(v)+' CHF'); }
+            if(!p) return;
+            const unitPrice=getProduitPrice(p);
+            let v=0;
+            if(p.prix_par_kg){
+                colisList.forEach(c=>{ v+=unitPrice*c.poids*c.qty; });
+            } else {
+                v=unitPrice*qtyTotal;
+            }
+            optionsTotal+=v;
+            optLabels.push(p.nom+' +'+fmt(v)+' CHF');
         });
-        // night_delivery fallback (if no OPT_NUIT product)
+
         const hasNuitOpt=clientProduits.some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
         let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
-        let total = baseTotal + supplTotal + optionsTotal + nuitSuppl;
+        let total = baseTotal + optionsTotal + nuitSuppl;
+
         document.getElementById('totalPrice').textContent = fmt(total) + ' CHF';
-        const selProduit = clientProduits.find(p=>String(p.id)===String(selectedService));
+
+        // Service name: selectedService is now a ref string, not a product ID
+        const selProduit = clientProduits.find(p=>svcRef(p)===selectedService);
         let serviceName = selProduit ? selProduit.nom : selectedService;
         const detailParts=[`${serviceName}: ${fmt(baseTotal)} CHF`];
         if(optLabels.length) detailParts.push(...optLabels);
