@@ -329,13 +329,15 @@
 
             <!-- ── ÉTAPE 1 : COLIS ── -->
             <div class="wstep active" id="wstep1">
-              <div class="form-section">📦 Taille du colis</div>
+
+              <!-- Sélecteur taille (pour le colis en cours d'ajout) -->
+              <div class="form-section">📦 Ajouter un colis</div>
               <div class="pkg-grid">
                 <div class="pkg-card selected" id="pkg-petit" onclick="setPkgSize('petit')">
-                  <div class="pkg-icon">📄</div><div class="pkg-name">Petit</div><div class="pkg-desc">Enveloppe, documents<br>&lt; 2 kg</div>
+                  <div class="pkg-icon">📄</div><div class="pkg-name">Petit</div><div class="pkg-desc">Enveloppe, docs<br>&lt; 2 kg</div>
                 </div>
                 <div class="pkg-card" id="pkg-moyen" onclick="setPkgSize('moyen')">
-                  <div class="pkg-icon">📦</div><div class="pkg-name">Moyen</div><div class="pkg-desc">Boite à chaussures<br>2–10 kg</div>
+                  <div class="pkg-icon">📦</div><div class="pkg-name">Moyen</div><div class="pkg-desc">Boite chaussures<br>2–10 kg</div>
                 </div>
                 <div class="pkg-card" id="pkg-grand" onclick="setPkgSize('grand2')">
                   <div class="pkg-icon">📫</div><div class="pkg-name">Grand</div><div class="pkg-desc">Carton standard<br>10–25 kg</div>
@@ -344,10 +346,15 @@
                   <div class="pkg-icon">🏗️</div><div class="pkg-name">Très grand</div><div class="pkg-desc">Meuble, palette<br>&gt; 25 kg</div>
                 </div>
               </div>
-              <div class="field-row" style="margin-bottom:20px;">
-                <div class="field"><label>Poids approximatif (kg)</label><input type="number" id="pkgPoidsInput" value="0.5" min="0.1" max="30" step="0.1" oninput="onPkgPoidsChange(this.value)"></div>
-                <div class="field"><label>Description du contenu</label><input type="text" id="pkgDescription" placeholder="ex: Livres, vêtements…"></div>
+              <div class="field-row">
+                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="0.5" min="0.1" max="30" step="0.1" oninput="onPkgPoidsChange(this.value)"></div>
+                <div class="field"><label>Quantité</label><input type="number" id="pkgQtyInput" value="1" min="1" max="99" step="1"></div>
               </div>
+              <div class="field" style="margin-bottom:4px;"><label>Description (optionnel)</label><input type="text" id="pkgDescription" placeholder="ex: Livres, vêtements…"></div>
+              <button type="button" onclick="addWizardColis()" style="width:100%;background:rgba(245,158,11,.1);border:1.5px dashed #f59e0b;color:#f59e0b;border-radius:10px;padding:11px;font-weight:700;cursor:pointer;margin-bottom:20px;font-size:13px;">+ Ajouter ce colis à la liste</button>
+
+              <!-- Liste des colis ajoutés -->
+              <div id="wizardColisList"></div>
 
               <div class="form-section">⚡ Choisissez votre formule</div>
               <div id="serviceGrid" class="formula-grid" style="grid-template-columns:repeat(3,1fr);">
@@ -1011,25 +1018,98 @@
 
     // Package size selector
     const PKG_POIDS = {petit:0.5, moyen:5, grand2:15, tgrand:28};
+    const PKG_ICONS = {petit:'📄', moyen:'📦', grand2:'📫', tgrand:'🏗️'};
+    const PKG_NAMES = {petit:'Petit (<2kg)', moyen:'Moyen (2-10kg)', grand2:'Grand (10-25kg)', tgrand:'Très grand (>25kg)'};
+    let currentPkgSize = 'petit';
+
     window.setPkgSize = function(size) {
+        currentPkgSize = size;
         document.querySelectorAll('.pkg-card').forEach(c => c.classList.remove('selected'));
         const card = document.getElementById('pkg-'+size);
         if(card) card.classList.add('selected');
         const p = PKG_POIDS[size] || 0.5;
-        colisList = [{id:Date.now(), poids:p, qty:1, type:'colis'}];
         const input = document.getElementById('pkgPoidsInput');
         if(input) input.value = p;
+        // Update first colis if list is empty or has only one
+        if(colisList.length === 1) {
+            colisList[0].poids = p;
+            colisList[0].size  = size;
+        }
         renderServiceButtons();
         updateTarifDisplay();
+        renderWizardColis();
         updateTotalPrice();
     };
+
     window.onPkgPoidsChange = function(v) {
         const p = Math.min(30, parseFloat(v) || 0.1);
-        colisList[0].poids = p;
+        if(colisList.length === 1) colisList[0].poids = p;
         renderServiceButtons();
         updateTarifDisplay();
+        renderWizardColis();
         updateTotalPrice();
     };
+
+    window.addWizardColis = function() {
+        const poids = Math.min(30, parseFloat(document.getElementById('pkgPoidsInput')?.value) || 0.5);
+        const qty   = Math.max(1, parseInt(document.getElementById('pkgQtyInput')?.value) || 1);
+        const desc  = document.getElementById('pkgDescription')?.value.trim() || '';
+        const size  = currentPkgSize;
+        // If only default empty colis, replace it; otherwise append
+        if(colisList.length === 1 && colisList[0].poids === 0.5 && colisList[0].qty === 1 && !colisList[0].size) {
+            colisList[0] = {id: Date.now(), poids, qty, type:'colis', size, description: desc};
+        } else {
+            colisList.push({id: Date.now(), poids, qty, type:'colis', size, description: desc});
+        }
+        // Reset form to default
+        setPkgSize('petit');
+        const qtyEl = document.getElementById('pkgQtyInput'); if(qtyEl) qtyEl.value = 1;
+        const descEl = document.getElementById('pkgDescription'); if(descEl) descEl.value = '';
+        renderWizardColis();
+        renderServiceButtons();
+        updateTotalPrice();
+    };
+
+    window.removeWizardColis = function(idx) {
+        if(colisList.length <= 1) return;
+        colisList.splice(idx, 1);
+        renderWizardColis();
+        renderServiceButtons();
+        updateTotalPrice();
+    };
+
+    window.updateWizardColisQty = function(idx, v) {
+        const q = Math.max(1, parseInt(v) || 1);
+        colisList[idx].qty = q;
+        renderWizardColis();
+        updateTotalPrice();
+    };
+
+    function renderWizardColis() {
+        const container = document.getElementById('wizardColisList');
+        if(!container) return;
+        const total = colisList.reduce((s,c) => s + c.qty, 0);
+        container.innerHTML = `
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:10px;letter-spacing:.06em;">
+                COLIS EN ATTENTE (${total} pièce${total>1?'s':''} · ${colisList.reduce((s,c)=>s+(c.poids*c.qty),0).toFixed(1)} kg total)
+            </div>
+            ${colisList.map((c,idx) => `
+                <div style="background:var(--night3);border:1px solid var(--border2);border-radius:10px;padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span style="font-size:20px;flex-shrink:0;">${PKG_ICONS[c.size||'moyen']||'📦'}</span>
+                    <div style="flex:1;min-width:100px;">
+                        <div style="font-weight:600;font-size:13px;">${PKG_NAMES[c.size||'moyen']||'Colis'} — ${c.poids} kg</div>
+                        ${c.description?`<div style="font-size:11px;color:var(--muted);">${c.description}</div>`:''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:11px;color:var(--muted);">Qté</span>
+                        <input type="number" value="${c.qty}" min="1" max="99"
+                            style="width:54px;padding:6px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--white);text-align:center;font-family:'Outfit',sans-serif;"
+                            oninput="updateWizardColisQty(${idx},this.value)">
+                    </div>
+                    ${colisList.length > 1 ? `<button onclick="removeWizardColis(${idx})" style="background:rgba(232,49,26,.1);border:1px solid rgba(232,49,26,.2);border-radius:8px;padding:6px 10px;color:var(--red);cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>` : ''}
+                </div>
+            `).join('')}`;
+    }
     // ── FIN WIZARD ──────────────────────────────────────────────────
 
     // ── DISTANCE (Nominatim + OSRM) ────────────────────────────────
@@ -1629,7 +1709,10 @@
         const dov = document.getElementById('distanceOverage'); if(dov) dov.style.display = 'none';
         nightDelivery = false;
         selectedOptions = new Set();
+        colisList = [{id:Date.now(), poids:0.5, qty:1, type:'colis'}];
+        const qtyEl = document.getElementById('pkgQtyInput'); if(qtyEl) qtyEl.value = 1;
         setPkgSize('petit');
+        renderWizardColis();
         renderOptions();
         wizardGo(1);
     }
@@ -2406,7 +2489,7 @@
         }
         await loadSavedAddresses();
         showScreen('Portal');
-        renderColis();
+        renderWizardColis();
         loadOrders();
         initPickupToggle();
         // Auto-calc distance when delivery address changes
