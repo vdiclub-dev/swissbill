@@ -839,44 +839,60 @@
 
     async function sendQuoteRequest() {
       const calc = renderCalculation();
+
+      // Validation
       if(!els.company.value.trim() || !els.contact.value.trim() || !els.email.value.trim()) {
         els.quoteStatus.className = 'status error';
         els.quoteStatus.textContent = 'Merci de renseigner la société, votre nom et votre e-mail.';
         return;
       }
+
       els.sendQuoteBtn.disabled = true;
       els.quoteStatus.className = 'status';
       els.quoteStatus.textContent = 'Envoi en cours…';
 
-      if(supabaseClient) {
-        const { error } = await supabaseClient.from('quote_requests').insert({
-          company_name: els.company.value.trim(),
-          contact_name: els.contact.value.trim(),
-          email:        els.email.value.trim(),
-          phone:        els.phone.value.trim()||null,
-          interest_type:els.interest.value,
-          monthly_volume:els.volume.value.trim()||null,
-          message:      els.message.value.trim()||null,
-          calc_service_ref:   calc.sk,
-          calc_service_label: calc.serviceLabel,
-          calc_distance_km:   calc.distance,
-          calc_weight_kg:     calc.weight,
+      try {
+        const db = window.SUPABASE_CLIENT;
+        if(!db) throw new Error('client_null');
+
+        const { error } = await db.from('quote_requests').insert({
+          company_name:          els.company.value.trim(),
+          contact_name:          els.contact.value.trim(),
+          email:                 els.email.value.trim(),
+          phone:                 els.phone.value.trim() || null,
+          interest_type:         els.interest.value,
+          monthly_volume:        els.volume.value.trim() || null,
+          message:               els.message.value.trim() || null,
+          calc_service_ref:      calc.sk,
+          calc_service_label:    calc.serviceLabel,
+          calc_distance_km:      calc.distance,
+          calc_weight_kg:        calc.weight,
           calc_selected_options: calc.opts,
-          calc_total_chf:     calc.total,
+          calc_total_chf:        calc.total,
           status: 'new',
           source: 'homepage'
         });
-        if(error) {
-          els.quoteStatus.className = 'status error';
-          els.quoteStatus.textContent = 'Une erreur s\'est produite. Veuillez nous contacter directement.';
-          els.sendQuoteBtn.disabled = false;
-          return;
-        }
-      }
 
-      els.quoteStatus.className = 'status ok';
-      els.quoteStatus.textContent = '✓ Demande envoyée — nous vous recontactons dans les 24h.';
-      els.sendQuoteBtn.textContent = 'Demande envoyée';
+        if(error) throw error;
+
+        els.quoteStatus.className = 'status ok';
+        els.quoteStatus.textContent = '✓ Demande envoyée — nous vous recontactons dans les 24h.';
+        els.sendQuoteBtn.textContent = 'Demande envoyée ✓';
+
+      } catch(err) {
+        console.error('[Colixo] sendQuote error:', err);
+        els.quoteStatus.className = 'status error';
+        const msg = err && err.message ? err.message : String(err);
+        if(msg === 'client_null') {
+          els.quoteStatus.textContent = 'Connexion non disponible. Appelez-nous directement.';
+        } else if(msg.includes('does not exist') || msg.includes('relation')) {
+          els.quoteStatus.textContent = 'Configuration en cours — contactez-nous directement par téléphone.';
+        } else {
+          els.quoteStatus.textContent = 'Erreur : ' + msg;
+        }
+        els.sendQuoteBtn.disabled = false;
+        els.sendQuoteBtn.textContent = 'Renvoyer la demande';
+      }
     }
 
     function fillFromCalc() {
