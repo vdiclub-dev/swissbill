@@ -318,26 +318,7 @@
                 <!-- SERVICE -->
                 <div class="form-section"><i class="fas fa-bolt" style="color:var(--orange)"></i> TYPE DE SERVICE</div>
                 <div class="service-grid" id="serviceGrid">
-                    <div class="svc-btn" data-svc="eco" onclick="selectService('eco')">
-                        <div class="svc-icon">🐢</div><div class="svc-name">ECO</div><div class="svc-delay">+24h</div>
-                        <div class="svc-price" id="priceEco">0 CHF</div>
-                    </div>
-                    <div class="svc-btn selected" data-svc="normal" onclick="selectService('normal')">
-                        <div class="svc-icon">📦</div><div class="svc-name">NORMAL</div><div class="svc-delay">+12h</div>
-                        <div class="svc-price" id="priceNormal">0 CHF</div>
-                    </div>
-                    <div class="svc-btn" data-svc="express" onclick="selectService('express')">
-                        <div class="svc-icon">⚡</div><div class="svc-name">EXPRESS</div><div class="svc-delay">+6h</div>
-                        <div class="svc-price" id="priceExpress">+5 CHF</div>
-                    </div>
-                    <div class="svc-btn" data-svc="urgent" onclick="selectService('urgent')">
-                        <div class="svc-icon">🔥</div><div class="svc-name">URGENT</div><div class="svc-delay">Immédiat</div>
-                        <div class="svc-price" id="priceUrgent">+10 CHF</div>
-                    </div>
-                    <div class="svc-btn" data-svc="forfait" onclick="selectService('forfait')" id="svcBtnForfait" style="display:none;">
-                        <div class="svc-icon">💰</div><div class="svc-name">FORFAIT</div><div class="svc-delay">Prix fixe</div>
-                        <div class="svc-price" id="priceForfait">— CHF</div>
-                    </div>
+                    <div class="svc-btn selected" data-svc="__loading__"><div class="svc-icon">⏳</div><div class="svc-name">Chargement</div></div>
                 </div>
 
                 <div class="toggle-row" onclick="toggleNuit()">
@@ -619,93 +600,68 @@
         </div>`).join('');
     }
 
-    // Mapping service button → ref patterns in produits_tarif
-    const SVC_REFS = {
-        eco:     ['ECO','ECO48','ECONO'],
-        normal:  ['STD','NOR','NORM','STANDARD','J1','24H'],
-        express: ['EXP','EXPRESS','RAP'],
-        urgent:  ['URG','URGENT','IMM'],
-        forfait: ['FOR','FORFAIT','FRF','FIX']
-    };
+    const SVC_ICON_MAP = [
+        {refs:['ECO','ECONO'],    icon:'🐢'},
+        {refs:['FOR','FORFAIT','FRF','FIX'], icon:'💰'},
+        {refs:['EXP','RAP'],      icon:'⚡'},
+        {refs:['URG','IMM'],      icon:'🔥'},
+        {refs:['PEC','PRISE'],    icon:'🚐'},
+        {refs:['LIV','LIVR'],     icon:'📬'},
+    ];
 
-    function findProduitByService(service, poids){
-        poids = poids||1;
-        const refs = SVC_REFS[service]||[];
-        // Pool: only products assigned to client if any, else all products
-        const hasAssigned = Object.keys(clientPrixMap).length > 0;
-        const pool = hasAssigned
-            ? clientProduits.filter(p => clientPrixMap[String(p.id)] != null)
-            : clientProduits;
-        const matches = pool.filter(p => {
-            const r = (p.ref||'').toUpperCase();
-            return refs.some(ref => r === ref || r.startsWith(ref));
-        });
-        if(!matches.length) return null;
-        const eligible = matches.filter(p => poids >= Number(p.poids_min||0));
-        const src = eligible.length ? eligible : matches;
-        return src.sort((a,b)=>Number(b.poids_min)-Number(a.poids_min))[0];
+    function getSvcIcon(ref){
+        const r=(ref||'').toUpperCase();
+        for(const m of SVC_ICON_MAP){ if(m.refs.some(x=>r.startsWith(x))) return m.icon; }
+        return '📦';
     }
 
     function getProduitPrice(produit){
         if(!produit) return null;
-        const ov = clientPrixMap[String(produit.id)];
-        return ov != null ? ov : Number(produit.prix);
+        const ov=clientPrixMap[String(produit.id)];
+        return ov!=null?ov:Number(produit.prix);
+    }
+
+    function getAssignedProduits(){
+        const hasAssigned=Object.keys(clientPrixMap).length>0;
+        return hasAssigned
+            ? clientProduits.filter(p=>clientPrixMap[String(p.id)]!=null)
+            : clientProduits;
+    }
+
+    function renderServiceButtons(){
+        const grid=document.getElementById('serviceGrid');
+        if(!grid) return;
+        const pool=getAssignedProduits();
+        if(!pool.length){
+            grid.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px;">Aucun service disponible — contactez Colixo.</div>';
+            return;
+        }
+        grid.style.gridTemplateColumns=`repeat(${Math.min(pool.length,4)},1fr)`;
+        grid.innerHTML=pool.map((p,i)=>{
+            const price=getProduitPrice(p);
+            const icon=getSvcIcon(p.ref);
+            const isFirst=i===0;
+            return `<div class="svc-btn${isFirst?' selected':''}" data-svc="${p.id}" onclick="selectService('${p.id}')">
+                <div class="svc-icon">${icon}</div>
+                <div class="svc-name">${p.nom}</div>
+                <div class="svc-delay">${p.ref||''}</div>
+                <div class="svc-price">${fmt(price)} CHF</div>
+            </div>`;
+        }).join('');
+        // Auto-select first
+        const first=pool[0];
+        if(first) selectedService=String(first.id);
+        updateTotalPrice();
     }
 
     function updateServicePrices(){
-        // Try to show prices from produits_tarif/prix_speciaux
-        if(clientProduits.length){
-            const ecoP  = findProduitByService('eco');
-            const normP = findProduitByService('normal');
-            const expP  = findProduitByService('express');
-            const urgP  = findProduitByService('urgent');
-            const forP  = findProduitByService('forfait');
-
-            const ecoPrice  = ecoP  ? getProduitPrice(ecoP)  : null;
-            const normPrice = normP ? getProduitPrice(normP) : null;
-            const expPrice  = expP  ? getProduitPrice(expP)  : null;
-            const urgPrice  = urgP  ? getProduitPrice(urgP)  : null;
-            const forPrice  = forP  ? getProduitPrice(forP)  : null;
-
-            document.getElementById('priceEco').innerHTML    = ecoPrice  != null ? fmt(ecoPrice)+' CHF'  : (normPrice!=null ? fmt(normPrice)+' CHF' : '—');
-            document.getElementById('priceNormal').innerHTML = normPrice != null ? fmt(normPrice)+' CHF' : (ecoPrice!=null  ? fmt(ecoPrice)+' CHF'  : '—');
-            document.getElementById('priceExpress').innerHTML = expPrice!=null ? fmt(expPrice)+' CHF' : '+'+fmt(clientTarif?.suppl_express||5)+' CHF';
-            document.getElementById('priceUrgent').innerHTML  = urgPrice!=null ? fmt(urgPrice)+' CHF' : '+'+fmt(clientTarif?.suppl_urgent||10)+' CHF';
-            // Forfait button: show only if client has this product assigned
-            const forfaitBtn = document.getElementById('svcBtnForfait');
-            if(forfaitBtn){
-                forfaitBtn.style.display = forPrice!=null ? '' : 'none';
-                if(forPrice!=null) document.getElementById('priceForfait').innerHTML = fmt(forPrice)+' CHF';
-            }
-            return;
-        }
-        // Fallback to clientTarif (old weight-based model)
-        if(!clientTarif) return;
-        if(clientTarif.tarif_type==='forfait'){
-            document.getElementById('priceEco').innerHTML    = fmt(clientTarif.montant_forfait)+' CHF';
-            document.getElementById('priceNormal').innerHTML = fmt(clientTarif.montant_forfait)+' CHF';
-        } else {
-            document.getElementById('priceEco').innerHTML    = fmt(clientTarif.prix_eco||clientTarif.prix_inf_2kg)+' CHF';
-            document.getElementById('priceNormal').innerHTML = fmt(clientTarif.prix_inf_2kg)+' CHF';
-        }
-        document.getElementById('priceExpress').innerHTML = '+'+fmt(clientTarif.suppl_express||5)+' CHF';
-        document.getElementById('priceUrgent').innerHTML  = '+'+fmt(clientTarif.suppl_urgent||10)+' CHF';
+        renderServiceButtons();
     }
 
-    function getPrixParColis(poids, service){
-        // New model: look up product matching service + poids
-        if(clientProduits.length){
-            const produit = findProduitByService(service, poids);
-            if(produit) return getProduitPrice(produit);
-            // No match by service ref → find by poids_min only (any assigned product)
-            const hasAssigned = Object.keys(clientPrixMap).length > 0;
-            const pool = hasAssigned
-                ? clientProduits.filter(p => clientPrixMap[String(p.id)] != null)
-                : clientProduits;
-            const byPoids = pool.filter(p=>poids>=Number(p.poids_min||0))
-                .sort((a,b)=>Number(b.poids_min)-Number(a.poids_min));
-            if(byPoids.length) return getProduitPrice(byPoids[0]);
-        }
+    function getPrixParColis(poids, produitId){
+        // Look up by product ID
+        const produit=clientProduits.find(p=>String(p.id)===String(produitId));
+        if(produit) return getProduitPrice(produit);
         // Fallback to clientTarif weight-based
         if(!clientTarif) return 0;
         if(clientTarif.tarif_type==='forfait') return parseFloat(clientTarif.montant_forfait)||0;
@@ -719,14 +675,11 @@
         if(poids<2)       base=parseFloat(clientTarif.prix_inf_2kg)||8.5;
         else if(poids<10) base=parseFloat(clientTarif.prix_inf_10kg)||11.5;
         else              base=parseFloat(clientTarif.prix_inf_30kg)||20.5;
-        if(service==='eco'&&clientTarif.prix_eco) base=parseFloat(clientTarif.prix_eco);
         return base;
     }
 
-    function getServiceSuppl(service){
-        if(!clientTarif) return 0;
-        if(service === 'express') return clientTarif.suppl_express || 5;
-        if(service === 'urgent') return clientTarif.suppl_urgent || 10;
+    function getServiceSuppl(produitId){
+        // Price already included in product price — no additional supplement
         return 0;
     }
 
@@ -746,7 +699,8 @@
         let nuitSuppl = nightDelivery ? (clientTarif?.suppl_nuit_chf || 25) : 0;
         let total = baseTotal + supplTotal + nuitSuppl;
         document.getElementById('totalPrice').textContent = fmt(total) + ' CHF';
-        let serviceName = selectedService === 'eco' ? 'Éco' : selectedService === 'normal' ? 'Normal' : selectedService === 'express' ? 'Express' : 'Urgent';
+        const selProduit = clientProduits.find(p=>String(p.id)===String(selectedService));
+        let serviceName = selProduit ? selProduit.nom : selectedService;
         document.getElementById('priceDetail').innerHTML = `${serviceName}: Base ${fmt(baseTotal)} CHF | Suppl: +${fmt(supplTotal)} CHF${nightDelivery ? ' | Nuit: +'+fmt(nuitSuppl)+' CHF' : ''}`;
         return total;
     }
@@ -914,8 +868,8 @@
     }
 
     window.selectService = function(svc) {
-        selectedService = svc;
-        document.querySelectorAll('.svc-btn').forEach(b => b.classList.toggle('selected', b.dataset.svc === svc));
+        selectedService = String(svc);
+        document.querySelectorAll('.svc-btn').forEach(b => b.classList.toggle('selected', String(b.dataset.svc) === String(svc)));
         updateTotalPrice();
     };
 
@@ -1140,7 +1094,7 @@
                 destinataire_tel: document.getElementById('destTel').value.trim() || null,
                 weight: poidsTotal,
                 quantity: qtyTotal,
-                service_type: selectedService,
+                service_type: (clientProduits.find(p=>String(p.id)===String(selectedService))?.ref || selectedService),
                 night_delivery: nightDelivery,
                 instructions: document.getElementById('destInstructions').value,
                 price_chf: prixTotal,       // ✅ CORRIGÉ: price_estime → price_chf
