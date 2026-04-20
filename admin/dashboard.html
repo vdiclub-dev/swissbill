@@ -54,6 +54,7 @@
         .user-role{font-size:11px;color:var(--red);font-weight:600;}
         .btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;transition:color 0.2s;}
         .btn-logout:hover{color:var(--red);}
+        .btn-push-hidden{display:none;}
 
         /* MAIN */
         .main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
@@ -269,6 +270,9 @@
         <div class="page-title" id="pageTitle">DASHBOARD</div>
         <div class="topbar-right">
             <a href="transports-dispatch.html?view=inbox" class="btn btn-ghost btn-sm"><i class="fas fa-inbox"></i> Nouveaux portail</a>
+            <button class="btn btn-ghost btn-sm btn-push-hidden" type="button" id="btnPush" onclick="window.activerPush()" title="Activer les notifications">
+                <i class="fas fa-bell"></i> Activer notifications
+            </button>
             <button class="btn btn-ghost btn-sm" type="button" onclick="window.refreshDashboard()" title="Actualiser les données">
                 <i class="fas fa-sync-alt"></i> Actualiser
             </button>
@@ -1213,10 +1217,26 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
         if (sideName) sideName.textContent = name;
         if (sideAvatar) sideAvatar.textContent = initials((prenom || nom || 'A'));
     }
-    // Activer les notifications push
-    if(userId && window.ColixoPush) {
-        window.ColixoPush.subscribePush(userId).catch(()=>{});
-    }
+    // Bouton "Activer notifications" — visible seulement si permission pas encore accordée
+    window._pushUserId = userId;
+    window.activerPush = async function() {
+        const btn = document.getElementById('btnPush');
+        if(!window.ColixoPush || !window._pushUserId) return;
+        await window.ColixoPush.subscribePush(window._pushUserId);
+        if(Notification.permission === 'granted') {
+            if(btn) btn.classList.add('btn-push-hidden');
+            window.ColixoPush.showLocalNotification('🔔 Notifications activées', 'Vous recevrez une alerte à chaque nouvelle commande.');
+        }
+    };
+    (function() {
+        const btn = document.getElementById('btnPush');
+        if(!btn) return;
+        if(Notification.permission === 'granted') {
+            btn.classList.add('btn-push-hidden');
+        } else if('Notification' in window && Notification.permission !== 'denied') {
+            btn.classList.remove('btn-push-hidden');
+        }
+    })();
 
     // Realtime commandes
     db.channel('dashboard').on(
