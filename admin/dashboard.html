@@ -1217,23 +1217,37 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
         if (sideName) sideName.textContent = name;
         if (sideAvatar) sideAvatar.textContent = initials((prenom || nom || 'A'));
     }
-    // Bouton "Activer notifications" — visible seulement si permission pas encore accordée
-    window._pushUserId = userId;
+    // Bouton notifications
     window.activerPush = async function() {
         const btn = document.getElementById('btnPush');
-        if(!window.ColixoPush || !window._pushUserId) return;
-        await window.ColixoPush.subscribePush(window._pushUserId);
-        if(Notification.permission === 'granted') {
-            if(btn) btn.classList.add('btn-push-hidden');
-            window.ColixoPush.showLocalNotification('🔔 Notifications activées', 'Vous recevrez une alerte à chaque nouvelle commande.');
+        if(!('Notification' in window)) { alert('Notifications non supportées par ce navigateur.'); return; }
+        const perm = await Notification.requestPermission();
+        if(perm !== 'granted') { alert('Permission refusée. Autorisez les notifications dans les paramètres du navigateur.'); return; }
+        // Enregistrer le service worker
+        if('serviceWorker' in navigator) {
+            try {
+                const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                await reg.update();
+                await navigator.serviceWorker.ready;
+                await reg.showNotification('🔔 Notifications activées', {
+                    body: 'Vous recevrez une alerte à chaque nouvelle commande.',
+                    icon: '/icon-192.png',
+                    tag: 'push-test'
+                });
+            } catch(e) { console.warn('[Push]', e); }
         }
+        if(btn) btn.classList.add('btn-push-hidden');
     };
     (function() {
         const btn = document.getElementById('btnPush');
         if(!btn) return;
-        if(Notification.permission === 'granted') {
+        if(!('Notification' in window) || Notification.permission === 'denied') {
             btn.classList.add('btn-push-hidden');
-        } else if('Notification' in window && Notification.permission !== 'denied') {
+        } else if(Notification.permission === 'granted') {
+            btn.classList.add('btn-push-hidden');
+            // SW déjà autorisé — on l'enregistre silencieusement
+            if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(()=>{});
+        } else {
             btn.classList.remove('btn-push-hidden');
         }
     })();
@@ -1249,12 +1263,11 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
                 const o = payload.new;
                 const client = o.entreprise_nom || o.client_name || 'Client';
                 const dest   = o.delivery_address ? o.delivery_address.split('\n')[0] : '';
-                if(window.ColixoPush) {
-                    window.ColixoPush.showLocalNotification(
+                if(Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+                    navigator.serviceWorker.ready.then(reg => reg.showNotification(
                         '📦 Nouvelle commande — ' + client,
-                        dest || 'Voir le tableau de bord',
-                        { tag: 'new-order-' + o.id, requireInteraction: true }
-                    );
+                        { body: dest || 'Voir le tableau de bord', icon: '/icon-192.png', tag: 'new-order-' + o.id, requireInteraction: true }
+                    ));
                 }
             } catch(e){}
         }
