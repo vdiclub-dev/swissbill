@@ -13,7 +13,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
-    
+    <script data-cfasync="false" src="../push-manager.js?v=20260420"></script>
+
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -1212,10 +1213,34 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
         if (sideName) sideName.textContent = name;
         if (sideAvatar) sideAvatar.textContent = initials((prenom || nom || 'A'));
     }
+    // Activer les notifications push
+    if(userId && window.ColixoPush) {
+        window.ColixoPush.subscribePush(userId).catch(()=>{});
+    }
+
     // Realtime commandes
     db.channel('dashboard').on(
         'postgres_changes',
-        {event:'*',schema:'public',table:'transport_orders_simple'},
+        {event:'INSERT',schema:'public',table:'transport_orders_simple'},
+        async (payload)=> {
+            try{
+                await Promise.all([loadTransports(), loadCommandes()]);
+                if(document.getElementById('sec-transports')?.classList.contains('active')) renderTransports();
+                const o = payload.new;
+                const client = o.entreprise_nom || o.client_name || 'Client';
+                const dest   = o.delivery_address ? o.delivery_address.split('\n')[0] : '';
+                if(window.ColixoPush) {
+                    window.ColixoPush.showLocalNotification(
+                        '📦 Nouvelle commande — ' + client,
+                        dest || 'Voir le tableau de bord',
+                        { tag: 'new-order-' + o.id, requireInteraction: true }
+                    );
+                }
+            } catch(e){}
+        }
+    ).on(
+        'postgres_changes',
+        {event:'UPDATE',schema:'public',table:'transport_orders_simple'},
         async ()=> {
             try{
                 await Promise.all([loadTransports(), loadCommandes()]);
