@@ -310,20 +310,34 @@ L'équipe Colixo"></textarea>
         document.getElementById('statTotal').textContent = currentProspects.length;
     }
     
+    // Appeler l'Edge Function prospect-agent
+    async function envoyerViaAgent(prospect, sujet, template) {
+        const fnUrl = (window.SUPABASE_CONFIG?.url || window.COLIXO_SUPABASE_URL)
+            .replace('/rest/v1','')
+            .replace('https://','https://') + '/functions/v1/prospect-agent';
+        const res = await fetch(fnUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': window.SUPABASE_CONFIG?.anonKey || window.COLIXO_SUPABASE_ANON_KEY || '' },
+            body: JSON.stringify({ prospect, sujet, template })
+        });
+        if(!res.ok) { const e = await res.json(); throw new Error(e.error || 'Erreur envoi'); }
+        return await res.json();
+    }
+
     // Envoyer un email individuel
-    window.envoyerEmailIndividuel = function(index) {
+    window.envoyerEmailIndividuel = async function(index) {
         const p = currentProspects[index];
+        if(!p.email) { toast('❌ Pas d\'email pour ce prospect'); return; }
         const sujet = document.getElementById('emailSujet').value || `Proposition Colixo pour ${p.nom}`;
         const template = document.getElementById('emailTemplate').value;
-        
-        let emailContent = template.replace(/{nom}/g, p.nom).replace(/{ville}/g, p.ville || '');
-        
-        console.log(`📧 Envoi à ${p.email || 'email non trouvé'}:`, emailContent);
-        toast(`Email envoyé à ${p.nom} (simulation)`);
-        
-        // Marquer comme contacté
-        p.email_envoye = true;
-        afficherProspects();
+        if(!template) { toast('❌ Remplissez le template d\'email'); return; }
+        try {
+            toast('⏳ Génération IA en cours…');
+            await envoyerViaAgent({ nom: p.nom, email: p.email, ville: p.ville, secteur: p.secteur, site: p.site }, sujet, template);
+            toast(`✅ Email envoyé à ${p.nom}`);
+            p.email_envoye = true;
+            afficherProspects();
+        } catch(e) { toast('❌ ' + e.message); }
     };
     
     // Lancer la campagne
@@ -377,17 +391,21 @@ L'équipe Colixo"></textarea>
                 }]);
             }
             
-            // Simuler l'envoi des emails
+            // Envoi réel via agent IA
+            let envoyes = 0;
             for(let i = 0; i < currentProspects.length; i++) {
                 const p = currentProspects[i];
-                const progress = ((i+1) / currentProspects.length) * 100;
-                document.getElementById('progressFill').style.width = progress + '%';
-                document.getElementById('progression').innerHTML = `Envoi ${i+1}/${currentProspects.length}`;
-                
-                let emailContent = template.replace(/{nom}/g, p.nom).replace(/{ville}/g, p.ville || '');
-                console.log(`📧 Envoi à ${p.email}:`, emailContent);
-                
-                await new Promise(r => setTimeout(r, 300));
+                document.getElementById('progressFill').style.width = ((i+1)/currentProspects.length*100) + '%';
+                document.getElementById('progression').innerHTML = `⏳ Envoi ${i+1}/${currentProspects.length} — ${p.nom}`;
+                if(!p.email) { continue; }
+                try {
+                    await envoyerViaAgent({ nom: p.nom, email: p.email, ville: p.ville, secteur: p.secteur, site: p.site }, sujet, template);
+                    p.email_envoye = true;
+                    envoyes++;
+                } catch(e) {
+                    console.warn(`[Campagne] Échec ${p.nom}:`, e.message);
+                }
+                await new Promise(r => setTimeout(r, 800)); // pause anti-spam
             }
             
             await db.from('campagnes_prospection').update({
@@ -395,8 +413,8 @@ L'équipe Colixo"></textarea>
                 statut: 'terminee'
             }).eq('id', currentCampagneId);
             
-            document.getElementById('progression').innerHTML = `✓ ${currentProspects.length} emails envoyés !`;
-            toast(`${currentProspects.length} emails envoyés avec succès !`);
+            document.getElementById('progression').innerHTML = `✅ ${envoyes} emails envoyés !`;
+            toast(`✅ ${envoyes} emails envoyés sur ${currentProspects.length} prospects`);
             
         } catch(e) {
             toast('Erreur: ' + e.message);
