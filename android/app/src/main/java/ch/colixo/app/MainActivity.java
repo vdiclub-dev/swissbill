@@ -16,6 +16,9 @@ public class MainActivity extends BridgeActivity {
         settings.setDomStorageEnabled(true);
         settings.setSupportZoom(false);
         settings.setTextZoom(100);
+        // Ajouter ColixoApp au user agent pour que les pages détectent l'app native
+        String ua = settings.getUserAgentString();
+        settings.setUserAgentString(ua + " ColixoApp");
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
         webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
