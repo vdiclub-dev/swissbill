@@ -97,29 +97,46 @@ Maximum 200 mots. Ton direct, professionnel, proposition de valeur claire.`
     emailHtml = baseEmail.replace(/\n/g, "<br>");
   }
 
-  // Wrapper HTML pour l'email
+  // Wrapper HTML premium pour l'email
   const fullHtml = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<style>
-  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f5f5f5;margin:0;padding:0;}
-  .wrap{max-width:600px;margin:30px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);}
-  .header{background:#e8311a;padding:28px 32px;}
-  .header h1{color:#fff;margin:0;font-size:24px;letter-spacing:1px;}
-  .header p{color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:13px;}
-  .body{padding:32px;}
-  .body p{color:#333;line-height:1.7;margin:0 0 16px;}
-  .cta{display:inline-block;background:#e8311a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:700;margin:8px 0 24px;}
-  .footer{background:#f9f9f9;padding:20px 32px;font-size:11px;color:#999;border-top:1px solid #eee;}
-</style></head>
-<body><div class="wrap">
-  <div class="header"><h1>COLIXO</h1><p>Livraison express en Suisse</p></div>
-  <div class="body">
-    ${emailHtml}
-    <a href="https://colixo.ch" class="cta">Découvrir Colixo →</a>
-  </div>
-  <div class="footer">Colixo · Service de livraison express Suisse · <a href="mailto:info@colixo.ch">info@colixo.ch</a><br>
-  Pour ne plus recevoir nos emails, répondez avec "désabonnement".</div>
-</div></body></html>`;
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Colixo</title></head>
+<body style="margin:0;padding:0;background:#0b0b0d;font-family:Inter,Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b0d;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+      <tr><td style="background:linear-gradient(135deg,#1a1a22,#111116);border-radius:20px 20px 0 0;padding:26px 32px;border:1px solid rgba(255,255,255,.07);border-bottom:none;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td><div style="display:inline-block;background:linear-gradient(135deg,#e8311a,#ff6a3d);border-radius:12px;width:42px;height:42px;line-height:42px;text-align:center;font-weight:900;font-size:18px;color:#fff;vertical-align:middle;">C</div>
+            <span style="font-size:20px;font-weight:900;letter-spacing:.05em;color:#fff;vertical-align:middle;margin-left:12px;">COLIXO</span></td>
+          <td align="right"><span style="background:rgba(232,49,26,.15);border:1px solid rgba(232,49,26,.3);border-radius:999px;padding:7px 14px;font-size:12px;color:#ffb8a8;">🚀 Livraison express</span></td>
+        </tr></table>
+      </td></tr>
+
+      <tr><td style="height:4px;background:linear-gradient(90deg,#e8311a,#ff6a3d);"></td></tr>
+
+      <tr><td style="background:linear-gradient(180deg,#141418,#1b1b21);padding:32px 32px 24px;border:1px solid rgba(255,255,255,.07);border-top:none;border-bottom:none;">
+        <div style="color:#e8e8f0;font-size:15px;line-height:1.75;">${emailHtml}</div>
+        <table cellpadding="0" cellspacing="0" style="margin-top:24px;">
+          <tr><td style="background:linear-gradient(135deg,#e8311a,#ff6a3d);border-radius:12px;box-shadow:0 10px 28px rgba(232,49,26,.35);">
+            <a href="https://colixo.ch" style="display:inline-block;color:#fff;text-decoration:none;padding:14px 28px;font-weight:800;font-size:15px;letter-spacing:.02em;">Découvrir Colixo →</a>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#0f0f14;border-radius:0 0 20px 20px;padding:20px 32px;border:1px solid rgba(255,255,255,.07);border-top:1px solid rgba(255,255,255,.05);">
+        <p style="margin:0;font-size:12px;color:#5a5a6e;line-height:1.6;">
+          Colixo · Impasse des Griottes 3, 1462 Yvonand · Suisse<br>
+          <a href="mailto:info@colixo.ch" style="color:#8a8a9e;text-decoration:none;">info@colixo.ch</a> ·
+          <a href="https://colixo.ch" style="color:#8a8a9e;text-decoration:none;">colixo.ch</a><br>
+          <span style="font-size:11px;color:#3a3a4e;">Pour ne plus recevoir nos e-mails, répondez avec "désabonnement".</span>
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
 
   // 2. Envoyer via Resend
   const sendRes = await fetch("https://api.resend.com/emails", {
