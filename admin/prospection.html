@@ -649,33 +649,10 @@
         showLoad(true);
         
         try {
-            // Créer la campagne
-            const { data: campagne, error } = await db.from('campagnes_prospection').insert([{
-                nom: nomCampagne,
-                criteres: {
-                    secteur: document.getElementById('secteur').value,
-                    region: document.getElementById('region').value
-                },
-                statut: 'en_cours',
-                email_subject: sujet,
-                email_template: template,
-                total_prospects: selected.length
-            }]).select().single();
+            const secteur = document.getElementById('secteur').value;
+            const region  = document.getElementById('region').value;
 
-            if(error) throw error;
-            currentCampagneId = campagne.id;
-
-            for(const p of selected) {
-                await db.from('prospects').insert([{
-                    campagne_id: currentCampagneId,
-                    entreprise_nom: p.nom, entreprise_site: p.site,
-                    entreprise_email: p.email, entreprise_telephone: p.telephone,
-                    entreprise_adresse: p.adresse, entreprise_npa: p.npa,
-                    entreprise_ville: p.ville, score_potentiel: p.score, statut: 'nouveau'
-                }]);
-            }
-
-            // Envoi réel via agent IA
+            // Envoi + sauvegarde dans mail_prospects
             let envoyes = 0;
             for(let i = 0; i < selected.length; i++) {
                 const p = selected[i];
@@ -683,20 +660,28 @@
                 document.getElementById('progression').textContent = `⏳ Envoi ${i+1}/${selected.length} — ${p.nom}`;
                 if(!p.email) continue;
                 try {
-                    await envoyerViaAgent({ nom: p.nom, email: p.email, ville: p.ville, secteur: p.secteur, site: p.site }, sujet, template);
+                    await envoyerViaAgent({ nom: p.nom, email: p.email, ville: p.ville, secteur: p.secteur||secteur, site: p.site }, sujet, template);
+                    // Sauvegarder dans mail_prospects
+                    await db.from('mail_prospects').upsert([{
+                        full_name: p.nom,
+                        company:   p.nom,
+                        email:     p.email,
+                        brand:     'colixo',
+                        phone:     p.telephone || null,
+                        source:    `campagne:${nomCampagne}`,
+                        quality_score: p.score || 70,
+                        status:    'sent_j0',
+                        notes:     `Secteur: ${secteur} | Ville: ${p.ville||region} | Sujet: ${sujet}`,
+                        last_contact_at: new Date().toISOString()
+                    }], { onConflict: 'brand,email', ignoreDuplicates: false });
                     p.email_envoye = true;
                     envoyes++;
                 } catch(e) { console.warn(`[Campagne] Échec ${p.nom}:`, e.message); }
                 await new Promise(r => setTimeout(r, 800));
             }
-            
-            await db.from('campagnes_prospection').update({
-                emails_envoyes: currentProspects.length,
-                statut: 'terminee'
-            }).eq('id', currentCampagneId);
-            
-            document.getElementById('progression').innerHTML = `✅ ${envoyes} emails envoyés !`;
-            toast(`✅ ${envoyes} emails envoyés sur ${currentProspects.length} prospects`);
+
+            document.getElementById('progression').textContent = `✅ ${envoyes} emails envoyés !`;
+            toast(`✅ ${envoyes} emails envoyés et sauvegardés`);
             
         } catch(e) {
             toast('Erreur: ' + e.message);
@@ -714,12 +699,12 @@
     
     // Charger les stats depuis la base
     async function chargerStats() {
-        const { data: prospects } = await db.from('prospects').select('*');
-        const total = prospects?.length || 0;
-        const contactes = prospects?.filter(p => p.email_envoye).length || 0;
-        const reponses = prospects?.filter(p => p.statut === 'repondu').length || 0;
+        const { data: prospects } = await db.from('mail_prospects').select('status').eq('brand','colixo');
+        const total     = prospects?.length || 0;
+        const contactes = prospects?.filter(p => p.status !== 'new').length || 0;
+        const reponses  = prospects?.filter(p => p.status === 'replied' || p.status === 'won').length || 0;
         const taux = contactes > 0 ? Math.round((reponses / contactes) * 100) : 0;
-        
+
         document.getElementById('statTotal').textContent = total;
         document.getElementById('statContactes').textContent = contactes;
         document.getElementById('statReponses').textContent = reponses;
