@@ -5,7 +5,7 @@
  *   supabase functions deploy prospect-agent --no-verify-jwt
  *
  * Secrets :
- *   ANTHROPIC_API_KEY   = clé API Anthropic (Claude)
+ *   OPENAI_API_KEY      = clé API OpenAI (déjà utilisée dans colixo-ai-pricing)
  *   RESEND_API_KEY      = clé API Resend
  *   NOTIFY_FROM_EMAIL   = expéditeur ex. "Colixo <info@colixo.ch>"
  *
@@ -27,12 +27,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
 
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY")?.trim();
-  const resendKey    = Deno.env.get("RESEND_API_KEY")?.trim();
-  const fromEmail    = (Deno.env.get("NOTIFY_FROM_EMAIL") ?? "Colixo <info@colixo.ch>").trim();
+  const openaiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+  const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
+  const fromEmail = (Deno.env.get("NOTIFY_FROM_EMAIL") ?? "Colixo <info@colixo.ch>").trim();
 
-  if (!anthropicKey || !resendKey) {
-    return new Response(JSON.stringify({ error: "Secrets manquants (ANTHROPIC_API_KEY, RESEND_API_KEY)" }), {
+  if (!openaiKey || !resendKey) {
+    return new Response(JSON.stringify({ error: "Secrets manquants (OPENAI_API_KEY, RESEND_API_KEY)" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
@@ -57,39 +57,43 @@ Deno.serve(async (req) => {
 
   let emailHtml = "";
   try {
-    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${openaiKey}`,
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "gpt-4o-mini",
         max_tokens: 800,
-        messages: [{
-          role: "user",
-          content: `Tu es un commercial de Colixo, service de livraison express en Suisse.
-Rédige un email de prospection professionnel et chaleureux en français pour cette entreprise :
+        messages: [
+          {
+            role: "system",
+            content: "Tu es un commercial de Colixo, service de livraison express en Suisse. Tu rédiges des emails de prospection professionnels et personnalisés en français."
+          },
+          {
+            role: "user",
+            content: `Rédige un email de prospection pour cette entreprise :
 - Nom : ${prospect.nom || "—"}
 - Secteur : ${prospect.secteur || "commerce"}
 - Ville : ${prospect.ville || "Suisse"}
 - Site : ${prospect.site || "—"}
 
-Base-toi sur ce template mais personnalise le texte selon le secteur et la ville :
+Base-toi sur ce template mais personnalise selon le secteur et la ville :
 ---
 ${baseEmail}
 ---
 
-Réponds UNIQUEMENT avec le contenu HTML de l'email (pas de balises html/body, juste le contenu avec des <p> et <strong>).
-Maximum 200 mots. Ton direct, professionnel, avec une proposition de valeur claire.`
-        }]
+Réponds UNIQUEMENT avec le contenu HTML de l'email (balises <p> et <strong> seulement).
+Maximum 200 mots. Ton direct, professionnel, proposition de valeur claire.`
+          }
+        ]
       })
     });
     const aiJson = await aiRes.json();
-    emailHtml = aiJson.content?.[0]?.text || baseEmail;
+    emailHtml = aiJson.choices?.[0]?.message?.content || baseEmail;
   } catch (e) {
-    console.warn("[prospect-agent] Claude error, fallback to template:", e);
+    console.warn("[prospect-agent] OpenAI error, fallback to template:", e);
     emailHtml = baseEmail.replace(/\n/g, "<br>");
   }
 
