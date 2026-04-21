@@ -6,7 +6,11 @@
 const API_BASE = 'https://swissbill.onrender.com/api';
 
 // Mode démo : true = pas besoin de backend, données fictives
-const DEMO_MODE = false;
+// Sera basculé automatiquement à true si le backend ne répond pas
+let DEMO_MODE = false;
+
+// Timeout des appels API (ms)
+const API_TIMEOUT = 6000;
 
 // ── State ─────────────────────────────────────────────────────
 const state = {
@@ -131,58 +135,87 @@ const DEMO_STATS = {
 };
 
 // ── API layer ──────────────────────────────────────────────────
-// En mode démo, retourne les données fictives directement
+async function fetchWithTimeout(url, options = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT);
+  try {
+    const res = await fetch(url, { ...options, signal: ctrl.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') throw new Error('Le serveur ne répond pas (timeout)');
+    throw new Error('Impossible de joindre le serveur');
+  }
+}
+
+async function apiFetch(path, options = {}) {
+  if (DEMO_MODE) return null; // géré par l'appelant
+  try {
+    const res = await fetchWithTimeout(API_BASE + path, options);
+    let json;
+    try { json = await res.json(); } catch { throw new Error('Réponse invalide du serveur'); }
+    if (!json.ok) throw new Error(json.error || (json.errors && json.errors.join(', ')) || 'Erreur serveur');
+    return json.data;
+  } catch (err) {
+    // Si le backend est inaccessible, basculer en mode démo automatiquement
+    if (!DEMO_MODE && (err.message.includes('timeout') || err.message.includes('joindre') || err.message.includes('fetch'))) {
+      DEMO_MODE = true;
+      document.getElementById('demoBanner').style.display = 'block';
+      document.getElementById('demoBanner').innerHTML = '<strong>⚠️ Backend inaccessible</strong> Basculement automatique en mode démo.';
+      toast('Backend inaccessible — mode démo activé', 'warning', 5000);
+      return null;
+    }
+    throw err;
+  }
+}
+
 const api = {
   async get(path) {
     if (DEMO_MODE) return demoGet(path);
-    const res = await fetch(API_BASE + path);
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || json.errors?.join(', ') || 'Erreur serveur');
-    return json.data;
+    const data = await apiFetch(path);
+    if (DEMO_MODE) return demoGet(path); // re-check après éventuel basculement
+    return data;
   },
 
   async post(path, body) {
     if (DEMO_MODE) return demoPost(path, body);
-    const res = await fetch(API_BASE + path, {
+    const data = await apiFetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || json.errors?.join(', ') || 'Erreur serveur');
-    return json.data;
+    if (DEMO_MODE) return demoPost(path, body);
+    return data;
   },
 
   async put(path, body) {
     if (DEMO_MODE) return demoPost(path, body, 'put');
-    const res = await fetch(API_BASE + path, {
+    const data = await apiFetch(path, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || json.errors?.join(', ') || 'Erreur serveur');
-    return json.data;
+    if (DEMO_MODE) return demoPost(path, body);
+    return data;
   },
 
   async patch(path, body) {
     if (DEMO_MODE) return demoPatch(path, body);
-    const res = await fetch(API_BASE + path, {
+    const data = await apiFetch(path, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || json.errors?.join(', ') || 'Erreur serveur');
-    return json.data;
+    if (DEMO_MODE) return demoPatch(path, body);
+    return data;
   },
 
   async delete(path) {
     if (DEMO_MODE) return demoDelete(path);
-    const res = await fetch(API_BASE + path, { method: 'DELETE' });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || 'Erreur serveur');
-    return true;
+    const data = await apiFetch(path, { method: 'DELETE' });
+    if (DEMO_MODE) return demoDelete(path);
+    return data;
   }
 };
 
@@ -1152,15 +1185,32 @@ function eventTypeLabel(t) {
 
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
-  if (DEMO_MODE) {
-    document.getElementById('demoBanner').style.display = 'block';
-  }
-
-  // Gestion des erreurs réseau non capturées
   window.addEventListener('unhandledrejection', e => {
     console.error('Unhandled rejection:', e.reason);
   });
 
+  if (DEMO_MODE) {
+    document.getElementById('demoBanner').style.display = 'block';
+    await navigate('dashboard');
+    return;
+  }
+
+  // Vérifier que le backend répond avant de charger
+  showLoader('Connexion au serveur...');
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(API_BASE.replace('/api', '/health'), { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('health check failed');
+  } catch {
+    DEMO_MODE = true;
+    const banner = document.getElementById('demoBanner');
+    banner.style.display = 'block';
+    banner.innerHTML = '<strong>⚠️ Backend inaccessible</strong> Vérifiez que le serveur Render est démarré. Mode démo activé.';
+    toast('Backend inaccessible — mode démo activé', 'warning', 6000);
+  }
+  hideLoader();
   await navigate('dashboard');
 }
 
