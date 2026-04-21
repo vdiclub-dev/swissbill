@@ -1195,23 +1195,21 @@ async function init() {
     return;
   }
 
-  // Vérifier que le backend répond avant de charger (Render cold start ~30s)
-  showLoader('Connexion au serveur...');
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 35000);
-    const res = await fetch(API_BASE.replace('/api', '/health'), { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error('health check failed');
-  } catch {
-    DEMO_MODE = true;
-    const banner = document.getElementById('demoBanner');
-    banner.style.display = 'block';
-    banner.innerHTML = '<strong>⚠️ Backend inaccessible</strong> Vérifiez que le serveur Render est démarré. Mode démo activé.';
-    toast('Backend inaccessible — mode démo activé', 'warning', 6000);
-  }
-  hideLoader();
+  // Charger immédiatement, vérifier le backend en arrière-plan
   await navigate('dashboard');
+
+  fetch(API_BASE.replace('/api', '/health'), { signal: AbortSignal.timeout(30000) })
+    .then(r => { if (!r.ok) throw new Error(); })
+    .catch(() => {
+      if (!DEMO_MODE) {
+        DEMO_MODE = true;
+        const banner = document.getElementById('demoBanner');
+        banner.style.display = 'block';
+        banner.innerHTML = '<strong>⚠️ Backend inaccessible</strong> Mode démo activé.';
+        toast('Backend inaccessible — mode démo activé', 'warning', 6000);
+        navigate('dashboard');
+      }
+    });
 }
 
 init();
