@@ -1,4 +1,4 @@
-const db = require('../../config/supabase');
+const db = require('../config/supabase');
 
 // Lève une erreur lisible à partir d'une réponse Supabase
 function assertOk(error, context) {

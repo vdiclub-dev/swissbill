@@ -44,8 +44,8 @@ app.use((err, req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     ok: true,
-    supabase: !!require('../config/supabase'),
-    openai:   !!require('../config/openai'),
+    supabase: !!require('./config/supabase'),
+    openai:   !!require('./config/openai'),
     uptime:   Math.round(process.uptime())
   });
 });

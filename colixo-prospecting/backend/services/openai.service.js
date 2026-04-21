@@ -1,4 +1,4 @@
-const openai = require('../../config/openai');
+const openai = require('../config/openai');
 
 const MODEL = 'gpt-4o-mini';
 const MAX_TOKENS = 2000;
