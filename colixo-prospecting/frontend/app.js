@@ -343,6 +343,7 @@ async function navigate(view, id = null) {
       default: document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-title">Page introuvable</div></div>';
     }
   } catch (err) {
+    hideLoader();
     document.getElementById('content').innerHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-title">Erreur de chargement</div><div class="empty-state-desc">${escHtml(err.message)}</div></div>`;
     console.error(err);
   }
