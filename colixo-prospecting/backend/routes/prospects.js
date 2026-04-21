@@ -40,9 +40,10 @@ router.post('/', async (req, res) => {
 
   try {
     const data = await supa.createProspect(req.body);
-    await supa.addEvent(data.id, 'created', `Prospect ${data.entreprise} créé`);
+    supa.addEvent(data.id, 'created', `Prospect ${data.entreprise} créé`).catch(e => console.warn('[addEvent]', e.message));
     res.status(201).json({ ok: true, data });
   } catch (err) {
+    console.error('[POST /prospects]', err.message);
     res.status(err.statusCode || 500).json({ ok: false, error: err.message });
   }
 });
@@ -54,9 +55,10 @@ router.put('/:id', async (req, res) => {
 
   try {
     const data = await supa.updateProspect(req.params.id, req.body);
-    await supa.addEvent(req.params.id, 'updated', 'Fiche mise à jour');
+    supa.addEvent(req.params.id, 'updated', 'Fiche mise à jour').catch(e => console.warn('[addEvent]', e.message));
     res.json({ ok: true, data });
   } catch (err) {
+    console.error('[PUT /prospects]', err.message);
     res.status(err.statusCode || 500).json({ ok: false, error: err.message });
   }
 });
