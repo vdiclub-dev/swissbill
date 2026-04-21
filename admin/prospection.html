@@ -78,6 +78,20 @@
         .modal-footer{padding:16px 24px;border-top:1px solid rgba(255,255,255,0.08);display:flex;gap:12px;justify-content:flex-end;}
         .btn-cancel{padding:10px 20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;cursor:pointer;font-size:14px;}
         .btn-send-confirm{padding:10px 24px;background:#e8311a;border:none;color:#fff;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;}
+        /* Template editor */
+        .tpl-editor-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0;}
+        .tpl-editor-col{display:flex;flex-direction:column;gap:8px;}
+        .tpl-editor-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;color:var(--muted2);}
+        .tpl-vars{display:flex;gap:6px;flex-wrap:wrap;}
+        .tpl-var{background:rgba(232,49,26,0.15);color:#f87171;border:1px solid rgba(232,49,26,0.3);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;font-family:monospace;transition:background .15s;}
+        .tpl-var:hover{background:rgba(232,49,26,0.3);}
+        .tpl-textarea{width:100%;height:320px;background:#111118;border:1px solid var(--border2);color:var(--white);border-radius:8px;padding:14px;font-family:monospace;font-size:13px;line-height:1.6;resize:vertical;}
+        .tpl-textarea:focus{outline:none;border-color:var(--red);}
+        .tpl-preview-frame{height:320px;background:#f3f4f6;border-radius:8px;overflow:hidden;}
+        .tpl-iframe{width:100%;height:100%;border:none;border-radius:6px;}
+        .tpl-preview-hint{font-size:11px;color:var(--muted);font-weight:400;}
+        .tpl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+        .tpl-btn-row{display:flex;gap:12px;margin-top:4px;}
         
         .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
         .stat-card{background:var(--night3);border-radius:12px;padding:20px;text-align:center;}
@@ -132,18 +146,39 @@
                 <div class="field"><label>Région / Ville</label><input type="text" id="region" placeholder="Ex: Lausanne, Genève, Vaud, Suisse"></div>
                 <div class="field"><label>Nombre max de prospects</label><input type="number" id="maxProspects" value="20" min="1" max="100"></div>
             </div>
-            <div class="field"><label>Sujet de l'email</label><input type="text" id="emailSujet" placeholder="Objet de l'email"></div>
-            <div class="field"><label>Template d'email</label>
-                <textarea id="emailTemplate" rows="4" placeholder="Bonjour {nom},
+            <div class="field"><label>Sujet de l'email</label><input type="text" id="emailSujet" placeholder="Ex: Livraison express pour {nom} — découvrez Colixo" oninput="updatePreviewLive()"></div>
 
-Je me permets de vous contacter car nous avons remarqué que votre entreprise pourrait bénéficier de nos services de livraison express...
-
-Cordialement,
-L'équipe Colixo"></textarea>
+            <!-- Éditeur template HTML -->
+            <div class="tpl-editor-wrap">
+                <div class="tpl-editor-col">
+                    <div class="tpl-editor-head">
+                        <span>✏️ Éditeur</span>
+                        <div class="tpl-vars">
+                            <span onclick="insererVar('{nom}')" class="tpl-var">{nom}</span>
+                            <span onclick="insererVar('{secteur}')" class="tpl-var">{secteur}</span>
+                            <span onclick="insererVar('{ville}')" class="tpl-var">{ville}</span>
+                            <span onclick="insererVar('{site}')" class="tpl-var">{site}</span>
+                        </div>
+                    </div>
+                    <textarea id="emailTemplate" class="tpl-textarea" title="Template HTML de l'email" placeholder="Saisissez le contenu de l'email..." oninput="updatePreviewLive()" spellcheck="false"></textarea>
+                </div>
+                <div class="tpl-editor-col">
+                    <div class="tpl-editor-head"><span>👁️ Aperçu</span><span class="tpl-preview-hint">avec données test</span></div>
+                    <div class="tpl-preview-frame">
+                        <iframe id="previewIframe" title="Aperçu de l'email" frameborder="0" class="tpl-iframe"></iframe>
+                    </div>
+                </div>
             </div>
-            <div style="margin-top:16px;">
-                <button class="btn btn-red" onclick="rechercherProspects()"><i class="fas fa-search"></i> Rechercher des prospects (Web)</button>
-                <button class="btn btn-green" onclick="lancerCampagne()" style="margin-left:12px;"><i class="fas fa-paper-plane"></i> Lancer la campagne</button>
+
+            <div class="tpl-actions">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="chargerTemplate('default')"><i class="fas fa-magic"></i> Template par défaut</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="chargerTemplate('court')"><i class="fas fa-align-left"></i> Version courte</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="chargerTemplate('promo')"><i class="fas fa-percent"></i> Offre promotionnelle</button>
+            </div>
+
+            <div class="tpl-btn-row">
+                <button type="button" class="btn btn-red" onclick="rechercherProspects()"><i class="fas fa-search"></i> Rechercher des prospects</button>
+                <button type="button" class="btn btn-green" onclick="lancerCampagne()"><i class="fas fa-paper-plane"></i> Lancer la campagne</button>
             </div>
         </div>
     </div>
@@ -383,7 +418,92 @@ L'équipe Colixo"></textarea>
         return await res.json();
     }
 
-    // Prévisualisation avant envoi
+    // ========== TEMPLATES ==========
+    const TEMPLATES = {
+        default: {
+            sujet: 'Optimisez vos livraisons — Colixo pour {nom}',
+            body: `<p>Bonjour,</p>
+<p>Je me permets de vous contacter au nom de <strong>Colixo</strong>, notre service de livraison express en Suisse.</p>
+<p>En tant qu'entreprise active dans le secteur <strong>{secteur}</strong> à <strong>{ville}</strong>, nous pensons que nos solutions pourraient vous faire gagner du temps et réduire vos coûts logistiques :</p>
+<ul>
+  <li>🚀 Livraison express J+1 partout en Suisse</li>
+  <li>📦 Suivi en temps réel de chaque colis</li>
+  <li>💼 Tarifs préférentiels pour les entreprises</li>
+  <li>📱 Portail client simple et intuitif</li>
+</ul>
+<p>Seriez-vous disponible pour un appel de 15 minutes cette semaine ?</p>
+<p>Cordialement,<br><strong>L'équipe Colixo</strong></p>`
+        },
+        court: {
+            sujet: 'Livraison express en Suisse — {nom}',
+            body: `<p>Bonjour,</p>
+<p>Je suis <strong>Colixo</strong>, service de livraison express en Suisse spécialisé pour les entreprises comme la vôtre dans le secteur <strong>{secteur}</strong>.</p>
+<p>Livraison J+1, suivi temps réel, portail client dédié.</p>
+<p>Intéressé(e) ? Répondez à cet email ou visitez <a href="https://colixo.ch">colixo.ch</a>.</p>
+<p>Cordialement,<br><strong>Colixo</strong></p>`
+        },
+        promo: {
+            sujet: '🎁 Offre découverte Colixo — {nom}',
+            body: `<p>Bonjour,</p>
+<p>Nous proposons actuellement une <strong>offre découverte exclusive</strong> pour les entreprises de <strong>{ville}</strong> dans le secteur <strong>{secteur}</strong> :</p>
+<p style="background:#fff3cd;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:4px;">
+  🎁 <strong>5 premières livraisons offertes</strong> sans engagement
+</p>
+<p>Colixo c'est la livraison express J+1 partout en Suisse, avec suivi en temps réel et portail client inclus.</p>
+<p>Profitez de cette offre en répondant à cet email ou en visitant <a href="https://colixo.ch">colixo.ch</a>.</p>
+<p>Cordialement,<br><strong>L'équipe Colixo</strong></p>`
+        }
+    };
+
+    function buildEmailHtml(bodyContent, nom, secteur, ville) {
+        const b = (bodyContent||'').replace(/\{nom\}/g, nom||'').replace(/\{secteur\}/g, secteur||'').replace(/\{ville\}/g, ville||'').replace(/\{site\}/g, '');
+        return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;background:#f5f5f5;}
+.wrap{max-width:580px;margin:20px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);}
+.hdr{background:#e8311a;padding:22px 28px;}
+.hdr h1{color:#fff;margin:0;font-size:22px;letter-spacing:1px;}
+.hdr p{color:rgba(255,255,255,0.8);margin:3px 0 0;font-size:12px;}
+.bdy{padding:28px;color:#333;font-size:14px;line-height:1.7;}
+.bdy p{margin:0 0 14px;}
+.bdy ul{margin:0 0 14px;padding-left:20px;}
+.bdy a{color:#e8311a;}
+.cta{display:inline-block;background:#e8311a;color:#fff;text-decoration:none;padding:11px 24px;border-radius:6px;font-weight:700;margin:6px 0 20px;}
+.ftr{background:#f9f9f9;padding:16px 28px;font-size:11px;color:#999;border-top:1px solid #eee;}
+</style></head><body><div class="wrap">
+<div class="hdr"><h1>COLIXO</h1><p>Livraison express en Suisse</p></div>
+<div class="bdy">${b}<a href="https://colixo.ch" class="cta">Découvrir Colixo →</a></div>
+<div class="ftr">Colixo · <a href="mailto:info@colixo.ch" style="color:#999;">info@colixo.ch</a> · colixo.ch</div>
+</div></body></html>`;
+    }
+
+    window.chargerTemplate = function(nom) {
+        const t = TEMPLATES[nom]; if(!t) return;
+        document.getElementById('emailTemplate').value = t.body;
+        document.getElementById('emailSujet').value = t.sujet;
+        updatePreviewLive();
+    };
+
+    window.insererVar = function(variable) {
+        const ta = document.getElementById('emailTemplate');
+        const start = ta.selectionStart, end = ta.selectionEnd;
+        ta.value = ta.value.slice(0, start) + variable + ta.value.slice(end);
+        ta.selectionStart = ta.selectionEnd = start + variable.length;
+        ta.focus();
+        updatePreviewLive();
+    };
+
+    window.updatePreviewLive = function() {
+        const body = document.getElementById('emailTemplate').value;
+        const iframe = document.getElementById('previewIframe');
+        if(!iframe) return;
+        const html = buildEmailHtml(body, 'Dupont SA', document.getElementById('secteur')?.value || 'restauration', document.getElementById('region')?.value || 'Lausanne');
+        iframe.srcdoc = html;
+    };
+
+    // Charger le template par défaut au démarrage
+    setTimeout(() => { chargerTemplate('default'); }, 100);
+
+    // ========== PRÉVISUALISATION AVANT ENVOI ==========
     let _previewIndex = -1;
     window.envoyerEmailIndividuel = function(index) {
         const p = currentProspects[index];
@@ -396,8 +516,13 @@ L'équipe Colixo"></textarea>
         document.getElementById('previewNom').textContent = p.nom;
         document.getElementById('previewEmail').textContent = p.email;
         document.getElementById('previewSujet').textContent = sujet.replace(/\{nom\}/g, p.nom).replace(/\{ville\}/g, p.ville||'');
-        const apercu = template.replace(/\{nom\}/g, p.nom).replace(/\{ville\}/g, p.ville||'').replace(/\{secteur\}/g, p.secteur||'').replace(/\n/g,'<br>');
-        document.getElementById('previewBody').innerHTML = apercu + '<p style="color:#888;font-size:12px;margin-top:16px;border-top:1px solid #eee;padding-top:12px;">✨ L\'IA personnalisera ce texte selon le secteur et la ville au moment de l\'envoi.</p>';
+        const previewHtml = buildEmailHtml(template, p.nom, p.secteur, p.ville);
+        document.getElementById('previewBody').innerHTML = '';
+        const iframe = document.createElement('iframe');
+        iframe.title = 'Aperçu email';
+        iframe.style.cssText = 'width:100%;height:420px;border:none;border-radius:6px;';
+        iframe.srcdoc = previewHtml;
+        document.getElementById('previewBody').appendChild(iframe);
         document.getElementById('modalPreview').classList.add('open');
     };
 
