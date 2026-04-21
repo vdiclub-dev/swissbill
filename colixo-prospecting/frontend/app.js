@@ -3,10 +3,10 @@
    ============================================================ */
 
 // ── Configuration ─────────────────────────────────────────────
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'https://swissbill.onrender.com/api';
 
 // Mode démo : true = pas besoin de backend, données fictives
-const DEMO_MODE = true;
+const DEMO_MODE = false;
 
 // ── State ─────────────────────────────────────────────────────
 const state = {
