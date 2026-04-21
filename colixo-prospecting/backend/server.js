@@ -10,6 +10,8 @@ const app = express();
 // ── CORS ─────────────────────────────────────────────────────
 const allowedOrigins = [
   process.env.FRONTEND_ORIGIN,
+  'https://www.colixo.ch',
+  'https://colixo.ch',
   'http://localhost:5500',
   'http://127.0.0.1:5500',
   'http://localhost:3000',
