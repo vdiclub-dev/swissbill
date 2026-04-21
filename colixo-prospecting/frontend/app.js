@@ -1195,11 +1195,11 @@ async function init() {
     return;
   }
 
-  // Vérifier que le backend répond avant de charger
+  // Vérifier que le backend répond avant de charger (Render cold start ~30s)
   showLoader('Connexion au serveur...');
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const timer = setTimeout(() => ctrl.abort(), 35000);
     const res = await fetch(API_BASE.replace('/api', '/health'), { signal: ctrl.signal });
     clearTimeout(timer);
     if (!res.ok) throw new Error('health check failed');
