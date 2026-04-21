@@ -1,3 +1,5 @@
+// Charge .env si présent (local), ignoré sur Render (variables injectées directement)
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 const express = require('express');
@@ -108,8 +110,9 @@ app.use((err, req, res, _next) => {
 
 // ── Démarrage ─────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3001', 10);
-app.listen(PORT, () => {
-  console.log(`\n🚀 Colixo Prospecting API — http://localhost:${PORT}`);
+const HOST = '0.0.0.0'; // requis sur Render
+app.listen(PORT, HOST, () => {
+  console.log(`\n🚀 Colixo Prospecting API — http://${HOST}:${PORT}`);
   console.log(`   Supabase : ${process.env.SUPABASE_URL ? '✅ configuré' : '⚠️  non configuré'}`);
   console.log(`   OpenAI   : ${process.env.OPENAI_API_KEY ? '✅ configuré' : '⚠️  non configuré'}`);
   console.log('');
