@@ -214,40 +214,65 @@ L'équipe Colixo"></textarea>
         }
     }
     
-    // Recherche avec l'API Qwant Maps (gratuit, pas besoin de clé)
+    // Mapping secteur → tags OpenStreetMap
+    const SECTEUR_TAGS = {
+        'e-commerce':  [['shop','yes'],['office','company']],
+        'transport':   [['office','logistics'],['office','transport'],['amenity','courier']],
+        'commerce':    [['shop','supermarket'],['shop','convenience'],['shop','general']],
+        'restaurant':  [['amenity','restaurant'],['amenity','cafe'],['amenity','fast_food']],
+        'industrie':   [['industrial','yes'],['office','industrial']],
+        '':            [['office','company'],['office','commercial'],['shop','yes']]
+    };
+
+    // Recherche via OpenStreetMap Overpass API (gratuit)
     async function rechercherAvecQwant(secteur, region, maxProspects) {
         try {
-            // Construction de la requête
-            let query = secteur ? `${secteur} ${region}` : region;
-            const url = `https://api.qwant.com/v3/maps/places?q=${encodeURIComponent(query)}&limit=${maxProspects}&lang=fr`;
-            
-            const response = await fetch(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; ColixoBot/1.0)'
-                }
+            const tags = SECTEUR_TAGS[secteur] || SECTEUR_TAGS[''];
+            // Construire le filtre de tags
+            const tagFilters = tags.map(([k,v]) =>
+                v === 'yes' ? `["${k}"]` : `["${k}"="${v}"]`
+            ).join('');
+
+            // Requête Overpass : cherche dans une zone nommée
+            const overpassQuery = `
+[out:json][timeout:25];
+area[name~"${region}",i]->.zone;
+(
+  node${tagFilters}(area.zone);
+  way${tagFilters}(area.zone);
+);
+out body ${maxProspects};`;
+
+            const res = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: 'data=' + encodeURIComponent(overpassQuery)
             });
-            
-            if(!response.ok) throw new Error('Erreur API Qwant');
-            
-            const data = await response.json();
-            
-            if(!data.data || !data.data.items) return [];
-            
-            // Transformer les résultats
-            return data.data.items.map(item => ({
-                nom: item.name || item.title || 'Entreprise',
-                adresse: item.address?.street || item.address?.freeform || '',
-                npa: item.address?.postcode || '',
-                ville: item.address?.city || item.address?.locality || '',
-                telephone: item.phone || '',
-                site: item.url || '',
-                secteur: secteur || '',
-                score: Math.floor(Math.random() * 100) + 20,
-                email: trouverEmail(item.name, item.url) // Tentative de trouver l'email
-            }));
-            
+            if(!res.ok) throw new Error('Overpass API error');
+            const data = await res.json();
+            const elements = data.elements || [];
+            if(!elements.length) return [];
+
+            return elements.slice(0, maxProspects).map(el => {
+                const t = el.tags || {};
+                const nom = t.name || t['name:fr'] || 'Entreprise';
+                const site = t.website || t['contact:website'] || '';
+                const tel  = t.phone || t['contact:phone'] || '';
+                const rue  = t['addr:street'] ? (t['addr:street'] + (t['addr:housenumber'] ? ' ' + t['addr:housenumber'] : '')) : '';
+                return {
+                    nom,
+                    adresse: rue,
+                    npa:      t['addr:postcode'] || '',
+                    ville:    t['addr:city'] || region,
+                    telephone: tel,
+                    site,
+                    secteur: secteur || '',
+                    score: Math.floor(Math.random() * 40) + 50,
+                    email: trouverEmail(nom, site)
+                };
+            }).filter(p => p.nom !== 'Entreprise' || p.adresse);
+
         } catch(e) {
-            console.warn('Qwant API error:', e);
+            console.warn('Overpass API error:', e);
             return [];
         }
     }
