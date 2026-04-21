@@ -92,6 +92,14 @@
         .tpl-preview-hint{font-size:11px;color:var(--muted);font-weight:400;}
         .tpl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
         .tpl-btn-row{display:flex;gap:12px;margin-top:4px;}
+        .card-header-right{display:flex;align-items:center;gap:12px;}
+        .selection-count{font-size:12px;color:var(--muted);}
+        .prospect-progression{font-size:12px;color:var(--muted);}
+        .tbl-check{width:36px;}
+        .confirm-stats{margin-top:8px;}
+        .confirm-email-ok{color:var(--green);}
+        .confirm-warn{margin-top:8px;padding:10px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;font-size:12px;color:#f59e0b;display:none;}
+        .modal-sm{max-width:460px;}
         
         .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
         .stat-card{background:var(--night3);border-radius:12px;padding:20px;text-align:center;}
@@ -187,13 +195,16 @@
     <div class="card">
         <div class="card-header">
             <div class="card-title"><i class="fas fa-list"></i> Prospects trouvés</div>
-            <div id="progression" style="font-size:12px;color:var(--muted);"></div>
+            <div class="card-header-right">
+                <span id="selectionCount" class="selection-count"></span>
+                <div id="progression" class="prospect-progression"></div>
+            </div>
         </div>
         <div class="card-body" style="padding:0;">
             <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
             <table class="tbl">
-                <thead>汽<th>Entreprise</th><th>Adresse</th><th>Téléphone</th><th>Score</th><th>Actions</th> </thead>
-                <tbody id="prospectsList">汽<td colspan="5" style="text-align:center;padding:40px;">Cliquez sur "Rechercher des prospects"</td> </tbody>
+                <thead><tr><th><input type="checkbox" id="checkAll" title="Tout sélectionner" onchange="toggleAll(this.checked)"></th><th>Entreprise</th><th>Adresse</th><th>Téléphone</th><th>Score</th><th>Actions</th></tr></thead>
+                <tbody id="prospectsList"><tr><td colspan="6" style="text-align:center;padding:40px;">Cliquez sur "Rechercher des prospects"</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -201,6 +212,28 @@
 
 <div class="toast" id="toast"></div>
 <div class="loader" id="loader"><div class="spin"></div></div>
+
+<!-- MODAL CONFIRMATION CAMPAGNE -->
+<div id="modalConfirm" class="modal-overlay">
+    <div class="modal-box modal-sm">
+        <div class="modal-head">🚀 Lancer la campagne <button type="button" class="modal-close-btn" onclick="fermerConfirm()">✕</button></div>
+        <div class="modal-meta">
+            <div class="modal-meta-lbl">Campagne</div><div id="confirmNom"></div>
+            <div class="modal-meta-lbl">Sujet</div><div id="confirmSujet"></div>
+            <div class="modal-meta-lbl">Prospects sélectionnés</div>
+            <div class="confirm-stats"><strong id="confirmTotal"></strong> prospects
+                — <span class="confirm-email-ok"><strong id="confirmAvecEmail"></strong> avec email</span>
+            </div>
+            <div id="confirmSansEmailWrap" class="confirm-warn">
+                ⚠️ <strong id="confirmSansEmail"></strong> prospect(s) sans email seront ignorés.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-cancel" onclick="fermerConfirm()">Annuler</button>
+            <button type="button" class="btn-send-confirm" onclick="confirmerCampagne()"><i class="fas fa-paper-plane"></i> Envoyer les emails</button>
+        </div>
+    </div>
+</div>
 
 <!-- MODAL PRÉVISUALISATION EMAIL -->
 <div id="modalPreview" class="modal-overlay">
@@ -390,25 +423,50 @@
         }));
     }
     
+    function getSelected() {
+        return currentProspects.filter((p, i) => {
+            const cb = document.getElementById('chk-' + i);
+            return cb && cb.checked;
+        });
+    }
+
+    function updateSelectionCount() {
+        const n = getSelected().length;
+        const el = document.getElementById('selectionCount');
+        if(el) el.textContent = n > 0 ? `${n} sélectionné${n>1?'s':''}` : '';
+    }
+
+    window.toggleAll = function(checked) {
+        currentProspects.forEach((p, i) => {
+            const cb = document.getElementById('chk-' + i);
+            if(cb) cb.checked = checked;
+        });
+        updateSelectionCount();
+    };
+
     function afficherProspects() {
         const tbody = document.getElementById('prospectsList');
         if(!currentProspects.length) {
-            tbody.innerHTML = '汽<td colspan="5" style="text-align:center;padding:40px;">Aucun prospect trouvé</td> </tbody>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;">Aucun prospect trouvé</td></tr>';
             return;
         }
-        
-        tbody.innerHTML = currentProspects.map((p, i) => `
-            <tr>
-                <td><strong>${p.nom}</strong><br><span style="font-size:11px;color:var(--muted);">${p.site || ''}</span></td>
-                <td style="font-size:12px;">${p.adresse || ''}<br>${p.npa || ''} ${p.ville || ''}</td>
-                <td>${p.telephone || '—'}</td>
-                <td><span style="color:${p.score > 70 ? 'var(--green)' : p.score > 40 ? 'var(--yellow)' : 'var(--muted)'}">${p.score}%</span></td>
-                <td><button class="btn btn-ghost btn-sm" onclick="envoyerEmailIndividuel(${i})"><i class="fas fa-envelope"></i> Envoyer</button></td>
-            </tr>
-        `).join('');
-        
-        // Mettre à jour les stats
+        tbody.innerHTML = currentProspects.map((p, i) => {
+            const scoreColor = p.score > 70 ? 'var(--green)' : p.score > 40 ? 'var(--yellow)' : 'var(--muted)';
+            const sent = p.email_envoye ? '✅ ' : '';
+            return `<tr>
+                <td class="tbl-check"><input type="checkbox" id="chk-${i}" ${p.email_envoye ? 'disabled' : 'checked'} onchange="updateSelectionCount()"></td>
+                <td><strong>${sent}${p.nom}</strong><br><span style="font-size:11px;color:var(--muted);">${p.site||''}</span></td>
+                <td style="font-size:12px;">${p.adresse||''} ${p.npa||''} ${p.ville||''}</td>
+                <td>${p.telephone||'—'}</td>
+                <td style="color:${scoreColor}">${p.score}%</td>
+                <td><button type="button" class="btn btn-ghost btn-sm" ${p.email_envoye?'disabled':''} onclick="envoyerEmailIndividuel(${i})"><i class="fas fa-envelope"></i> Envoyer</button></td>
+            </tr>`;
+        }).join('');
         document.getElementById('statTotal').textContent = currentProspects.length;
+        updateSelectionCount();
+        // Cocher "tout" si tous cochés
+        const allCb = document.getElementById('checkAll');
+        if(allCb) allCb.checked = true;
     }
     
     // Appeler l'Edge Function prospect-agent
@@ -555,16 +613,34 @@
     };
     
     // Lancer la campagne
-    window.lancerCampagne = async function() {
-        if(!currentProspects.length) {
-            toast('Aucun prospect à contacter');
-            return;
-        }
-        
+    window.lancerCampagne = function() {
+        const selected = getSelected();
+        if(!selected.length) { toast('❌ Aucun prospect sélectionné'); return; }
         const nomCampagne = document.getElementById('campagneNom').value;
         const sujet = document.getElementById('emailSujet').value;
         const template = document.getElementById('emailTemplate').value;
-        
+        if(!nomCampagne) { toast('❌ Donnez un nom à la campagne'); return; }
+        if(!sujet || !template) { toast('❌ Remplissez le sujet et le template'); return; }
+
+        const avecEmail = selected.filter(p => p.email).length;
+        const sansEmail = selected.length - avecEmail;
+
+        document.getElementById('confirmNom').textContent = nomCampagne;
+        document.getElementById('confirmTotal').textContent = selected.length;
+        document.getElementById('confirmAvecEmail').textContent = avecEmail;
+        document.getElementById('confirmSansEmail').textContent = sansEmail;
+        document.getElementById('confirmSujet').textContent = sujet;
+        document.getElementById('confirmSansEmailWrap').style.display = sansEmail > 0 ? 'block' : 'none';
+        document.getElementById('modalConfirm').classList.add('open');
+    };
+
+    window.confirmerCampagne = async function() {
+        document.getElementById('modalConfirm').classList.remove('open');
+        const selected = getSelected();
+        const nomCampagne = document.getElementById('campagneNom').value;
+        const sujet = document.getElementById('emailSujet').value;
+        const template = document.getElementById('emailTemplate').value;
+
         if(!nomCampagne) {
             toast('Veuillez donner un nom à la campagne');
             return;
@@ -583,43 +659,35 @@
                 statut: 'en_cours',
                 email_subject: sujet,
                 email_template: template,
-                total_prospects: currentProspects.length
+                total_prospects: selected.length
             }]).select().single();
-            
+
             if(error) throw error;
             currentCampagneId = campagne.id;
-            
-            // Enregistrer les prospects
-            for(const p of currentProspects) {
+
+            for(const p of selected) {
                 await db.from('prospects').insert([{
                     campagne_id: currentCampagneId,
-                    entreprise_nom: p.nom,
-                    entreprise_site: p.site,
-                    entreprise_email: p.email,
-                    entreprise_telephone: p.telephone,
-                    entreprise_adresse: p.adresse,
-                    entreprise_npa: p.npa,
-                    entreprise_ville: p.ville,
-                    score_potentiel: p.score,
-                    statut: 'nouveau'
+                    entreprise_nom: p.nom, entreprise_site: p.site,
+                    entreprise_email: p.email, entreprise_telephone: p.telephone,
+                    entreprise_adresse: p.adresse, entreprise_npa: p.npa,
+                    entreprise_ville: p.ville, score_potentiel: p.score, statut: 'nouveau'
                 }]);
             }
-            
+
             // Envoi réel via agent IA
             let envoyes = 0;
-            for(let i = 0; i < currentProspects.length; i++) {
-                const p = currentProspects[i];
-                document.getElementById('progressFill').style.width = ((i+1)/currentProspects.length*100) + '%';
-                document.getElementById('progression').innerHTML = `⏳ Envoi ${i+1}/${currentProspects.length} — ${p.nom}`;
-                if(!p.email) { continue; }
+            for(let i = 0; i < selected.length; i++) {
+                const p = selected[i];
+                document.getElementById('progressFill').style.width = ((i+1)/selected.length*100) + '%';
+                document.getElementById('progression').textContent = `⏳ Envoi ${i+1}/${selected.length} — ${p.nom}`;
+                if(!p.email) continue;
                 try {
                     await envoyerViaAgent({ nom: p.nom, email: p.email, ville: p.ville, secteur: p.secteur, site: p.site }, sujet, template);
                     p.email_envoye = true;
                     envoyes++;
-                } catch(e) {
-                    console.warn(`[Campagne] Échec ${p.nom}:`, e.message);
-                }
-                await new Promise(r => setTimeout(r, 800)); // pause anti-spam
+                } catch(e) { console.warn(`[Campagne] Échec ${p.nom}:`, e.message); }
+                await new Promise(r => setTimeout(r, 800));
             }
             
             await db.from('campagnes_prospection').update({
@@ -634,9 +702,14 @@
             toast('Erreur: ' + e.message);
         } finally {
             showLoad(false);
+            afficherProspects();
         }
     };
-    
+
+    window.fermerConfirm = function() {
+        document.getElementById('modalConfirm').classList.remove('open');
+    };
+
     window.rechercherProspects = rechercherProspects;
     
     // Charger les stats depuis la base
