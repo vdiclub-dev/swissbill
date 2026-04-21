@@ -228,23 +228,18 @@ L'équipe Colixo"></textarea>
     async function rechercherAvecQwant(secteur, region, maxProspects) {
         try {
             const tags = SECTEUR_TAGS[secteur] || SECTEUR_TAGS[''];
-            // Construire le filtre de tags
             const tagFilters = tags.map(([k,v]) =>
                 v === 'yes' ? `["${k}"]` : `["${k}"="${v}"]`
             ).join('');
 
-            // Requête Overpass : cherche dans une zone nommée
-            const overpassQuery = `
-[out:json][timeout:25];
-area[name~"${region}",i]->.zone;
-(
-  node${tagFilters}(area.zone);
-  way${tagFilters}(area.zone);
-);
-out body ${maxProspects};`;
+            // Capitalize first letter pour matcher OSM (ex: "lausanne" → "Lausanne")
+            const regionOsm = region.charAt(0).toUpperCase() + region.slice(1).toLowerCase();
+
+            const overpassQuery = `[out:json][timeout:25];area[name="${regionOsm}"]->.zone;(node${tagFilters}(area.zone);way${tagFilters}(area.zone););out body ${maxProspects};`;
 
             const res = await fetch('https://overpass-api.de/api/interpreter', {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: 'data=' + encodeURIComponent(overpassQuery)
             });
             if(!res.ok) throw new Error('Overpass API error');
