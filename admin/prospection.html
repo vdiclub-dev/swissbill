@@ -100,6 +100,16 @@
         .confirm-email-ok{color:var(--green);}
         .confirm-warn{margin-top:8px;padding:10px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;font-size:12px;color:#f59e0b;display:none;}
         .modal-sm{max-width:460px;}
+        .email-cell{display:flex;align-items:center;gap:6px;min-width:180px;}
+        .email-text{font-size:12px;color:var(--muted2);}
+        .email-text.missing{color:rgba(245,158,11,0.8);font-style:italic;}
+        .btn-edit-email{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:11px;transition:color .15s;}
+        .btn-edit-email:hover{color:var(--white);}
+        .email-edit-wrap{display:flex;align-items:center;gap:4px;}
+        .email-edit-input{background:#111118;border:1px solid var(--border2);color:var(--white);border-radius:6px;padding:4px 8px;font-size:12px;width:180px;}
+        .email-edit-input:focus{outline:none;border-color:var(--red);}
+        .btn-save-email{background:var(--green);border:none;color:var(--night);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;}
+        .btn-cancel-email{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;}
         
         .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
         .stat-card{background:var(--night3);border-radius:12px;padding:20px;text-align:center;}
@@ -203,8 +213,8 @@
         <div class="card-body" style="padding:0;">
             <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
             <table class="tbl">
-                <thead><tr><th><input type="checkbox" id="checkAll" title="Tout sélectionner" onchange="toggleAll(this.checked)"></th><th>Entreprise</th><th>Adresse</th><th>Téléphone</th><th>Score</th><th>Actions</th></tr></thead>
-                <tbody id="prospectsList"><tr><td colspan="6" style="text-align:center;padding:40px;">Cliquez sur "Rechercher des prospects"</td></tr></tbody>
+                <thead><tr><th><input type="checkbox" id="checkAll" title="Tout sélectionner" onchange="toggleAll(this.checked)"></th><th>Entreprise</th><th>Adresse</th><th>Téléphone</th><th>Email</th><th>Score</th><th>Actions</th></tr></thead>
+                <tbody id="prospectsList"><tr><td colspan="7" style="text-align:center;padding:40px;">Cliquez sur "Rechercher des prospects"</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -389,15 +399,10 @@
     // Tentative de trouver un email à partir du nom/site
     function trouverEmail(nom, site) {
         if(site && site.includes('.')) {
-            // Si le site est présent, essayer contact@, info@, etc.
-            const domain = site.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-            if(domain) {
-                return `contact@${domain}`;
-            }
+            const domain = site.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
+            if(domain && domain.includes('.')) return `contact@${domain}`;
         }
-        // Sinon, générer un email plausible
-        const slug = nom.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return `${slug}@gmail.com`;
+        return ''; // Pas d'email inventé
     }
     
     // Recherche avec Google Places (si vous avez une clé API)
@@ -444,20 +449,36 @@
         updateSelectionCount();
     };
 
+    function emailCellHtml(p, i) {
+        if(p._editingEmail) {
+            return `<td><div class="email-edit-wrap">
+                <input type="email" id="email-input-${i}" class="email-edit-input" value="${p.email||''}" placeholder="email@exemple.ch">
+                <button type="button" class="btn-save-email" onclick="saveEmail(${i})">✓</button>
+                <button type="button" class="btn-cancel-email" onclick="cancelEmail(${i})">✕</button>
+            </div></td>`;
+        }
+        const hasEmail = !!p.email;
+        return `<td><div class="email-cell">
+            <span class="email-text${hasEmail?'':' missing'}">${hasEmail ? p.email : 'Aucun email'}</span>
+            <button type="button" class="btn-edit-email" title="Modifier l'email" onclick="editEmail(${i})"><i class="fas fa-pencil-alt"></i></button>
+        </div></td>`;
+    }
+
     function afficherProspects() {
         const tbody = document.getElementById('prospectsList');
         if(!currentProspects.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;">Aucun prospect trouvé</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;">Aucun prospect trouvé</td></tr>';
             return;
         }
         tbody.innerHTML = currentProspects.map((p, i) => {
             const scoreColor = p.score > 70 ? 'var(--green)' : p.score > 40 ? 'var(--yellow)' : 'var(--muted)';
             const sent = p.email_envoye ? '✅ ' : '';
-            return `<tr>
+            return `<tr id="row-${i}">
                 <td class="tbl-check"><input type="checkbox" id="chk-${i}" ${p.email_envoye ? 'disabled' : 'checked'} onchange="updateSelectionCount()"></td>
                 <td><strong>${sent}${p.nom}</strong><br><span style="font-size:11px;color:var(--muted);">${p.site||''}</span></td>
                 <td style="font-size:12px;">${p.adresse||''} ${p.npa||''} ${p.ville||''}</td>
                 <td>${p.telephone||'—'}</td>
+                ${emailCellHtml(p, i)}
                 <td style="color:${scoreColor}">${p.score}%</td>
                 <td><button type="button" class="btn btn-ghost btn-sm" ${p.email_envoye?'disabled':''} onclick="envoyerEmailIndividuel(${i})"><i class="fas fa-envelope"></i> Envoyer</button></td>
             </tr>`;
@@ -468,6 +489,49 @@
         const allCb = document.getElementById('checkAll');
         if(allCb) allCb.checked = true;
     }
+
+    function refreshRow(i) {
+        const p = currentProspects[i];
+        const row = document.getElementById('row-' + i);
+        if(!row) return;
+        // Re-render just the email cell (4th td, index 4)
+        const tds = row.querySelectorAll('td');
+        if(tds[4]) tds[4].outerHTML = emailCellHtml(p, i).replace(/^<td>/, '<td>');
+        // Actually simpler to just rebuild the row
+        const scoreColor = p.score > 70 ? 'var(--green)' : p.score > 40 ? 'var(--yellow)' : 'var(--muted)';
+        const sent = p.email_envoye ? '✅ ' : '';
+        row.innerHTML = `
+            <td class="tbl-check"><input type="checkbox" id="chk-${i}" ${p.email_envoye ? 'disabled' : 'checked'} onchange="updateSelectionCount()"></td>
+            <td><strong>${sent}${p.nom}</strong><br><span style="font-size:11px;color:var(--muted);">${p.site||''}</span></td>
+            <td style="font-size:12px;">${p.adresse||''} ${p.npa||''} ${p.ville||''}</td>
+            <td>${p.telephone||'—'}</td>
+            ${emailCellHtml(p, i)}
+            <td style="color:${scoreColor}">${p.score}%</td>
+            <td><button type="button" class="btn btn-ghost btn-sm" ${p.email_envoye?'disabled':''} onclick="envoyerEmailIndividuel(${i})"><i class="fas fa-envelope"></i> Envoyer</button></td>`;
+        if(p._editingEmail) {
+            const inp = document.getElementById('email-input-' + i);
+            if(inp) { inp.focus(); inp.select(); }
+        }
+        updateSelectionCount();
+    }
+
+    window.editEmail = function(i) {
+        currentProspects[i]._editingEmail = true;
+        refreshRow(i);
+    };
+
+    window.saveEmail = function(i) {
+        const inp = document.getElementById('email-input-' + i);
+        if(inp) currentProspects[i].email = inp.value.trim();
+        currentProspects[i]._editingEmail = false;
+        refreshRow(i);
+        updateSelectionCount();
+    };
+
+    window.cancelEmail = function(i) {
+        currentProspects[i]._editingEmail = false;
+        refreshRow(i);
+    };
     
     // Appeler l'Edge Function prospect-agent
     async function envoyerViaAgent(prospect, sujet, template) {
