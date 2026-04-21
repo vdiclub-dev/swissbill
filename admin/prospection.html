@@ -288,61 +288,68 @@
         }
     }
     
-    // Mapping secteur → tags OpenStreetMap
-    const SECTEUR_TAGS = {
-        'e-commerce':  [['shop','yes'],['office','company']],
-        'transport':   [['office','logistics'],['office','transport'],['amenity','courier']],
-        'commerce':    [['shop','supermarket'],['shop','convenience'],['shop','general']],
-        'restaurant':  [['amenity','restaurant'],['amenity','cafe'],['amenity','fast_food']],
-        'industrie':   [['industrial','yes'],['office','industrial']],
-        '':            [['office','company'],['office','commercial'],['shop','yes']]
+    // Mapping secteur → filtres Overpass
+    const SECTEUR_FILTERS = {
+        'e-commerce':  '["shop"]',
+        'transport':   '["office"~"logistics|transport|shipping|courier",i]',
+        'commerce':    '["shop"]',
+        'restaurant':  '["amenity"~"restaurant|cafe|fast_food|bar|bistro|brasserie",i]',
+        'industrie':   '["office"~"company|industrial|manufacturer",i]',
+        '':            '["name"]["shop"]'
     };
 
-    // Recherche via OpenStreetMap Overpass API (gratuit)
+    // Étape 1 : géocoder la région via Nominatim pour obtenir la bounding box
+    async function geocodeRegion(region) {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(region + ', Suisse')}&format=json&limit=1&accept-language=fr`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'ColixoApp/1.0' } });
+        const data = await res.json();
+        if(!data.length) throw new Error(`Région "${region}" introuvable`);
+        const bb = data[0].boundingbox; // [minlat, maxlat, minlon, maxlon]
+        return { s: bb[0], n: bb[1], w: bb[2], e: bb[3], display: data[0].display_name };
+    }
+
+    // Recherche via Overpass avec bounding box (beaucoup plus fiable)
     async function rechercherAvecQwant(secteur, region, maxProspects) {
         try {
-            const tags = SECTEUR_TAGS[secteur] || SECTEUR_TAGS[''];
-            const tagFilters = tags.map(([k,v]) =>
-                v === 'yes' ? `["${k}"]` : `["${k}"="${v}"]`
-            ).join('');
+            document.getElementById('progression').innerHTML = '🔍 Géolocalisation de la région…';
+            const bbox = await geocodeRegion(region);
+            const filter = SECTEUR_FILTERS[secteur] || SECTEUR_FILTERS[''];
+            const bboxStr = `${bbox.s},${bbox.w},${bbox.n},${bbox.e}`;
 
-            // Capitalize first letter pour matcher OSM (ex: "lausanne" → "Lausanne")
-            const regionOsm = region.charAt(0).toUpperCase() + region.slice(1).toLowerCase();
-
-            const overpassQuery = `[out:json][timeout:25];area[name="${regionOsm}"]->.zone;(node${tagFilters}(area.zone);way${tagFilters}(area.zone););out body ${maxProspects};`;
+            document.getElementById('progression').innerHTML = '🔍 Recherche des entreprises…';
+            const query = `[out:json][timeout:30];(node${filter}(${bboxStr});way${filter}(${bboxStr}););out body ${maxProspects * 2};`;
 
             const res = await fetch('https://overpass-api.de/api/interpreter', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'data=' + encodeURIComponent(overpassQuery)
+                body: 'data=' + encodeURIComponent(query)
             });
-            if(!res.ok) throw new Error('Overpass API error');
+            if(!res.ok) throw new Error('Overpass API error ' + res.status);
             const data = await res.json();
-            const elements = data.elements || [];
-            if(!elements.length) return [];
+            const elements = (data.elements || []).filter(el => el.tags?.name);
 
             return elements.slice(0, maxProspects).map(el => {
                 const t = el.tags || {};
-                const nom = t.name || t['name:fr'] || 'Entreprise';
-                const site = t.website || t['contact:website'] || '';
-                const tel  = t.phone || t['contact:phone'] || '';
-                const rue  = t['addr:street'] ? (t['addr:street'] + (t['addr:housenumber'] ? ' ' + t['addr:housenumber'] : '')) : '';
+                const nom  = t.name || t['name:fr'] || '';
+                const site = t.website || t['contact:website'] || t['url'] || '';
+                const tel  = t.phone || t['contact:phone'] || t['contact:mobile'] || '';
+                const rue  = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
                 return {
                     nom,
                     adresse: rue,
-                    npa:      t['addr:postcode'] || '',
-                    ville:    t['addr:city'] || region,
+                    npa:     t['addr:postcode'] || '',
+                    ville:   t['addr:city'] || t['addr:municipality'] || region,
                     telephone: tel,
                     site,
                     secteur: secteur || '',
-                    score: Math.floor(Math.random() * 40) + 50,
-                    email: trouverEmail(nom, site)
+                    score:   Math.floor(Math.random() * 30) + 60,
+                    email:   trouverEmail(nom, site)
                 };
-            }).filter(p => p.nom !== 'Entreprise' || p.adresse);
+            }).filter(p => p.nom);
 
         } catch(e) {
-            console.warn('Overpass API error:', e);
-            return [];
+            console.warn('Recherche error:', e);
+            throw e;
         }
     }
     
