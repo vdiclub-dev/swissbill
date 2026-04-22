@@ -9,8 +9,8 @@ const API_BASE = 'https://swissbill.onrender.com/api';
 // Sera basculé automatiquement à true si le backend ne répond pas
 let DEMO_MODE = false;
 
-// Timeout des appels API (ms)
-const API_TIMEOUT = 6000;
+// Timeout des appels API (ms) — 60s pour absorber le cold start Render (~50s)
+const API_TIMEOUT = 60000;
 
 // ── State ─────────────────────────────────────────────────────
 const state = {
@@ -1260,21 +1260,21 @@ async function init() {
     return;
   }
 
-  // Charger immédiatement, vérifier le backend en arrière-plan
-  await navigate('dashboard');
+  // Réveil du serveur Render (peut prendre 50s sur plan gratuit)
+  const banner = document.getElementById('demoBanner');
+  banner.style.display = 'block';
+  banner.innerHTML = '⏳ Démarrage du serveur en cours (plan gratuit Render, ~30-50s)...';
 
-  fetch(API_BASE.replace('/api', '/health'), { signal: AbortSignal.timeout(30000) })
-    .then(r => { if (!r.ok) throw new Error(); })
-    .catch(() => {
-      if (!DEMO_MODE) {
-        DEMO_MODE = true;
-        const banner = document.getElementById('demoBanner');
-        banner.style.display = 'block';
-        banner.innerHTML = '<strong>⚠️ Backend inaccessible</strong> Mode démo activé.';
-        toast('Backend inaccessible — mode démo activé', 'warning', 6000);
-        navigate('dashboard');
-      }
-    });
+  try {
+    const res = await fetch(API_BASE.replace('/api', '/health'), { signal: AbortSignal.timeout(65000) });
+    if (!res.ok) throw new Error();
+    banner.style.display = 'none';
+    await navigate('dashboard');
+  } catch {
+    DEMO_MODE = true;
+    banner.innerHTML = '<strong>⚠️ Backend inaccessible</strong> Mode démo activé. <button onclick="location.reload()" style="margin-left:8px;padding:2px 8px;border:1px solid currentColor;border-radius:4px;cursor:pointer;background:transparent;color:inherit;font-size:12px;">Réessayer</button>';
+    await navigate('dashboard');
+  }
 }
 
 init();
