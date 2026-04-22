@@ -30,8 +30,24 @@ async function getProspectById(id) {
   return data;
 }
 
+const PROSPECT_FIELDS = [
+  'entreprise','ville','secteur','site_web','contact_nom','contact_role',
+  'linkedin_url','email','telephone','notes','statut','score','score_classe',
+  'resume','besoin_detecte','angle_commercial','objections_probables',
+  'message_connexion','message_1','relance_1','relance_2','email_1','email_relance','script_appel'
+];
+
+function sanitize(payload) {
+  const out = {};
+  PROSPECT_FIELDS.forEach(k => { if (payload[k] !== undefined && payload[k] !== '') out[k] = payload[k]; });
+  if (!out.statut) out.statut = 'a_contacter';
+  return out;
+}
+
 async function createProspect(payload) {
-  const { data, error } = await db.from('prospects').insert([payload]).select().single();
+  const clean = sanitize(payload);
+  console.log('[createProspect] payload:', JSON.stringify(clean));
+  const { data, error } = await db.from('prospects').insert([clean]).select().single();
   assertOk(error, 'createProspect');
   return data;
 }
