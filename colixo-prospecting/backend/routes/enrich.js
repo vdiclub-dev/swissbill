@@ -2,44 +2,48 @@ const router = require('express').Router();
 const { enrichProspect } = require('../services/openai.service');
 const supa = require('../services/supabase.service');
 
-// POST /api/enrich-prospect
-// Body: données du prospect (pas forcément sauvegardé)
-router.post('/', async (req, res) => {
-  const { entreprise } = req.body;
-  if (!entreprise?.trim()) {
-    return res.status(400).json({ ok: false, error: 'Le champ "entreprise" est requis pour l\'enrichissement' });
-  }
-
-  try {
-    const enrichment = await enrichProspect(req.body);
-    res.json({ ok: true, data: enrichment });
-  } catch (err) {
-    const isConfig = err.message.includes('non configuré');
-    res.status(isConfig ? 503 : 502).json({ ok: false, error: err.message });
-  }
-});
-
 // POST /api/enrich-prospect/:id
-// Enrichit un prospect existant et sauvegarde le résultat
 router.post('/:id', async (req, res) => {
+  const { id } = req.params;
+
   try {
-    const prospect = await supa.getProspectById(req.params.id);
+    const prospect = await supa.getProspectById(id);
 
-    await supa.updateProspect(req.params.id, { statut: 'analyse_en_cours' });
-    await supa.addEvent(req.params.id, 'enrichment_started', 'Analyse IA lancée');
+    // Marquer analyse en cours
+    await supa.updateProspect(id, { statut: 'a_qualifier' });
+    supa.addEvent(id, 'enrichment_started', 'Analyse IA lancée').catch(() => {});
 
+    // Lancer enrichissement (scraping + OpenAI)
     const enrichment = await enrichProspect(prospect);
 
-    const updated = await supa.updateProspect(req.params.id, {
-      ...enrichment,
-      statut: 'pret_a_contacter'
-    });
+    // Sauvegarder tous les champs enrichis + statut
+    const updated = await supa.saveEnrichment(id, enrichment);
 
-    await supa.addEvent(req.params.id, 'enriched', `Score: ${enrichment.score} — Classe: ${enrichment.score_classe}`);
+    supa.addEvent(id, 'enriched',
+      `Score: ${enrichment.score_total} (${enrichment.score_classe}) — Qualité analyse: ${enrichment.analysis_quality}`,
+      { score: enrichment.score_total, classe: enrichment.score_classe, signals: enrichment.logistic_signals }
+    ).catch(() => {});
+
+    // Suggestion de tâche automatique si score élevé
+    if (enrichment.score_total >= 70) {
+      supa.createTask({
+        prospect_id: id,
+        title:       `Contacter ${prospect.entreprise} — Score A (${enrichment.score_total}/100)`,
+        status:      'pending',
+        due_date:    new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      }).catch(() => {});
+    }
+
     res.json({ ok: true, data: updated });
+
   } catch (err) {
+    // Remettre en état si erreur
+    supa.updateProspect(id, { statut: 'a_qualifier' }).catch(() => {});
+    supa.addEvent(id, 'enrichment_failed', err.message).catch(() => {});
+
     const isConfig = err.message.includes('non configuré');
-    res.status(err.statusCode || (isConfig ? 503 : 502)).json({ ok: false, error: err.message });
+    res.status(err.statusCode || (isConfig ? 503 : 502))
+       .json({ ok: false, error: err.message });
   }
 });
 

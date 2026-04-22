@@ -36,7 +36,7 @@ const DEMO_PROSPECTS = [
     message_connexion: 'Bonjour Sandra, je gère la prospection chez Colixo, livraison express en Suisse romande. Vos livraisons médicales méritent un partenaire fiable. Échange possible ?',
     email_1: 'Objet: Livraison express médicale — Colixo pour Medi-Supply\n\nBonjour Sandra,\n\nNous accompagnons plusieurs distributeurs médicaux sur Lausanne avec des livraisons J+1 garanties et un suivi temps réel. Seriez-vous disponible 10 minutes cette semaine ?\n\nCordialement,\nL\'équipe Colixo',
     script_appel: 'Introduction: "Bonjour, je vous contacte de Colixo, nous sommes spécialisés dans la livraison express en Suisse romande."\nQuestion 1: "Combien de livraisons gérez-vous par mois aujourd\'hui ?"\nQuestion 2: "Avez-vous des contraintes particulières sur les délais ou horaires ?"\nProposition: "Nous proposons un essai gratuit sur 5 livraisons."',
-    statut: 'pret_a_contacter', created_at: '2026-04-10T09:15:00Z', updated_at: '2026-04-18T14:30:00Z'
+    statut: 'pret_a_contacter', score_pertinence_secteur:18,score_besoin_logistique:17,score_compatibilite_geo:9,score_potentiel_volume:16,score_probabilite_reponse:13,score_complexite_op:8,score_fit_colixo:5, analysis_quality:'forte', logistic_signals:['livraison','urgence','cliniques','traçabilité'], created_at: '2026-04-10T09:15:00Z', updated_at: '2026-04-18T14:30:00Z'
   },
   {
     id: 'demo-2', entreprise: 'TechParts Romandie', ville: 'Genève',
@@ -53,7 +53,7 @@ const DEMO_PROSPECTS = [
     message_connexion: 'Bonjour Marc, chez Colixo on livre des pièces industrielles en urgence partout en Suisse romande. Une panne de machine n\'attend pas. Échange rapide ?',
     email_1: 'Objet: Urgences logistiques pièces détachées — Colixo\n\nBonjour Marc,\n\nColixo accompagne des distributeurs industriels avec des livraisons express même le soir ou le samedi. Vos clients n\'attendent pas. Disponible 10 min ?',
     script_appel: 'Introduction: "Bonjour, Colixo livraison express industrielle en Suisse romande."\nQuestion 1: "Quelle est votre fréquence de livraisons urgentes par mois ?"\nQuestion 2: "Utilisez-vous un prestataire dédié ou du cas par cas ?"\nProposition: "Tarif préférentiel pour les urgences industrielles, réponse en 2h."',
-    statut: 'contact_envoye', created_at: '2026-04-08T11:00:00Z', updated_at: '2026-04-17T10:00:00Z'
+    statut: 'contacte', analysis_quality:'forte', logistic_signals:['urgence','pièces','industrie','B2B'], created_at: '2026-04-08T11:00:00Z', updated_at: '2026-04-17T10:00:00Z'
   },
   {
     id: 'demo-3', entreprise: 'Bio Marché Vevey', ville: 'Vevey',
@@ -67,7 +67,7 @@ const DEMO_PROSPECTS = [
     objections_probables: '1. Volume trop faible. 2. Budget serré. 3. Relation locale privilégiée.',
     score: 42, score_classe: 'C',
     message_connexion: '', email_1: '', script_appel: '',
-    statut: 'a_contacter', created_at: '2026-04-15T16:00:00Z', updated_at: '2026-04-15T16:00:00Z'
+    statut: 'nouveau', created_at: '2026-04-15T16:00:00Z', updated_at: '2026-04-15T16:00:00Z'
   },
   {
     id: 'demo-4', entreprise: 'Horlogerie Bouvet & Fils', ville: 'La Chaux-de-Fonds',
@@ -101,7 +101,7 @@ const DEMO_PROSPECTS = [
     message_connexion: 'Bonjour Aurélie, Colixo accompagne des e-commerçants alimentaires en forte croissance. Fiabilité J+1 et tarifs scalables. Échange cette semaine ?',
     email_1: 'Objet: Partenaire logistique scalable pour FreshBox\n\nBonjour Aurélie,\n\nColixo accompagne des box alimentaires en forte croissance avec des livraisons J+1 fiables et des tarifs qui s\'adaptent à votre volume. On peut parler 10 minutes cette semaine ?\n\nCordialement',
     script_appel: 'Introduction: "Colixo, partenaire logistique pour les e-commerçants en croissance."\nQuestion 1: "Votre volume de livraisons actuelles par semaine ?"\nQuestion 2: "Avez-vous des incidents récents avec votre prestataire actuel ?"\nProposition: "Garantie de livraison J+1 avec pénalités contractuelles."',
-    statut: 'rdv', created_at: '2026-04-02T10:00:00Z', updated_at: '2026-04-21T08:00:00Z'
+    statut: 'rdv_planifie', analysis_quality:'forte', logistic_signals:['e-commerce','abonnement','volume','croissance','livraison hebdomadaire'], created_at: '2026-04-02T10:00:00Z', updated_at: '2026-04-21T08:00:00Z'
   },
   {
     id: 'demo-6', entreprise: 'Clinique Beaumont', ville: 'Nyon',
@@ -116,7 +116,7 @@ const DEMO_PROSPECTS = [
     score: 67, score_classe: 'B',
     message_connexion: 'Bonjour Dr. Martin, Colixo livre du matériel médical en express en Suisse romande. Réactivité garantie pour vos urgences. Disponible pour échanger ?',
     email_1: '', script_appel: '',
-    statut: 'en_attente', created_at: '2026-04-12T14:00:00Z', updated_at: '2026-04-19T11:00:00Z'
+    statut: 'contacte', created_at: '2026-04-12T14:00:00Z', updated_at: '2026-04-19T11:00:00Z'
   }
 ];
 
@@ -150,19 +150,28 @@ async function fetchWithTimeout(url, options = {}) {
 }
 
 async function apiFetch(path, options = {}) {
-  if (DEMO_MODE) return null; // géré par l'appelant
+  if (DEMO_MODE) return null;
   try {
     const res = await fetchWithTimeout(API_BASE + path, options);
     let json;
     try { json = await res.json(); } catch { throw new Error('Réponse invalide du serveur'); }
+
+    // Doublon détecté (409)
+    if (res.status === 409 && json.duplicate) {
+      const dup = json.duplicate;
+      const err = new Error(`Doublon: "${dup.entreprise}" existe déjà (${dup.statut ? statutLabel(dup.statut) : ''}) — vérifié sur ${json.matchedOn}`);
+      err.isDuplicate = true;
+      err.duplicate   = dup;
+      throw err;
+    }
+
     if (!json.ok) throw new Error(json.error || (json.errors && json.errors.join(', ')) || 'Erreur serveur');
     return json.data;
   } catch (err) {
-    // Si le backend est inaccessible, basculer en mode démo automatiquement
     if (!DEMO_MODE && (err.message.includes('timeout') || err.message.includes('joindre') || err.message.includes('fetch'))) {
       DEMO_MODE = true;
       document.getElementById('demoBanner').style.display = 'block';
-      document.getElementById('demoBanner').innerHTML = '<strong>⚠️ Backend inaccessible</strong> Basculement automatique en mode démo.';
+      document.getElementById('demoBanner').innerHTML = '<strong>⚠️ Backend inaccessible</strong> Mode démo activé.';
       toast('Backend inaccessible — mode démo activé', 'warning', 5000);
       return null;
     }
@@ -510,12 +519,23 @@ async function renderProspects(filters = {}) {
       <input type="text" class="search-input" id="searchInput" placeholder="🔍 Rechercher..." value="${escHtml(filters.search || '')}" oninput="debounceSearch()"/>
       <select class="select-filter" id="filtreStatut" onchange="applyFilters()">
         <option value="">Tous statuts</option>
-        ${['a_contacter','analyse_en_cours','pret_a_contacter','contact_envoye','en_attente','repondu','relance_a_faire','rdv','opportunite','perdu'].map(s =>
+        ${['nouveau','a_qualifier','qualifie','pret_a_contacter','contacte','relance_1_envoyee','relance_2_envoyee','repondu','rdv_planifie','opportunite','client_gagne','perdu','sans_suite'].map(s =>
           `<option value="${s}" ${filters.statut===s?'selected':''}>${statutLabel(s)}</option>`).join('')}
+      </select>
+      <select class="select-filter" id="filtreClasse" onchange="applyFilters()">
+        <option value="">Toutes classes</option>
+        <option value="A" ${filters.score_classe==='A'?'selected':''}>⭐ Classe A (≥70)</option>
+        <option value="B" ${filters.score_classe==='B'?'selected':''}>Classe B (≥45)</option>
+        <option value="C" ${filters.score_classe==='C'?'selected':''}>Classe C (&lt;45)</option>
       </select>
       <select class="select-filter" id="filtreSecteur" onchange="applyFilters()">
         <option value="">Tous secteurs</option>
         ${secteurs.map(s => `<option value="${s}" ${filters.secteur===s?'selected':''}>${escHtml(s)}</option>`).join('')}
+      </select>
+      <select class="select-filter" id="filtreSort" onchange="applyFilters()">
+        <option value="" ${!filters.sort?'selected':''}>Tri: Date ajout</option>
+        <option value="score" ${filters.sort==='score'?'selected':''}>Tri: Score</option>
+        <option value="activite" ${filters.sort==='activite'?'selected':''}>Tri: Activité récente</option>
       </select>
       <span style="font-size:12px;color:var(--muted);margin-left:auto;">${prospects.length} prospect${prospects.length > 1 ? 's' : ''}</span>
     </div>
@@ -587,9 +607,11 @@ function debounceSearch() {
 
 function applyFilters() {
   renderProspects({
-    search:  document.getElementById('searchInput')?.value || '',
-    statut:  document.getElementById('filtreStatut')?.value || '',
-    secteur: document.getElementById('filtreSecteur')?.value || ''
+    search:       document.getElementById('searchInput')?.value  || '',
+    statut:       document.getElementById('filtreStatut')?.value || '',
+    score_classe: document.getElementById('filtreClasse')?.value || '',
+    secteur:      document.getElementById('filtreSecteur')?.value|| '',
+    sort:         document.getElementById('filtreSort')?.value   || '',
   });
 }
 
@@ -632,7 +654,7 @@ async function renderDetail(id) {
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
             <span class="statut-badge s-${p.statut}" style="font-size:12px;">${statutLabel(p.statut)}</span>
             <select style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:8px;font:inherit;font-size:12px;cursor:pointer;" onchange="changeStatut('${p.id}',this.value)">
-              ${['a_contacter','analyse_en_cours','pret_a_contacter','contact_envoye','en_attente','repondu','relance_a_faire','rdv','opportunite','perdu'].map(s =>
+              ${['nouveau','a_qualifier','qualifie','pret_a_contacter','contacte','relance_1_envoyee','relance_2_envoyee','repondu','rdv_planifie','opportunite','client_gagne','perdu','sans_suite'].map(s =>
                 `<option value="${s}" ${p.statut===s?'selected':''}>${statutLabel(s)}</option>`).join('')}
             </select>
           </div>
@@ -652,28 +674,58 @@ async function renderDetail(id) {
     <!-- Enrichissement -->
     <div class="tab-pane active" id="tab-enrichissement">
       ${p.score > 0 ? `
-        <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
-          <div class="score-display" style="flex:1;min-width:220px;">
+        <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-start;">
+          <div class="score-display" style="flex:0 0 auto;">
             <div class="score-circle" style="--pct:${p.score}">
               <div class="score-circle-inner" style="color:${p.score>=70?'var(--success)':p.score>=40?'var(--warning)':'var(--danger)'};">${p.score}</div>
             </div>
             <div class="score-meta">
-              <strong>Score de priorité</strong>
-              <span>Classe <strong>${p.score_classe}</strong> — ${p.score >= 70 ? 'Priorité haute' : p.score >= 40 ? 'Priorité moyenne' : 'Faible priorité'}</span>
+              <strong>Classe ${p.score_classe}</strong>
+              <span>${p.score >= 70 ? 'Priorité haute' : p.score >= 40 ? 'Priorité moyenne' : 'Faible priorité'}</span>
+              ${p.analysis_quality ? `<span style="font-size:10px;color:var(--muted);">Analyse: ${p.analysis_quality}</span>` : ''}
             </div>
           </div>
+          <div style="flex:1;min-width:220px;">
+            ${p.score_reasoning ? `<div style="font-size:13px;color:var(--muted2);font-style:italic;margin-bottom:10px;">"${escHtml(p.score_reasoning)}"</div>` : ''}
+            ${[
+              ['Pertinence secteur',       p.score_pertinence_secteur,  20],
+              ['Besoin logistique',        p.score_besoin_logistique,   20],
+              ['Compatibilité géo',        p.score_compatibilite_geo,   10],
+              ['Potentiel volume',         p.score_potentiel_volume,    20],
+              ['Probabilité réponse',      p.score_probabilite_reponse, 15],
+              ['Complexité opérationnelle',p.score_complexite_op,       10],
+              ['Fit Colixo',               p.score_fit_colixo,           5],
+            ].filter(([,v]) => v != null).map(([label, val, max]) => `
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px;">
+                <span style="width:160px;color:var(--muted);">${label}</span>
+                <div style="flex:1;height:5px;background:var(--border2);border-radius:3px;">
+                  <div style="height:100%;width:${Math.round((val/max)*100)}%;background:var(--accent);border-radius:3px;"></div>
+                </div>
+                <span style="width:40px;text-align:right;color:var(--text);">${val}/${max}</span>
+              </div>`).join('')}
+          </div>
         </div>
+        ${p.logistic_signals && (Array.isArray(p.logistic_signals) ? p.logistic_signals : JSON.parse(p.logistic_signals || '[]')).length > 0 ? `
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px;">Signaux logistiques détectés</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${(Array.isArray(p.logistic_signals) ? p.logistic_signals : JSON.parse(p.logistic_signals)).map(s =>
+              `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(232,49,26,.1);border:1px solid rgba(232,49,26,.2);color:var(--accent);">${escHtml(s)}</span>`
+            ).join('')}
+          </div>
+        </div>` : ''}
         <div class="info-grid" style="margin-bottom:16px;">
           ${infoBlock('Résumé', p.resume)}
           ${infoBlock('Besoin détecté', p.besoin_detecte)}
           ${infoBlock('Angle commercial', p.angle_commercial)}
           ${infoBlock('Objections probables', p.objections_probables)}
         </div>
+        ${p.enriched_at ? `<div style="font-size:11px;color:var(--muted);text-align:right;">Dernière analyse: ${fmtDateTime(p.enriched_at)}</div>` : ''}
       ` : `
         <div class="empty-state" style="padding:36px;">
           <div class="empty-state-icon">🤖</div>
           <div class="empty-state-title">Aucune analyse disponible</div>
-          <div class="empty-state-desc">Cliquez sur "Analyser" pour lancer l'enrichissement IA.</div>
+          <div class="empty-state-desc">Cliquez sur "Analyser" pour lancer l'enrichissement IA (scraping site web + analyse OpenAI).</div>
           <div style="margin-top:16px;"><button class="btn btn-primary" onclick="enrichProspect('${p.id}')">🤖 Lancer l'analyse</button></div>
         </div>`}
     </div>
@@ -681,21 +733,19 @@ async function renderDetail(id) {
     <!-- Messages -->
     <div class="tab-pane" id="tab-messages">
       ${p.message_connexion ? `
-        ${msgBlock('💼 Message de connexion LinkedIn', p.message_connexion, 'linkedin-warning')}
-        ${msgBlock('📩 Premier message LinkedIn', p.message_1)}
-        ${msgBlock('🔄 Relance 1 (J+7)', p.relance_1)}
-        ${msgBlock('🔄 Relance 2 (J+14)', p.relance_2)}
-        ${msgBlock('✉️ Email de premier contact', p.email_1)}
+        ${msgBlock('💼 Message LinkedIn — Direct', p.message_connexion, 'linkedin-warning')}
+        ${p.message_connexion_premium ? msgBlock('💼 Message LinkedIn — Premium', p.message_connexion_premium, 'linkedin-warning') : ''}
+        ${msgBlock('✉️ Email de premier contact', p.message_1)}
         ${msgBlock('✉️ Email de relance', p.email_relance)}
         ${msgBlock('📞 Script d\'appel', p.script_appel)}
         <div style="padding:12px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;font-size:12px;color:#f59e0b;margin-top:8px;">
-          ⚠️ <strong>Rappel :</strong> Les messages LinkedIn sont à envoyer manuellement. Colixo ne permet aucune automatisation sur LinkedIn.
+          ⚠️ <strong>Rappel :</strong> Les messages LinkedIn sont à envoyer manuellement. Aucune automatisation LinkedIn n'est réalisée.
         </div>
       ` : `
         <div class="empty-state" style="padding:36px;">
           <div class="empty-state-icon">💬</div>
           <div class="empty-state-title">Aucun message généré</div>
-          <div class="empty-state-desc">Lancez l'analyse IA pour générer tous les messages automatiquement.</div>
+          <div class="empty-state-desc">Lancez l'analyse IA pour générer automatiquement LinkedIn, email et script d'appel.</div>
           <div style="margin-top:16px;"><button class="btn btn-primary" onclick="enrichProspect('${p.id}')">🤖 Générer les messages</button></div>
         </div>`}
     </div>
@@ -766,12 +816,14 @@ async function renderPipeline() {
   hideLoader();
 
   const STAGES = [
-    { key: 'a_contacter',      label: 'À contacter' },
-    { key: 'pret_a_contacter', label: 'Prêt à contacter' },
-    { key: 'contact_envoye',   label: 'Contacté' },
-    { key: 'repondu',          label: 'Répondu' },
-    { key: 'rdv',              label: '📅 RDV' },
-    { key: 'opportunite',      label: '🏆 Opportunité' }
+    { key: 'nouveau',           label: 'Nouveau' },
+    { key: 'qualifie',          label: 'Qualifié' },
+    { key: 'pret_a_contacter',  label: 'Prêt à contacter' },
+    { key: 'contacte',          label: 'Contacté' },
+    { key: 'relance_1_envoyee', label: 'Relance 1' },
+    { key: 'repondu',           label: 'Répondu' },
+    { key: 'rdv_planifie',      label: '📅 RDV' },
+    { key: 'opportunite',       label: '🏆 Opportunité' },
   ];
 
   const grouped = {};
@@ -1165,11 +1217,23 @@ function msgBlock(title, content, special) {
 
 function statutLabel(s) {
   const labels = {
+    nouveau:            'Nouveau',
+    a_qualifier:        'À qualifier',
+    qualifie:           'Qualifié',
+    pret_a_contacter:   'Prêt à contacter',
+    contacte:           'Contacté',
+    relance_1_envoyee:  'Relance 1',
+    relance_2_envoyee:  'Relance 2',
+    repondu:            'Répondu',
+    rdv_planifie:       'RDV planifié',
+    opportunite:        'Opportunité',
+    client_gagne:       '🏆 Client gagné',
+    perdu:              'Perdu',
+    sans_suite:         'Sans suite',
+    // legacy
     a_contacter: 'À contacter', analyse_en_cours: 'En analyse',
-    pret_a_contacter: 'Prêt', contact_envoye: 'Contacté',
-    en_attente: 'En attente', repondu: 'Répondu',
+    contact_envoye: 'Contacté', en_attente: 'En attente',
     relance_a_faire: 'Relance', rdv: 'RDV',
-    opportunite: 'Opportunité', perdu: 'Perdu'
   };
   return labels[s] || s;
 }
