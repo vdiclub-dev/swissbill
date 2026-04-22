@@ -1,1 +1,615 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prospects Vignerons - Suisse romande</title>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+
+  <style>
+    :root{
+      --bg:#0a0a0a;
+      --panel:#141414;
+      --panel2:#1b1b1b;
+      --line:#2a2a2a;
+      --text:#f5f5f5;
+      --muted:#a1a1a1;
+      --accent:#ff6a00;
+      --accent2:#ff8c33;
+      --ok:#22c55e;
+      --warn:#eab308;
+      --danger:#ef4444;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    .wrap{
+      max-width:1400px;
+      margin:0 auto;
+      padding:24px;
+    }
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:16px;
+      margin-bottom:24px;
+      flex-wrap:wrap;
+    }
+
+    .title{
+      font-size:28px;
+      font-weight:800;
+      letter-spacing:.3px;
+    }
+
+    .title span{
+      color:var(--accent);
+    }
+
+    .stats{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .card{
+      background:linear-gradient(180deg,var(--panel),var(--panel2));
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px 16px;
+      min-width:180px;
+    }
+
+    .card .label{
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:6px;
+    }
+
+    .card .value{
+      font-size:24px;
+      font-weight:800;
+    }
+
+    .filters{
+      display:grid;
+      grid-template-columns:repeat(6, minmax(0,1fr));
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .field{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px;
+    }
+
+    .field label{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:6px;
+    }
+
+    .field input,
+    .field select{
+      width:100%;
+      background:#0f0f0f;
+      color:var(--text);
+      border:1px solid #2f2f2f;
+      border-radius:10px;
+      padding:10px 12px;
+      outline:none;
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin:14px 0 22px;
+    }
+
+    button{
+      border:0;
+      border-radius:12px;
+      padding:11px 16px;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .btn-primary{
+      background:var(--accent);
+      color:#111;
+    }
+
+    .btn-secondary{
+      background:#232323;
+      color:var(--text);
+      border:1px solid var(--line);
+    }
+
+    .table-wrap{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:18px;
+      overflow:hidden;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+    }
+
+    thead{
+      background:#101010;
+    }
+
+    th, td{
+      padding:12px 10px;
+      border-bottom:1px solid var(--line);
+      text-align:left;
+      vertical-align:top;
+      font-size:14px;
+    }
+
+    th{
+      color:#d5d5d5;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.4px;
+    }
+
+    tr:hover{
+      background:#111111;
+    }
+
+    .badge{
+      display:inline-block;
+      padding:6px 9px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .nouveau{ background:#1f2937; color:#dbeafe; }
+    .contacte{ background:#052e16; color:#bbf7d0; }
+    .relance{ background:#3f2b05; color:#fde68a; }
+    .perdu{ background:#3b0a0a; color:#fecaca; }
+    .client{ background:#082f49; color:#bae6fd; }
+
+    .row-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .mini-btn{
+      background:#232323;
+      color:#fff;
+      border:1px solid #343434;
+      border-radius:10px;
+      padding:8px 10px;
+      text-decoration:none;
+      font-size:12px;
+      display:inline-block;
+    }
+
+    .mini-btn.orange{
+      background:var(--accent);
+      color:#111;
+      border:none;
+      font-weight:700;
+    }
+
+    .pagination{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:14px;
+      flex-wrap:wrap;
+    }
+
+    .muted{
+      color:var(--muted);
+    }
+
+    .empty{
+      padding:30px;
+      text-align:center;
+      color:var(--muted);
+    }
+
+    @media (max-width: 1100px){
+      .filters{
+        grid-template-columns:repeat(2, minmax(0,1fr));
+      }
+      .table-wrap{
+        overflow:auto;
+      }
+      table{
+        min-width:1200px;
+      }
+    }
+
+    @media (max-width: 640px){
+      .filters{
+        grid-template-columns:1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="title">Prospects <span>Vignerons</span> — Suisse romande</div>
+      <div class="stats">
+        <div class="card">
+          <div class="label">Total prospects</div>
+          <div class="value" id="stat-total">0</div>
+        </div>
+        <div class="card">
+          <div class="label">Affichés</div>
+          <div class="value" id="stat-visible">0</div>
+        </div>
+        <div class="card">
+          <div class="label">Contactés</div>
+          <div class="value" id="stat-contactes">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="field">
+        <label>Canton</label>
+        <select id="filter-canton">
+          <option value="">Tous</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Ville</label>
+        <select id="filter-ville">
+          <option value="">Toutes</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Code postal</label>
+        <input id="filter-npa" type="text" placeholder="Ex: 1095" />
+      </div>
+
+      <div class="field">
+        <label>Nom / domaine</label>
+        <input id="filter-search" type="text" placeholder="Recherche..." />
+      </div>
+
+      <div class="field">
+        <label>Statut</label>
+        <select id="filter-statut">
+          <option value="">Tous</option>
+          <option value="nouveau">Nouveau</option>
+          <option value="contacte">Contacté</option>
+          <option value="relance">À relancer</option>
+          <option value="perdu">Perdu</option>
+          <option value="client">Client</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Trier par</label>
+        <select id="filter-sort">
+          <option value="nom_asc">Nom A-Z</option>
+          <option value="nom_desc">Nom Z-A</option>
+          <option value="ville_asc">Ville A-Z</option>
+          <option value="npa_asc">NPA croissant</option>
+          <option value="score_desc">Score décroissant</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="btn-apply">Appliquer</button>
+      <button class="btn-secondary" id="btn-reset">Réinitialiser</button>
+      <button class="btn-secondary" id="btn-export">Exporter CSV</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Adresse</th>
+            <th>NPA</th>
+            <th>Ville</th>
+            <th>Canton</th>
+            <th>Contact</th>
+            <th>Score</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="9" class="empty">Chargement...</td></tr>
+        </tbody>
+      </table>
+
+      <div class="pagination">
+        <div class="muted" id="page-info">Page 1</div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-secondary" id="prev-page">Précédent</button>
+          <button class="btn-secondary" id="next-page">Suivant</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const supabaseClient = window.supabase.createClient(
+      window.SUPABASE_URL,
+      window.SUPABASE_ANON_KEY
+    );
+
+    const state = {
+      allRows: [],
+      filteredRows: [],
+      page: 1,
+      pageSize: 25
+    };
+
+    const els = {
+      canton: document.getElementById("filter-canton"),
+      ville: document.getElementById("filter-ville"),
+      npa: document.getElementById("filter-npa"),
+      search: document.getElementById("filter-search"),
+      statut: document.getElementById("filter-statut"),
+      sort: document.getElementById("filter-sort"),
+      tbody: document.getElementById("tbody"),
+      statTotal: document.getElementById("stat-total"),
+      statVisible: document.getElementById("stat-visible"),
+      statContactes: document.getElementById("stat-contactes"),
+      pageInfo: document.getElementById("page-info")
+    };
+
+    async function loadProspects() {
+      const { data, error } = await supabaseClient
+        .from("prospects_vignerons")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        els.tbody.innerHTML = `<tr><td colspan="9" class="empty">Erreur: ${error.message}</td></tr>`;
+        return;
+      }
+
+      state.allRows = data || [];
+      populateFilters();
+      updateStats();
+      applyFilters();
+    }
+
+    function populateFilters() {
+      const cantons = [...new Set(state.allRows.map(r => (r.canton || "").trim()).filter(Boolean))].sort();
+      const villes = [...new Set(state.allRows.map(r => (r.ville || "").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
+
+      els.canton.innerHTML = `<option value="">Tous</option>` + cantons.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      els.ville.innerHTML = `<option value="">Toutes</option>` + villes.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    }
+
+    function updateStats() {
+      const total = state.allRows.length;
+      const contactes = state.allRows.filter(r => r.statut === "contacte" || r.statut === "client" || r.statut === "relance").length;
+
+      els.statTotal.textContent = total;
+      els.statContactes.textContent = contactes;
+    }
+
+    function applyFilters() {
+      const canton = els.canton.value.trim().toLowerCase();
+      const ville = els.ville.value.trim().toLowerCase();
+      const npa = els.npa.value.trim().toLowerCase();
+      const search = els.search.value.trim().toLowerCase();
+      const statut = els.statut.value.trim().toLowerCase();
+      const sort = els.sort.value;
+
+      let rows = [...state.allRows];
+
+      rows = rows.filter(row => {
+        const rowCanton = (row.canton || "").toLowerCase();
+        const rowVille = (row.ville || "").toLowerCase();
+        const rowNpa = (row.npa || "").toLowerCase();
+        const rowNom = (row.nom || "").toLowerCase();
+        const rowAdresse = (row.adresse || "").toLowerCase();
+        const rowStatut = (row.statut || "").toLowerCase();
+
+        const okCanton = !canton || rowCanton === canton;
+        const okVille = !ville || rowVille === ville;
+        const okNpa = !npa || rowNpa.includes(npa);
+        const okSearch = !search || rowNom.includes(search) || rowAdresse.includes(search) || rowVille.includes(search);
+        const okStatut = !statut || rowStatut === statut;
+
+        return okCanton && okVille && okNpa && okSearch && okStatut;
+      });
+
+      rows.sort((a, b) => {
+        switch (sort) {
+          case "nom_desc":
+            return (b.nom || "").localeCompare(a.nom || "", "fr");
+          case "ville_asc":
+            return (a.ville || "").localeCompare(b.ville || "", "fr");
+          case "npa_asc":
+            return (a.npa || "").localeCompare(b.npa || "", "fr");
+          case "score_desc":
+            return (Number(b.score) || 0) - (Number(a.score) || 0);
+          case "nom_asc":
+          default:
+            return (a.nom || "").localeCompare(b.nom || "", "fr");
+        }
+      });
+
+      state.filteredRows = rows;
+      state.page = 1;
+      els.statVisible.textContent = rows.length;
+      renderTable();
+    }
+
+    function renderTable() {
+      const totalPages = Math.max(1, Math.ceil(state.filteredRows.length / state.pageSize));
+      if (state.page > totalPages) state.page = totalPages;
+
+      const start = (state.page - 1) * state.pageSize;
+      const end = start + state.pageSize;
+      const rows = state.filteredRows.slice(start, end);
+
+      els.pageInfo.textContent = `Page ${state.page} / ${totalPages}`;
+
+      if (!rows.length) {
+        els.tbody.innerHTML = `<tr><td colspan="9" class="empty">Aucun prospect trouvé.</td></tr>`;
+        return;
+      }
+
+      els.tbody.innerHTML = rows.map(row => {
+        const statut = (row.statut || "nouveau").toLowerCase();
+        const email = row.email ? `<a class="mini-btn" href="mailto:${escapeAttr(row.email)}">E-mail</a>` : "";
+        const site = row.site_web ? `<a class="mini-btn" href="${escapeAttr(row.site_web)}" target="_blank" rel="noopener">Site</a>` : "";
+        const tel = row.telephone ? `<a class="mini-btn" href="tel:${escapeAttr(row.telephone)}">Appeler</a>` : "";
+
+        return `
+          <tr>
+            <td><strong>${escapeHtml(row.nom || "")}</strong></td>
+            <td>${escapeHtml(row.adresse || "")}</td>
+            <td>${escapeHtml(row.npa || "")}</td>
+            <td>${escapeHtml(row.ville || "")}</td>
+            <td>${escapeHtml(row.canton || "")}</td>
+            <td>
+              <div>${row.email ? escapeHtml(row.email) : ""}</div>
+              <div class="muted">${row.telephone ? escapeHtml(row.telephone) : ""}</div>
+            </td>
+            <td>${escapeHtml(String(row.score ?? 0))}</td>
+            <td>
+              <span class="badge ${escapeHtml(statut)}">${escapeHtml(row.statut || "nouveau")}</span>
+            </td>
+            <td>
+              <div class="row-actions">
+                ${site}
+                ${email}
+                ${tel}
+                <button class="mini-btn orange" onclick="setStatut(${row.id}, 'contacte')">Contacté</button>
+                <button class="mini-btn" onclick="setStatut(${row.id}, 'relance')">Relance</button>
+                <button class="mini-btn" onclick="setStatut(${row.id}, 'client')">Client</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    async function setStatut(id, statut) {
+      const { error } = await supabaseClient
+        .from("prospects_vignerons")
+        .update({ statut })
+        .eq("id", id);
+
+      if (error) {
+        alert("Erreur mise à jour : " + error.message);
+        return;
+      }
+
+      const row = state.allRows.find(r => r.id === id);
+      if (row) row.statut = statut;
+
+      updateStats();
+      renderTable();
+    }
+
+    function exportCSV() {
+      const rows = state.filteredRows;
+      if (!rows.length) {
+        alert("Aucune donnée à exporter.");
+        return;
+      }
+
+      const headers = ["nom","adresse","npa","ville","canton","site_web","email","telephone","score","statut","notes","source"];
+      const csv = [
+        headers.join(";"),
+        ...rows.map(r => headers.map(h => csvEscape(r[h])).join(";"))
+      ].join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "prospects_vignerons_filtres.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? "");
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function escapeAttr(str) {
+      return escapeHtml(str);
+    }
+
+    document.getElementById("btn-apply").addEventListener("click", applyFilters);
+
+    document.getElementById("btn-reset").addEventListener("click", () => {
+      els.canton.value = "";
+      els.ville.value = "";
+      els.npa.value = "";
+      els.search.value = "";
+      els.statut.value = "";
+      els.sort.value = "nom_asc";
+      applyFilters();
+    });
+
+    document.getElementById("btn-export").addEventListener("click", exportCSV);
+
+    document.getElementById("prev-page").addEventListener("click", () => {
+      if (state.page > 1) {
+        state.page--;
+        renderTable();
+      }
+    });
+
+    document.getElementById("next-page").addEventListener("click", () => {
+      const totalPages = Math.max(1, Math.ceil(state.filteredRows.length / state.pageSize));
+      if (state.page < totalPages) {
+        state.page++;
+        renderTable();
+      }
+    });
+
+    els.search.addEventListener("input", applyFilters);
+    els.npa.addEventListener("input", applyFilters);
+    els.canton.addEventListener("change", applyFilters);
+    els.ville.addEventListener("change", applyFilters);
+    els.statut.addEventListener("change", applyFilters);
+    els.sort.addEventListener("change", applyFilters);
+
+    loadProspects();
+  </script>
+</body>
+</html>
