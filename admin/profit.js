@@ -12,6 +12,40 @@ var FIXED_COST     = 20;    // CHF fixed per tour (insurance, platform, etc.)
 var TIME_CHF_PER_H = 25;    // CHF/hr (driver time)
 var AVG_SPEED      = 35;    // km/h average urban delivery speed
 var FALLBACK_PRICE = { same_day:35, express:25, prio:18, vinologue:16, standard:12, eco:9 };
+var DEPOT          = { lat: 46.8006, lng: 6.7611 }; // Yvonand
+
+// ── HAVERSINE + ROUTE KM ──────────────────────────────────────────────────────
+
+function haversine(lat1, lng1, lat2, lng2) {
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLng = (lng2 - lng1) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2)
+          + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Calcule les km réels aller-retour : dépôt → stops → dépôt
+function realRouteKm(missions) {
+    var geo = missions.filter(function(m) { return m.delivery_lat && m.delivery_lng; });
+    if (!geo.length) {
+        // Pas de coordonnées : fallback sum des distance_km individuels
+        return missions.reduce(function(s, m) { return s + (parseFloat(m.distance_km) || 8); }, 0);
+    }
+    var km = 0;
+    // Dépôt → première livraison
+    km += haversine(DEPOT.lat, DEPOT.lng, parseFloat(geo[0].delivery_lat), parseFloat(geo[0].delivery_lng));
+    // Entre chaque livraison
+    for (var i = 0; i < geo.length - 1; i++) {
+        km += haversine(
+            parseFloat(geo[i].delivery_lat),   parseFloat(geo[i].delivery_lng),
+            parseFloat(geo[i+1].delivery_lat), parseFloat(geo[i+1].delivery_lng)
+        );
+    }
+    // Dernière livraison → retour dépôt
+    km += haversine(parseFloat(geo[geo.length-1].delivery_lat), parseFloat(geo[geo.length-1].delivery_lng), DEPOT.lat, DEPOT.lng);
+    return km;
+}
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -50,10 +84,8 @@ function calculateTourProfit(missions) {
 
     var revenue = missions.reduce(function(s, m) { return s + missionRevenue(m); }, 0);
 
-    // Total tour km: sum of individual mission distances
-    var km = missions.reduce(function(s, m) {
-        return s + (parseFloat(m.distance_km) || 8);
-    }, 0);
+    // Km réels : dépôt → toutes livraisons chaînées → retour dépôt
+    var km = realRouteKm(missions);
 
     var kmCost   = km * KM_COST;
     var timeCost = (km / AVG_SPEED) * TIME_CHF_PER_H;
