@@ -11,6 +11,7 @@
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <script src="ai-dispatch.js?v=20260422"></script>
     <script src="profit.js?v=20260423"></script>
+    <script src="pricing.js?v=20260423"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -149,6 +150,10 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 .auto-progress-msg{font-size:13px;color:var(--muted2);min-height:20px;}
 .progress-bar{height:4px;background:var(--border2);border-radius:4px;overflow:hidden;margin-top:14px;}
 .progress-fill{height:100%;background:var(--red);border-radius:4px;transition:width 0.4s;}
+/* ── DYNAMIC PRICING ── */
+.ai-price-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;background:rgba(168,85,247,0.14);color:var(--purple);border:1px solid rgba(168,85,247,0.28);border-radius:100px;padding:1px 7px;margin-left:6px;vertical-align:middle;}
+.price-breakdown{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4;}
+.price-load-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle;}
 /* ── PROFIT BADGE ── */
 .profit-badge{margin:0 10px 8px;padding:9px 12px;border-radius:10px;border:1px solid;font-size:12px;}
 .profit-good{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.22);color:var(--green);}
@@ -317,6 +322,14 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
                 <span style="color:var(--muted)">·</span>
                 <span id="routeBadgeMin" style="font-weight:700;">—</span>
                 <span id="routeBadgeSpinner" style="margin-left:auto;font-size:11px;color:var(--muted);"></span>
+            </div>
+            <div class="field s2">
+                <label>Prix <span class="ai-price-badge" id="priceAiBadge" style="display:none;">⚡ Optimisé IA</span></label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <input type="number" id="nPrice" placeholder="0.00" step="0.5" min="0" style="flex:1;">
+                    <button type="button" id="btnAutoPrice" class="btn btn-ghost btn-xs" title="Calculer prix optimal IA">⚡ Auto</button>
+                </div>
+                <div class="price-breakdown" id="priceBreakdown"></div>
             </div>
             <div class="field s2"><label>Instructions / Notes</label><textarea id="nInstructions" placeholder="Instructions spéciales…"></textarea></div>
         </div>
@@ -944,6 +957,9 @@ document.getElementById('btnNew').addEventListener('click',function(){
     document.getElementById('nPriority').value='normal';document.getElementById('nDriver').value='';document.getElementById('nTournee').value='';
     pickupCoords=null;deliveryCoords=null;routeData=null;
     document.getElementById('routeBadge').style.display='none';
+    document.getElementById('nPrice').value='';
+    document.getElementById('priceAiBadge').style.display='none';
+    document.getElementById('priceBreakdown').textContent='';
     orderCounter++;openModal('modalNew');
 });
 document.getElementById('btnSaveNew').addEventListener('click',async function(){
@@ -953,7 +969,7 @@ document.getElementById('btnSaveNew').addEventListener('click',async function(){
     var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Création…';
     try{
         var drvId=document.getElementById('nDriver').value||null,tourneeId=document.getElementById('nTournee').value||null;
-        var payload={order_number:genNum(),pickup_address:pickupCoords?pickupCoords.label:pA,delivery_address:deliveryCoords?deliveryCoords.label:dA,pickup_lat:pickupCoords?pickupCoords.lat:null,pickup_lng:pickupCoords?pickupCoords.lng:null,delivery_lat:deliveryCoords?deliveryCoords.lat:null,delivery_lng:deliveryCoords?deliveryCoords.lng:null,service_type:document.getElementById('nSvcType').value,speed:document.getElementById('nSvcType').value,package_type:document.getElementById('nPkgType').value,quantity:parseInt(document.getElementById('nQty').value)||1,weight:parseFloat(document.getElementById('nWeight').value)||null,priority:document.getElementById('nPriority').value==='urgent'?'urgent':'normal',instructions:document.getElementById('nInstructions').value.trim()||null,driver_id:drvId,status:drvId?'planned':'pending',destinataire_nom:document.getElementById('destName').value.trim()||null,destinataire_tel:document.getElementById('destPhone').value.trim()||null,assigned_at:drvId?nowCH():null,tournee_id:tourneeId,distance_km:routeData?routeData.distance_km:null,duration_min:routeData?routeData.duration_min:null};
+        var payload={order_number:genNum(),pickup_address:pickupCoords?pickupCoords.label:pA,delivery_address:deliveryCoords?deliveryCoords.label:dA,pickup_lat:pickupCoords?pickupCoords.lat:null,pickup_lng:pickupCoords?pickupCoords.lng:null,delivery_lat:deliveryCoords?deliveryCoords.lat:null,delivery_lng:deliveryCoords?deliveryCoords.lng:null,service_type:document.getElementById('nSvcType').value,speed:document.getElementById('nSvcType').value,package_type:document.getElementById('nPkgType').value,quantity:parseInt(document.getElementById('nQty').value)||1,weight:parseFloat(document.getElementById('nWeight').value)||null,priority:document.getElementById('nPriority').value==='urgent'?'urgent':'normal',instructions:document.getElementById('nInstructions').value.trim()||null,driver_id:drvId,status:drvId?'planned':'pending',destinataire_nom:document.getElementById('destName').value.trim()||null,destinataire_tel:document.getElementById('destPhone').value.trim()||null,assigned_at:drvId?nowCH():null,tournee_id:tourneeId,distance_km:routeData?routeData.distance_km:null,duration_min:routeData?routeData.duration_min:null,price_chf:parseFloat(document.getElementById('nPrice').value)||null};
         var r=await db.from('transport_orders_simple').insert([payload]);if(r.error)throw r.error;
         toast(payload.order_number+' créé !',true);closeModal('modalNew');await load({silent:true});
     }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Créer le transport';}
@@ -1166,6 +1182,62 @@ window.ColixoDispatch={
     renderTournees:renderTourneePanel,
     applyFilter:applyFilter
 };
+})();
+</script>
+
+<!-- DYNAMIC PRICING WIRING -->
+<script>
+(function(){
+    function refreshPrice() {
+        if (!window.ColixoPrice) return;
+        var kmEl = document.getElementById('routeBadgeKm');
+        var kmText = kmEl ? kmEl.textContent : '';
+        var km = parseFloat(kmText) || 0;
+        var svcType  = (document.getElementById('nSvcType')   || {}).value || 'standard';
+        var priority = (document.getElementById('nPriority')  || {}).value || 'normal';
+        var tourneeId = (document.getElementById('nTournee')  || {}).value || null;
+
+        var result = window.ColixoPrice.calculateDynamicPrice({
+            km:          km,
+            serviceType: svcType,
+            isUrgent:    priority === 'urgent',
+            tourneeId:   tourneeId
+        });
+
+        var priceInput = document.getElementById('nPrice');
+        var badge      = document.getElementById('priceAiBadge');
+        var breakdown  = document.getElementById('priceBreakdown');
+        if (!priceInput) return;
+
+        priceInput.value = result.price.toFixed(2);
+        if (badge) badge.style.display = 'inline-block';
+
+        var loadColor  = result.load === 'high' ? '#f59e0b' : result.load === 'low' ? '#22c55e' : '#3b82f6';
+        var loadLabel  = result.load === 'high' ? 'Forte activité' : result.load === 'low' ? 'Faible activité' : 'Charge normale';
+        if (breakdown) {
+            breakdown.innerHTML = result.breakdown
+                + ' <span class="price-load-dot" style="background:' + loadColor + '"></span>'
+                + loadLabel;
+        }
+    }
+
+    // Watch route calculation completion (spinner text changes to "✓ Route calculée")
+    var spinner = document.getElementById('routeBadgeSpinner');
+    if (spinner) {
+        new MutationObserver(function() {
+            if (spinner.textContent.indexOf('✓') >= 0) setTimeout(refreshPrice, 50);
+        }).observe(spinner, { childList: true, subtree: true, characterData: true });
+    }
+
+    // React to service type, priority and tournée changes
+    ['nSvcType','nPriority','nTournee'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', refreshPrice);
+    });
+
+    // Manual "Auto" button
+    var btn = document.getElementById('btnAutoPrice');
+    if (btn) btn.addEventListener('click', refreshPrice);
 })();
 </script>
 </body>
