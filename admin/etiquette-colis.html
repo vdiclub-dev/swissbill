@@ -48,6 +48,8 @@
         }
         .btn-red{background:var(--red);color:#fff}
         .btn-ghost{background:#fff;color:var(--night);border:1px solid #d1d5db}
+        .btn-blue{background:#2563eb;color:#fff}
+        .btn:disabled{opacity:0.5;cursor:not-allowed}
         .label-sheet{
             width:148mm;
             height:105mm;
@@ -79,6 +81,7 @@
         }
         .addr-name{font-size:20px;font-weight:700;line-height:1.1;margin-bottom:5px}
         .addr-line{font-size:15px;line-height:1.25}
+        .addr-missing{font-size:13px;color:#dc2626;font-style:italic}
         .mini-box{
             border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fafafa;
         }
@@ -95,11 +98,46 @@
             margin-top:8px;font-family:monospace;font-size:11px;word-break:break-all;background:#f3f4f6;padding:7px;border-radius:8px
         }
         .loading,.error{max-width:760px;margin:40px auto;text-align:center;font-size:16px}
+        .addr-missing-banner{
+            max-width:760px;margin:0 auto 16px;background:#fef2f2;border:1px solid #fecaca;
+            border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px;
+            font-size:14px;font-weight:600;color:#dc2626;
+        }
+
+        /* MODAL EDIT ADRESSE */
+        .modal-backdrop{
+            display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;
+            align-items:center;justify-content:center;
+        }
+        .modal-backdrop.open{display:flex}
+        .modal{
+            background:#fff;border-radius:18px;padding:32px;width:100%;max-width:480px;
+            box-shadow:0 32px 80px rgba(0,0,0,0.2);
+        }
+        .modal-title{
+            font-family:'Bebas Neue',cursive;font-size:24px;letter-spacing:1px;
+            color:var(--night);margin-bottom:20px;
+        }
+        .form-group{margin-bottom:16px}
+        .form-label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;
+            letter-spacing:1px;color:var(--muted);margin-bottom:6px}
+        .form-input{
+            width:100%;padding:11px 14px;border:1.5px solid var(--line);border-radius:10px;
+            font-family:'Outfit',sans-serif;font-size:14px;color:var(--text);background:#fafafa;
+            transition:border-color 0.2s;
+        }
+        .form-input:focus{outline:none;border-color:#2563eb;background:#fff}
+        textarea.form-input{resize:vertical;min-height:80px}
+        .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
+        .modal-msg{font-size:13px;margin-top:12px;padding:10px 14px;border-radius:8px;display:none}
+        .modal-msg.ok{background:#f0fdf4;color:#16a34a;display:block}
+        .modal-msg.err{background:#fef2f2;color:#dc2626;display:block}
+
         @media print{
             @page{size:A6 landscape;margin:4mm}
             html,body{width:148mm;height:105mm;overflow:hidden}
             body{background:#fff;padding:0}
-            .toolbar{display:none}
+            .toolbar,.addr-missing-banner,.modal-backdrop{display:none!important}
             .label-sheet{width:100%;height:100%;border:none;border-radius:0;box-shadow:none}
             .label-inner{padding:5mm}
         }
@@ -110,11 +148,16 @@
         <div class="title">Étiquette colis</div>
         <div class="actions">
             <a class="btn btn-ghost" href="dispatch.html">Retour</a>
-            <button class="btn btn-red" onclick="window.print()">Imprimer</button>
+            <button id="btnEditAddr" class="btn btn-blue" style="display:none" onclick="openModal()">✏️ Modifier l'adresse</button>
+            <button class="btn btn-red" onclick="window.print()">🖨️ Imprimer</button>
         </div>
     </div>
 
-    <div id="loading" class="loading">Chargement de l’étiquette…</div>
+    <div id="missingBanner" class="addr-missing-banner" style="display:none">
+        ⚠️ Adresse destinataire manquante — cliquez sur <strong>&nbsp;Modifier l'adresse&nbsp;</strong> pour la saisir.
+    </div>
+
+    <div id="loading" class="loading">Chargement de l'étiquette…</div>
     <div id="error" class="error" style="display:none;color:#b91c1c;"></div>
 
     <div id="sheet" class="label-sheet" style="display:none;">
@@ -166,6 +209,30 @@
         </div>
     </div>
 
+    <!-- Modal modification adresse -->
+    <div id="modalBackdrop" class="modal-backdrop" onclick="closeModalOutside(event)">
+        <div class="modal">
+            <div class="modal-title">Modifier l'adresse destinataire</div>
+            <div class="form-group">
+                <label class="form-label" for="fNom">Nom / Entreprise</label>
+                <input id="fNom" class="form-input" type="text" placeholder="Ex: Dupont SA">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="fAddr">Adresse complète</label>
+                <textarea id="fAddr" class="form-input" placeholder="Rue de la Paix 12&#10;1000 Lausanne&#10;Suisse"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="fTel">Téléphone (optionnel)</label>
+                <input id="fTel" class="form-input" type="text" placeholder="+41 79 000 00 00">
+            </div>
+            <div id="modalMsg" class="modal-msg"></div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+                <button id="btnSave" class="btn btn-red" onclick="saveAddress()">💾 Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
 <script>
 (function(){
     if(!window.SUPABASE_CONFIG){ document.getElementById('error').style.display='block'; document.getElementById('error').textContent='config.js manquant'; return; }
@@ -173,6 +240,8 @@
     const loading = document.getElementById('loading');
     const errorEl = document.getElementById('error');
     const sheet = document.getElementById('sheet');
+
+    let _orderId = null;
 
     function fail(msg){
         loading.style.display='none';
@@ -191,18 +260,58 @@
         }catch(e){ return '—'; }
     }
 
+    function renderLabel(o){
+        const orderRef = o.order_number || String(o.id).slice(0,8).toUpperCase();
+        const qrData = `https://colixo.ch/admin/driver-app.html?id=${o.id}`;
+
+        document.getElementById('docNum').textContent = orderRef;
+        document.getElementById('createdAt').textContent = `Créée le ${fmtDate(o.created_at)}`;
+
+        const nom = o.destinataire_nom || o.client_name || o.entreprise_nom || '';
+        const addr = o.delivery_address || '';
+
+        document.getElementById('destName').textContent = nom || '—';
+        if(addr){
+            document.getElementById('destAddr').innerHTML = addr.replace(/\n/g,'<br>');
+            document.getElementById('destAddr').className = 'addr-line';
+        } else {
+            document.getElementById('destAddr').textContent = 'Adresse non renseignée';
+            document.getElementById('destAddr').className = 'addr-missing';
+        }
+        document.getElementById('destPhone').textContent = o.destinataire_tel || '';
+        document.getElementById('serviceVal').textContent = (o.service_type || o.speed || 'Standard') + (o.night_delivery ? ' · Nuit' : '');
+        document.getElementById('qtyVal').textContent = `${o.quantity || 1} colis`;
+        document.getElementById('weightVal').textContent = `${o.weight || 0} kg`;
+        document.getElementById('packageVal').textContent = o.package_type || 'Standard';
+        document.getElementById('scanCode').textContent = qrData;
+
+        // QR code
+        const qrWrap = document.getElementById('qrWrap');
+        qrWrap.innerHTML = '';
+        new QRCode(qrWrap, {
+            text: qrData, width:200, height:200,
+            colorDark:'#000000', colorLight:'#ffffff',
+            correctLevel: QRCode.CorrectLevel.L
+        });
+
+        // Pre-remplir le formulaire
+        document.getElementById('fNom').value = nom;
+        document.getElementById('fAddr').value = addr;
+        document.getElementById('fTel').value = o.destinataire_tel || '';
+    }
+
     async function init(){
         try{
             const id = qs('id');
             if(!id){ fail('Commande introuvable : identifiant manquant.'); return; }
+            _orderId = id;
 
             const { data:{ session } } = await db.auth.getSession();
             const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
             if(!session && !codeUser){ location.href='../login/index.html'; return; }
 
             let user = null;
-            if(codeUser && codeUser.role) {
-                // Connexion par code (clients portail) — utiliser directement les données stockées
+            if(codeUser && codeUser.role){
                 user = codeUser;
             } else {
                 const uid = session?.user?.id;
@@ -210,7 +319,7 @@
                 user = u;
             }
 
-            const isAdmin = user && ['admin','super_admin','magasinier','chauffeur'].includes(String(user.role||''));
+            const isAdmin = user && ['admin','super_admin','magasinier'].includes(String(user.role||''));
             const isClient = user && ['client','gestionnaire','comptable'].includes(String(user.role||''));
             if(!user || (!isAdmin && !isClient)){
                 fail("Accès refusé à l'étiquette colis.");
@@ -218,41 +327,82 @@
             }
 
             let orderQuery = db.from('transport_orders_simple').select('*').eq('id', id);
-            // Les clients ne peuvent voir que leurs propres commandes
             if(isClient) orderQuery = orderQuery.eq('entreprise_id', user.entreprise_id);
             const { data:o, error } = await orderQuery.single();
             if(error || !o){ fail('Commande introuvable ou accès non autorisé.'); return; }
 
-            const orderRef = o.order_number || String(o.id).slice(0,8).toUpperCase();
-            const qrData = `https://colixo.ch/admin/driver-app.html?id=${o.id}`;
-
-            document.getElementById('docNum').textContent = orderRef;
-            document.getElementById('createdAt').textContent = `Créée le ${fmtDate(o.created_at)}`;
-            document.getElementById('destName').textContent = o.destinataire_nom || o.client_name || o.entreprise_nom || 'Destinataire';
-            document.getElementById('destAddr').innerHTML = (o.delivery_address || 'Adresse non renseignée').replace(/\n/g,'<br>');
-            document.getElementById('destPhone').textContent = o.destinataire_tel || '';
-            document.getElementById('serviceVal').textContent = (o.service_type || o.speed || 'Standard') + (o.night_delivery ? ' · Nuit' : '');
-            document.getElementById('qtyVal').textContent = `${o.quantity || 1} colis`;
-            document.getElementById('weightVal').textContent = `${o.weight || 0} kg`;
-            document.getElementById('packageVal').textContent = o.package_type || 'Standard';
-            document.getElementById('scanCode').textContent = qrData;
-
-            new QRCode(document.getElementById('qrWrap'), {
-                text: qrData,
-                width: 200,
-                height: 200,
-                colorDark: '#000000',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.L
-            });
-
+            renderLabel(o);
             loading.style.display='none';
             sheet.style.display='block';
+
+            if(isAdmin){
+                document.getElementById('btnEditAddr').style.display='inline-flex';
+                if(!o.delivery_address){
+                    document.getElementById('missingBanner').style.display='flex';
+                }
+            }
         }catch(e){
             console.error(e);
             fail("Erreur d'affichage de l'étiquette.");
         }
     }
+
+    // --- Modal ---
+    window.openModal = function(){
+        document.getElementById('modalBackdrop').classList.add('open');
+        document.getElementById('modalMsg').className = 'modal-msg';
+        document.getElementById('modalMsg').textContent = '';
+    };
+
+    window.closeModal = function(){
+        document.getElementById('modalBackdrop').classList.remove('open');
+    };
+
+    window.closeModalOutside = function(e){
+        if(e.target === document.getElementById('modalBackdrop')) closeModal();
+    };
+
+    window.saveAddress = async function(){
+        const btn = document.getElementById('btnSave');
+        const msg = document.getElementById('modalMsg');
+        const nom = document.getElementById('fNom').value.trim();
+        const addr = document.getElementById('fAddr').value.trim();
+        const tel = document.getElementById('fTel').value.trim();
+
+        if(!addr){ msg.className='modal-msg err'; msg.textContent='L\'adresse est obligatoire.'; return; }
+
+        btn.disabled = true;
+        btn.textContent = 'Enregistrement…';
+        msg.className = 'modal-msg';
+
+        try{
+            const updates = {
+                delivery_address: addr,
+                ...(nom && { destinataire_nom: nom }),
+                ...(tel && { destinataire_tel: tel }),
+            };
+            const { data, error } = await db
+                .from('transport_orders_simple')
+                .update(updates)
+                .eq('id', _orderId)
+                .select()
+                .single();
+
+            if(error) throw error;
+
+            renderLabel(data);
+            document.getElementById('missingBanner').style.display='none';
+            msg.className='modal-msg ok';
+            msg.textContent='Adresse enregistrée !';
+            setTimeout(closeModal, 1200);
+        }catch(e){
+            msg.className='modal-msg err';
+            msg.textContent='Erreur : ' + (e.message || 'impossible de sauvegarder');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '💾 Enregistrer';
+        }
+    };
 
     init();
 })();
