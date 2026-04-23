@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="../vendor/supabase.umd.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
 :root{--red:#e8311a;--red-dark:#c0280f;--red-glow:rgba(232,49,26,0.18);--night:#0a0a0f;--night2:#111118;--night3:#18181f;--surface:#1e1e28;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--white:#fff;--muted:rgba(255,255,255,0.42);--muted2:rgba(255,255,255,0.68);--green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b;--orange:#f97316;--purple:#a855f7;--teal:#14b8a6;}
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
@@ -128,6 +130,23 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 .mactions .btn{flex:1;justify-content:center;padding:12px;}
 @media(max-width:1150px){.panel-right{width:290px;}}
 @media(max-width:900px){html,body{overflow:auto;}.workspace{flex-direction:column;overflow:visible;}.panel-right{width:100%;border-left:none;border-top:1px solid var(--border);}.tbl-wrap{max-height:55vh;}}
+/* ── MAP OVERLAY ── */
+.map-overlay{display:none;position:fixed;inset:0;z-index:500;background:var(--night);flex-direction:column;}
+.map-overlay.open{display:flex;}
+.map-toolbar{height:48px;background:var(--night2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;}
+.map-toolbar .map-title{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;}
+#leafletMap{flex:1;}
+.map-legend{position:absolute;bottom:20px;right:16px;z-index:600;background:rgba(17,17,24,0.92);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;min-width:170px;pointer-events:none;}
+.map-legend-item{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:5px;}
+.map-legend-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+/* ── AUTO PROGRESS ── */
+.auto-progress{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.72);align-items:center;justify-content:center;}
+.auto-progress.open{display:flex;}
+.auto-progress-box{background:var(--night2);border:1px solid var(--border2);border-radius:18px;padding:30px 36px;text-align:center;min-width:300px;}
+.auto-progress-title{font-family:'Bebas Neue',cursive;font-size:24px;letter-spacing:1px;margin-bottom:6px;}
+.auto-progress-msg{font-size:13px;color:var(--muted2);min-height:20px;}
+.progress-bar{height:4px;background:var(--border2);border-radius:4px;overflow:hidden;margin-top:14px;}
+.progress-fill{height:100%;background:var(--red);border-radius:4px;transition:width 0.4s;}
     </style>
 </head>
 <body>
@@ -140,6 +159,8 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
     <a href="tarification.html" class="btn btn-ghost btn-sm"><i class="fas fa-tags"></i> Tarification</a>
     <button type="button" class="btn btn-ghost btn-sm" id="btnRefresh"><i class="fas fa-sync-alt"></i> Actualiser</button>
     <button type="button" class="btn btn-red btn-sm" id="btnNew"><i class="fas fa-plus"></i> Nouveau transport</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btnAutoCluster" onclick="autoCluster()"><i class="fas fa-magic"></i> Auto-tournées</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btnShowMap" onclick="toggleMap()"><i class="fas fa-map-marked-alt"></i> Carte</button>
 </header>
 
 <div class="workspace">
@@ -212,6 +233,26 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- MAP OVERLAY -->
+<div class="map-overlay" id="mapOverlay">
+    <div class="map-toolbar">
+        <span class="map-title">🗺 Carte des tournées</span>
+        <div style="flex:1"></div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="toggleMap()"><i class="fas fa-times"></i> Fermer</button>
+    </div>
+    <div id="leafletMap"></div>
+    <div class="map-legend" id="mapLegend"></div>
+</div>
+
+<!-- AUTO CLUSTER PROGRESS -->
+<div class="auto-progress" id="autoProgress">
+    <div class="auto-progress-box">
+        <div class="auto-progress-title">Création des tournées</div>
+        <div class="auto-progress-msg" id="autoProgressMsg">Analyse des commandes…</div>
+        <div class="progress-bar"><div class="progress-fill" id="autoProgressFill" style="width:0%"></div></div>
+    </div>
+</div>
 
 <!-- MODAL NOUVEAU TRANSPORT -->
 <div class="overlay" id="modalNew">
@@ -511,7 +552,7 @@ function renderTourneePanel(){
             +'<div class="t-card-stats"><span class="t-stat"><i class="fas fa-truck"></i>'+tot.vehicles+' véhicule'+(tot.vehicles!==1?'s':'')+'</span><span class="t-stat"><i class="fas fa-sack-dollar"></i>CA '+fmtMoney(tot.revenue)+'</span><span class="t-stat"><i class="fas fa-wallet"></i>Coût '+fmtMoney(tot.cost)+'</span><span class="t-stat" style="color:'+(tot.result>=0?'var(--green)':'#f87171')+';"><i class="fas fa-chart-line"></i>Résultat '+fmtMoney(tot.result)+'</span>'+(tot.km?'<span class="t-stat"><i class="fas fa-gauge-high"></i>'+fmtMoney(tot.costPerKm)+'/km</span>':'')+'</div>'
             +(trItems?'<div class="t-transports">'+trItems+'</div>':'')
             +'<div class="t-drop-zone"><i class="fas fa-hand-point-up" style="margin-right:5px;opacity:0.5;"></i>Glisser un transport ici</div>'
-            +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
+            +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-ghost btn-xs" onclick="optimizeTournee(\''+t.id+'\')" title="Optimiser l\'ordre de livraison via OSRM"><i class="fas fa-route"></i> Opt.</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
         +'</div>';
     }).join('');
 }
@@ -876,6 +917,168 @@ document.getElementById('btnSaveNew').addEventListener('click',async function(){
         toast(payload.order_number+' créé !',true);closeModal('modalNew');await load({silent:true});
     }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Créer le transport';}
 });
+
+// ── AUTO-CLUSTER & CARTE ──
+
+var TOUR_COLORS=['#e8311a','#3b82f6','#22c55e','#f59e0b','#a855f7','#14b8a6','#f97316','#ec4899','#06b6d4','#84cc16','#fb7185','#818cf8'];
+var tourneeOptimizedOrder={};
+var leafletMap=null;
+
+function getZone(lat,lng){
+    if(!lat||!lng)return'Non géolocalisé';
+    lat=parseFloat(lat);lng=parseFloat(lng);
+    if(lat<46.35&&lng<6.35)return'Genève';
+    if(lat<46.65&&lng>=6.2&&lng<7.2)return'Lausanne / Vaud';
+    if(lat>=46.65&&lat<46.9&&lng>=6.9&&lng<7.3)return'Fribourg';
+    if(lat>=46.9&&lat<47.15&&lng<7.1)return'Neuchâtel';
+    if(lat>=47.0&&lat<47.2&&lng>=7.1&&lng<7.5)return'Biel / Bienne';
+    if(lat>=46.85&&lat<47.2&&lng>=7.3&&lng<7.8)return'Berne';
+    if(lat>=47.1&&lat<47.4&&lng>=7.4&&lng<7.9)return'Solothurn';
+    if(lat>=47.3&&lng>=7.5&&lng<7.9)return'Basel';
+    if(lat>=47.2&&lng>=7.9&&lng<8.4)return'Aarau / Aargau';
+    if(lat>=47.2&&lng>=8.4&&lng<8.8)return'Zürich';
+    if(lat<46.65&&lng>=7.2)return'Valais';
+    return'Zone '+Math.round(lat*5)/5+'/'+Math.round(lng*5)/5;
+}
+
+function setAutoProgress(msg,pct){
+    document.getElementById('autoProgressMsg').textContent=msg;
+    document.getElementById('autoProgressFill').style.width=pct+'%';
+}
+
+window.autoCluster=async function(){
+    var unassigned=rows.filter(function(r){return!r.tournee_id&&['pending','planned'].indexOf(r.status)>=0;});
+    if(!unassigned.length){toast('Aucune commande non assignée à grouper',false);return;}
+    var withCoords=unassigned.filter(function(r){return r.delivery_lat&&r.delivery_lng;});
+    var withoutCoords=unassigned.length-withCoords.length;
+    var msg='Créer des tournées automatiques pour '+unassigned.length+' commande(s) ?';
+    if(withoutCoords)msg+='\n('+withoutCoords+' sans coordonnées → zone "Non géolocalisé")';
+    if(!confirm(msg))return;
+
+    document.getElementById('autoProgress').classList.add('open');
+    setAutoProgress('Groupement géographique…',10);
+
+    try{
+        var zones={};
+        withCoords.forEach(function(r){
+            var z=getZone(r.delivery_lat,r.delivery_lng);
+            if(!zones[z])zones[z]=[];
+            zones[z].push(r);
+        });
+        if(withoutCoords>0){
+            zones['Non géolocalisé']=unassigned.filter(function(r){return!r.delivery_lat||!r.delivery_lng;});
+        }
+
+        var zoneNames=Object.keys(zones);
+        var dateVal=new Date().toISOString().split('T')[0];
+        var created=0;
+
+        for(var zi=0;zi<zoneNames.length;zi++){
+            var zoneName=zoneNames[zi];
+            var zoneOrders=zones[zoneName];
+            setAutoProgress('Tournée '+zoneName+'…',10+Math.round(80*zi/zoneNames.length));
+            var MAX=20;
+            for(var chunk=0;chunk*MAX<zoneOrders.length;chunk++){
+                var slice=zoneOrders.slice(chunk*MAX,(chunk+1)*MAX);
+                var tourName=zoneOrders.length<=MAX?zoneName:zoneName+' '+(chunk+1);
+                var col=TOUR_COLORS[created%TOUR_COLORS.length];
+                var ins=await db.from('tournees').insert([{nom:tourName,date:dateVal,zone:zoneName,couleur:col,jours:[1,2,3,4,5]}]).select('id').single();
+                if(ins.error)throw ins.error;
+                var ids=slice.map(function(r){return r.id;});
+                var upd=await db.from('transport_orders_simple').update({tournee_id:ins.data.id,status:'planned'}).in('id',ids);
+                if(upd.error)throw upd.error;
+                slice.forEach(function(r){r.tournee_id=ins.data.id;r.status='planned';});
+                created++;
+            }
+        }
+
+        setAutoProgress(created+' tournée(s) créée(s) !',100);
+        await loadTournees();
+        applyFilter();
+        setTimeout(function(){document.getElementById('autoProgress').classList.remove('open');},1400);
+        toast('✅ '+created+' tournée(s) créée(s) automatiquement',true);
+    }catch(e){
+        document.getElementById('autoProgress').classList.remove('open');
+        toast('Erreur : '+(e.message||String(e)),false);
+    }
+};
+
+window.optimizeTournee=async function(tid){
+    var tOrders=rows.filter(function(r){return r.tournee_id===tid&&r.delivery_lat&&r.delivery_lng;});
+    if(tOrders.length<2){toast('Moins de 2 commandes géolocalisées dans cette tournée',false);return;}
+    if(tOrders.length>12){toast('Optimisation limitée à 12 points (API gratuite)',false);return;}
+    try{
+        var coords=tOrders.map(function(r){return r.delivery_lng+','+r.delivery_lat;}).join(';');
+        var url='https://router.project-osrm.org/trip/v1/driving/'+coords+'?source=first&roundtrip=false&geometries=geojson';
+        var resp=await fetch(url);
+        if(!resp.ok)throw new Error('OSRM non disponible ('+resp.status+')');
+        var data=await resp.json();
+        if(data.code!=='Ok')throw new Error(data.message||'Erreur OSRM');
+        // Build ordered IDs: waypoints[i].waypoint_index = optimized position for original input i
+        var orderedIds=new Array(tOrders.length).fill(null);
+        data.waypoints.forEach(function(wp,i){orderedIds[wp.waypoint_index]=tOrders[i].id;});
+        tourneeOptimizedOrder[tid]=orderedIds.filter(Boolean);
+        renderTourneePanel();
+        toast('✅ Tournée optimisée ('+tOrders.length+' points)',true);
+        if(document.getElementById('mapOverlay').classList.contains('open'))renderMap();
+    }catch(e){toast('Erreur optimisation : '+(e.message||String(e)),false);}
+};
+
+window.toggleMap=function(){
+    var overlay=document.getElementById('mapOverlay');
+    if(overlay.classList.contains('open')){overlay.classList.remove('open');}
+    else{overlay.classList.add('open');setTimeout(renderMap,120);}
+};
+
+window.renderMap=function(){
+    var overlay=document.getElementById('mapOverlay');
+    if(!overlay.classList.contains('open'))return;
+    if(typeof L==='undefined'){toast('Leaflet non chargé',false);return;}
+    if(!leafletMap){
+        leafletMap=L.map('leafletMap').setView([46.8,7.2],8);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CARTO',maxZoom:19}).addTo(leafletMap);
+    } else {
+        leafletMap.eachLayer(function(l){if(l._cx)leafletMap.removeLayer(l);});
+    }
+    var legend=document.getElementById('mapLegend');
+    var legendHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.42);margin-bottom:8px;letter-spacing:1px;">Légende</div>';
+    var allPoints=[];
+
+    tournees.forEach(function(t,ti){
+        var col=t.couleur||TOUR_COLORS[ti%TOUR_COLORS.length];
+        var tOrders=rows.filter(function(r){return r.tournee_id===t.id&&r.delivery_lat&&r.delivery_lng;});
+        if(!tOrders.length)return;
+        var optimized=tourneeOptimizedOrder[t.id];
+        var sorted=optimized
+            ?optimized.map(function(id){return tOrders.find(function(r){return r.id===id;});}).filter(Boolean)
+            :tOrders;
+        sorted.forEach(function(r,idx){
+            var m=L.circleMarker([parseFloat(r.delivery_lat),parseFloat(r.delivery_lng)],{radius:8,color:col,weight:2,fillColor:col,fillOpacity:0.85}).addTo(leafletMap);
+            m._cx=true;
+            m.bindPopup('<strong>'+(r.order_number||r.id.slice(0,8))+'</strong><br>'+(r.delivery_address||'')+'<br>'+(r.destinataire_nom||''));
+            allPoints.push([parseFloat(r.delivery_lat),parseFloat(r.delivery_lng)]);
+        });
+        if(sorted.length>=2){
+            var ll=sorted.map(function(r){return[parseFloat(r.delivery_lat),parseFloat(r.delivery_lng)];});
+            var line=L.polyline(ll,{color:col,weight:3,opacity:0.8,dashArray:'8,4'}).addTo(leafletMap);
+            line._cx=true;
+        }
+        legendHTML+='<div class="map-legend-item"><div class="map-legend-dot" style="background:'+col+'"></div><span>'+t.nom+' ('+tOrders.length+')</span></div>';
+    });
+
+    var unassigned=rows.filter(function(r){return!r.tournee_id&&r.delivery_lat&&r.delivery_lng&&['delivered','refused','cancelled'].indexOf(r.status)<0;});
+    unassigned.forEach(function(r){
+        var m=L.circleMarker([parseFloat(r.delivery_lat),parseFloat(r.delivery_lng)],{radius:5,color:'#555',weight:1,fillColor:'#888',fillOpacity:0.55}).addTo(leafletMap);
+        m._cx=true;
+        m.bindPopup('<strong>'+(r.order_number||r.id.slice(0,8))+'</strong><br>'+(r.delivery_address||''));
+        allPoints.push([parseFloat(r.delivery_lat),parseFloat(r.delivery_lng)]);
+    });
+    if(unassigned.length)legendHTML+='<div class="map-legend-item"><div class="map-legend-dot" style="background:#888"></div><span>Non assignés ('+unassigned.length+')</span></div>';
+
+    legend.innerHTML=legendHTML;
+    if(allPoints.length)leafletMap.fitBounds(allPoints,{padding:[40,40]});
+    leafletMap.invalidateSize();
+};
 
 // ── EVENTS ──
 document.getElementById('q').addEventListener('input',applyFilter);
