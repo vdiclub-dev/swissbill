@@ -12,6 +12,7 @@
     <script src="ai-dispatch.js?v=20260422"></script>
     <script src="profit.js?v=20260423"></script>
     <script src="pricing.js?v=20260423"></script>
+    <script src="autopilot.js?v=20260423"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -180,6 +181,31 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 .score-a{background:rgba(34,197,94,0.14);color:var(--green);border:1px solid rgba(34,197,94,0.28);}
 .score-b{background:rgba(245,158,11,0.14);color:var(--yellow);border:1px solid rgba(245,158,11,0.28);}
 .score-c{background:rgba(232,49,26,0.14);color:#f87171;border:1px solid rgba(232,49,26,0.28);}
+/* ── AUTOPILOT DRAWER ── */
+.ap-drawer{position:fixed;top:0;right:0;bottom:0;width:360px;z-index:800;background:var(--night2);border-left:1px solid var(--border2);display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);overflow:hidden;}
+.ap-drawer.open{transform:translateX(0);}
+.ap-panel{flex:1;overflow-y:auto;padding-bottom:20px;}
+.ap-panel::-webkit-scrollbar{width:4px;}
+.ap-panel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+.ap-header{display:flex;align-items:center;gap:10px;padding:14px 14px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.ap-title{font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px;}
+.ap-modes{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.ap-mode-btn{flex:1;justify-content:center;font-size:11px;padding:7px 4px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--muted2);cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;transition:all 0.18s;}
+.ap-mode-btn:hover{color:var(--white);border-color:var(--border2);}
+.ap-mode-active{background:rgba(255,255,255,0.04);}
+.ap-section{padding:10px 14px 4px;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.ap-count{background:var(--surface);color:var(--muted2);border-radius:100px;padding:1px 7px;font-size:10px;}
+.ap-card{margin:0 10px 7px;padding:10px 12px;border-radius:10px;border:1px solid var(--border2);}
+.ap-card-title{font-size:13px;font-weight:600;line-height:1.3;margin-bottom:3px;}
+.ap-card-detail{font-size:11px;color:var(--muted2);line-height:1.4;margin-bottom:7px;}
+.ap-card-btns{display:flex;gap:6px;}
+.ap-chip-auto{display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.24);border-radius:100px;padding:1px 6px;margin-left:6px;vertical-align:middle;}
+.ap-empty{text-align:center;padding:30px 20px;color:var(--muted);font-size:13px;line-height:1.7;}
+.ap-empty small{font-size:11px;}
+.ap-log-row{display:flex;align-items:flex-start;gap:6px;padding:5px 14px;font-size:11px;border-top:1px solid var(--border);}
+.ap-log-msg{flex:1;color:var(--muted2);line-height:1.4;}
+.ap-log-ts{color:var(--muted);white-space:nowrap;font-size:10px;margin-top:1px;}
+@media(max-width:900px){.ap-drawer{width:100%;}}
     </style>
 </head>
 <body>
@@ -193,6 +219,7 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
     <button type="button" class="btn btn-ghost btn-sm" id="btnRefresh"><i class="fas fa-sync-alt"></i> Actualiser</button>
     <button type="button" class="btn btn-red btn-sm" id="btnNew"><i class="fas fa-plus"></i> Nouveau transport</button>
     <button type="button" class="btn btn-ghost btn-sm" id="btnAutoCluster" onclick="autoCluster()"><i class="fas fa-magic"></i> Auto-tournées</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btnAutopilot" onclick="window.ColixoAutopilot&&window.ColixoAutopilot.openPanel()">🧠 Pilote</button>
     <button type="button" class="btn btn-ghost btn-sm" id="btnShowMap" onclick="toggleMap()"><i class="fas fa-map-marked-alt"></i> Carte</button>
 </header>
 
@@ -276,6 +303,13 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- AUTOPILOT DRAWER -->
+<div class="ap-drawer" id="apDrawer">
+    <div class="ap-panel" id="apPanel">
+        <div class="ap-empty">Chargement…</div>
+    </div>
+</div>
 
 <!-- MAP OVERLAY -->
 <div class="map-overlay" id="mapOverlay">
@@ -1182,6 +1216,33 @@ window.ColixoDispatch={
     renderTournees:renderTourneePanel,
     applyFilter:applyFilter
 };
+})();
+</script>
+
+<!-- AUTOPILOT HOOK: re-analyse after data loads -->
+<script>
+(function(){
+    // Wait for ColixoDispatch to be ready then hook into reload
+    var waitForDispatch = setInterval(function() {
+        if (!window.ColixoDispatch || !window.ColixoAutopilot) return;
+        clearInterval(waitForDispatch);
+        // Wrap reload to trigger autopilot analysis after data refresh
+        var origReload = window.ColixoDispatch.reload;
+        if (origReload) {
+            window.ColixoDispatch.reload = function() {
+                return origReload.call(window.ColixoDispatch).then(function(r) {
+                    if (window.ColixoAutopilot && document.getElementById('apDrawer').classList.contains('open')) {
+                        window.ColixoAutopilot.analyzeSystem();
+                    }
+                    return r;
+                });
+            };
+        }
+        // Initial analysis 2s after page load (data will be ready)
+        setTimeout(function() {
+            if (window.ColixoAutopilot) window.ColixoAutopilot.analyzeSystem();
+        }, 2000);
+    }, 300);
 })();
 </script>
 
