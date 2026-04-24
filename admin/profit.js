@@ -26,23 +26,21 @@ function haversine(lat1, lng1, lat2, lng2) {
 }
 
 // Calcule les km réels aller-retour : dépôt → stops → dépôt
+// Les missions confiées à un transporteur externe sont exclues (on ne roule pas pour elles)
 function realRouteKm(missions) {
-    var geo = missions.filter(function(m) { return m.delivery_lat && m.delivery_lng; });
+    var internal = missions.filter(function(m) { return !m.external_carrier_name; });
+    var geo = internal.filter(function(m) { return m.delivery_lat && m.delivery_lng; });
     if (!geo.length) {
-        // Pas de coordonnées : fallback sum des distance_km individuels
-        return missions.reduce(function(s, m) { return s + (parseFloat(m.distance_km) || 8); }, 0);
+        return internal.reduce(function(s, m) { return s + (parseFloat(m.distance_km) || 8); }, 0);
     }
     var km = 0;
-    // Dépôt → première livraison
     km += haversine(DEPOT.lat, DEPOT.lng, parseFloat(geo[0].delivery_lat), parseFloat(geo[0].delivery_lng));
-    // Entre chaque livraison
     for (var i = 0; i < geo.length - 1; i++) {
         km += haversine(
             parseFloat(geo[i].delivery_lat),   parseFloat(geo[i].delivery_lng),
             parseFloat(geo[i+1].delivery_lat), parseFloat(geo[i+1].delivery_lng)
         );
     }
-    // Dernière livraison → retour dépôt
     km += haversine(parseFloat(geo[geo.length-1].delivery_lat), parseFloat(geo[geo.length-1].delivery_lng), DEPOT.lat, DEPOT.lng);
     return km;
 }
@@ -67,11 +65,11 @@ function missionRevenue(m) {
 // ── calculateMissionCost ──────────────────────────────────────────────────────
 
 function calculateMissionCost(mission) {
-    var km = parseFloat(mission.distance_km) || 0;
-    if (!km) {
-        // Estimate from address if no distance: fallback 8 km per stop
-        km = 8;
+    // Transporteur externe : le coût est uniquement le montant facturé par le transporteur
+    if (mission.external_carrier_name) {
+        return parseFloat(mission.external_carrier_price) || 0;
     }
+    var km = parseFloat(mission.distance_km) || 8;
     var kmCost   = km * KM_COST;
     var timeCost = (km / AVG_SPEED) * TIME_CHF_PER_H;
     return Math.round((kmCost + timeCost) * 100) / 100;
@@ -84,12 +82,19 @@ function calculateTourProfit(missions) {
 
     var revenue = missions.reduce(function(s, m) { return s + missionRevenue(m); }, 0);
 
-    // Km réels : dépôt → toutes livraisons chaînées → retour dépôt
-    var km = realRouteKm(missions);
+    // Coût des missions externes : uniquement le prix payé au transporteur (pas de km)
+    var extCost = missions.reduce(function(s, m) {
+        return s + (m.external_carrier_name ? (parseFloat(m.external_carrier_price) || 0) : 0);
+    }, 0);
 
+    // Km réels uniquement pour les missions internes (on ne roule pas pour les externes)
+    var km = realRouteKm(missions);
     var kmCost   = km * KM_COST;
     var timeCost = (km / AVG_SPEED) * TIME_CHF_PER_H;
-    var cost     = FIXED_COST + kmCost + timeCost;
+
+    // Coût fixe seulement si on a des missions internes
+    var hasInternal = missions.some(function(m) { return !m.external_carrier_name; });
+    var cost = (hasInternal ? FIXED_COST : 0) + kmCost + timeCost + extCost;
 
     var profit        = revenue - cost;
     var marginPercent = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
