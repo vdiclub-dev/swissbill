@@ -474,6 +474,29 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
     </div>
 </div>
 
+<!-- MODAL LIVRAISON EXTERNE -->
+<div class="overlay" id="modalExtDelivery">
+    <div class="mbox sm">
+        <div class="mhead">
+            <div>
+                <div class="mtitle">Confirmer livraison externe</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:3px;" id="extDelNum"></div>
+            </div>
+            <button type="button" class="mclose" onclick="closeModal('modalExtDelivery')">✕</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted2);margin-bottom:16px;" id="extDelCarrier"></div>
+        <input type="hidden" id="extDelId">
+        <div class="fgrid">
+            <div class="field s2"><label>Nom du réceptionnaire (optionnel)</label><input type="text" id="extDelReceiver" placeholder="Prénom Nom"></div>
+            <div class="field s2"><label>Note (optionnel)</label><input type="text" id="extDelNote" placeholder="Ex: Livré en point relais…"></div>
+        </div>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalExtDelivery')">Annuler</button>
+            <button type="button" class="btn btn-red" id="btnConfirmExtDel"><i class="fas fa-check"></i> Confirmer livraison</button>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL SUPPRIMER -->
 <div class="overlay" id="modalDelete">
     <div class="mbox sm">
@@ -888,6 +911,7 @@ function renderTable(list){
                 :'<td style="text-align:center;color:var(--muted);font-size:11px;">—</td>')
             +'<td class="actions">'
                 +actionHtml
+                +(o.external_carrier_name&&o.status!=='delivered'&&o.status!=='completed'?'<button type="button" class="btn btn-xs btn-green" onclick="openExtDeliveryModal(\''+o.id+'\')" title="Confirmer livraison externe"><i class="fas fa-check"></i> Livré</button> ':'')
                 +'<a class="btn btn-ghost btn-xs" href="'+gmUrl+'" target="_blank" title="Google Maps"><i class="fas fa-map-marked-alt"></i></a> '
                 +'<button type="button" class="btn btn-ghost btn-xs" onclick="openAssignModal(\''+o.id+'\')" title="Assigner"><i class="fas fa-user-check"></i></button> '
                 +'<button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="openDeleteModal(\''+o.id+'\',\''+esc(o.order_number||o.id.slice(0,8))+'\')" title="Supprimer"><i class="fas fa-trash"></i></button>'
@@ -986,6 +1010,35 @@ document.getElementById('modalBtnSave').addEventListener('click',async function(
         var oo=rows.find(function(x){return x.id===id;});if(oo){oo.driver_id=drvId;oo.tournee_id=tourneeId;oo.external_carrier_name=extName;oo.external_carrier_price=extPrice;if(drvId&&oo.status==='pending'&&getAdminStatus(oo)!=='pending_validation')oo.status='planned';}
         toast('Assigné',true);closeModal('modalAssign');applyFilter();renderTourneePanel();
     }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;}
+});
+
+// ── LIVRAISON EXTERNE ──
+window.openExtDeliveryModal=function(id){
+    var o=rows.find(function(x){return x.id===id;});if(!o)return;
+    document.getElementById('extDelId').value=id;
+    document.getElementById('extDelNum').textContent=o.order_number||o.id.slice(0,8);
+    document.getElementById('extDelCarrier').textContent='Transporteur : '+(o.external_carrier_name||'—')+(o.external_carrier_price?' — '+o.external_carrier_price+' CHF':'');
+    document.getElementById('extDelReceiver').value='';
+    document.getElementById('extDelNote').value='';
+    openModal('modalExtDelivery');
+};
+document.getElementById('btnConfirmExtDel').addEventListener('click',async function(){
+    var id=document.getElementById('extDelId').value;
+    var receiver=document.getElementById('extDelReceiver').value.trim()||null;
+    var note=document.getElementById('extDelNote').value.trim()||null;
+    var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+    try{
+        var ts=nowCH();
+        var payload={status:'delivered',delivered_at:ts,pod_status:true,pod_mode:'external'};
+        if(receiver)payload.receiver_name=receiver;
+        if(note)payload.instructions=note;
+        var r=await db.from('transport_orders_simple').update(payload).eq('id',id);
+        if(r.error)throw r.error;
+        var o=rows.find(function(x){return x.id===id;});
+        if(o){o.status='delivered';o.delivered_at=ts;o.pod_status=true;o.pod_mode='external';if(receiver)o.receiver_name=receiver;}
+        toast('Livraison confirmée',true);closeModal('modalExtDelivery');applyFilter();
+    }catch(e){toast('Erreur : '+(e.message||e),false);}
+    finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Confirmer livraison';}
 });
 
 // ── SUPPRIMER ──
