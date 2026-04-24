@@ -13,6 +13,9 @@
     <script src="profit.js?v=20260423"></script>
     <script src="pricing.js?v=20260423"></script>
     <script src="autopilot.js?v=20260423"></script>
+    <script src="workflow.js?v=20260423"></script>
+    <script src="realtime.js?v=20260423"></script>
+    <script src="driver-pod.js?v=20260423"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -134,6 +137,28 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 .mactions .btn{flex:1;justify-content:center;padding:12px;}
 @media(max-width:1150px){.panel-right{width:290px;}}
 @media(max-width:900px){html,body{overflow:auto;}.workspace{flex-direction:column;overflow:visible;}.panel-right{width:100%;border-left:none;border-top:1px solid var(--border);}.tbl-wrap{max-height:55vh;}}
+/* ── PANEL-RIGHT TABS ── */
+.rp-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--night2);}
+.rp-tab{flex:1;padding:9px 6px;font-size:12px;font-weight:700;letter-spacing:.5px;text-align:center;cursor:pointer;color:var(--muted);border:none;background:none;font-family:'Outfit',sans-serif;transition:color .15s;}
+.rp-tab.active{color:var(--white);border-bottom:2px solid var(--red);}
+/* ── PIPELINE ── */
+.pipeline-panel{display:none;flex-direction:column;gap:0;overflow-y:auto;flex:1;padding:10px;}
+.pipeline-panel.visible{display:flex;}
+.pp-bloc{background:var(--night3);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+.pp-bloc-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);}
+.pp-bloc-title{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;flex:1;}
+.pp-bloc-count{font-size:18px;font-weight:700;font-family:'Bebas Neue',cursive;}
+.pp-bloc-body{padding:8px 10px;font-size:12px;color:var(--muted2);max-height:180px;overflow-y:auto;}
+.pp-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);}
+.pp-row:last-child{border-bottom:none;}
+.pp-num{font-weight:700;font-size:11px;color:var(--white);min-width:70px;}
+.pp-addr{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;}
+.pp-empty{padding:10px;text-align:center;font-size:11px;color:var(--muted);}
+.pp-footer{padding:8px 10px;border-top:1px solid var(--border);}
+.pp-bloc.unassigned .pp-bloc-title{color:var(--muted2);}
+.pp-bloc.waiting .pp-bloc-title{color:var(--blue);}
+.pp-bloc.transit .pp-bloc-title{color:var(--purple);}
+.pp-bloc.billing .pp-bloc-title{color:var(--green);}
 /* ── MAP OVERLAY ── */
 .map-overlay{display:none;position:fixed;inset:0;z-index:500;background:var(--night);flex-direction:column;}
 .map-overlay.open{display:flex;}
@@ -283,7 +308,7 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
                     <th>Adresse enlèvement</th><th>Adresse livraison</th>
                     <th>Destinataire</th><th>Chauffeur</th>
                     <th>Poids / Qté</th><th>Km / Min</th>
-                    <th>Tournée</th><th>Créé</th><th>Actions</th>
+                    <th>Tournée</th><th>Créé</th><th>POD</th><th>Actions</th>
                 </tr></thead>
                 <tbody id="tbody"></tbody>
             </table>
@@ -293,16 +318,31 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 
     <div class="panel-right">
         <div class="rp-header">
-            <span class="rp-title">Tournées</span>
+            <span class="rp-title" id="rpTitle">Tournées</span>
             <button type="button" class="btn btn-ghost btn-sm" id="btnNewTournee"><i class="fas fa-plus"></i> Créer</button>
+        </div>
+        <div class="rp-tabs">
+            <button type="button" class="rp-tab active" id="tabTournees" onclick="switchRPTab('tournees')">Tournées</button>
+            <button type="button" class="rp-tab" id="tabPipeline" onclick="switchRPTab('pipeline')">Pipeline</button>
         </div>
         <div class="rp-body" id="tourneePanel">
             <div style="text-align:center;padding:30px;color:var(--muted);font-size:13px;"><i class="fas fa-spinner fa-spin"></i></div>
+        </div>
+        <div class="pipeline-panel" id="pipelinePanel">
+            <div class="pp-empty">Chargement…</div>
         </div>
     </div>
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- POD MODAL -->
+<div class="modal" id="modalPOD" style="display:none;">
+    <div class="modal-box" style="max-width:520px;">
+        <div class="modal-head"><span class="modal-title" id="podModalTitle">Preuve de livraison</span><button type="button" class="modal-close" onclick="closeModal('modalPOD')"><i class="fas fa-times"></i></button></div>
+        <div style="padding:20px;" id="podModalBody"><div style="text-align:center;color:var(--muted);padding:30px;"><i class="fas fa-spinner fa-spin"></i> Chargement…</div></div>
+    </div>
+</div>
 
 <!-- AUTOPILOT DRAWER -->
 <div class="ap-drawer" id="apDrawer">
@@ -365,6 +405,21 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
                 </div>
                 <div class="price-breakdown" id="priceBreakdown"></div>
             </div>
+            <div class="sep">Sous-traitance externe</div>
+            <div class="field s2" style="grid-column:1/-1;">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                    <input type="checkbox" id="nExtCarrierToggle" style="width:16px;height:16px;cursor:pointer;" onchange="document.getElementById('extCarrierNameField').style.display=this.checked?'block':'none';document.getElementById('extCarrierPriceField').style.display=this.checked?'block':'none';">
+                    <span>Confier à un transporteur externe</span>
+                </label>
+            </div>
+            <div class="field" id="extCarrierNameField" style="display:none;">
+                <label>Nom du transporteur</label>
+                <input type="text" id="nExtCarrierName" placeholder="DHL, FedEx, Chronopost…">
+            </div>
+            <div class="field" id="extCarrierPriceField" style="display:none;">
+                <label>Prix au transporteur (CHF)</label>
+                <input type="number" id="nExtCarrierPrice" placeholder="0.00" step="0.01" min="0">
+            </div>
             <div class="field s2"><label>Instructions / Notes</label><textarea id="nInstructions" placeholder="Instructions spéciales…"></textarea></div>
         </div>
         <div class="mactions">
@@ -376,13 +431,27 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 
 <!-- MODAL ASSIGNER -->
 <div class="overlay" id="modalAssign">
-    <div class="mbox sm">
+    <div class="mbox">
         <div class="mhead"><div><div class="mtitle">Assigner</div><div style="font-size:12px;color:var(--muted);margin-top:3px;" id="modalAssignNum"></div></div><button type="button" class="mclose" onclick="closeModal('modalAssign')">✕</button></div>
         <div style="font-size:12px;color:var(--muted2);margin-bottom:14px;line-height:1.4;" id="modalAssignRoute"></div>
         <input type="hidden" id="modalAssignId">
         <div class="fgrid">
             <div class="field" id="drvFieldWrap"><label>Chauffeur</label><select id="modalDriverSel"><option value="">— Aucun —</option></select></div>
             <div class="field" id="trnFieldWrap"><label>Tournée</label><select id="modalTourneeSel"><option value="">— Aucune —</option></select></div>
+            <div class="field s2" style="grid-column:1/-1;">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                    <input type="checkbox" id="assignExtCarrierToggle" style="width:16px;height:16px;cursor:pointer;" onchange="document.getElementById('assignExtCarrierNameField').style.display=this.checked?'block':'none';document.getElementById('assignExtCarrierPriceField').style.display=this.checked?'block':'none';">
+                    <span>Confier à un transporteur externe</span>
+                </label>
+            </div>
+            <div class="field" id="assignExtCarrierNameField" style="display:none;">
+                <label>Nom du transporteur</label>
+                <input type="text" id="assignExtCarrierName" placeholder="DHL, FedEx, Chronopost…">
+            </div>
+            <div class="field" id="assignExtCarrierPriceField" style="display:none;">
+                <label>Prix au transporteur (CHF)</label>
+                <input type="number" id="assignExtCarrierPrice" placeholder="0.00" step="0.01" min="0">
+            </div>
         </div>
         <div class="mactions">
             <button type="button" class="btn btn-ghost" onclick="closeModal('modalAssign')">Annuler</button>
@@ -673,10 +742,16 @@ window.pushTournee=async function(tid){
     var t=tournees.find(function(x){return x.id===tid;});if(!t)return;
     if(!t._chauffeur_id){toast('Assignez un chauffeur avant de pousser.',false);return;}
     var drv=driverName(t._chauffeur_id);
-    var tids=rows.filter(function(r){return r.tournee_id===tid&&r.status==='pending';}).map(function(r){return r.id;});
-    if(tids.length)await db.from('transport_orders_simple').update({status:'planned'}).in('id',tids);
-    try{if(window.ColixoPush&&window.ColixoPush.notifyDriver)await window.ColixoPush.notifyDriver(t._chauffeur_id,'🗺 Tournée : '+t.nom,rows.filter(function(r){return r.tournee_id===tid;}).length+' transports • '+(t.heure_debut||'')+' → '+(t.heure_fin||''),{type:'tournee_ready'});}catch(e){}
-    toast('Tournée «'+t.nom+'» poussée vers '+drv+' !',true);await load({silent:true});
+    if(window.ColixoWorkflow){
+        try{await window.ColixoWorkflow.assignTourToDriver(tid,t._chauffeur_id);}
+        catch(e){toast('Erreur : '+(e.message||e),false);return;}
+    }else{
+        var tids=rows.filter(function(r){return r.tournee_id===tid&&r.status==='pending';}).map(function(r){return r.id;});
+        if(tids.length)await db.from('transport_orders_simple').update({driver_id:t._chauffeur_id,admin_status:'accepted',status:'planned'}).in('id',tids);
+    }
+    toast('Tournée «'+t.nom+'» envoyée vers '+drv+' !',true);
+    await load({silent:true});
+    renderPipelinePanel();
 };
 
 // ── CHAUFFEUR PAR TOURNÉE ──
@@ -801,11 +876,16 @@ function renderTable(list){
             +'<td><div class="addr-lbl">DÉPART</div><div class="addr-full">'+esc(o.pickup_address||'—')+'</div></td>'
             +'<td><div class="addr-lbl">ARRIVÉE</div><div class="addr-full">'+esc(o.delivery_address||'—')+'</div></td>'
             +'<td style="font-size:13px;">'+(o.destinataire_nom?'<strong>'+esc(o.destinataire_nom)+'</strong>'+(o.destinataire_tel?'<br><span style="font-size:11px;color:var(--muted)">'+esc(o.destinataire_tel)+'</span>':''):'<span style="color:var(--muted)">—</span>')+'</td>'
-            +'<td>'+(drv?'<span style="font-size:12px;color:var(--blue)"><i class="fas fa-user" style="font-size:10px;margin-right:3px;"></i>'+esc(drv)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
+            +'<td>'+(o.external_carrier_name?'<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#f59e0b;border-radius:12px;padding:2px 8px;" title="Transporteur externe'+(o.external_carrier_price?' — '+o.external_carrier_price+' CHF':'')+'"><i class="fas fa-truck" style="font-size:9px;"></i>'+esc(o.external_carrier_name)+'</span>'+(o.external_carrier_price?'<br><span style="font-size:11px;color:var(--muted)">'+o.external_carrier_price+' CHF</span>':''):drv?'<span style="font-size:12px;color:var(--blue)"><i class="fas fa-user" style="font-size:10px;margin-right:3px;"></i>'+esc(drv)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
             +'<td style="font-size:12px;color:var(--muted2);">'+(o.weight?o.weight+' kg':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.quantity||1)+' u</span></td>'
             +'<td style="font-size:12px;color:var(--muted2);">'+(o.distance_km?Math.round(o.distance_km)+' km':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.duration_min?Math.round(o.duration_min)+' min':'—')+'</span></td>'
             +'<td>'+(t?'<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--blue);"><span style="width:8px;height:8px;border-radius:50%;background:'+(t.couleur||'#3b82f6')+'"></span>'+esc(t.nom)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
             +'<td style="font-size:11px;color:var(--muted);white-space:nowrap;">'+fdate(o.created_at)+'</td>'
+            +(o.status==='delivered'||o.status==='completed'
+                ?'<td style="text-align:center;">'+(o.pod_status
+                    ?'<span title="POD complet" style="color:var(--green);cursor:pointer;" onclick="openPODModal(\''+o.id+'\')">✅</span>'
+                    :'<span title="POD incomplet" style="color:var(--yellow);cursor:pointer;" onclick="openPODModal(\''+o.id+'\')">⚠️</span>')+'</td>'
+                :'<td style="text-align:center;color:var(--muted);font-size:11px;">—</td>')
             +'<td class="actions">'
                 +actionHtml
                 +'<a class="btn btn-ghost btn-xs" href="'+gmUrl+'" target="_blank" title="Google Maps"><i class="fas fa-map-marked-alt"></i></a> '
@@ -870,6 +950,12 @@ function openAssignModal(id){
     document.getElementById('modalDriverSel').value=o.driver_id||'';
     document.getElementById('modalTourneeSel').value=o.tournee_id||'';
     document.getElementById('trnFieldWrap').style.display='';
+    var hasExt=!!(o.external_carrier_name);
+    document.getElementById('assignExtCarrierToggle').checked=hasExt;
+    document.getElementById('assignExtCarrierName').value=o.external_carrier_name||'';
+    document.getElementById('assignExtCarrierPrice').value=o.external_carrier_price||'';
+    document.getElementById('assignExtCarrierNameField').style.display=hasExt?'':'none';
+    document.getElementById('assignExtCarrierPriceField').style.display=hasExt?'':'none';
     openModal('modalAssign');
 }
 window.openAssignModal=openAssignModal;
@@ -887,14 +973,17 @@ document.getElementById('modalBtnSave').addEventListener('click',async function(
             toast('Chauffeur assigné à la tournée',true);closeModal('modalAssign');renderTourneePanel();return;
         }
         var id=rawId,drvId=document.getElementById('modalDriverSel').value||null,tourneeId=document.getElementById('modalTourneeSel').value||null;
-        var payload={driver_id:drvId,assigned_at:drvId?nowCH():null,tournee_id:tourneeId};
+        var extOn=document.getElementById('assignExtCarrierToggle').checked;
+        var extName=extOn?(document.getElementById('assignExtCarrierName').value.trim()||null):null;
+        var extPrice=extOn?(parseFloat(document.getElementById('assignExtCarrierPrice').value)||null):null;
+        var payload={driver_id:drvId,assigned_at:drvId?nowCH():null,tournee_id:tourneeId,external_carrier_name:extName,external_carrier_price:extPrice};
         if(drvId){
             var o=rows.find(function(x){return x.id===id;});
             if(o&&o.status==='pending'&&getAdminStatus(o)!=='pending_validation')payload.status='planned';
         }
         var r=await db.from('transport_orders_simple').update(payload).eq('id',id);
         if(r.error)throw r.error;
-        var oo=rows.find(function(x){return x.id===id;});if(oo){oo.driver_id=drvId;oo.tournee_id=tourneeId;if(drvId&&oo.status==='pending'&&getAdminStatus(oo)!=='pending_validation')oo.status='planned';}
+        var oo=rows.find(function(x){return x.id===id;});if(oo){oo.driver_id=drvId;oo.tournee_id=tourneeId;oo.external_carrier_name=extName;oo.external_carrier_price=extPrice;if(drvId&&oo.status==='pending'&&getAdminStatus(oo)!=='pending_validation')oo.status='planned';}
         toast('Assigné',true);closeModal('modalAssign');applyFilter();renderTourneePanel();
     }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;}
 });
@@ -994,8 +1083,14 @@ document.getElementById('btnNew').addEventListener('click',function(){
     document.getElementById('nPrice').value='';
     document.getElementById('priceAiBadge').style.display='none';
     document.getElementById('priceBreakdown').textContent='';
+    document.getElementById('nExtCarrierToggle').checked=false;
+    document.getElementById('nExtCarrierName').value='';
+    document.getElementById('nExtCarrierPrice').value='';
+    document.getElementById('extCarrierNameField').style.display='none';
+    document.getElementById('extCarrierPriceField').style.display='none';
     orderCounter++;openModal('modalNew');
 });
+
 document.getElementById('btnSaveNew').addEventListener('click',async function(){
     var pA=document.getElementById('pickupInput').value.trim(),dA=document.getElementById('deliveryInput').value.trim();
     if(!pA){toast('Adresse enlèvement obligatoire',false);return;}
@@ -1003,7 +1098,7 @@ document.getElementById('btnSaveNew').addEventListener('click',async function(){
     var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Création…';
     try{
         var drvId=document.getElementById('nDriver').value||null,tourneeId=document.getElementById('nTournee').value||null;
-        var payload={order_number:genNum(),pickup_address:pickupCoords?pickupCoords.label:pA,delivery_address:deliveryCoords?deliveryCoords.label:dA,pickup_lat:pickupCoords?pickupCoords.lat:null,pickup_lng:pickupCoords?pickupCoords.lng:null,delivery_lat:deliveryCoords?deliveryCoords.lat:null,delivery_lng:deliveryCoords?deliveryCoords.lng:null,service_type:document.getElementById('nSvcType').value,speed:document.getElementById('nSvcType').value,package_type:document.getElementById('nPkgType').value,quantity:parseInt(document.getElementById('nQty').value)||1,weight:parseFloat(document.getElementById('nWeight').value)||null,priority:document.getElementById('nPriority').value==='urgent'?'urgent':'normal',instructions:document.getElementById('nInstructions').value.trim()||null,driver_id:drvId,status:drvId?'planned':'pending',destinataire_nom:document.getElementById('destName').value.trim()||null,destinataire_tel:document.getElementById('destPhone').value.trim()||null,assigned_at:drvId?nowCH():null,tournee_id:tourneeId,distance_km:routeData?routeData.distance_km:null,duration_min:routeData?routeData.duration_min:null,price_chf:parseFloat(document.getElementById('nPrice').value)||null};
+        var payload={order_number:genNum(),pickup_address:pickupCoords?pickupCoords.label:pA,delivery_address:deliveryCoords?deliveryCoords.label:dA,pickup_lat:pickupCoords?pickupCoords.lat:null,pickup_lng:pickupCoords?pickupCoords.lng:null,delivery_lat:deliveryCoords?deliveryCoords.lat:null,delivery_lng:deliveryCoords?deliveryCoords.lng:null,service_type:document.getElementById('nSvcType').value,speed:document.getElementById('nSvcType').value,package_type:document.getElementById('nPkgType').value,quantity:parseInt(document.getElementById('nQty').value)||1,weight:parseFloat(document.getElementById('nWeight').value)||null,priority:document.getElementById('nPriority').value==='urgent'?'urgent':'normal',instructions:document.getElementById('nInstructions').value.trim()||null,driver_id:drvId,status:drvId?'planned':'pending',destinataire_nom:document.getElementById('destName').value.trim()||null,destinataire_tel:document.getElementById('destPhone').value.trim()||null,assigned_at:drvId?nowCH():null,tournee_id:tourneeId,distance_km:routeData?routeData.distance_km:null,duration_min:routeData?routeData.duration_min:null,price_chf:parseFloat(document.getElementById('nPrice').value)||null,external_carrier_name:document.getElementById('nExtCarrierToggle').checked?(document.getElementById('nExtCarrierName').value.trim()||null):null,external_carrier_price:document.getElementById('nExtCarrierToggle').checked?(parseFloat(document.getElementById('nExtCarrierPrice').value)||null):null};
         var r=await db.from('transport_orders_simple').insert([payload]);if(r.error)throw r.error;
         toast(payload.order_number+' créé !',true);closeModal('modalNew');await load({silent:true});
     }catch(e){toast('Erreur : '+(e.message||e),false);}finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Créer le transport';}
@@ -1181,6 +1276,108 @@ document.getElementById('triListe').addEventListener('change',applyFilter);
 document.getElementById('btnRefresh').addEventListener('click',function(){load();loadTournees();});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')load({silent:true});});
 
+// ── PIPELINE TAB ─────────────────────────────────────────────────────────────
+
+window.switchRPTab=function(tab){
+    var isTournees=(tab==='tournees');
+    document.getElementById('tabTournees').classList.toggle('active',isTournees);
+    document.getElementById('tabPipeline').classList.toggle('active',!isTournees);
+    document.getElementById('tourneePanel').style.display=isTournees?'':'none';
+    var pp=document.getElementById('pipelinePanel');
+    pp.style.display=isTournees?'none':'';
+    if(!isTournees)renderPipelinePanel();
+};
+
+function renderPipelinePanel(){
+    var el=document.getElementById('pipelinePanel');if(!el)return;
+    var all=rows.filter(function(r){return['refused','cancelled'].indexOf(r.status)<0;});
+    var unassigned=all.filter(function(r){return!r.driver_id;});
+    var waiting=all.filter(function(r){return r.driver_id&&['pending','planned'].indexOf(r.status)>=0;});
+    var transit=all.filter(function(r){return r.status==='in_transit';});
+    var billing=all.filter(function(r){return r.status==='delivered';});
+
+    function bloc(cls,title,color,count,items,extraFooter){
+        var rowsHtml=items.slice(0,8).map(function(r){
+            return'<div class="pp-row"><span class="pp-num">'+(r.order_number||r.id.slice(0,8))+'</span><span class="pp-addr">'+(esc((r.delivery_address||'').split(',')[0]))+'</span></div>';
+        }).join('');
+        if(!rowsHtml)rowsHtml='<div class="pp-empty">Aucun</div>';
+        else if(items.length>8)rowsHtml+='<div class="pp-empty">+' +(items.length-8)+' autres…</div>';
+        return'<div class="pp-bloc '+cls+'">'
+            +'<div class="pp-bloc-head"><span class="pp-bloc-title">'+title+'</span><span class="pp-bloc-count" style="color:'+color+'">'+count+'</span></div>'
+            +'<div class="pp-bloc-body">'+rowsHtml+'</div>'
+            +(extraFooter?'<div class="pp-footer">'+extraFooter+'</div>':'')
+            +'</div>';
+    }
+
+    var factBtn=billing.length
+        ?'<button type="button" class="btn btn-green btn-xs" style="width:100%" onclick="moveAllToInvoicing()"><i class="fas fa-file-invoice"></i> Valider '+billing.length+' pour facturation</button>'
+        :'';
+
+    el.innerHTML=''
+        +bloc('unassigned','Non assignées','var(--muted)',unassigned.length,unassigned)
+        +bloc('waiting','En attente chauffeur','var(--blue)',waiting.length,waiting)
+        +bloc('transit','En cours de livraison','var(--purple)',transit.length,transit)
+        +bloc('billing','Livrées · à facturer','var(--green)',billing.length,billing,factBtn);
+}
+
+// ── POD MODAL ────────────────────────────────────────────────────────────────
+
+window.openPODModal=async function(id){
+    var o=rows.find(function(x){return x.id===id;});
+    var title='POD — '+(o?o.order_number||id.slice(0,8):'');
+    document.getElementById('podModalTitle').textContent=title;
+    document.getElementById('podModalBody').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i></div>';
+    openModal('modalPOD');
+    var pod=window.ColixoPOD?await window.ColixoPOD.fetchPOD(id):null;
+    if(!pod){document.getElementById('podModalBody').innerHTML='<div style="padding:20px;color:var(--muted);text-align:center;">Aucune preuve enregistrée.</div>';return;}
+    var dt=pod.delivered_at?new Date(pod.delivered_at).toLocaleString('fr-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+    var photoHtml='';
+    if(pod.photo_url){
+        photoHtml='<div style="margin-bottom:14px;"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">PHOTO</div><img src="'+esc(pod.photo_url)+'" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;border:1px solid var(--border);" onerror="this.style.display=\'none\'"></div>';
+    }else if(pod.photo_data){
+        photoHtml='<div style="margin-bottom:14px;"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">PHOTO</div><img src="'+esc(pod.photo_data)+'" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;border:1px solid var(--border);"></div>';
+    }
+    var sigHtml='';
+    if(pod.signature_url){
+        sigHtml='<div style="margin-bottom:14px;"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">SIGNATURE</div><img src="'+esc(pod.signature_url)+'" style="width:100%;max-height:140px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#18181f;" onerror="this.style.display=\'none\'"></div>';
+    }else if(pod.signature_data){
+        sigHtml='<div style="margin-bottom:14px;"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">SIGNATURE</div><img src="'+esc(pod.signature_data)+'" style="width:100%;max-height:140px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#18181f;"></div>';
+    }
+    var podBadge=pod.pod_status
+        ?'<span style="background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">✅ POD COMPLET</span>'
+        :'<span style="background:rgba(245,158,11,0.12);color:var(--yellow);border:1px solid rgba(245,158,11,0.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">⚠️ LIVRAISON RAPIDE</span>';
+    document.getElementById('podModalBody').innerHTML=
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'+podBadge+'<span style="font-size:12px;color:var(--muted);">'+dt+'</span></div>'
+        +'<div style="background:var(--night3);border-radius:10px;padding:12px 14px;margin-bottom:14px;">'
+        +'<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">RÉCEPTIONNAIRE</div>'
+        +'<div style="font-size:15px;font-weight:700;">'+(pod.receiver_name?esc(pod.receiver_name):'<span style="color:var(--muted)">Non renseigné</span>')+'</div>'
+        +(pod.note_livraison?'<div style="margin-top:8px;font-size:12px;color:var(--muted2);">📝 '+esc(pod.note_livraison)+'</div>':'')
+        +(pod.gps_lat&&pod.gps_lng?'<div style="margin-top:6px;"><a href="https://www.google.com/maps?q='+pod.gps_lat+','+pod.gps_lng+'" target="_blank" style="font-size:11px;color:var(--blue);">📍 Voir position GPS</a></div>':'')
+        +'</div>'
+        +photoHtml+sigHtml;
+};
+
+window.moveAllToInvoicing=async function(){
+    if(!confirm('Marquer toutes les livraisons comme complétées (prêtes à facturer) ?'))return;
+    if(window.ColixoWorkflow){
+        await window.ColixoWorkflow.moveDeliveredToInvoicing();
+    }else{
+        await db.from('transport_orders_simple').update({status:'completed'}).eq('status','delivered');
+    }
+    toast('Livraisons basculées en facturation',true);
+    await load({silent:true});
+    renderPipelinePanel();
+};
+
+// Listen for tour completion events from driver app (via Supabase realtime)
+window.addEventListener('colixo:tour_completed',function(e){
+    toast('🎉 Tournée terminée ! ('+e.detail.missionCount+' livraisons)',true);
+    renderPipelinePanel();
+});
+window.addEventListener('colixo:billing_ready',function(){
+    renderPipelinePanel();
+});
+
 // ── INIT ──
 (async function(){
     try{
@@ -1202,7 +1399,15 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
         await load({silent:true});
         setupTableDrag();
         startPolling();
-        db.channel('td_rt').on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},function(){setTimeout(function(){load({silent:true});},500);}).subscribe();
+        // Enhanced realtime: update local state + re-render pipeline on changes
+        if(window.ColixoRealtime){
+            window.ColixoRealtime.initDispatch({
+                onMissionChange: function(){load({silent:true}).then(renderPipelinePanel);},
+                onTourneeChange: function(){loadTournees();}
+            });
+        }else{
+            db.channel('td_rt').on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},function(){load({silent:true});}).subscribe();
+        }
     }catch(ex){document.body.innerHTML='<div style="padding:40px;color:#e8311a;font-family:sans-serif;font-size:15px;">Erreur : '+ex.message+'</div>';}
 })();
 

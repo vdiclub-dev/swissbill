@@ -21,6 +21,10 @@
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <script data-cfasync="false" src="../push-manager.js?v=20260462"></script>
+    <script src="workflow.js?v=20260423"></script>
+    <script src="realtime.js?v=20260423"></script>
+    <script src="signature-pad.js?v=20260423"></script>
+    <script src="driver-pod.js?v=20260423"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -323,11 +327,23 @@
         .sig-canvas.signed { border-color:var(--green); }
         .sig-clear { font-size:12px; color:var(--muted); background:none; border:none; cursor:pointer; float:right; }
         .photo-btn { width:100%; padding:14px; border-radius:12px; background:var(--night3); border:1.5px dashed var(--border2); color:var(--muted2); font-family:'Outfit',sans-serif; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; margin:14px 0; }
-        .photo-preview { width:100%; height:130px; object-fit:cover; border-radius:12px; display:none; margin:10px 0; }
+        .photo-preview { width:100%; height:130px; object-fit:cover; border-radius:12px; display:none; margin:10px 0; cursor:pointer; }
         .note-input { width:100%; padding:12px 14px; background:var(--night3); border:1.5px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:14px; color:var(--white); resize:none; min-height:70px; margin-bottom:18px; }
         .note-input:focus { outline:none; border-color:var(--green); }
         .note-input::placeholder { color:rgba(255,255,255,0.2); }
         .btn-confirm { width:100%; padding:16px; background:var(--green); color:var(--night); border:none; border-radius:12px; font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; }
+        /* ── POD additions ── */
+        .pod-receiver-input { width:100%; padding:16px; background:var(--night3); border:2px solid var(--border2); border-radius:12px; font-family:'Outfit',sans-serif; font-size:18px; font-weight:600; color:var(--white); margin-bottom:14px; }
+        .pod-receiver-input:focus { outline:none; border-color:var(--green); }
+        .pod-receiver-input::placeholder { color:rgba(255,255,255,0.2); font-weight:400; font-size:15px; }
+        .pod-required { color:var(--red); margin-left:2px; }
+        .pod-bar { display:flex; gap:8px; margin-bottom:16px; }
+        .pod-bar-item { flex:1; padding:9px 6px; text-align:center; border-radius:10px; background:var(--night3); border:1.5px solid var(--border); font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.5px; transition:all .2s; }
+        .pod-bar-item.done { background:rgba(34,197,94,0.1); border-color:var(--green); color:var(--green); }
+        .pod-error { font-size:13px; color:#f87171; padding:10px 12px; background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.2); border-radius:10px; margin-bottom:14px; display:none; }
+        .pod-error.show { display:block; }
+        .btn-quick-pod { width:100%; padding:13px; margin-top:10px; background:transparent; color:var(--muted); border:1px dashed rgba(255,255,255,0.15); border-radius:12px; font-family:'Outfit',sans-serif; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; }
+        .btn-quick-pod:active { opacity:0.7; }
 
         /* ── SUCCESS ── */
         .success-screen { align-items:center; justify-content:center; padding:40px 24px; text-align:center; }
@@ -772,27 +788,56 @@
     </div>
 </div>
 
-<!-- ═══ CONFIRM DELIVERY ═══ -->
+<!-- ═══ CONFIRM DELIVERY / POD ═══ -->
 <div class="screen" id="screenConfirm">
     <div class="confirm-screen">
         <div class="confirm-back" onclick="showScreen('missions')">
             <div class="cb-btn"><i class="fas fa-arrow-left"></i></div>
-            <div class="cb-title">CONFIRMER LIVRAISON</div>
+            <div class="cb-title">PREUVE DE LIVRAISON</div>
         </div>
+
         <div class="confirm-order" id="confirmInfo"></div>
+
+        <!-- 1. Receiver name — required -->
+        <div class="sig-label"><i class="fas fa-user"></i> Réceptionnaire <span class="pod-required">*</span></div>
+        <input type="text" class="pod-receiver-input" id="podReceiverName"
+               placeholder="Prénom Nom du réceptionnaire"
+               autocomplete="name" autocorrect="off" autocapitalize="words">
+
+        <!-- 2. POD proof bar — live indicator -->
+        <div class="pod-bar" id="podBar">
+            <div class="pod-bar-item" id="podBarSig"><i class="fas fa-pen-nib"></i> Signature</div>
+            <div class="pod-bar-item" id="podBarPhoto"><i class="fas fa-camera"></i> Photo</div>
+        </div>
+
+        <!-- 3. Signature -->
         <div class="sig-label"><i class="fas fa-pen-nib"></i> Signature destinataire</div>
         <canvas class="sig-canvas" id="sigCanvas"></canvas>
-        <button class="sig-clear" onclick="clearSig()"><i class="fas fa-eraser"></i> Effacer</button>
+        <button type="button" class="sig-clear" onclick="clearSig()"><i class="fas fa-eraser"></i> Effacer</button>
         <div style="clear:both;margin-bottom:14px;"></div>
-        <img id="photoPreview" class="photo-preview" alt="">
-        <button class="photo-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()">
-            <i class="fas fa-camera"></i> Photo de confirmation
+
+        <!-- 4. Photo -->
+        <img id="photoPreview" class="photo-preview" alt="" onclick="document.getElementById('photoInput').click()">
+        <button type="button" class="photo-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()">
+            <i class="fas fa-camera"></i> 📷 Prendre une photo
         </button>
         <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhoto(this)">
-        <div class="sig-label" style="margin-top:4px;"><i class="fas fa-sticky-note"></i> Note (optionnel)</div>
-        <textarea class="note-input" id="deliveryNote" placeholder="Laissé en réception, remis à…"></textarea>
-        <button class="btn-confirm" onclick="confirmDelivery()">
-            <i class="fas fa-check-circle"></i> Confirmer la livraison
+
+        <!-- 5. Optional note -->
+        <div class="sig-label"><i class="fas fa-sticky-note"></i> Note (optionnel)</div>
+        <textarea class="note-input" id="deliveryNote" placeholder="Laissé en réception, remis à la réception…"></textarea>
+
+        <!-- 6. Error message -->
+        <div class="pod-error" id="podError"></div>
+
+        <!-- 7. Validate -->
+        <button type="button" class="btn-confirm" id="btnConfirmDelivery" onclick="confirmDelivery()">
+            <i class="fas fa-check-circle"></i> Valider la livraison
+        </button>
+
+        <!-- 8. Quick mode — name only, no proof required -->
+        <button type="button" class="btn-quick-pod" onclick="confirmDeliveryQuick()">
+            <i class="fas fa-bolt"></i> Livraison rapide (sans photo/signature)
         </button>
     </div>
 </div>
@@ -1287,8 +1332,24 @@
         loadTodayPointage();
         loadVehicule();
         getOrInitDaySessionStartIso();
+        window._colixoDriverId = driver.id; // expose for driver-pod.js
         startGPS();
         initNotifications(driver.id);
+
+        // ── Realtime: new missions assigned to this driver ──
+        if(window.ColixoRealtime) {
+            window.ColixoRealtime.initDriver(driver.id, {
+                onNewMission: function(row) {
+                    toast('info', '📦 Nouvelle mission assignée : ' + (row.order_number || '#?'));
+                    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+                    loadMissions();
+                },
+                onMissionUpdate: function(newRow) {
+                    // Silently refresh if status changed externally (e.g. dispatch recall)
+                    if(newRow && newRow.status) loadMissions();
+                }
+            });
+        }
 
         // ── Vérifier si ouvert depuis un scan QR ──
         const params = new URLSearchParams(window.location.search);
@@ -3196,11 +3257,27 @@
         document.getElementById('photoPreview').style.display='none';
         document.getElementById('photoBtn').style.display='flex';
         document.getElementById('deliveryNote').value='';
+        // POD fields reset
+        const recvInput = document.getElementById('podReceiverName');
+        if(recvInput) recvInput.value = curMission.destinataire_nom || '';
+        const podErr = document.getElementById('podError');
+        if(podErr) { podErr.textContent=''; podErr.classList.remove('show'); }
+        window._photoB64 = null;
         hasSig=false;
-        updateDashboard(); // Update button states
+        updatePodBar();
+        updateDashboard();
         showScreen('confirm');
         setTimeout(initSig, 150);
     };
+
+    /* ── POD BAR ── */
+    function updatePodBar() {
+        const sigEl   = document.getElementById('podBarSig');
+        const photoEl = document.getElementById('podBarPhoto');
+        if(sigEl)   sigEl.classList.toggle('done',   hasSig);
+        if(photoEl) photoEl.classList.toggle('done', !!(window._photoB64));
+    }
+    window.updatePodBar = updatePodBar;
 
     /* ── SIGNATURE ── */
     function initSig() {
@@ -3233,8 +3310,7 @@
             if(!drawing) return;
             const p = getPos(e);
             sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
-            hasSig = true;
-            canvas.classList.add('signed');
+            if(!hasSig) { hasSig = true; canvas.classList.add('signed'); updatePodBar(); }
         };
         canvas.onmouseup = () => { drawing = false; };
 
@@ -3248,8 +3324,7 @@
             if(!drawing) return;
             const p = getPos(e);
             sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
-            hasSig = true;
-            canvas.classList.add('signed');
+            if(!hasSig) { hasSig = true; canvas.classList.add('signed'); updatePodBar(); }
         }, {passive: false});
         canvas.addEventListener('touchend', () => { drawing = false; }, {passive: false});
     }
@@ -3261,6 +3336,7 @@
         sigCtx.fillRect(0, 0, c.width, c.height);
         c.classList.remove('signed');
         hasSig = false;
+        updatePodBar();
     };
 
     window.handlePhoto = function(input) {
@@ -3286,6 +3362,7 @@
                     preview.src = b64;
                     preview.style.display = 'block';
                     document.getElementById('photoBtn').style.display = 'none';
+                    updatePodBar();
                     toast('success', '📷 Photo OK ' + Math.round(b64.length/1024) + 'kb');
                 } catch(err) {
                     // Fallback sans compression
@@ -3306,70 +3383,94 @@
         reader.readAsDataURL(f);
     };
 
-        window.confirmDelivery = async function() {
+    function podShowError(msg) {
+        const el = document.getElementById('podError');
+        if(!el) return;
+        el.textContent = msg;
+        el.classList.add('show');
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    function podHideError() {
+        const el = document.getElementById('podError');
+        if(el) { el.textContent = ''; el.classList.remove('show'); }
+    }
+
+    async function _finishDelivery(mode) {
         if(!curMission) return;
-        showLoad();
-        try {
-            const now = nowCH();
-            const note = document.getElementById('deliveryNote').value.trim();
+        podHideError();
 
-            // Récupérer signature
-            // Signature — lire directement le canvas
-            let signatureData = null;
-            if(hasSig) {
-                const sigC = document.getElementById('sigCanvas');
-                if(sigC) signatureData = sigC.toDataURL('image/jpeg', 0.8);
-            }
+        const receiverName = (document.getElementById('podReceiverName')?.value || '').trim();
+        const note         = (document.getElementById('deliveryNote')?.value    || '').trim();
+        const sigCanvas    = document.getElementById('sigCanvas');
 
-            // Photo — stockée dans window._photoB64 par handlePhoto
-            const photoData = window._photoB64 || null;
-
-            // 1. Mettre à jour le statut du transport
-            const { error } = await db.from('transport_orders_simple').update({
-                status:        'delivered',
-                delivered_at:   now,
-                instructions:   note || curMission.instructions || null
-            }).eq('id', curMission.id);
-            if(error) throw error;
-
-            // 2. Enregistrement livraison avec photo + signature
-            const deliveryRecord = {
-                order_id:        curMission.id,
-                order_number:    curMission.order_number,
-                driver_id:       driver.id,
-                delivered_at:    now,
-                delivery_address:curMission.delivery_address,
-                destinataire_nom:curMission.destinataire_nom || null,
-                note_livraison:  note || null,
-                has_signature:   hasSig,
-                signature_data:  signatureData,
-                photo_data:      photoData,
-                gps_lat:         myLat,
-                gps_lng:         myLng,
-                created_at:      now
-            };
-
-            try {
-                // Upsert pour éviter les doublons (trigger auto peut déjà avoir créé la ligne)
-                const { error: e2 } = await db.from('deliveries')
-                    .upsert([deliveryRecord], { onConflict: 'order_id' });
-                if(e2) {
-                    // Si upsert échoue essayer insert simple
-                    const { error: e3 } = await db.from('deliveries').insert([deliveryRecord]);
-                    if(e3) toast('error', 'Photo non sauvegardée: ' + e3.message);
-                }
-            } catch(e2) {
-                toast('error', 'Erreur livraison: ' + e2.message);
-            }
-
+        // Use ColixoPOD if available (uploads to Storage + validates)
+        if(window.ColixoPOD) {
+            showLoad();
+            const result = await window.ColixoPOD.validateDelivery({
+                missionId:    curMission.id,
+                driverId:     driver.id,
+                receiverName: receiverName,
+                photoB64:     window._photoB64 || null,
+                sigCanvas:    sigCanvas,
+                note:         note,
+                gpsLat:       myLat,
+                gpsLng:       myLng,
+                mode:         mode
+            });
             hideLoad();
-            window._photoB64 = null; // reset photo
-            window._sigB64   = null; // reset signature
-            document.getElementById('successMsg').textContent = `Transport ${curMission.order_number||''} livré avec succès !`;
-            showScreen('success');
-            await loadMissions();
 
-        } catch(e) { hideLoad(); toast('error',e.message); }
+            if(!result.ok) {
+                podShowError(result.error);
+                return;
+            }
+        } else {
+            // Fallback: save base64 directly to deliveries table (no Storage)
+            if(!receiverName) { podShowError('Le nom du réceptionnaire est obligatoire'); return; }
+            if(mode === 'full' && !window._photoB64 && !hasSig) {
+                podShowError('Ajoutez une photo ou une signature'); return;
+            }
+            showLoad();
+            const now = nowCH();
+            let signatureData = hasSig && sigCanvas ? sigCanvas.toDataURL('image/jpeg', 0.8) : null;
+            const { error: oe } = await db.from('transport_orders_simple').update({
+                status: 'delivered', delivered_at: now,
+                receiver_name: receiverName, pod_status: mode !== 'quick',
+                pod_mode: mode, instructions: note || curMission.instructions || null
+            }).eq('id', curMission.id);
+            if(oe) { hideLoad(); toast('error', oe.message); return; }
+            try {
+                const rec = {
+                    order_id: curMission.id, driver_id: driver.id, delivered_at: now,
+                    receiver_name: receiverName, has_signature: hasSig,
+                    signature_data: signatureData, photo_data: window._photoB64 || null,
+                    pod_status: mode !== 'quick', pod_mode: mode,
+                    note_livraison: note || null, gps_lat: myLat, gps_lng: myLng, created_at: now
+                };
+                const { error: de } = await db.from('deliveries').upsert([rec], { onConflict: 'order_id' });
+                if(de) await db.from('deliveries').insert([rec]);
+            } catch(_) {}
+            hideLoad();
+        }
+
+        window._photoB64 = null;
+        window._sigB64   = null;
+        const label = mode === 'quick' ? 'Livraison rapide enregistrée' : 'Livré avec succès !';
+        document.getElementById('successMsg').textContent = `${curMission.order_number||'Transport'} — ${label}`;
+        showScreen('success');
+        await loadMissions();
+
+        if(curMission.tournee_id && window.ColixoWorkflow) {
+            const allDone = await window.ColixoWorkflow.checkTourCompletion(curMission.tournee_id);
+            if(allDone) toast('success', '🎉 Tournée terminée !');
+        }
+    }
+
+    window.confirmDelivery = async function() { await _finishDelivery('full'); };
+    window.confirmDeliveryQuick = async function() {
+        const receiverName = (document.getElementById('podReceiverName')?.value || '').trim();
+        if(!receiverName) { podShowError('Indiquez le nom du réceptionnaire'); return; }
+        if(!confirm('Valider sans photo ni signature ?')) return;
+        await _finishDelivery('quick');
     };
 
     /* ── Position serveur (carte admin conducteurs) — throttlé ── */
