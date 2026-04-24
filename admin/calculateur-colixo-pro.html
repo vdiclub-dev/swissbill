@@ -417,6 +417,29 @@
           </div>
         </div>
 
+        <div class="section-title">Carburant</div>
+        <div class="form-grid">
+          <div>
+            <label>Km parcourus / véhicule / jour</label>
+            <input type="number" id="kmVehiculeJour" value="120" step="1" min="0" />
+          </div>
+          <div>
+            <label>Consommation (L/100 km)</label>
+            <input type="number" id="litres100" value="9" step="0.1" min="0" />
+          </div>
+          <div>
+            <label>Prix à la pompe CHF / litre</label>
+            <input type="number" id="prixLitre" value="1.80" step="0.01" min="0" />
+          </div>
+          <div>
+            <label>Inclure dans les coûts fixes</label>
+            <select id="inclureCarburant" title="Inclure le carburant dans les coûts fixes">
+              <option value="oui" selected>Oui</option>
+              <option value="non">Non</option>
+            </select>
+          </div>
+        </div>
+
         <div class="section-title">Options facturables</div>
         <div class="option-row">
           <div><strong>Express 24h</strong><span>Supplément : +6 CHF</span></div>
@@ -463,6 +486,8 @@
           <div class="kpi"><span>Prix minimum sécurité</span><strong id="prixSecurite">0.00</strong></div>
           <div class="kpi"><span>Marge / colis</span><strong id="margeColis">0.00</strong></div>
           <div class="kpi"><span>Marge mensuelle</span><strong id="margeMensuelle">0.00</strong></div>
+          <div class="kpi"><span>Carburant / mois</span><strong id="coutCarburantMois">0.00</strong></div>
+          <div class="kpi"><span>Carburant / colis</span><strong id="coutCarburantColis">0.00</strong></div>
         </div>
 
         <div id="status" class="status warn">Remplis les données puis lance le calcul.</div>
@@ -553,8 +578,17 @@
       const urgent          = document.getElementById("urgent").checked;
       const sansAscenseur   = document.getElementById("sansAscenseur").checked;
 
+      const kmVehiculeJour    = n("kmVehiculeJour");
+      const litres100         = n("litres100");
+      const prixLitre         = n("prixLitre");
+      const inclureCarburant  = document.getElementById("inclureCarburant").value;
+
+      const coutCarburantMois  = (kmVehiculeJour * nbVehicules * litres100 / 100) * prixLitre * joursMois;
+      const coutCarburantColis = coutCarburantMois / Math.max(colisJour * joursMois, 1);
+
       const volumeMensuel     = Math.max(colisJour * joursMois, 1);
-      const coutFixeMensuel   = ((salaire + leasing + assurance) * nbVehicules) + local + admin + imprevus;
+      const coutFixeMensuelBase = ((salaire + leasing + assurance) * nbVehicules) + local + admin + imprevus;
+      const coutFixeMensuel   = coutFixeMensuelBase + (inclureCarburant === "oui" ? coutCarburantMois : 0);
       const coutFixeParColis  = coutFixeMensuel / volumeMensuel;
 
       const kmParColisBrut    = kmTournee / colisTournee;
@@ -596,6 +630,8 @@
       document.getElementById("prixSecurite").textContent      = money(prixSecurite);
       document.getElementById("margeColis").textContent        = money(margeColis);
       document.getElementById("margeMensuelle").textContent    = money(margeMensuelle);
+      document.getElementById("coutCarburantMois").textContent = money(coutCarburantMois);
+      document.getElementById("coutCarburantColis").textContent = money(coutCarburantColis);
 
       const status = document.getElementById("status");
       status.className = "status";
@@ -626,6 +662,7 @@
         Coût kilométrique corrigé par colis : <strong>${money(coutKmParColis)}</strong>.<br>
         Km moyen corrigé par colis : <strong>${kmParColisCorrige.toFixed(2)} km</strong>.<br>
         Taux de remplissage : <strong>${percent(remplissage * 100)}</strong>.<br>
+        Carburant estimé : <strong>${money(coutCarburantMois)} / mois</strong> (${money(coutCarburantColis)} / colis)${inclureCarburant === "non" ? " — non inclus dans les coûts fixes" : ""}.<br>
         Plus le nombre de colis dans une même zone augmente, plus le coût réel par colis baisse.
       `;
     }
