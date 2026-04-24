@@ -294,20 +294,31 @@
             <label>Jours travaillés par mois</label>
             <input type="number" id="joursMois" value="22" min="1" />
           </div>
+          <div>
+            <label>Nombre de véhicules estimés</label>
+            <input type="number" id="nbVehicules" value="2" min="1" />
+          </div>
+          <div>
+            <label>Type de prestation</label>
+            <select id="modeLogistique" onchange="toggleLogistique()">
+              <option value="avec" selected>Avec logistique complète</option>
+              <option value="sans">Sans logistique, livraison seule</option>
+            </select>
+          </div>
         </div>
 
         <div class="section-title">Coûts fixes mensuels</div>
         <div class="form-grid">
           <div>
-            <label>Salaire chauffeur + charges CHF</label>
+            <label>Salaire chauffeur + charges CHF / véhicule</label>
             <input type="number" id="salaire" value="5500" min="0" />
           </div>
           <div>
-            <label>Leasing / amortissement véhicule CHF</label>
+            <label>Leasing / amortissement CHF / véhicule</label>
             <input type="number" id="leasing" value="850" min="0" />
           </div>
           <div>
-            <label>Assurance / plaques CHF</label>
+            <label>Assurance / plaques CHF / véhicule</label>
             <input type="number" id="assurance" value="300" min="0" />
           </div>
           <div>
@@ -431,7 +442,7 @@
           </div>
         </div>
 
-        <button onclick="calculerPrix()">Calculer le prix client</button>
+        <button type="button" onclick="calculerPrix()">Calculer le prix client</button>
       </div>
 
       <aside class="card">
@@ -444,6 +455,7 @@
 
         <div class="kpis">
           <div class="kpi"><span>Volume mensuel</span><strong id="volumeMensuel">0</strong></div>
+          <div class="kpi"><span>Véhicules estimés</span><strong id="vehiculesResultat">0</strong></div>
           <div class="kpi"><span>Coût fixe / colis</span><strong id="coutFixeColis">0.00</strong></div>
           <div class="kpi"><span>Km réel / colis</span><strong id="kmColis">0.00</strong></div>
           <div class="kpi"><span>Coût km / colis</span><strong id="coutKmColis">0.00</strong></div>
@@ -489,57 +501,70 @@
     function calculerMargeDynamique(volumeMensuel, margeMinimum, margeCible, objectif) {
       if (objectif === "securite") return margeMinimum;
       if (objectif === "premium") return Math.max(margeCible + 25, 55);
-
       if (volumeMensuel >= 3000) return Math.max(margeMinimum, 25);
       if (volumeMensuel >= 1500) return Math.max(margeMinimum, 30);
       if (volumeMensuel >= 700)  return Math.max(margeMinimum, margeCible);
       return Math.max(margeMinimum, margeCible + 10);
     }
 
+    function toggleLogistique() {
+      const mode = document.getElementById("modeLogistique").value;
+      const disabled = mode === "sans";
+      ["preparation", "emballage", "manutention"].forEach(id => {
+        const el = document.getElementById(id);
+        el.disabled = disabled;
+        el.style.opacity = disabled ? "0.45" : "1";
+      });
+    }
+
     function calculerPrix() {
-      const colisJour   = n("colisJour");
-      const joursMois   = n("joursMois");
+      const colisJour       = n("colisJour");
+      const joursMois       = n("joursMois");
+      const nbVehicules     = Math.max(n("nbVehicules"), 1);
+      const modeLogistique  = document.getElementById("modeLogistique").value;
 
-      const salaire     = n("salaire");
-      const leasing     = n("leasing");
-      const assurance   = n("assurance");
-      const local       = n("local");
-      const admin       = n("admin");
-      const imprevus    = n("imprevus");
+      const salaire         = n("salaire");
+      const leasing         = n("leasing");
+      const assurance       = n("assurance");
+      const local           = n("local");
+      const admin           = n("admin");
+      const imprevus        = n("imprevus");
 
-      const kmTournee     = n("kmTournee");
-      const colisTournee  = Math.max(n("colisTournee"), 1);
-      const coutKm        = n("coutKm");
-      const remplissage   = Math.max(n("remplissage"), 10) / 100;
+      const kmTournee       = n("kmTournee");
+      const colisTournee    = Math.max(n("colisTournee"), 1);
+      const coutKm          = n("coutKm");
+      const remplissage     = Math.max(n("remplissage"), 10) / 100;
 
-      const preparation   = n("preparation");
-      const emballage     = n("emballage");
-      const manutention   = n("manutention");
-      const adminColis    = n("adminColis");
+      const preparation     = n("preparation");
+      const emballage       = n("emballage");
+      const manutention     = n("manutention");
+      const adminColis      = n("adminColis");
 
-      const margeMinimum  = n("margeMinimum");
-      const margeCible    = n("margeCible");
-      const prixPlancher  = n("prixPlancher");
-      const remise        = n("remise");
+      const margeMinimum    = n("margeMinimum");
+      const margeCible      = n("margeCible");
+      const prixPlancher    = n("prixPlancher");
+      const remise          = n("remise");
       const coefficientClient = parseFloat(document.getElementById("coefficientClient").value);
-      const objectif      = document.getElementById("objectif").value;
+      const objectif        = document.getElementById("objectif").value;
 
-      const etage            = n("etage");
+      const etage           = n("etage");
       const supplementManuel = n("supplementManuel");
-      const express          = document.getElementById("express").checked;
-      const urgent           = document.getElementById("urgent").checked;
-      const sansAscenseur    = document.getElementById("sansAscenseur").checked;
+      const express         = document.getElementById("express").checked;
+      const urgent          = document.getElementById("urgent").checked;
+      const sansAscenseur   = document.getElementById("sansAscenseur").checked;
 
       const volumeMensuel     = Math.max(colisJour * joursMois, 1);
-      const coutFixeMensuel   = salaire + leasing + assurance + local + admin + imprevus;
+      const coutFixeMensuel   = ((salaire + leasing + assurance) * nbVehicules) + local + admin + imprevus;
       const coutFixeParColis  = coutFixeMensuel / volumeMensuel;
 
       const kmParColisBrut    = kmTournee / colisTournee;
       const kmParColisCorrige = kmParColisBrut / remplissage;
       const coutKmParColis    = kmParColisCorrige * coutKm;
 
-      const coutVariable = preparation + emballage + manutention + adminColis;
-      const coutReel     = coutFixeParColis + coutKmParColis + coutVariable;
+      const coutVariable = modeLogistique === "avec"
+        ? preparation + emballage + manutention + adminColis
+        : adminColis;
+      const coutReel = coutFixeParColis + coutKmParColis + coutVariable;
 
       const margeDynamique = calculerMargeDynamique(volumeMensuel, margeMinimum, margeCible, objectif);
       const prixSecurite   = Math.max(coutReel * (1 + margeMinimum / 100), prixPlancher);
@@ -560,16 +585,17 @@
       const margeMensuelle = margeColis * volumeMensuel;
       const tauxMargeReel  = prixClient > 0 ? (margeColis / prixClient) * 100 : 0;
 
-      document.getElementById("prixClient").textContent   = money(prixClient);
-      document.getElementById("prixDetail").textContent   = "Marge appliquée : " + percent(margeDynamique) + " | coefficient client : " + coefficientClient.toFixed(2);
-      document.getElementById("volumeMensuel").textContent = volumeMensuel.toLocaleString("fr-CH");
-      document.getElementById("coutFixeColis").textContent = money(coutFixeParColis);
-      document.getElementById("kmColis").textContent       = kmParColisCorrige.toFixed(2) + " km";
-      document.getElementById("coutKmColis").textContent   = money(coutKmParColis);
-      document.getElementById("coutReel").textContent      = money(coutReel);
-      document.getElementById("prixSecurite").textContent  = money(prixSecurite);
-      document.getElementById("margeColis").textContent    = money(margeColis);
-      document.getElementById("margeMensuelle").textContent = money(margeMensuelle);
+      document.getElementById("prixClient").textContent        = money(prixClient);
+      document.getElementById("prixDetail").textContent        = "Marge appliquée : " + percent(margeDynamique) + " | coefficient client : " + coefficientClient.toFixed(2);
+      document.getElementById("volumeMensuel").textContent     = volumeMensuel.toLocaleString("fr-CH");
+      document.getElementById("vehiculesResultat").textContent = nbVehicules.toLocaleString("fr-CH");
+      document.getElementById("coutFixeColis").textContent     = money(coutFixeParColis);
+      document.getElementById("kmColis").textContent           = kmParColisCorrige.toFixed(2) + " km";
+      document.getElementById("coutKmColis").textContent       = money(coutKmParColis);
+      document.getElementById("coutReel").textContent          = money(coutReel);
+      document.getElementById("prixSecurite").textContent      = money(prixSecurite);
+      document.getElementById("margeColis").textContent        = money(margeColis);
+      document.getElementById("margeMensuelle").textContent    = money(margeMensuelle);
 
       const status = document.getElementById("status");
       status.className = "status";
@@ -587,7 +613,7 @@
 
       document.getElementById("offreClient").innerHTML = `
         <strong>Proposition commerciale :</strong><br>
-        Prise en charge logistique complète : préparation, contrôle, emballage et livraison.<br>
+        ${modeLogistique === "avec" ? "Prise en charge logistique complète : préparation, contrôle, emballage et livraison." : "Prestation de livraison seule, sans préparation ni emballage logistique."}<br>
         Prix conseillé : <strong>${money(prixClient)} par colis</strong>.<br>
         Prix minimum de négociation : <strong>${money(prixSecurite)} par colis</strong>.<br>
         Volume estimé : <strong>${volumeMensuel.toLocaleString("fr-CH")} colis par mois</strong>.<br>
@@ -604,6 +630,7 @@
       `;
     }
 
+    toggleLogistique();
     calculerPrix();
   </script>
 </body>
