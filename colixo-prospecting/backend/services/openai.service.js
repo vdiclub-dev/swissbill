@@ -191,4 +191,40 @@ Analyse et retourne JSON:
   return JSON.parse(response.choices[0].message.content);
 }
 
-module.exports = { enrichProspect, analyzeReply };
+// ── extractWithAI ──────────────────────────────────────────────
+// Extrait les champs prospect depuis le contenu d'un site web
+
+async function extractWithAI(siteText, parsed) {
+  if (!openai || !siteText) return null;
+  try {
+    const hint = parsed.type === 'person'
+      ? `Profil LinkedIn de ${parsed.name}`
+      : `Page entreprise LinkedIn : ${parsed.name}`;
+
+    const prompt = `Analyse ce contenu de site web et extrais les informations de l'entreprise.
+Contexte: ${hint}
+
+CONTENU:
+${siteText.substring(0, 2000)}
+
+Retourne uniquement un JSON valide avec ces champs (null si non trouvé):
+{
+  "entreprise": "nom officiel de l'entreprise",
+  "secteur": "secteur en 2-3 mots (ex: E-commerce, Industrie, Santé)",
+  "ville": "ville principale du siège",
+  "contact_role": null
+}`;
+
+    const response = await openai.chat.completions.create({
+      model:           MODEL,
+      messages:        [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature:     0.1,
+      max_tokens:      200,
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch { return null; }
+}
+
+module.exports = { enrichProspect, analyzeReply, fetchSiteContent, extractWithAI };

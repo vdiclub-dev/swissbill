@@ -884,10 +884,56 @@ async function enrichProspect(id) {
 }
 
 // ── Prospect form ──────────────────────────────────────────────
+// ── LinkedIn auto-prefill ─────────────────────────────────────────────────────
+
+async function linkedinPrefill(url) {
+  if (!url || !url.includes('linkedin.com/')) return;
+
+  const spinner = document.getElementById('linkedinPrefillSpinner');
+  const hint    = document.getElementById('linkedinPrefillHint');
+  const form    = document.getElementById('prospectForm');
+
+  if (spinner) spinner.style.display = 'inline';
+  if (hint)    hint.textContent = '⏳ Analyse en cours…';
+
+  try {
+    const res  = await fetch(API_BASE + '/linkedin-prefill', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ linkedin_url: url }),
+    });
+    const json = await res.json();
+
+    if (!json.ok) throw new Error(json.error || 'Erreur');
+
+    const d = json.data;
+    const fields = ['entreprise','ville','secteur','site_web','contact_nom','contact_role'];
+    let filled = 0;
+
+    fields.forEach(f => {
+      if (!d[f]) return;
+      const el = form.querySelector(`[name=${f}]`);
+      if (el && !el.value) { el.value = d[f]; filled++; }
+    });
+
+    if (hint) hint.textContent = filled > 0
+      ? `✅ ${filled} champ${filled > 1 ? 's' : ''} rempli${filled > 1 ? 's' : ''} automatiquement — vérifiez et complétez`
+      : '⚠️ Aucune donnée trouvée — remplissez manuellement';
+
+  } catch (err) {
+    if (hint) hint.textContent = '⚠️ Auto-remplissage indisponible — ' + err.message;
+  } finally {
+    if (spinner) spinner.style.display = 'none';
+  }
+}
+
 function openModalProspect(id = null) {
   const form = document.getElementById('prospectForm');
   form.reset();
   form.querySelector('[name=id]').value = '';
+
+  const hint = document.getElementById('linkedinPrefillHint');
+  if (hint) hint.textContent = '✨ Collez une URL LinkedIn — le formulaire se remplit automatiquement';
 
   if (id) {
     const p = state.prospects.find(x => x.id === id) || DEMO_PROSPECTS.find(x => x.id === id);
@@ -904,6 +950,21 @@ function openModalProspect(id = null) {
   }
 
   document.getElementById('modalProspect').classList.add('open');
+
+  // Attacher l'écouteur paste/blur sur le champ LinkedIn
+  const linkedinInput = document.getElementById('linkedinUrlInput');
+  if (linkedinInput && !linkedinInput._prefillBound) {
+    linkedinInput._prefillBound = true;
+    linkedinInput.addEventListener('paste', e => {
+      const pasted = (e.clipboardData || window.clipboardData).getData('text');
+      if (pasted && pasted.includes('linkedin.com/')) {
+        setTimeout(() => linkedinPrefill(pasted), 50);
+      }
+    });
+    linkedinInput.addEventListener('blur', () => {
+      linkedinPrefill(linkedinInput.value);
+    });
+  }
 }
 
 async function submitProspect(e) {

@@ -53,14 +53,16 @@ app.get('/health', (req, res) => {
 });
 
 // ── Routes ────────────────────────────────────────────────────
-const prospectsRouter = require('./routes/prospects');
-const enrichRouter    = require('./routes/enrich');
-const tasksRouter     = require('./routes/tasks');
-const eventsRouter    = require('./routes/events');
-const repliesRouter   = require('./routes/replies');
+const prospectsRouter      = require('./routes/prospects');
+const enrichRouter         = require('./routes/enrich');
+const tasksRouter          = require('./routes/tasks');
+const eventsRouter         = require('./routes/events');
+const repliesRouter        = require('./routes/replies');
+const linkedinPrefillRouter = require('./routes/linkedin-prefill');
 
 app.use('/api/prospects',                prospectsRouter);
 app.use('/api/enrich-prospect',          enrichRouter);
+app.use('/api/linkedin-prefill',         linkedinPrefillRouter);
 app.use('/api/prospects/:id/tasks',      tasksRouter);
 app.use('/api/prospects/:id/events',     eventsRouter);
 app.use('/api/prospects/:id/reply-assistant', repliesRouter);
