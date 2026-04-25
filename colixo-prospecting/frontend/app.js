@@ -406,6 +406,36 @@ async function renderDashboard() {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 5);
 
+  // Charger les tâches en arrière-plan pour le widget dashboard
+  api.get('/agenda?status=pending').then(tasks => {
+    const today = new Date().toISOString().split('T')[0];
+    const sorted = (Array.isArray(tasks) ? tasks : [])
+      .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
+      .slice(0, 6);
+    const el = document.getElementById('dashTasksBody');
+    if (!el) return;
+    if (!sorted.length) {
+      el.innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-desc">Aucune tâche en attente.</div></div>';
+      return;
+    }
+    el.innerHTML = `<table><tbody>${sorted.map(t => {
+      const p = t.prospects || {};
+      const isLate = t.due_date && t.due_date < today;
+      return `<tr onclick="navigate('agenda')" style="cursor:pointer;">
+        <td style="padding:9px 14px;">
+          <div class="td-main">${escHtml(t.title)}</div>
+          ${p.entreprise ? `<div class="td-sub">${escHtml(p.entreprise)}</div>` : ''}
+        </td>
+        <td style="padding:9px 14px;text-align:right;white-space:nowrap;">
+          <span style="font-size:12px;color:${isLate ? 'var(--danger)' : 'var(--muted)'};">${fmtDate(t.due_date)}</span>
+          ${isLate ? '<span class="atask-badge badge-danger" style="margin-left:6px;">En retard</span>' : ''}
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  }).catch(() => {
+    // Widget optionnel, on ignore les erreurs silencieusement
+  });
+
   document.getElementById('content').innerHTML = `
     <div class="section-title">Vue générale</div>
 
@@ -462,6 +492,16 @@ async function renderDashboard() {
               </div>`).join('')}
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="dash-agenda-widget card">
+      <div class="card-header">
+        <div class="card-title">📅 Prochaines tâches</div>
+        <button class="btn btn-sm btn-primary" onclick="navigate('agenda')">Voir l'agenda</button>
+      </div>
+      <div class="card-body" id="dashTasksBody" style="padding:0;">
+        <div class="empty-state" style="padding:20px;"><div class="empty-state-desc">Chargement…</div></div>
       </div>
     </div>
 
