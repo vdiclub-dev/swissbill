@@ -389,18 +389,27 @@ function updateNav(view) {
 // ── Dashboard ──────────────────────────────────────────────────
 async function renderDashboard() {
   showLoader('Chargement du dashboard...');
-  const [stats, prospects, agendaTasks] = await Promise.all([
+  const [stats, prospects] = await Promise.all([
     api.get('/prospects/stats'),
-    api.get('/prospects'),
-    api.get('/agenda').catch(() => [])
+    api.get('/prospects')
   ]);
   state.stats = stats;
   state.prospects = prospects;
   updateNavCount(prospects.length);
+
+  // Tâches : tenter le vrai backend, sinon démo
+  let agendaTasks = [];
+  try {
+    const raw = await api.get('/agenda');
+    agendaTasks = Array.isArray(raw) && raw.length ? raw : generateDemoAgenda();
+  } catch {
+    agendaTasks = generateDemoAgenda();
+  }
+
   hideLoader();
 
   const today = new Date().toISOString().split('T')[0];
-  const upcomingTasks = (Array.isArray(agendaTasks) ? agendaTasks : [])
+  const upcomingTasks = agendaTasks
     .filter(t => t.status === 'pending')
     .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
     .slice(0, 6);
