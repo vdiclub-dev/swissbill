@@ -33,9 +33,9 @@ const DEMO_PROSPECTS = [
     angle_commercial: 'Fiabilité et réactivité sur les urgences médicales. Colixo peut proposer des créneaux dédiés et un suivi temps réel avec confirmation de livraison.',
     objections_probables: '1. Contrat en cours avec DPD. 2. Prix potentiellement plus élevé. 3. Capacité à couvrir tout le canton de Vaud.',
     score: 88, score_classe: 'A',
-    message_connexion: 'Bonjour Sandra, je gère la prospection chez Colixo, livraison express en Suisse romande. Vos livraisons médicales méritent un partenaire fiable. Échange possible ?',
-    email_1: 'Objet: Livraison express médicale — Colixo pour Medi-Supply\n\nBonjour Sandra,\n\nNous accompagnons plusieurs distributeurs médicaux sur Lausanne avec des livraisons J+1 garanties et un suivi temps réel. Seriez-vous disponible 10 minutes cette semaine ?\n\nCordialement,\nL\'équipe Colixo',
-    script_appel: 'Introduction: "Bonjour, je vous contacte de Colixo, nous sommes spécialisés dans la livraison express en Suisse romande."\nQuestion 1: "Combien de livraisons gérez-vous par mois aujourd\'hui ?"\nQuestion 2: "Avez-vous des contraintes particulières sur les délais ou horaires ?"\nProposition: "Nous proposons un essai gratuit sur 5 livraisons."',
+    message_connexion: 'Bonjour,\n\nJe représente Colixo, service de livraison express en Suisse romande. Nous accompagnons plusieurs acteurs du secteur médical avec des livraisons J+1 et un suivi en temps réel. Seriez-vous disponible pour un bref échange cette semaine ?\n\nCordialement',
+    email_1: 'Objet: Livraison express médicale — Colixo pour Medi-Supply\n\nBonjour Madame,\n\nNous accompagnons plusieurs distributeurs médicaux en Suisse romande avec des livraisons J+1 garanties et un suivi en temps réel. Seriez-vous disponible 10 minutes cette semaine pour évaluer si notre offre correspond à vos besoins ?\n\nCordialement,\nL\'équipe Colixo',
+    script_appel: 'Introduction: "Bonjour, je vous contacte de chez Colixo, nous sommes spécialisés dans la livraison express en Suisse romande. Avez-vous quelques minutes ?"\nQuestion 1: "Quel est votre volume de livraisons mensuel actuellement ?"\nQuestion 2: "Avez-vous des contraintes particulières sur les délais ou les horaires de livraison ?"\nProposition: "Nous pourrions vous proposer un essai sur 5 livraisons, sans engagement."',
     statut: 'pret_a_contacter', score_pertinence_secteur:18,score_besoin_logistique:17,score_compatibilite_geo:9,score_potentiel_volume:16,score_probabilite_reponse:13,score_complexite_op:8,score_fit_colixo:5, analysis_quality:'forte', logistic_signals:['livraison','urgence','cliniques','traçabilité'], created_at: '2026-04-10T09:15:00Z', updated_at: '2026-04-18T14:30:00Z'
   },
   {
@@ -50,9 +50,9 @@ const DEMO_PROSPECTS = [
     angle_commercial: 'Proposition de valeur claire : chaque heure d\'arrêt machine coûte cher. Colixo peut livrer en urgence avant 12h ou en soirée.',
     objections_probables: '1. Ont peut-être déjà une solution interne. 2. Volume insuffisant pour négocier. 3. Couverture géographique.',
     score: 82, score_classe: 'A',
-    message_connexion: 'Bonjour Marc, chez Colixo on livre des pièces industrielles en urgence partout en Suisse romande. Une panne de machine n\'attend pas. Échange rapide ?',
-    email_1: 'Objet: Urgences logistiques pièces détachées — Colixo\n\nBonjour Marc,\n\nColixo accompagne des distributeurs industriels avec des livraisons express même le soir ou le samedi. Vos clients n\'attendent pas. Disponible 10 min ?',
-    script_appel: 'Introduction: "Bonjour, Colixo livraison express industrielle en Suisse romande."\nQuestion 1: "Quelle est votre fréquence de livraisons urgentes par mois ?"\nQuestion 2: "Utilisez-vous un prestataire dédié ou du cas par cas ?"\nProposition: "Tarif préférentiel pour les urgences industrielles, réponse en 2h."',
+    message_connexion: 'Bonjour,\n\nJe représente Colixo, service de livraison express en Suisse romande. Nous accompagnons des distributeurs de pièces industrielles avec des livraisons urgentes en dehors des heures ouvrées. Seriez-vous disponible pour un bref échange ?\n\nCordialement',
+    email_1: 'Objet: Livraisons urgentes pièces détachées — Colixo\n\nBonjour Monsieur,\n\nColixo accompagne des distributeurs industriels avec des livraisons express, y compris en soirée et le samedi. Seriez-vous disponible 10 minutes cette semaine pour évaluer si notre offre répond à vos contraintes ?\n\nCordialement,\nL\'équipe Colixo',
+    script_appel: 'Introduction: "Bonjour, je vous contacte de chez Colixo, service de livraison express industrielle en Suisse romande. Avez-vous quelques minutes ?"\nQuestion 1: "Quelle est votre fréquence de livraisons urgentes par mois ?"\nQuestion 2: "Faites-vous appel à un prestataire dédié ou traitez-vous ces urgences au cas par cas ?"\nProposition: "Nous proposons un tarif dédié pour les urgences industrielles avec une prise en charge en 2h."',
     statut: 'contacte', analysis_quality:'forte', logistic_signals:['urgence','pièces','industrie','B2B'], created_at: '2026-04-08T11:00:00Z', updated_at: '2026-04-17T10:00:00Z'
   },
   {
@@ -81,8 +81,8 @@ const DEMO_PROSPECTS = [
     angle_commercial: 'Sécurité, discrétion, traçabilité complète. Colixo peut proposer des livraisons avec remise en main propre et photo de confirmation.',
     objections_probables: '1. Nécessite assurance haute valeur. 2. Prestataire historique (probablement DHL ou FedEx). 3. Exigences de sécurité très élevées.',
     score: 74, score_classe: 'B',
-    message_connexion: 'Bonjour Pierre, Colixo propose des livraisons sécurisées pour l\'horlogerie en Suisse romande. Traçabilité et remise en main propre garanties. Disponible pour en discuter ?',
-    email_1: 'Objet: Livraisons sécurisées horlogerie — Colixo\n\nBonjour Pierre,\n\nNous accompagnons des acteurs de l\'horlogerie avec des livraisons à haute valeur ajoutée : traçabilité complète, remise en main propre, confirmation photo. 10 minutes cette semaine ?',
+    message_connexion: 'Bonjour,\n\nJe représente Colixo, service de livraison express en Suisse romande. Nous proposons des livraisons sécurisées avec traçabilité complète et remise en main propre, adaptées aux exigences du secteur horloger. Seriez-vous disponible pour un bref échange ?\n\nCordialement',
+    email_1: 'Objet: Livraisons sécurisées horlogerie — Colixo\n\nBonjour Monsieur,\n\nNous accompagnons des acteurs du secteur horloger avec des livraisons à haute valeur ajoutée : traçabilité complète, remise en main propre et confirmation photo. Seriez-vous disponible 10 minutes cette semaine pour en discuter ?\n\nCordialement,\nL\'équipe Colixo',
     script_appel: 'Introduction: "Colixo, spécialisé dans les livraisons sécurisées en Suisse romande."\nQuestion 1: "Combien d\'envois réalisez-vous par mois vers des ateliers ou retailers ?"\nQuestion 2: "Avez-vous des exigences d\'assurance particulières ?"\nProposition: "Livraisons assurées jusqu\'à CHF 50\'000, avec traçabilité complète."',
     statut: 'repondu', created_at: '2026-04-05T08:00:00Z', updated_at: '2026-04-20T09:00:00Z'
   },
@@ -98,8 +98,8 @@ const DEMO_PROSPECTS = [
     angle_commercial: 'Partenaire de croissance : Colixo peut absorber la montée en volume et garantir les créneaux critiques du jeudi-vendredi.',
     objections_probables: '1. Déjà avec un prestataire. 2. Tarif au volume. 3. Contraintes de fraîcheur.',
     score: 91, score_classe: 'A',
-    message_connexion: 'Bonjour Aurélie, Colixo accompagne des e-commerçants alimentaires en forte croissance. Fiabilité J+1 et tarifs scalables. Échange cette semaine ?',
-    email_1: 'Objet: Partenaire logistique scalable pour FreshBox\n\nBonjour Aurélie,\n\nColixo accompagne des box alimentaires en forte croissance avec des livraisons J+1 fiables et des tarifs qui s\'adaptent à votre volume. On peut parler 10 minutes cette semaine ?\n\nCordialement',
+    message_connexion: 'Bonjour,\n\nJe représente Colixo, service de livraison express en Suisse romande. Nous accompagnons des e-commerçants en croissance avec des livraisons J+1 fiables et des tarifs adaptés au volume. Seriez-vous disponible pour un échange cette semaine ?\n\nCordialement',
+    email_1: 'Objet: Partenaire logistique pour FreshBox — Colixo\n\nBonjour Madame,\n\nColixo accompagne des acteurs de la box alimentaire en croissance avec des livraisons J+1 fiables et des tarifs progressifs selon le volume. Seriez-vous disponible 10 minutes cette semaine pour évaluer si notre offre correspond à vos besoins ?\n\nCordialement,\nL\'équipe Colixo',
     script_appel: 'Introduction: "Colixo, partenaire logistique pour les e-commerçants en croissance."\nQuestion 1: "Votre volume de livraisons actuelles par semaine ?"\nQuestion 2: "Avez-vous des incidents récents avec votre prestataire actuel ?"\nProposition: "Garantie de livraison J+1 avec pénalités contractuelles."',
     statut: 'rdv_planifie', analysis_quality:'forte', logistic_signals:['e-commerce','abonnement','volume','croissance','livraison hebdomadaire'], created_at: '2026-04-02T10:00:00Z', updated_at: '2026-04-21T08:00:00Z'
   },
@@ -114,7 +114,7 @@ const DEMO_PROSPECTS = [
     angle_commercial: 'Fiabilité et créneaux dédiés en matinée. Colixo peut être le partenaire préférentiel pour les urgences.',
     objections_probables: '1. Appels d\'offres obligatoires. 2. Contrats cadres existants.',
     score: 67, score_classe: 'B',
-    message_connexion: 'Bonjour Dr. Martin, Colixo livre du matériel médical en express en Suisse romande. Réactivité garantie pour vos urgences. Disponible pour échanger ?',
+    message_connexion: 'Bonjour,\n\nJe représente Colixo, service de livraison express en Suisse romande. Nous livrons du matériel médical avec réactivité et traçabilité. Seriez-vous disponible pour un bref échange ?\n\nCordialement',
     email_1: '', script_appel: '',
     statut: 'contacte', created_at: '2026-04-12T14:00:00Z', updated_at: '2026-04-19T11:00:00Z'
   }
@@ -297,15 +297,15 @@ function generateDemoReply(rawMessage) {
     objection_type: hasPositive ? 'interet' : 'pas_de_besoin',
     next_best_action: hasPositive ? 'Proposer un créneau de rendez-vous cette semaine' : 'Relancer dans 30 jours avec une approche différente',
     suggested_reply_short: hasPositive
-      ? 'Super nouvelle ! Je vous propose jeudi 24 avril à 10h ou vendredi à 14h — qu\'est-ce qui vous convient ?'
-      : 'Très bien, je comprends. Je me permettrai de vous recontacter dans quelques semaines si la situation évolue.',
+      ? 'Merci pour votre retour. Je vous propose le jeudi 24 avril à 10h ou le vendredi à 14h — quel créneau vous convient le mieux ?'
+      : 'Je vous remercie pour votre réponse. Je me permettrai de revenir vers vous dans quelques semaines si votre situation évolue.',
     suggested_reply_sales: hasPositive
-      ? 'Bonjour,\n\nMerci pour votre retour positif. Colixo accompagne des entreprises comme la vôtre avec des livraisons J+1 fiables et un portail de suivi en temps réel.\n\nJe vous propose un échange de 15 minutes pour comprendre vos besoins spécifiques.\n\nJeudi 24/04 à 10h ou vendredi 25/04 à 14h ?\n\nCordialement'
-      : 'Bonjour,\n\nJe comprends que ce n\'est pas le bon moment. Nous travaillons régulièrement avec des entreprises qui pensaient ne pas avoir de besoin jusqu\'à ce qu\'un incident logistique coûteux arrive.\n\nJe reste disponible si votre situation évolue.\n\nBonne continuation.',
-    suggested_reply_meeting: 'Bonjour,\n\nPour faire suite à votre message, je vous propose ces deux créneaux :\n- Jeudi 24 avril à 10h00\n- Vendredi 25 avril à 14h30\n\nL\'échange dure 15 minutes maximum, en vidéo ou par téléphone selon votre préférence.\n\nBonne journée',
-    suggested_reply_objection_prix: 'Je comprends votre préoccupation sur le prix. Ce qui nos clients constatent, c\'est que le coût d\'une livraison ratée (retour client insatisfait, gestion SAV) dépasse souvent l\'écart tarifaire. On peut regarder ensemble un structure tarifaire adaptée à votre volume ?',
-    suggested_reply_no_need: 'Aucun problème, je comprends. Les besoins évoluent et si vous avez un pic de volume ou un prestataire qui déçoit, je suis là. Je vous envoie notre brochure pour référence.',
-    suggested_reply_refus: 'Merci pour votre transparence. Je respecte votre choix. N\'hésitez pas à revenir vers nous si la situation change — nous restons disponibles. Bonne continuation dans vos activités.'
+      ? 'Bonjour,\n\nMerci pour votre retour. Colixo accompagne des entreprises comme la vôtre avec des livraisons J+1 fiables et un portail de suivi en temps réel.\n\nJe vous propose un échange de 15 minutes pour mieux comprendre vos besoins.\n\nJeudi 24/04 à 10h ou vendredi 25/04 à 14h ?\n\nCordialement'
+      : 'Bonjour,\n\nJe comprends que le moment n\'est peut-être pas opportun. Nous accompagnons régulièrement des entreprises dont les besoins logistiques évoluent.\n\nN\'hésitez pas à revenir vers nous si votre situation change.\n\nCordialement',
+    suggested_reply_meeting: 'Bonjour,\n\nSuite à votre message, je vous propose les créneaux suivants :\n- Jeudi 24 avril à 10h00\n- Vendredi 25 avril à 14h30\n\nL\'échange dure 15 minutes maximum, en vidéo ou par téléphone selon votre préférence.\n\nCordialement',
+    suggested_reply_objection_prix: 'Bonjour,\n\nJe comprends votre attention au coût. Ce que nos clients constatent, c\'est que le coût d\'une livraison non conforme (retour client, gestion SAV) dépasse souvent l\'écart tarifaire. Nous pourrions examiner ensemble une structure adaptée à votre volume.\n\nCordialement',
+    suggested_reply_no_need: 'Bonjour,\n\nJe vous remercie pour votre réponse. Les besoins évoluent et si un pic de volume ou un changement de prestataire devait se présenter, nous restons à votre disposition.\n\nCordialement',
+    suggested_reply_refus: 'Bonjour,\n\nJe vous remercie pour votre transparence. N\'hésitez pas à revenir vers nous si votre situation devait évoluer — nous resterons disponibles.\n\nBonne continuation.'
   };
 }
 
@@ -317,13 +317,13 @@ function generateDemoEnrichment(data) {
     objections_probables: '1. Prestataire existant. 2. Budget. 3. Volume insuffisant pour négocier.',
     score: Math.floor(Math.random() * 30) + 55,
     score_classe: 'B',
-    message_connexion: `Bonjour, je représente Colixo, livraison express en Suisse romande. Votre activité dans le ${data.secteur || 'secteur'} pourrait bénéficier de nos solutions. Échange possible ?`,
-    message_1: `Bonjour,\n\nMerci d'avoir accepté ma connexion. Colixo propose des livraisons J+1 fiables pour les entreprises ${data.secteur ? 'du secteur ' + data.secteur : 'B2B'}. Auriez-vous 10 minutes pour en discuter ?`,
-    relance_1: 'Bonjour, je me permets de relancer suite à mon message de la semaine dernière. Avez-vous eu l\'occasion d\'y réfléchir ?',
-    relance_2: 'Bonjour, dernière relance de ma part. Si vous êtes intéressé(e) à terme, je reste disponible. Belle journée.',
-    email_1: `Objet: Livraison express — Colixo pour ${data.entreprise || 'votre entreprise'}\n\nBonjour,\n\nColixo accompagne des entreprises ${data.secteur ? 'dans le ' + data.secteur : 'B2B'} avec des livraisons express J+1 en Suisse romande. Disponible 10 min cette semaine ?\n\nCordialement,\nL'équipe Colixo`,
-    email_relance: `Objet: Re: Livraison express — Colixo\n\nBonjour,\n\nJe reviens vers vous suite à mon email de la semaine dernière. Avez-vous eu l'occasion d'y réfléchir ? Je reste disponible.\n\nCordialement`,
-    script_appel: `Introduction: "Bonjour, je vous appelle de Colixo, service de livraison express en Suisse romande."\nQuestion 1: "Combien de livraisons gérez-vous par mois ?"\nQuestion 2: "Avez-vous des délais critiques à respecter ?"\nProposition: "Je vous propose un essai gratuit sur 5 envois."`
+    message_connexion: `Bonjour,\n\nJe représente Colixo, service de livraison express B2B en Suisse romande. Votre activité dans le secteur ${data.secteur || 'logistique'} pourrait bénéficier de notre offre. Seriez-vous disponible pour un bref échange cette semaine ?\n\nCordialement`,
+    message_1: `Bonjour,\n\nMerci d'avoir accepté ma connexion. Colixo accompagne des entreprises ${data.secteur ? 'du secteur ' + data.secteur : 'B2B'} avec des livraisons J+1 fiables en Suisse romande. Auriez-vous 10 minutes cette semaine pour en discuter ?\n\nCordialement`,
+    relance_1: 'Bonjour,\n\nJe me permets de revenir vers vous suite à mon message de la semaine dernière. Avez-vous eu l\'occasion d\'y réfléchir ?\n\nCordialement',
+    relance_2: 'Bonjour,\n\nJe ne voudrais pas vous importuner davantage. Si un besoin logistique devait se présenter à terme, n\'hésitez pas à revenir vers nous.\n\nBonne continuation,\nL\'équipe Colixo',
+    email_1: `Objet: Livraison express B2B — Colixo pour ${data.entreprise || 'votre entreprise'}\n\nBonjour,\n\nColixo accompagne des entreprises ${data.secteur ? 'du secteur ' + data.secteur : 'B2B'} avec des livraisons express J+1 en Suisse romande. Seriez-vous disponible 10 minutes cette semaine pour évaluer si notre offre correspond à vos besoins ?\n\nCordialement,\nL'équipe Colixo`,
+    email_relance: `Objet: Re: Livraison express B2B — Colixo\n\nBonjour,\n\nJe me permets de revenir vers vous suite à mon précédent message. Avez-vous eu l'occasion d'y réfléchir ? Je reste à votre disposition.\n\nCordialement,\nL'équipe Colixo`,
+    script_appel: `Introduction: "Bonjour, je vous contacte de chez Colixo, service de livraison express en Suisse romande. Avez-vous quelques minutes ?"\nQuestion 1: "Quel est votre volume de livraisons mensuel actuellement ?"\nQuestion 2: "Avez-vous des contraintes de délais particulières à respecter ?"\nProposition: "Nous pourrions vous proposer un essai sur 5 livraisons, sans engagement."`
   };
 }
 

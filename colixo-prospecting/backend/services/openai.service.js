@@ -109,15 +109,22 @@ Retourne un JSON valide avec exactement ces champs:
   "confidence_score": <0-100, confiance dans l'analyse>,
   "analysis_quality": <"forte"|"moyenne"|"faible">,
 
-  "message_connexion": "message LinkedIn direct (max 120 mots, objectif: obtenir 10 min d'échange, ton direct)",
-  "message_connexion_premium": "message LinkedIn raffiné (max 120 mots, même objectif, ton premium)",
+  "message_connexion": "message LinkedIn direct (max 120 mots, objectif: obtenir un échange de 10 minutes)",
+  "message_connexion_premium": "message LinkedIn soigné (max 120 mots, même objectif)",
   "message_1": "email de prospection (max 180 mots, objet inclus en première ligne)",
   "email_relance": "email de relance si pas de réponse (max 140 mots)",
   "script_appel": "guide script téléphonique (max 200 mots, structure: accroche, valeur, question)"
 }
 
 Signaux logistiques: livraison, expédition, stock, entrepôt, commandes, e-commerce, distribution, transport, urgence, intervention, multi-sites, tournées, délais, pièces, B2B récurrent, volume, fenêtres horaires.
-Messages: courts, humains, crédibles, sans promesses exagérées, axés sur un échange de 10 minutes.`;
+Règles de rédaction STRICTES pour tous les messages:
+- Vouvoiement obligatoire (vous/votre), jamais de tutoiement
+- Ne jamais utiliser le prénom seul. Commencer par "Bonjour Madame," ou "Bonjour Monsieur," si le genre est connu, sinon "Bonjour," uniquement
+- Ton professionnel B2B: crédible, sobre, sans enthousiasme excessif
+- Jamais de formulations familières ("on livre", "Échange rapide ?", "Disponible 10 min ?", "Super nouvelle !")
+- Questions complètes avec formulation polie ("Seriez-vous disponible…", "Auriez-vous l'occasion…")
+- Signature: "Cordialement, / L'équipe Colixo" pour les emails
+- Messages courts, factuels, centrés sur la valeur concrète pour le prospect`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -175,10 +182,11 @@ Analyse et retourne JSON:
   "urgency_level": <0-3>,
   "recommended_channel": <"email"|"telephone"|"linkedin"|"aucun">,
   "next_best_action": "action concrète recommandée en 1 phrase",
-  "suggested_reply_short": "réponse directe max 100 mots",
-  "suggested_reply_sales": "réponse orientée valeur max 150 mots",
-  "suggested_reply_meeting": "réponse orientée RDV max 150 mots"
-}`;
+  "suggested_reply_short": "réponse directe max 100 mots, ton professionnel, vouvoiement",
+  "suggested_reply_sales": "réponse orientée valeur max 150 mots, ton professionnel, vouvoiement",
+  "suggested_reply_meeting": "réponse orientée RDV max 150 mots, ton professionnel, vouvoiement"
+}
+Règles: vouvoiement strict, pas de prénom seul, pas de familiarités ("super !", "pas de souci", "je suis là"), formulations B2B sobres.`;
 
   const response = await openai.chat.completions.create({
     model:           MODEL,
