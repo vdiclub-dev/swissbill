@@ -401,7 +401,8 @@
                 </div>
                 <div style="display:flex;gap:8px;">
                     <button class="btn btn-ghost btn-sm" onclick="loadAgendaProspection()"><i class="fas fa-sync-alt"></i> Actualiser</button>
-                    <a href="/colixo-prospecting/frontend/index.html#agenda" target="_blank" class="btn btn-red btn-sm"><i class="fas fa-external-link-alt"></i> Ouvrir CRM complet</a>
+                    <button class="btn btn-red btn-sm" onclick="openModalRdv()"><i class="fas fa-plus"></i> Nouveau RDV</button>
+                    <a href="/colixo-prospecting/frontend/index.html" target="_blank" class="btn btn-ghost btn-sm"><i class="fas fa-external-link-alt"></i> CRM complet</a>
                 </div>
             </div>
             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -424,6 +425,55 @@
             <div class="card"><div class="feed" id="fullActivityFeed"><div class="empty"><div class="empty-ico">⏳</div></div></div></div>
         </div>
 
+    </div>
+</div>
+
+<!-- MODAL RDV PROSPECTION -->
+<div id="modalRdv" class="modal" style="display:none;">
+    <div class="modal-box" style="max-width:480px;">
+        <div class="modal-head">
+            <div class="modal-title">📅 NOUVEAU RENDEZ-VOUS</div>
+            <button class="modal-close" onclick="closeModal('modalRdv')">✕</button>
+        </div>
+        <div class="field" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Prospect *</label>
+            <select id="rdvProspect" onchange="fillRdvTitle()" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-size:14px;font-family:'Outfit',sans-serif;">
+                <option value="">Chargement des prospects...</option>
+            </select>
+        </div>
+        <div class="field" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Type</label>
+            <select id="rdvType" onchange="fillRdvTitle()" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-size:14px;font-family:'Outfit',sans-serif;">
+                <option value="Rendez-vous commercial">Rendez-vous commercial</option>
+                <option value="Appel téléphonique">Appel téléphonique</option>
+                <option value="Démonstration produit">Démonstration produit</option>
+                <option value="Présentation offre">Présentation offre</option>
+                <option value="Suivi post-RDV">Suivi post-RDV</option>
+                <option value="Autre">Autre...</option>
+            </select>
+        </div>
+        <div class="field" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Titre *</label>
+            <input type="text" id="rdvTitle" placeholder="Ex: RDV commercial — Dupont SA" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-size:14px;font-family:'Outfit',sans-serif;box-sizing:border-box;"/>
+        </div>
+        <div class="field-row">
+            <div class="field" style="margin-bottom:14px;">
+                <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Date *</label>
+                <input type="date" id="rdvDate" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-size:14px;font-family:'Outfit',sans-serif;box-sizing:border-box;"/>
+            </div>
+            <div class="field" style="margin-bottom:14px;">
+                <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Heure</label>
+                <input type="time" id="rdvTime" value="09:00" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-size:14px;font-family:'Outfit',sans-serif;box-sizing:border-box;"/>
+            </div>
+        </div>
+        <div class="field" style="margin-bottom:6px;">
+            <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Notes</label>
+            <textarea id="rdvNotes" placeholder="Lieu, objectif, infos utiles..." rows="3" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-size:14px;font-family:'Outfit',sans-serif;box-sizing:border-box;resize:vertical;"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" onclick="saveRdv()"><i class="fas fa-calendar-check"></i> Créer le RDV</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalRdv')">Annuler</button>
+        </div>
     </div>
 </div>
 
@@ -1447,6 +1497,85 @@ async function markAgendaDone(id) {
 
 function escAdm(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── MODAL RDV ───────────────────────────────────────────────────
+let _rdvProspects = [];
+
+async function openModalRdv() {
+  const modal = document.getElementById('modalRdv');
+  modal.style.display = 'flex';
+  // Date par défaut = aujourd'hui
+  document.getElementById('rdvDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('rdvTitle').value = 'Rendez-vous commercial';
+  document.getElementById('rdvNotes').value = '';
+
+  // Charger les prospects si pas encore chargés
+  const sel = document.getElementById('rdvProspect');
+  if (_rdvProspects.length === 0) {
+    sel.innerHTML = '<option value="">Chargement...</option>';
+    try {
+      const res = await fetch('https://swissbill.onrender.com/api/prospects');
+      const json = await res.json();
+      _rdvProspects = json.ok && Array.isArray(json.data) ? json.data : [];
+    } catch { _rdvProspects = []; }
+  }
+  if (_rdvProspects.length) {
+    sel.innerHTML = '<option value="">— Sélectionner un prospect —</option>' +
+      _rdvProspects.map(p => `<option value="${p.id}">${escAdm(p.entreprise)}${p.ville ? ' · ' + p.ville : ''}</option>`).join('');
+  } else {
+    sel.innerHTML = '<option value="">Aucun prospect disponible</option>';
+  }
+}
+
+function fillRdvTitle() {
+  const type = document.getElementById('rdvType').value;
+  const sel = document.getElementById('rdvProspect');
+  const name = sel.options[sel.selectedIndex]?.text?.split(' · ')[0] || '';
+  document.getElementById('rdvTitle').value = name ? `${type} — ${name}` : type;
+}
+
+async function saveRdv() {
+  const prospectId = document.getElementById('rdvProspect').value;
+  const title      = document.getElementById('rdvTitle').value.trim();
+  const date       = document.getElementById('rdvDate').value;
+  const time       = document.getElementById('rdvTime').value;
+  const notes      = document.getElementById('rdvNotes').value.trim();
+
+  if (!prospectId) { alert('Veuillez sélectionner un prospect.'); return; }
+  if (!title)      { alert('Veuillez saisir un titre.'); return; }
+  if (!date)       { alert('Veuillez choisir une date.'); return; }
+
+  const due_date = date; // YYYY-MM-DD
+  const fullTitle = notes ? `${title}${time ? ' à ' + time : ''}` : `${title}${time ? ' à ' + time : ''}`;
+  const payload = { title: fullTitle, due_date, notes: notes || undefined, status: 'pending' };
+
+  const btn = document.querySelector('#modalRdv .btn-red');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
+
+  try {
+    const res = await fetch(`https://swissbill.onrender.com/api/prospects/${prospectId}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Erreur');
+    closeModal('modalRdv');
+    // Ajouter à la liste locale et re-render
+    const prospect = _rdvProspects.find(p => p.id === prospectId);
+    _agendaData.unshift({ ...json.data, prospects: prospect ? { id: prospect.id, entreprise: prospect.entreprise, ville: prospect.ville } : {} });
+    renderAgendaTable();
+    const badge = document.getElementById('badgeAgenda');
+    const pending = _agendaData.filter(x => x.status === 'pending').length;
+    badge.textContent = pending; badge.style.display = '';
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-calendar-check"></i> Créer le RDV';
+  }
 }
 </script>
 
