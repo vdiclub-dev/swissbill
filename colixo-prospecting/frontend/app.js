@@ -1604,26 +1604,28 @@ async function init() {
     console.error('Unhandled rejection:', e.reason);
   });
 
+  // Afficher le dashboard immédiatement (données démo)
+  await navigate('dashboard');
+
   if (DEMO_MODE) {
     document.getElementById('demoBanner').style.display = 'block';
-    await navigate('dashboard');
     return;
   }
 
-  // Réveil du serveur Render (peut prendre 50s sur plan gratuit)
+  // Vérifier le backend en arrière-plan (sans bloquer l'affichage)
   const banner = document.getElementById('demoBanner');
   banner.style.display = 'block';
-  banner.innerHTML = '⏳ Démarrage du serveur en cours (plan gratuit Render, ~30-50s)...';
+  banner.innerHTML = '⏳ Connexion au serveur...';
 
   try {
-    const res = await fetch(API_BASE.replace('/api', '/health'), { signal: AbortSignal.timeout(65000) });
+    const res = await fetch(API_BASE.replace('/api', '/health'), { signal: AbortSignal.timeout(60000) });
     if (!res.ok) throw new Error();
     banner.style.display = 'none';
-    await navigate('dashboard');
+    // Rafraîchir avec les vraies données si on est toujours sur le dashboard
+    if (state.currentView === 'dashboard') await renderDashboard();
   } catch {
     DEMO_MODE = true;
     banner.innerHTML = '<strong>⚠️ Backend inaccessible</strong> Mode démo activé. <button onclick="location.reload()" style="margin-left:8px;padding:2px 8px;border:1px solid currentColor;border-radius:4px;cursor:pointer;background:transparent;color:inherit;font-size:12px;">Réessayer</button>';
-    await navigate('dashboard');
   }
 }
 
