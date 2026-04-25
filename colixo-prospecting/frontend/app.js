@@ -240,6 +240,7 @@ function demoGet(path) {
   }
   if (path.includes('/events')) return generateDemoEvents(path);
   if (path.includes('/tasks')) return generateDemoTasks(path);
+  if (path.startsWith('/agenda')) return generateDemoAgenda();
   return [];
 }
 
@@ -388,14 +389,21 @@ function updateNav(view) {
 // ── Dashboard ──────────────────────────────────────────────────
 async function renderDashboard() {
   showLoader('Chargement du dashboard...');
-  const [stats, prospects] = await Promise.all([
+  const [stats, prospects, agendaTasks] = await Promise.all([
     api.get('/prospects/stats'),
-    api.get('/prospects')
+    api.get('/prospects'),
+    api.get('/agenda').catch(() => [])
   ]);
   state.stats = stats;
   state.prospects = prospects;
   updateNavCount(prospects.length);
   hideLoader();
+
+  const today = new Date().toISOString().split('T')[0];
+  const upcomingTasks = (Array.isArray(agendaTasks) ? agendaTasks : [])
+    .filter(t => t.status === 'pending')
+    .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
+    .slice(0, 6);
 
   const topProspects = [...prospects]
     .filter(p => p.score > 0)
@@ -406,35 +414,22 @@ async function renderDashboard() {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 5);
 
-  // Charger les tâches en arrière-plan pour le widget dashboard
-  api.get('/agenda?status=pending').then(tasks => {
-    const today = new Date().toISOString().split('T')[0];
-    const sorted = (Array.isArray(tasks) ? tasks : [])
-      .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
-      .slice(0, 6);
-    const el = document.getElementById('dashTasksBody');
-    if (!el) return;
-    if (!sorted.length) {
-      el.innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-desc">Aucune tâche en attente.</div></div>';
-      return;
-    }
-    el.innerHTML = `<table><tbody>${sorted.map(t => {
-      const p = t.prospects || {};
-      const isLate = t.due_date && t.due_date < today;
-      return `<tr onclick="navigate('agenda')" style="cursor:pointer;">
-        <td style="padding:9px 14px;">
-          <div class="td-main">${escHtml(t.title)}</div>
-          ${p.entreprise ? `<div class="td-sub">${escHtml(p.entreprise)}</div>` : ''}
-        </td>
-        <td style="padding:9px 14px;text-align:right;white-space:nowrap;">
-          <span style="font-size:12px;color:${isLate ? 'var(--danger)' : 'var(--muted)'};">${fmtDate(t.due_date)}</span>
-          ${isLate ? '<span class="atask-badge badge-danger" style="margin-left:6px;">En retard</span>' : ''}
-        </td>
-      </tr>`;
-    }).join('')}</tbody></table>`;
-  }).catch(() => {
-    // Widget optionnel, on ignore les erreurs silencieusement
-  });
+  const tasksHTML = upcomingTasks.length
+    ? `<table><tbody>${upcomingTasks.map(t => {
+        const p = t.prospects || {};
+        const isLate = t.due_date && t.due_date < today;
+        return `<tr onclick="navigate('agenda')" style="cursor:pointer;">
+          <td style="padding:9px 14px;">
+            <div class="td-main">${escHtml(t.title)}</div>
+            ${p.entreprise ? `<div class="td-sub">${escHtml(p.entreprise)}</div>` : ''}
+          </td>
+          <td style="padding:9px 14px;text-align:right;white-space:nowrap;">
+            <span style="font-size:12px;color:${isLate ? 'var(--danger)' : 'var(--muted)'};">${fmtDate(t.due_date)}</span>
+            ${isLate ? ' <span class="atask-badge badge-danger">En retard</span>' : ''}
+          </td>
+        </tr>`;
+      }).join('')}</tbody></table>`
+    : '<div class="empty-state" style="padding:20px;"><div class="empty-state-desc">Aucune tâche en attente.</div></div>';
 
   document.getElementById('content').innerHTML = `
     <div class="section-title">Vue générale</div>
@@ -500,8 +495,8 @@ async function renderDashboard() {
         <div class="card-title">📅 Prochaines tâches</div>
         <button class="btn btn-sm btn-primary" onclick="navigate('agenda')">Voir l'agenda</button>
       </div>
-      <div class="card-body" id="dashTasksBody" style="padding:0;">
-        <div class="empty-state" style="padding:20px;"><div class="empty-state-desc">Chargement…</div></div>
+      <div class="card-body" style="padding:0;">
+        ${tasksHTML}
       </div>
     </div>
 
