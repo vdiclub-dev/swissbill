@@ -225,6 +225,7 @@
             <a class="nav-item" href="analytics.html"><i class="fas fa-chart-bar"></i><span>Analytics</span></a>
             <a class="nav-item" href="prospection.html"><i class="fas fa-paper-plane"></i><span>Prospection IA</span></a>
             <a class="nav-item" href="/colixo-prospecting/frontend/index.html" target="_blank"><i class="fab fa-linkedin"></i><span>Prospection LinkedIn</span></a>
+            <a class="nav-item" data-section="agenda-prospection" href="#"><i class="fas fa-calendar-check"></i><span>Agenda Prospection</span><span class="nav-badge" id="badgeAgenda" style="display:none;">0</span></a>
             <a class="nav-item" href="rh.html"><i class="fas fa-users-cog"></i><span>Gestion RH</span></a>
             <a class="nav-item" href="planning-rh.html"><i class="fas fa-calendar-alt"></i><span>Planning RH</span></a>
             <a class="nav-item" href="tournees.html"><i class="fas fa-route"></i><span>Tournées</span></a>
@@ -388,6 +389,32 @@
             </div>
             <div class="card">
                 <table class="tbl"><thead><tr><th>Référence</th><th>Entreprise</th><th>Adresse livraison</th><th>Service</th><th>Statut</th><th>Date</th></tr></thead><tbody id="transportsList"></tbody></table>
+            </div>
+        </div>
+
+        <!-- AGENDA PROSPECTION -->
+        <div class="section" id="sec-agenda-prospection">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div>
+                    <div style="font-family:'Bebas Neue',cursive;font-size:32px;">AGENDA PROSPECTION</div>
+                    <div style="font-size:13px;color:var(--muted);margin-top:2px;">Tâches de suivi prospects — Colixo CRM</div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-ghost btn-sm" onclick="loadAgendaProspection()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+                    <a href="/colixo-prospecting/frontend/index.html#agenda" target="_blank" class="btn btn-red btn-sm"><i class="fas fa-external-link-alt"></i> Ouvrir CRM complet</a>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                <button class="btn btn-ghost btn-sm" onclick="filterAgenda('all')" id="agendaFilterAll" style="border-color:rgba(232,49,26,0.5);color:#fff;">Toutes</button>
+                <button class="btn btn-ghost btn-sm" onclick="filterAgenda('pending')" id="agendaFilterPending">En attente</button>
+                <button class="btn btn-ghost btn-sm" onclick="filterAgenda('late')" id="agendaFilterLate" style="color:#f59e0b;">En retard</button>
+                <button class="btn btn-ghost btn-sm" onclick="filterAgenda('done')" id="agendaFilterDone">Terminées</button>
+            </div>
+            <div class="card">
+                <table class="tbl">
+                    <thead><tr><th>Tâche</th><th>Prospect</th><th>Ville</th><th>Échéance</th><th>Statut</th><th>Action</th></tr></thead>
+                    <tbody id="agendaProspectionList"><tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted);">Chargement...</td></tr></tbody>
+                </table>
             </div>
         </div>
 
@@ -633,8 +660,9 @@ window.goSection = function(name){
     const nav=document.querySelector(`[data-section="${name}"]`);
     if(sec)sec.classList.add('active');
     if(nav)nav.classList.add('active');
-    const titles={dashboard:'DASHBOARD',clients:'ENTREPRISES',utilisateurs:'UTILISATEURS',chauffeurs:'CHAUFFEURS',transports:'TRANSPORTS',activite:'ACTIVITÉ'};
+    const titles={dashboard:'DASHBOARD',clients:'ENTREPRISES',utilisateurs:'UTILISATEURS',chauffeurs:'CHAUFFEURS',transports:'TRANSPORTS',activite:'ACTIVITÉ','agenda-prospection':'AGENDA PROSPECTION'};
     document.getElementById('pageTitle').textContent=titles[name]||name.toUpperCase();
+    if(name==='agenda-prospection') loadAgendaProspection();
 };
 document.querySelectorAll('.nav-item[data-section]').forEach(item=>{
     item.addEventListener('click',e=>{e.preventDefault();goSection(item.dataset.section);});
@@ -1329,6 +1357,97 @@ init();
 if (document.readyState === 'complete') colixoDashApp();
 else window.addEventListener('load', colixoDashApp);
 })();
+</script>
+
+<script>
+// ── AGENDA PROSPECTION ──────────────────────────────────────────
+let _agendaData = [];
+let _agendaFilter = 'all';
+
+async function loadAgendaProspection() {
+  const tbody = document.getElementById('agendaProspectionList');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted);">Chargement...</td></tr>';
+  try {
+    const res = await fetch('https://swissbill.onrender.com/api/agenda');
+    const json = await res.json();
+    _agendaData = json.ok && Array.isArray(json.data) ? json.data : [];
+    const badge = document.getElementById('badgeAgenda');
+    const pending = _agendaData.filter(t => t.status === 'pending').length;
+    if (pending > 0) { badge.textContent = pending; badge.style.display = ''; }
+    renderAgendaTable();
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted);">Impossible de joindre le serveur</td></tr>';
+  }
+}
+
+function filterAgenda(f) {
+  _agendaFilter = f;
+  ['all','pending','late','done'].forEach(k => {
+    const btn = document.getElementById('agendaFilter' + k.charAt(0).toUpperCase() + k.slice(1));
+    if (btn) btn.style.borderColor = k === f ? 'rgba(232,49,26,0.5)' : '';
+    if (btn) btn.style.color = k === f ? '#fff' : (k === 'late' ? '#f59e0b' : '');
+  });
+  renderAgendaTable();
+}
+
+function renderAgendaTable() {
+  const tbody = document.getElementById('agendaProspectionList');
+  if (!tbody) return;
+  const today = new Date().toISOString().split('T')[0];
+  let tasks = _agendaData;
+  if (_agendaFilter === 'pending') tasks = tasks.filter(t => t.status === 'pending');
+  else if (_agendaFilter === 'late') tasks = tasks.filter(t => t.status === 'pending' && t.due_date && t.due_date < today);
+  else if (_agendaFilter === 'done') tasks = tasks.filter(t => t.status === 'done');
+
+  if (!tasks.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted);">Aucune tâche</td></tr>';
+    return;
+  }
+  tbody.innerHTML = tasks.map(t => {
+    const p = t.prospects || {};
+    const isLate = t.status === 'pending' && t.due_date && t.due_date < today;
+    const isDone = t.status === 'done';
+    const dateColor = isLate ? '#f59e0b' : isDone ? 'var(--muted)' : '#fff';
+    const statusBadge = isDone
+      ? '<span style="background:rgba(34,197,94,0.15);color:#22c55e;padding:3px 8px;border-radius:6px;font-size:11px;">✓ Fait</span>'
+      : isLate
+        ? '<span style="background:rgba(245,158,11,0.15);color:#f59e0b;padding:3px 8px;border-radius:6px;font-size:11px;">⚠ Retard</span>'
+        : '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:3px 8px;border-radius:6px;font-size:11px;">En attente</span>';
+    const dueStr = t.due_date ? new Date(t.due_date).toLocaleDateString('fr-CH', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+    return `<tr>
+      <td style="padding:11px 14px;color:${isDone ? 'var(--muted)' : '#fff'};text-decoration:${isDone ? 'line-through' : 'none'};">${escAdm(t.title)}</td>
+      <td style="padding:11px 14px;">${escAdm(p.entreprise || '—')}</td>
+      <td style="padding:11px 14px;color:var(--muted);">${escAdm(p.ville || '—')}</td>
+      <td style="padding:11px 14px;color:${dateColor};">${dueStr}${isLate ? ' ⚠️' : ''}</td>
+      <td style="padding:11px 14px;">${statusBadge}</td>
+      <td style="padding:11px 14px;">
+        ${!isDone ? `<button class="btn btn-ghost btn-sm" onclick="markAgendaDone('${t.id}')"><i class="fas fa-check"></i></button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function markAgendaDone(id) {
+  try {
+    await fetch('https://swissbill.onrender.com/api/agenda/' + id, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ status: 'done' })
+    });
+    const t = _agendaData.find(x => x.id === id);
+    if (t) t.status = 'done';
+    renderAgendaTable();
+    const badge = document.getElementById('badgeAgenda');
+    const pending = _agendaData.filter(x => x.status === 'pending').length;
+    badge.textContent = pending;
+    if (!pending) badge.style.display = 'none';
+  } catch { alert('Erreur lors de la mise à jour'); }
+}
+
+function escAdm(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 </script>
 
 <script>
