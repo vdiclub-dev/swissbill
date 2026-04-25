@@ -196,6 +196,16 @@ async function getTasks(prospect_id) {
   return data;
 }
 
+async function getAllTasks(filters = {}) {
+  let q = db.from('prospect_tasks')
+    .select('*, prospects(id, entreprise, ville, statut)')
+    .order('due_date', { ascending: true });
+  if (filters.status) q = q.eq('status', filters.status);
+  const { data, error } = await q;
+  assertOk(error, 'getAllTasks');
+  return data;
+}
+
 async function createTask(payload) {
   const { data, error } = await db.from('prospect_tasks').insert([payload]).select().single();
   assertOk(error, 'createTask');
@@ -256,7 +266,7 @@ module.exports = {
   getAllProspects, getProspectById, createProspect, updateProspect, deleteProspect,
   findDuplicate, saveEnrichment,
   addEvent, getEvents,
-  getTasks, createTask, updateTaskStatus,
+  getTasks, getAllTasks, createTask, updateTaskStatus,
   saveReply,
   getDashboardStats,
 };

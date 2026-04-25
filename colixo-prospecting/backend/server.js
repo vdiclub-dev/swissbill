@@ -59,8 +59,10 @@ const tasksRouter          = require('./routes/tasks');
 const eventsRouter         = require('./routes/events');
 const repliesRouter        = require('./routes/replies');
 const linkedinPrefillRouter = require('./routes/linkedin-prefill');
+const agendaRouter          = require('./routes/agenda');
 
 app.use('/api/prospects',                prospectsRouter);
+app.use('/api/agenda',                   agendaRouter);
 app.use('/api/enrich-prospect',          enrichRouter);
 app.use('/api/linkedin-prefill',         linkedinPrefillRouter);
 app.use('/api/prospects/:id/tasks',      tasksRouter);

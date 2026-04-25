@@ -327,6 +327,26 @@ function generateDemoEnrichment(data) {
   };
 }
 
+function generateDemoAgenda() {
+  const today = new Date();
+  const d = (offset, h = 0) => {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() + offset);
+    dt.setHours(h, 0, 0, 0);
+    return dt.toISOString().split('T')[0];
+  };
+  return [
+    { id: 'ag-1', title: 'Envoyer email de premier contact', due_date: d(-2), status: 'pending', prospects: { id: 'demo-1', entreprise: 'Medi-Supply SA', ville: 'Lausanne', statut: 'pret_a_contacter' } },
+    { id: 'ag-2', title: 'Relancer dans 7 jours si pas de réponse', due_date: d(0), status: 'pending', prospects: { id: 'demo-2', entreprise: 'TechParts Romandie', ville: 'Genève', statut: 'contacte' } },
+    { id: 'ag-3', title: 'Appel téléphonique — valider besoin', due_date: d(0), status: 'pending', prospects: { id: 'demo-4', entreprise: 'Horlogerie Bouvet & Fils', ville: 'La Chaux-de-Fonds', statut: 'repondu' } },
+    { id: 'ag-4', title: 'Préparer offre commerciale', due_date: d(2), status: 'pending', prospects: { id: 'demo-5', entreprise: 'FreshBox Suisse', ville: 'Lausanne', statut: 'repondu' } },
+    { id: 'ag-5', title: 'Relancer suite au 1er email', due_date: d(4), status: 'pending', prospects: { id: 'demo-1', entreprise: 'Medi-Supply SA', ville: 'Lausanne', statut: 'pret_a_contacter' } },
+    { id: 'ag-6', title: 'Marquer rendez-vous confirmation', due_date: d(7), status: 'pending', prospects: { id: 'demo-5', entreprise: 'FreshBox Suisse', ville: 'Lausanne', statut: 'repondu' } },
+    { id: 'ag-7', title: 'Email de suivi post-appel', due_date: d(9), status: 'done', prospects: { id: 'demo-4', entreprise: 'Horlogerie Bouvet & Fils', ville: 'La Chaux-de-Fonds', statut: 'repondu' } },
+    { id: 'ag-8', title: 'Envoyer message LinkedIn', due_date: d(12), status: 'pending', prospects: { id: 'demo-2', entreprise: 'TechParts Romandie', ville: 'Genève', statut: 'contacte' } },
+  ];
+}
+
 // ── Router ─────────────────────────────────────────────────────
 async function navigate(view, id = null) {
   state.currentView = view;
@@ -336,7 +356,7 @@ async function navigate(view, id = null) {
 
   const titles = {
     dashboard: 'Dashboard', prospects: 'Prospects', add: 'Nouveau prospect',
-    edit: 'Modifier prospect', detail: 'Fiche prospect', pipeline: 'Pipeline CRM'
+    edit: 'Modifier prospect', detail: 'Fiche prospect', pipeline: 'Pipeline CRM', agenda: 'Agenda'
   };
   document.getElementById('topbarTitle').textContent = titles[view] || view;
 
@@ -349,6 +369,7 @@ async function navigate(view, id = null) {
       case 'prospects': await renderProspects(); break;
       case 'detail':    await renderDetail(id); break;
       case 'pipeline':  await renderPipeline(); break;
+      case 'agenda':    await renderAgenda(); break;
       default: document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-title">Page introuvable</div></div>';
     }
   } catch (err) {
@@ -1030,6 +1051,228 @@ async function deleteProspect(id, name) {
     await renderProspects();
   } catch (err) {
     hideLoader();
+    toast('❌ ' + err.message, 'error');
+  }
+}
+
+// ── Agenda ────────────────────────────────────────────────────
+let _agendaYear  = new Date().getFullYear();
+let _agendaMonth = new Date().getMonth(); // 0-based
+let _agendaTasks = [];
+
+async function renderAgenda() {
+  showLoader('Chargement de l\'agenda…');
+  try {
+    const raw = await api.get('/agenda');
+    _agendaTasks = Array.isArray(raw) ? raw : [];
+  } catch {
+    _agendaTasks = DEMO_MODE ? generateDemoAgenda() : [];
+  }
+  hideLoader();
+  _agendaYear  = new Date().getFullYear();
+  _agendaMonth = new Date().getMonth();
+  _renderAgendaView();
+  // Badge nav
+  const pending = _agendaTasks.filter(t => t.status === 'pending').length;
+  const badge = document.getElementById('nav-tasks-count');
+  if (badge) { badge.textContent = pending; badge.classList.toggle('nav-badge-hidden', !pending); }
+}
+
+function _renderAgendaView() {
+  const today    = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const year     = _agendaYear;
+  const month    = _agendaMonth;
+
+  const firstDay   = new Date(year, month, 1);
+  const lastDay    = new Date(year, month + 1, 0);
+  const startDow   = (firstDay.getDay() + 6) % 7; // Lundi = 0
+  const daysInMonth = lastDay.getDate();
+
+  const MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const DAYS_FR   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+
+  // Tâches du mois groupées par jour
+  const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const byDay = {};
+  _agendaTasks.forEach(t => {
+    if (!t.due_date || !t.due_date.startsWith(monthStr)) return;
+    const day = t.due_date.split('-')[2];
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(t);
+  });
+
+  // Tâches en retard (avant ce mois, pending)
+  const overdue = _agendaTasks.filter(t =>
+    t.status === 'pending' && t.due_date && t.due_date < monthStr + '-01'
+  );
+
+  // Tâches du mois sélectionné pour la liste
+  const monthTasks = _agendaTasks.filter(t => t.due_date && t.due_date.startsWith(monthStr));
+  monthTasks.sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
+
+  // Calendrier HTML
+  let calCells = '';
+  let cellIdx = 0;
+  // Cellules vides avant le 1er
+  for (let i = 0; i < startDow; i++) {
+    calCells += `<div class="cal-cell cal-empty"></div>`;
+    cellIdx++;
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const tasks  = byDay[String(d).padStart(2, '0')] || [];
+    const isToday = dayStr === todayStr;
+    const pending = tasks.filter(t => t.status === 'pending');
+    const hasDone = tasks.some(t => t.status === 'done');
+    const isOverdue = pending.length > 0 && dayStr < todayStr;
+
+    let dots = '';
+    if (pending.length > 0) dots += `<span class="cal-dot ${isOverdue ? 'dot-danger' : 'dot-pending'}"></span>`;
+    if (hasDone)            dots += `<span class="cal-dot dot-done"></span>`;
+
+    calCells += `
+      <div class="cal-cell ${isToday ? 'cal-today' : ''} ${tasks.length ? 'cal-has-tasks' : ''}"
+           onclick="agendaJumpToDay('${dayStr}')">
+        <span class="cal-day-num">${d}</span>
+        ${pending.length ? `<span class="cal-task-count">${pending.length}</span>` : ''}
+        <div class="cal-dots">${dots}</div>
+      </div>`;
+    cellIdx++;
+  }
+  // Compléter dernière ligne
+  while (cellIdx % 7 !== 0) {
+    calCells += `<div class="cal-cell cal-empty"></div>`;
+    cellIdx++;
+  }
+
+  const overdueHTML = overdue.length ? `
+    <div class="agenda-section">
+      <div class="agenda-section-title danger-title">⚠️ En retard — ${overdue.length} tâche${overdue.length > 1 ? 's' : ''}</div>
+      ${overdue.map(t => agendaTaskRow(t, true)).join('')}
+    </div>` : '';
+
+  const listHTML = monthTasks.length
+    ? Object.entries(
+        monthTasks.reduce((acc, t) => {
+          if (!acc[t.due_date]) acc[t.due_date] = [];
+          acc[t.due_date].push(t);
+          return acc;
+        }, {})
+      ).map(([date, tasks]) => {
+        const isPast = date < todayStr;
+        const isToday = date === todayStr;
+        const label = isToday ? 'Aujourd\'hui' : fmtDate(date);
+        return `
+          <div class="agenda-section" id="day-${date}">
+            <div class="agenda-section-title ${isPast && tasks.some(t => t.status === 'pending') ? 'danger-title' : isToday ? 'today-title' : ''}">${label}</div>
+            ${tasks.map(t => agendaTaskRow(t, isPast && t.status === 'pending')).join('')}
+          </div>`;
+      }).join('')
+    : '<div class="empty-state" style="padding:24px;"><div class="empty-state-desc">Aucune tâche ce mois-ci.</div></div>';
+
+  document.getElementById('content').innerHTML = `
+    <div class="agenda-wrap">
+
+      <div class="agenda-cal-col">
+        <div class="cal-header">
+          <button class="cal-nav-btn" onclick="agendaChangeMonth(-1)">&#8249;</button>
+          <span class="cal-month-label">${MONTHS_FR[month]} ${year}</span>
+          <button class="cal-nav-btn" onclick="agendaChangeMonth(1)">&#8250;</button>
+        </div>
+        <div class="cal-grid">
+          ${DAYS_FR.map(d => `<div class="cal-dow">${d}</div>`).join('')}
+          ${calCells}
+        </div>
+
+        <div class="agenda-legend">
+          <span class="leg-item"><span class="cal-dot dot-pending"></span> À faire</span>
+          <span class="leg-item"><span class="cal-dot dot-danger"></span> En retard</span>
+          <span class="leg-item"><span class="cal-dot dot-done"></span> Terminé</span>
+        </div>
+
+        <div class="agenda-mini-stats">
+          <div class="mini-stat">
+            <strong>${_agendaTasks.filter(t => t.status === 'pending' && t.due_date >= todayStr).length}</strong>
+            <span>À venir</span>
+          </div>
+          <div class="mini-stat danger-stat">
+            <strong>${_agendaTasks.filter(t => t.status === 'pending' && t.due_date < todayStr).length}</strong>
+            <span>En retard</span>
+          </div>
+          <div class="mini-stat ok-stat">
+            <strong>${_agendaTasks.filter(t => t.status === 'done').length}</strong>
+            <span>Terminées</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="agenda-list-col">
+        <div class="agenda-list-header">
+          <span class="agenda-list-title">Tâches — ${MONTHS_FR[month]} ${year}</span>
+          <div class="agenda-filters">
+            <button class="btn btn-sm ${_agendaFilter === 'all' ? 'btn-primary' : 'btn-ghost'}" onclick="agendaSetFilter('all')">Toutes</button>
+            <button class="btn btn-sm ${_agendaFilter === 'pending' ? 'btn-primary' : 'btn-ghost'}" onclick="agendaSetFilter('pending')">À faire</button>
+            <button class="btn btn-sm ${_agendaFilter === 'done' ? 'btn-primary' : 'btn-ghost'}" onclick="agendaSetFilter('done')">Terminées</button>
+          </div>
+        </div>
+        ${overdueHTML}
+        <div id="agendaListBody">${listHTML}</div>
+      </div>
+
+    </div>`;
+}
+
+function agendaTaskRow(t, isLate) {
+  const prospect = t.prospects || {};
+  const statusClass = t.status === 'done' ? 'atask-done' : isLate ? 'atask-late' : '';
+  return `
+    <div class="agenda-task-row ${statusClass}" id="atask-${t.id}">
+      <button class="task-check ${t.status === 'done' ? 'done' : ''}"
+              onclick="agendaToggle('${t.id}','${t.status}')"
+              title="${t.status === 'done' ? 'Marquer en attente' : 'Marquer comme terminé'}">
+        ${t.status === 'done' ? '✓' : ''}
+      </button>
+      <div class="atask-body">
+        <div class="atask-title">${escHtml(t.title)}</div>
+        ${prospect.entreprise ? `<div class="atask-prospect" onclick="navigate('detail','${prospect.id}')">${escHtml(prospect.entreprise)}${prospect.ville ? ' — ' + escHtml(prospect.ville) : ''}</div>` : ''}
+      </div>
+      ${isLate ? '<span class="atask-badge badge-danger">En retard</span>' : ''}
+      ${t.status === 'done' ? '<span class="atask-badge badge-done">Terminé</span>' : ''}
+    </div>`;
+}
+
+let _agendaFilter = 'all';
+
+function agendaSetFilter(filter) {
+  _agendaFilter = filter;
+  _renderAgendaView();
+}
+
+function agendaChangeMonth(delta) {
+  _agendaMonth += delta;
+  if (_agendaMonth < 0)  { _agendaMonth = 11; _agendaYear--; }
+  if (_agendaMonth > 11) { _agendaMonth = 0;  _agendaYear++; }
+  _renderAgendaView();
+}
+
+function agendaJumpToDay(dayStr) {
+  const el = document.getElementById('day-' + dayStr);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function agendaToggle(taskId, currentStatus) {
+  const newStatus = currentStatus === 'done' ? 'pending' : 'done';
+  try {
+    await api.patch('/agenda/' + taskId, { status: newStatus });
+    const t = _agendaTasks.find(x => x.id === taskId);
+    if (t) t.status = newStatus;
+    _renderAgendaView();
+    // Mettre à jour badge nav
+    const pending = _agendaTasks.filter(t => t.status === 'pending').length;
+    const badge = document.getElementById('nav-tasks-count');
+    if (badge) { badge.textContent = pending; badge.classList.toggle('nav-badge-hidden', !pending); }
+  } catch (err) {
     toast('❌ ' + err.message, 'error');
   }
 }
