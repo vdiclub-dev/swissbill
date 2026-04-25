@@ -387,24 +387,7 @@ function updateNav(view) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────
-async function renderDashboard() {
-  showLoader('Chargement du dashboard...');
-
-  const [rawStats, rawProspects, rawAgenda] = await Promise.all([
-    api.get('/prospects/stats').catch(() => null),
-    api.get('/prospects').catch(() => null),
-    api.get('/agenda').catch(() => null)
-  ]);
-
-  hideLoader();
-
-  // Fallback démo si le backend n'a pas répondu
-  const stats     = rawStats     || DEMO_STATS;
-  const prospects = Array.isArray(rawProspects) ? rawProspects : [...DEMO_PROSPECTS];
-  const agendaTasks = (Array.isArray(rawAgenda) && rawAgenda.length)
-    ? rawAgenda
-    : generateDemoAgenda();
-
+function _paintDashboard(stats, prospects, agendaTasks) {
   state.stats = stats;
   state.prospects = prospects;
   updateNavCount(prospects.length);
@@ -553,6 +536,30 @@ async function renderDashboard() {
       </div>
     </div>
   `;
+}
+
+async function renderDashboard() {
+  // Afficher immédiatement avec données démo/cache
+  const initStats     = state.stats     || DEMO_STATS;
+  const initProspects = (state.prospects && state.prospects.length) ? state.prospects : [...DEMO_PROSPECTS];
+  const initAgenda    = generateDemoAgenda();
+  hideLoader();
+  _paintDashboard(initStats, initProspects, initAgenda);
+
+  // Rafraîchir silencieusement avec les vraies données
+  if (DEMO_MODE) return;
+  try {
+    const [rawStats, rawProspects, rawAgenda] = await Promise.all([
+      api.get('/prospects/stats').catch(() => null),
+      api.get('/prospects').catch(() => null),
+      api.get('/agenda').catch(() => null)
+    ]);
+    if (state.currentView !== 'dashboard') return;
+    const stats     = rawStats || initStats;
+    const prospects = Array.isArray(rawProspects) && rawProspects.length ? rawProspects : initProspects;
+    const agenda    = Array.isArray(rawAgenda)    && rawAgenda.length    ? rawAgenda    : initAgenda;
+    _paintDashboard(stats, prospects, agenda);
+  } catch (_) { /* démo déjà affichée */ }
 }
 
 // ── Prospects list ─────────────────────────────────────────────
