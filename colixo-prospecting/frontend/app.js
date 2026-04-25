@@ -410,10 +410,11 @@ async function renderDashboard() {
   updateNavCount(prospects.length);
 
   const today = new Date().toISOString().split('T')[0];
-  const upcomingTasks = agendaTasks
-    .filter(t => t.status === 'pending')
+  const pendingTasks = agendaTasks.filter(t => t.status === 'pending');
+  const lateTasks    = pendingTasks.filter(t => t.due_date && t.due_date < today);
+  const upcoming     = pendingTasks
     .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
-    .slice(0, 6);
+    .slice(0, 5);
 
   const topProspects = [...prospects]
     .filter(p => p.score > 0)
@@ -424,89 +425,82 @@ async function renderDashboard() {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 5);
 
-  const tasksHTML = upcomingTasks.length
-    ? `<table><tbody>${upcomingTasks.map(t => {
-        const p = t.prospects || {};
-        const isLate = t.due_date && t.due_date < today;
-        return `<tr onclick="navigate('agenda')" style="cursor:pointer;">
-          <td style="padding:9px 14px;">
-            <div class="td-main">${escHtml(t.title)}</div>
-            ${p.entreprise ? `<div class="td-sub">${escHtml(p.entreprise)}</div>` : ''}
-          </td>
-          <td style="padding:9px 14px;text-align:right;white-space:nowrap;">
-            <span style="font-size:12px;color:${isLate ? 'var(--danger)' : 'var(--muted)'};">${fmtDate(t.due_date)}</span>
-            ${isLate ? ' <span class="atask-badge badge-danger">En retard</span>' : ''}
-          </td>
-        </tr>`;
-      }).join('')}</tbody></table>`
-    : '<div class="empty-state" style="padding:20px;"><div class="empty-state-desc">Aucune tâche en attente.</div></div>';
+  const byStatut  = (stats && stats.byStatut)  ? stats.byStatut  : {};
+  const bySecteur = (stats && stats.bySecteur) ? stats.bySecteur : {};
+  const maxStatut  = Math.max(1, ...Object.values(byStatut));
+  const maxSecteur = Math.max(1, ...Object.values(bySecteur));
 
   document.getElementById('content').innerHTML = `
     <div class="section-title">Vue générale</div>
 
-    <div class="kpi-grid">
+    <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
       <div class="kpi-card" style="--kpi-color:#e8311a">
         <div class="kpi-icon">🏢</div>
         <div class="kpi-label">Total prospects</div>
-        <div class="kpi-value">${stats.total}</div>
+        <div class="kpi-value">${stats.total || 0}</div>
         <div class="kpi-sub">dans la base</div>
       </div>
       <div class="kpi-card" style="--kpi-color:#22c55e">
         <div class="kpi-icon">🔥</div>
         <div class="kpi-label">Prospects chauds</div>
-        <div class="kpi-value">${stats.chauds}</div>
+        <div class="kpi-value">${stats.chauds || 0}</div>
         <div class="kpi-sub">score ≥ 70</div>
       </div>
       <div class="kpi-card" style="--kpi-color:#3b82f6">
         <div class="kpi-icon">📅</div>
         <div class="kpi-label">Rendez-vous</div>
-        <div class="kpi-value">${stats.rdv}</div>
+        <div class="kpi-value">${stats.rdv || 0}</div>
         <div class="kpi-sub">confirmés ou en cours</div>
       </div>
       <div class="kpi-card" style="--kpi-color:#f59e0b">
         <div class="kpi-icon">📊</div>
         <div class="kpi-label">Taux de réponse</div>
-        <div class="kpi-value">${stats.tauxReponse}%</div>
-        <div class="kpi-sub">conversion RDV: ${stats.tauxConversion}%</div>
+        <div class="kpi-value">${stats.tauxReponse || 0}%</div>
+        <div class="kpi-sub">conversion RDV: ${stats.tauxConversion || 0}%</div>
+      </div>
+      <div class="kpi-card kpi-card-link" style="--kpi-color:#a855f7;cursor:pointer;" onclick="navigate('agenda')">
+        <div class="kpi-icon">📌</div>
+        <div class="kpi-label">Tâches en attente</div>
+        <div class="kpi-value" style="color:#a855f7;">${pendingTasks.length}</div>
+        <div class="kpi-sub">${lateTasks.length > 0 ? lateTasks.length + ' en retard · ' : ''}Voir l'agenda →</div>
       </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;">
       <div class="card">
-        <div class="card-header"><div class="card-title">📈 Répartition par statut</div></div>
-        <div class="card-body">
-          <div class="chart-bars">
-            ${Object.entries(stats.byStatut).map(([k, v]) => `
-              <div class="chart-row">
-                <div class="chart-label">${statutLabel(k)}</div>
-                <div class="chart-bar-wrap"><div class="chart-bar" style="width:${Math.round(v/Math.max(...Object.values(stats.byStatut))*100)}%"></div></div>
-                <div class="chart-count">${v}</div>
-              </div>`).join('')}
-          </div>
+        <div class="card-header">
+          <div class="card-title">📌 Prochaines tâches</div>
+          <button class="btn btn-sm btn-primary" onclick="navigate('agenda')">Agenda complet</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${upcoming.length ? `<table><tbody>${upcoming.map(t => {
+            const p = t.prospects || {};
+            const isLate = t.due_date && t.due_date < today;
+            return `<tr onclick="navigate('agenda')" style="cursor:pointer;">
+              <td style="padding:9px 14px;">
+                <div class="td-main">${escHtml(t.title)}</div>
+                ${p.entreprise ? `<div class="td-sub">${escHtml(p.entreprise)}</div>` : ''}
+              </td>
+              <td style="padding:9px 14px;text-align:right;white-space:nowrap;font-size:12px;color:${isLate ? 'var(--danger)' : 'var(--muted)'};">
+                ${fmtDate(t.due_date)}${isLate ? ' ⚠️' : ''}
+              </td>
+            </tr>`;
+          }).join('')}</tbody></table>`
+          : `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Aucune tâche en attente</div>`}
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">🏭 Par secteur</div></div>
+        <div class="card-header"><div class="card-title">📈 Répartition par statut</div></div>
         <div class="card-body">
           <div class="chart-bars">
-            ${Object.entries(stats.bySecteur).map(([k, v]) => `
+            ${Object.entries(byStatut).map(([k, v]) => `
               <div class="chart-row">
-                <div class="chart-label">${escHtml(k)}</div>
-                <div class="chart-bar-wrap"><div class="chart-bar" style="width:${Math.round(v/Math.max(...Object.values(stats.bySecteur))*100)}%"></div></div>
+                <div class="chart-label">${statutLabel(k)}</div>
+                <div class="chart-bar-wrap"><div class="chart-bar" style="width:${Math.round(v/maxStatut*100)}%"></div></div>
                 <div class="chart-count">${v}</div>
-              </div>`).join('')}
+              </div>`).join('') || '<div style="color:var(--muted);font-size:13px;">Aucune donnée</div>'}
           </div>
         </div>
-      </div>
-    </div>
-
-    <div class="dash-agenda-widget card">
-      <div class="card-header">
-        <div class="card-title">📅 Prochaines tâches</div>
-        <button class="btn btn-sm btn-primary" onclick="navigate('agenda')">Voir l'agenda</button>
-      </div>
-      <div class="card-body" style="padding:0;">
-        ${tasksHTML}
       </div>
     </div>
 
