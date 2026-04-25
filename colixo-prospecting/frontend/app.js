@@ -389,24 +389,25 @@ function updateNav(view) {
 // ── Dashboard ──────────────────────────────────────────────────
 async function renderDashboard() {
   showLoader('Chargement du dashboard...');
-  const [stats, prospects] = await Promise.all([
-    api.get('/prospects/stats'),
-    api.get('/prospects')
+
+  const [rawStats, rawProspects, rawAgenda] = await Promise.all([
+    api.get('/prospects/stats').catch(() => null),
+    api.get('/prospects').catch(() => null),
+    api.get('/agenda').catch(() => null)
   ]);
+
+  hideLoader();
+
+  // Fallback démo si le backend n'a pas répondu
+  const stats     = rawStats     || DEMO_STATS;
+  const prospects = Array.isArray(rawProspects) ? rawProspects : [...DEMO_PROSPECTS];
+  const agendaTasks = (Array.isArray(rawAgenda) && rawAgenda.length)
+    ? rawAgenda
+    : generateDemoAgenda();
+
   state.stats = stats;
   state.prospects = prospects;
   updateNavCount(prospects.length);
-
-  // Tâches : tenter le vrai backend, sinon démo
-  let agendaTasks = [];
-  try {
-    const raw = await api.get('/agenda');
-    agendaTasks = Array.isArray(raw) && raw.length ? raw : generateDemoAgenda();
-  } catch {
-    agendaTasks = generateDemoAgenda();
-  }
-
-  hideLoader();
 
   const today = new Date().toISOString().split('T')[0];
   const upcomingTasks = agendaTasks
