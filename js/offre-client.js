@@ -377,11 +377,8 @@ function genererOffre() {
 
   <div class="offre-header">
     <div class="offre-logo">
-      <div class="offre-logo-mark">C</div>
-      <div>
-        <div class="offre-logo-name">COLIXO</div>
-        <div class="offre-logo-sub">Livraison express · Suisse romande</div>
-      </div>
+      <img src="../images/colixo-logo-print.png" alt="Colixo" class="offre-logo-img"/>
+      <div class="offre-logo-sub" style="margin-top:4px;font-size:.78rem;color:#888;">Livraison express · Suisse romande</div>
     </div>
     <div class="offre-ref">
       <div class="offre-ref-num">Réf. ${esc(refOffre)}</div>
