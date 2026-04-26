@@ -163,16 +163,8 @@
             <input id="cpfNumero" type="text" placeholder="Ex : CLI-001"/>
           </div>
           <div class="cpf-field">
-            <label>Secteur</label>
-            <input id="cpfSecteur" type="text" placeholder="Ex : E-commerce"/>
-          </div>
-          <div class="cpf-field">
             <label>Contact — Nom</label>
             <input id="cpfContactNom" type="text" placeholder="Ex : Jean Dupont"/>
-          </div>
-          <div class="cpf-field">
-            <label>Contact — Rôle</label>
-            <input id="cpfContactRole" type="text" placeholder="Ex : Directeur logistique"/>
           </div>
           <div class="cpf-field">
             <label>Email</label>
@@ -260,7 +252,7 @@
     }
     const { data, error } = await db
       .from('entreprises')
-      .select('id,nom,numero_client,email,telephone,contact_nom,contact_role,adresse,npa,ville,secteur')
+      .select('*')
       .order('nom');
     if (error || !data) {
       document.getElementById('cpList').innerHTML = '<div id="cpEmpty">Erreur de chargement.</div>';
@@ -285,9 +277,7 @@
     document.getElementById('cpFormTitle').textContent = client ? '✏️ Modifier le client' : '➕ Nouveau client';
     sf('cpfNom',        client?.nom);
     sf('cpfNumero',     client?.numero_client);
-    sf('cpfSecteur',    client?.secteur);
     sf('cpfContactNom', client?.contact_nom);
-    sf('cpfContactRole',client?.contact_role);
     sf('cpfEmail',      client?.email);
     sf('cpfTelephone',  client?.telephone);
     sf('cpfAdresse',    client?.adresse);
@@ -314,9 +304,7 @@
     const payload = {
       nom,
       numero_client: gf('cpfNumero') || null,
-      secteur:       gf('cpfSecteur') || null,
       contact_nom:   gf('cpfContactNom') || null,
-      contact_role:  gf('cpfContactRole') || null,
       email:         gf('cpfEmail') || null,
       telephone:     gf('cpfTelephone') || null,
       adresse:       gf('cpfAdresse') || null,
