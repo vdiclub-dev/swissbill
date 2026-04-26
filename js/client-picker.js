@@ -159,7 +159,7 @@
             <input id="cpfNom" type="text" placeholder="Ex : Dupont SA"/>
           </div>
           <div class="cpf-field">
-            <label>Numéro client</label>
+            <label>Numéro client <span id="cpfNumeroHint" style="color:#e85d04;font-size:.72rem;font-weight:400;">(auto)</span></label>
             <input id="cpfNumero" type="text" placeholder="Ex : CLI-001"/>
           </div>
           <div class="cpf-field">
@@ -210,6 +210,15 @@
   }
   function gf(id) { return (document.getElementById(id)?.value || '').trim(); }
   function sf(id, v) { const el = document.getElementById(id); if (el) el.value = v || ''; }
+
+  function genererNumeroClient() {
+    let max = 0;
+    _allClients.forEach(c => {
+      const m = /^CLI-(\d+)$/i.exec(c.numero_client || '');
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    });
+    return 'CLI-' + String(max + 1).padStart(3, '0');
+  }
 
   /* ── Rendu liste ─────────────────────────────────────────── */
   function renderList(items) {
@@ -287,13 +296,27 @@
     const client = id ? _allClients.find(c => String(c.id) === String(id)) : null;
     document.getElementById('cpFormTitle').textContent = client ? '✏️ Modifier le client' : '➕ Nouveau client';
     sf('cpfNom',        client?.nom);
-    sf('cpfNumero',     client?.numero_client);
     sf('cpfContactNom', client?.contact_nom);
     sf('cpfEmail',      client?.email);
     sf('cpfTelephone',  client?.telephone);
     sf('cpfAdresse',    client?.adresse);
     sf('cpfNpa',        client?.npa);
     sf('cpfVille',      client?.ville);
+
+    const numEl  = document.getElementById('cpfNumero');
+    const hint   = document.getElementById('cpfNumeroHint');
+    if (client) {
+      numEl.value    = client.numero_client || '';
+      numEl.readOnly = false;
+      numEl.style.color = '';
+      if (hint) hint.style.display = 'none';
+    } else {
+      numEl.value    = genererNumeroClient();
+      numEl.readOnly = true;
+      numEl.style.color = '#e85d04';
+      if (hint) hint.style.display = '';
+    }
+
     formOverlay.classList.add('open');
     setTimeout(() => document.getElementById('cpfNom').focus(), 80);
   }
