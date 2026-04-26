@@ -3,6 +3,17 @@
 // Dépendances : config.js (window.SUPABASE_CLIENT)
 // ============================================================
 
+/* ── Callback client-picker ─────────────────────────────── */
+function remplirClientProspect(c) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  set('fEntreprise',  c.nom);
+  set('fVille2',      c.ville);
+  set('fContactNom',  c.contact_nom);
+  set('fEmail',       c.email);
+  set('fTelephone',   c.telephone);
+}
+window.remplirClientProspect = remplirClientProspect;
+
 /* ── État global ─────────────────────────────────────────── */
 let allProspects   = [];   // données brutes depuis Supabase
 let filtered       = [];   // après application des filtres

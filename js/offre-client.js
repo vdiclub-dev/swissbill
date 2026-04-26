@@ -5,6 +5,17 @@
 /* ── État ────────────────────────────────────────────────── */
 let calcResult = {};
 
+/* ── Callback client-picker ─────────────────────────────── */
+function remplirClientOffre(c) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  set('cEntreprise',       c.nom);
+  set('cContactNom',       c.contact_nom);
+  set('cEmail',            c.email);
+  set('cTelephone',        c.telephone);
+  set('cAdresse',          c.adresse);
+  set('cVille',            c.ville);
+}
+
 /* ── Utilitaires ─────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 const val = id => ($( id)?.value ?? '').trim();
@@ -71,9 +82,9 @@ function calculer() {
   const prepColis      = chk('cPrepCommandes');
   const coutPrep       = num('cCoutPrep') || 2;
 
-  // Calculs de coûts
-  const coutCarburant  = kmJour * litres100 / 100 * prixCarburant;
-  const coutChauffeur  = heuresJour * coutHoraire;
+  // Calculs de coûts — tous multipliés par le nombre de véhicules/chauffeurs
+  const coutCarburant  = kmJour * litres100 / 100 * prixCarburant * nbVehicules;
+  const coutChauffeur  = heuresJour * coutHoraire * nbVehicules;
   const coutVehicule   = fraisFixes * nbVehicules;
   const coutLogistique = prepColis ? colisJour * coutPrep : 0;
   const coutTotalJour  = coutCarburant + coutChauffeur + coutVehicule + coutLogistique;
