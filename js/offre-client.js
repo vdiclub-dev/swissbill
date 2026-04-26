@@ -276,7 +276,7 @@ function genererOffre() {
     <div class="offre-section-title">6. CONDITIONS COMMERCIALES</div>
     <ul class="offre-list">
       <li>Offre valable <strong>30 jours</strong> à compter de la date d'émission</li>
-      <li>Paiement : à 30 jours net, sur facturation mensuelle</li>
+      <li>Paiement : facturation hebdomadaire (tous les 7 jours), payable à 10 jours net</li>
       <li>Contrat de prestation ajustable en fonction des volumes réels</li>
       <li>Reconduction tacite mensuelle — résiliation avec préavis 30 jours</li>
       <li>Prix révisables annuellement selon indice des prix à la consommation</li>
