@@ -88,9 +88,9 @@ function lireParams() {
   const coutPrep      = num('cCoutPrep')          || 2;
   const colisRenta    = num('cColisRentabilite')  || 80;
 
-  // Coûts fixes journaliers (indépendants du volume client)
-  const coutCarburant = kmJour * litres100 / 100 * prixCarburant * nbVehicules;
-  const coutChauffeur = heuresJour * coutHoraire * nbChauffeurs;
+  // Coûts journaliers — carburant et chauffeur × rotations, frais fixes × véhicules seulement
+  const coutCarburant = kmJour * litres100 / 100 * prixCarburant * nbVehicules * nbChauffeurs;
+  const coutChauffeur = heuresJour * coutHoraire * nbChauffeurs * nbVehicules;
   const coutVehicule  = fraisFixes * nbVehicules;
   // Coût logistique par colis (variable)
   const coutPrepColis = prepColis ? coutPrep : 0;
@@ -351,9 +351,10 @@ function genererOffre() {
   const delai       = val('cDelai')         || '';
   const colisJour   = val('cColisJour')     || '—';
   const colisHebdo  = val('cColisHebdo')    || '—';
-  const kmJourVeh   = num('cKmJour');
-  const nbVehOffre  = num('cNbVehicules') || 1;
-  const kmJour      = kmJourVeh ? String(kmJourVeh * nbVehOffre) : '—';
+  const kmJourVeh       = num('cKmJour');
+  const nbVehOffre      = num('cNbVehicules') || 1;
+  const nbRotOffre      = num('cNbChauffeurs') || 1;
+  const kmJour          = kmJourVeh ? String(kmJourVeh * nbVehOffre * nbRotOffre) : '—';
   const poidsMoyen  = val('cPoidsMoyen')    || '—';
   const dateOffre   = new Date().toLocaleDateString('fr-CH', { day:'2-digit', month:'long', year:'numeric' });
   const refOffre    = 'COL-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
