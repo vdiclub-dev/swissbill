@@ -239,13 +239,13 @@ window.ajouterVitesse  = ajouterVitesse;
 
 /* ── Niveaux de service (vitesses) ───────────────────────── */
 const VITESSES_DEFAUT = [
-  { label: 'Standard 48h',   pct: 60 },
-  { label: 'Prioritaire 24h', pct: 30 },
-  { label: 'Express',          pct: 10 },
+  { label: 'Standard 48h',    pct: 60, surcharge: 0  },
+  { label: 'Prioritaire 24h', pct: 30, surcharge: 15 },
+  { label: 'Express',          pct: 10, surcharge: 40 },
 ];
 
-function ajouterVitesse(label = '', pct = 0) {
-  vitesses.push({ id: ++_vid, label, pct });
+function ajouterVitesse(label = '', pct = 0, surcharge = 0) {
+  vitesses.push({ id: ++_vid, label, pct, surcharge });
   renderVitesses();
 }
 
@@ -260,8 +260,9 @@ function syncVitesse(id) {
   if (!row) return;
   const v = vitesses.find(x => x.id === id);
   if (!v) return;
-  v.label = row.querySelector('.vi-label')?.value || '';
-  v.pct   = parseFloat(row.querySelector('.vi-pct')?.value) || 0;
+  v.label     = row.querySelector('.vi-label')?.value    || '';
+  v.pct       = parseFloat(row.querySelector('.vi-pct')?.value) || 0;
+  v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
 }
 window.syncVitesse = syncVitesse;
 
@@ -274,8 +275,9 @@ function renderVitesses() {
     const id = +row.dataset.vid;
     const v  = vitesses.find(x => x.id === id);
     if (!v) return;
-    v.label = row.querySelector('.vi-label')?.value || '';
-    v.pct   = parseFloat(row.querySelector('.vi-pct')?.value) || 0;
+    v.label     = row.querySelector('.vi-label')?.value || '';
+    v.pct       = parseFloat(row.querySelector('.vi-pct')?.value)       || 0;
+    v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
   });
 
   if (!vitesses.length) {
@@ -288,30 +290,38 @@ function renderVitesses() {
   const totalColis = num('cColisJour') || 1;
   const totalPct   = vitesses.reduce((s, v) => s + v.pct, 0);
 
+  // Prix de base calculé sur le volume TOTAL — partagé entre tous les colis
+  const basePPC = prixColisFor(totalColis, marge, p);
+
   body.innerHTML = `
     <div class="vitesse-header-row">
       <span>Libellé</span>
-      <span>% du volume</span>
+      <span>% volume</span>
+      <span>Suppl. %</span>
       <span>Colis/jour</span>
       <span>Prix/colis</span>
       <span></span>
     </div>
     ${vitesses.map(v => {
-      const colisV = Math.max(totalColis * v.pct / 100, 0.01);
-      const ppc    = prixColisFor(colisV, marge, p);
+      const colisV = totalColis * v.pct / 100;
+      const ppc    = basePPC * (1 + v.surcharge / 100);
       return `
       <div class="vitesse-row" data-vid="${v.id}">
         <input class="vi-label" type="text" list="dlVitesses" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé" oninput="syncVitesse(${v.id})"/>
         <div class="vitesse-surcharge-wrap">
-          <input class="vi-pct" type="number" value="${v.pct}" min="0" max="100" step="5" title="Part du volume total (%)" oninput="syncVitesse(${v.id})"/>
+          <input class="vi-pct" type="number" value="${v.pct}" min="0" max="100" step="5" title="Part du volume (%)" oninput="syncVitesse(${v.id})"/>
+          <span>%</span>
+        </div>
+        <div class="vitesse-surcharge-wrap">
+          <input class="vi-surcharge" type="number" value="${v.surcharge}" min="0" step="5" title="Supplément sur le prix de base (%)" oninput="syncVitesse(${v.id})"/>
           <span>%</span>
         </div>
         <span class="tranche-val">${fNum(colisV, 0)}</span>
-        <span class="tranche-val">${fCHF(ppc)}</span>
+        <span class="tranche-val accent">${fCHF(ppc)}</span>
         <button type="button" class="tranche-del" onclick="supprimerVitesse(${v.id})" title="Supprimer">✕</button>
       </div>`;
     }).join('')}
-    ${totalPct !== 100 ? `<div class="vitesse-total-warn">⚠ Total : ${totalPct}% — devrait être 100%</div>` : `<div class="vitesse-total-ok">✓ Total : 100%</div>`}
+    ${totalPct !== 100 ? `<div class="vitesse-total-warn">⚠ Total volumes : ${totalPct}% (devrait être 100%)</div>` : `<div class="vitesse-total-ok">✓ Total volumes : 100%</div>`}
   `;
 }
 
@@ -463,8 +473,8 @@ function genererOffre() {
             <td><strong>${esc(v.label)}</strong></td>
             <td>${v.pct}%</td>
             ${tranches.map(t => {
-              const colisV = Math.max(t.colis * v.pct / 100, 0.01);
-              const ppc    = prixColisFor(colisV, t.marge, calcResult);
+              const basePPC = prixColisFor(t.colis, t.marge, calcResult);
+              const ppc     = basePPC * (1 + v.surcharge / 100);
               return `<td class="tranche-price">${fCHF(ppc)}</td>`;
             }).join('')}
           </tr>
@@ -497,21 +507,25 @@ function genererOffre() {
     <!-- Vitesses seules -->
     <table class="offre-tranche-table">
       <thead>
-        <tr><th>Niveau de service</th><th>Volume/jour</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th></tr>
+        <tr><th>Niveau de service</th><th>Volume/jour</th><th>Suppl.</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th></tr>
       </thead>
       <tbody>
-        ${vitesses.map(v => {
-          const colisV = Math.max(calcResult.colisJour * v.pct / 100, 0.01);
-          const ppc    = prixColisFor(colisV, calcResult.marge, calcResult);
-          const ppj    = ppc * colisV;
-          return `<tr>
-            <td><strong>${esc(v.label)}</strong></td>
-            <td>${fNum(colisV, 0)} colis (${v.pct}%)</td>
-            <td class="tranche-price">${fCHF(ppc)}</td>
-            <td>${fCHF(ppj * 5)}</td>
-            <td>${fCHF(ppj * calcResult.joursParMois)}</td>
-          </tr>`;
-        }).join('')}
+        ${(() => {
+          const basePPC = prixColisFor(calcResult.colisJour, calcResult.marge, calcResult);
+          return vitesses.map(v => {
+            const colisV = calcResult.colisJour * v.pct / 100;
+            const ppc    = basePPC * (1 + v.surcharge / 100);
+            const ppj    = ppc * colisV;
+            return `<tr>
+              <td><strong>${esc(v.label)}</strong></td>
+              <td>${fNum(colisV, 0)} colis (${v.pct}%)</td>
+              <td>${v.surcharge > 0 ? '+' + v.surcharge + '%' : '—'}</td>
+              <td class="tranche-price">${fCHF(ppc)}</td>
+              <td>${fCHF(ppj * 5)}</td>
+              <td>${fCHF(ppj * calcResult.joursParMois)}</td>
+            </tr>`;
+          }).join('');
+        })()}
       </tbody>
     </table>
     ` : `
@@ -649,7 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTranches(lireParams());
 
   // Init vitesses avec les 3 niveaux par défaut
-  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.pct));
+  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.pct, v.surcharge));
 
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
     'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
