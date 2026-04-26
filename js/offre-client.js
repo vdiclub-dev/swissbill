@@ -99,13 +99,14 @@ function lireParams() {
            coutPrepColis, colisRenta, joursParMois };
 }
 
-/* ── Prix par colis pour un volume donné ─────────────────── */
-// Frais fixes véhicule répartis sur le seuil de rentabilité,
-// coûts variables (chauffeur, carburant) sur le volume réel du client.
-function prixColisFor(colisJour, marge, p) {
-  const c = Math.max(colisJour, 1);
-  const cpVariable  = (p.coutCarburant + p.coutChauffeur) / c;
-  const cpVehicule  = p.coutVehicule / (p.colisRenta * p.nbVehicules);
+/* ── Prix par colis ──────────────────────────────────────── */
+// Tous les coûts répartis sur le seuil de rentabilité.
+// Un petit client paie sa part proportionnelle — pas plus cher/colis.
+// Le volume réel n'affecte que le montant total de la facture.
+function prixColisFor(_colisJour, marge, p) {
+  const colisBase   = p.colisRenta * p.nbVehicules;
+  const cpVariable  = (p.coutCarburant + p.coutChauffeur) / colisBase;
+  const cpVehicule  = p.coutVehicule / colisBase;
   const cpLogistique= p.coutPrepColis;
   return (cpVariable + cpVehicule + cpLogistique) * (1 + marge / 100);
 }
