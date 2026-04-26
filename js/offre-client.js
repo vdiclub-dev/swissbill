@@ -196,7 +196,7 @@ function renderTranches(p) {
       const ppm  = ppj * p.joursParMois;
       return `
       <div class="tranche-row" data-tid="${t.id}">
-        <input class="ti-label" type="text"   value="${esc(t.label)}" placeholder="Ex : Volume standard" title="Description de la tranche" oninput="syncTranche(${t.id})"/>
+        <input class="ti-label" type="text" list="dlTranches" value="${esc(t.label)}" placeholder="Ex : Volume standard" title="Description de la tranche" oninput="syncTranche(${t.id})"/>
         <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
         <input class="ti-marge" type="number" value="${t.marge}" min="0" title="Marge en %" oninput="recalcTranches()"/>
         <span class="tranche-val">${fCHF(ppc)}</span>
@@ -291,7 +291,7 @@ function renderVitesses() {
     </div>
     ${vitesses.map(v => `
       <div class="vitesse-row" data-vid="${v.id}">
-        <input class="vi-label" type="text" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé du niveau de service" oninput="syncVitesse(${v.id})"/>
+        <input class="vi-label" type="text" list="dlVitesses" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé du niveau de service" oninput="syncVitesse(${v.id})"/>
         <div class="vitesse-surcharge-wrap">
           <input class="vi-surcharge" type="number" value="${v.surcharge}" min="0" step="5" title="Supplément en %" oninput="syncVitesse(${v.id})"/>
           <span>%</span>
