@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <title>Prospects CRM — Colixo Admin</title>
+
+  <!-- Supabase SDK -->
+  <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Config Colixo (Supabase client global) -->
+  <script data-cfasync="false" src="../config.js?v=20260462"></script>
+  <!-- CSS -->
+  <link rel="stylesheet" href="../css/prospects.css"/>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-inner">
+    <a class="brand" href="../admin/dashboard.html">
+      <div class="brand-mark">C</div>
+      <div>
+        <div class="brand-name">COLIXO</div>
+        <div class="brand-sub">Prospects CRM</div>
+      </div>
+    </a>
+    <a class="header-back" href="../admin/dashboard.html">← Dashboard</a>
+  </div>
+</header>
+
+<!-- ── CONTENU PRINCIPAL ──────────────────────────────────── -->
+<div class="page-wrap">
+
+  <!-- Titre + bouton -->
+  <div class="section-header">
+    <div class="section-title">Prospects <span>CRM</span></div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn-ghost" onclick="chargerProspects()" title="Actualiser">⟳ Actualiser</button>
+      <button class="btn-primary" onclick="ouvrirFormAjout()">+ Nouveau prospect</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card accent">
+      <div class="stat-num" id="statTotal">—</div>
+      <div class="stat-lbl">Total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statContact">—</div>
+      <div class="stat-lbl">À contacter</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statInteress">—</div>
+      <div class="stat-lbl">Intéressés</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statSignes">—</div>
+      <div class="stat-lbl">Signés</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statScore">—</div>
+      <div class="stat-lbl">Score moyen</div>
+    </div>
+  </div>
+
+  <!-- Filtres -->
+  <div class="filters-bar">
+    <input  type="text"   class="filter-input"  id="fSearch"  placeholder="🔍 Rechercher entreprise, contact, notes…"/>
+    <input  type="text"   class="filter-input"  id="fVille"   placeholder="Ville" style="max-width:130px;"/>
+    <input  type="text"   class="filter-input"  id="fSecteur" placeholder="Secteur" style="max-width:130px;"/>
+    <select title="Statut" class="filter-select" id="fStatut">
+      <option value="">Tous statuts</option>
+      <option value="a_contacter">À contacter</option>
+      <option value="contacte">Contacté</option>
+      <option value="interesse">Intéressé</option>
+      <option value="devis_envoye">Devis envoyé</option>
+      <option value="relance">Relancé</option>
+      <option value="signe">Signé</option>
+      <option value="perdu">Perdu</option>
+    </select>
+    <div class="score-filter-wrap">
+      Score min&nbsp;<strong id="scoreVal">0</strong>
+      <input type="range" id="fScore" min="0" max="100" step="5" value="0"
+             oninput="document.getElementById('scoreVal').textContent=this.value"/>
+    </div>
+  </div>
+
+  <!-- Compteur résultats -->
+  <div class="result-count" id="resultCount"></div>
+
+  <!-- État chargement -->
+  <div id="loadingState">
+    <div class="spinner"></div>
+    <span>Chargement des prospects…</span>
+  </div>
+
+  <!-- État vide -->
+  <div id="emptyState" style="display:none;">
+    <div class="empty-icon">🏢</div>
+    <div class="empty-title">Aucun prospect trouvé</div>
+    <div class="empty-desc">Modifiez les filtres ou ajoutez un nouveau prospect.</div>
+  </div>
+
+  <!-- Grille prospects -->
+  <div id="prospectGrid" style="display:none;"></div>
+
+</div><!-- /page-wrap -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — Ajout prospect
+══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalAjout">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="modal-title">➕ Nouveau prospect</span>
+      <button class="modal-close" onclick="fermerAjout()">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="prospectForm">
+        <div class="form-grid">
+
+          <div class="field form-full">
+            <label>Entreprise *</label>
+            <input type="text" id="fEntreprise" placeholder="Ex : Dupont SA" required/>
+          </div>
+
+          <div class="field">
+            <label>Ville</label>
+            <input type="text" id="fVille2" placeholder="Ex : Lausanne"/>
+          </div>
+
+          <div class="field">
+            <label>Secteur</label>
+            <input type="text" id="fSecteur2" placeholder="Ex : E-commerce, Pharmacie…"/>
+          </div>
+
+          <div class="field form-full">
+            <label>Site web</label>
+            <input type="url" id="fSiteWeb" placeholder="https://exemple.ch"/>
+          </div>
+
+          <div class="field">
+            <label>Contact — Nom</label>
+            <input type="text" id="fContactNom" placeholder="Ex : Jean Dupont"/>
+          </div>
+
+          <div class="field">
+            <label>Contact — Rôle</label>
+            <input type="text" id="fContactRole" placeholder="Ex : Directeur logistique"/>
+          </div>
+
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="fEmail" placeholder="jean@exemple.ch"/>
+          </div>
+
+          <div class="field">
+            <label>Téléphone</label>
+            <input type="tel" id="fTelephone" placeholder="+41 XX XXX XX XX"/>
+          </div>
+
+          <div class="field form-full">
+            <label>LinkedIn URL</label>
+            <input type="url" id="fLinkedin" placeholder="https://linkedin.com/in/…"/>
+          </div>
+
+          <div class="field form-full">
+            <label>Besoin détecté</label>
+            <textarea id="fBesoin" placeholder="Ex : Volume logistique important, délais courts requis…"></textarea>
+          </div>
+
+          <div class="field form-full">
+            <label>Angle commercial</label>
+            <textarea id="fAngle" placeholder="Ex : Mettre en avant la réactivité J+1 et le suivi en temps réel…"></textarea>
+          </div>
+
+          <div class="field form-full">
+            <label>Notes</label>
+            <textarea id="fNotes" placeholder="Informations complémentaires, source…"></textarea>
+          </div>
+
+          <div class="field">
+            <label>Statut initial</label>
+            <select title="Statut" id="fStatut2">
+              <option value="a_contacter">À contacter</option>
+              <option value="contacte">Contacté</option>
+              <option value="interesse">Intéressé</option>
+              <option value="devis_envoye">Devis envoyé</option>
+              <option value="relance">Relancé</option>
+              <option value="signe">Signé</option>
+              <option value="perdu">Perdu</option>
+            </select>
+          </div>
+
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="fermerAjout()">Annuler</button>
+      <button class="btn-primary" id="btnSauvegarder" onclick="soumettreProspect(event)">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — Fiche détail
+══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalDetail">
+  <div class="modal-box wide">
+    <div class="modal-head">
+      <span class="modal-title">📋 Fiche prospect</span>
+      <button class="modal-close" onclick="fermerDetail()">✕</button>
+    </div>
+    <div class="modal-body" id="detailContent">
+      <!-- Rendu dynamique par renderDetail() -->
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="fermerDetail()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── TOASTS ──────────────────────────────────────────────── -->
+<div id="toastZone"></div>
+
+<!-- ── JS ─────────────────────────────────────────────────── -->
+<script src="../js/prospects.js?v=1"></script>
+</body>
+</html>
