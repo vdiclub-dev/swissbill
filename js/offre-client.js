@@ -75,6 +75,7 @@ function calculer() {
   const heuresJour     = num('cHeuresJour');
   const coutHoraire    = num('cCoutHoraire') || 35;
   const nbVehicules    = num('cNbVehicules') || 1;
+  const nbChauffeurs   = num('cNbChauffeurs') || nbVehicules;
   const fraisFixes     = num('cFraisFixes');
   const marge          = num('cMarge') || 20;
   const colisJour      = num('cColisJour') || 1;
@@ -82,9 +83,9 @@ function calculer() {
   const prepColis      = chk('cPrepCommandes');
   const coutPrep       = num('cCoutPrep') || 2;
 
-  // Calculs de coûts — tous multipliés par le nombre de véhicules/chauffeurs
+  // Calculs de coûts
   const coutCarburant  = kmJour * litres100 / 100 * prixCarburant * nbVehicules;
-  const coutChauffeur  = heuresJour * coutHoraire * nbVehicules;
+  const coutChauffeur  = heuresJour * coutHoraire * nbChauffeurs;
   const coutVehicule   = fraisFixes * nbVehicules;
   const coutLogistique = prepColis ? colisJour * coutPrep : 0;
   const coutTotalJour  = coutCarburant + coutChauffeur + coutVehicule + coutLogistique;
