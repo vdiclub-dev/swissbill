@@ -152,9 +152,11 @@ function calculer() {
 /* ── Tranches tarifaires ─────────────────────────────────── */
 function ajouterTranche() {
   const colisDefaut = num('cColisJour') || 30;
-  const margeDefaut = num('cMarge')    || 20;
-  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, marge: margeDefaut });
-  renderTranches(lireParams());
+  const p = lireParams();
+  const marge = num('cMarge') || 20;
+  const prixAuto = prixColisFor(colisDefaut, marge, p);
+  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, prixVente: prixAuto });
+  renderTranches(p);
 }
 
 function supprimerTranche(id) {
@@ -171,37 +173,42 @@ function renderTranches(p) {
     return;
   }
 
-  // Lire les valeurs actuelles des inputs existants avant de re-rendre
+  // Sync avant re-render
   body.querySelectorAll('.tranche-row').forEach(row => {
     const id = +row.dataset.tid;
     const t  = tranches.find(x => x.id === id);
     if (!t) return;
-    t.label = row.querySelector('.ti-label')?.value || '';
-    t.colis = parseFloat(row.querySelector('.ti-colis')?.value) || t.colis;
-    t.marge = parseFloat(row.querySelector('.ti-marge')?.value) || t.marge;
+    t.label     = row.querySelector('.ti-label')?.value || '';
+    t.colis     = parseFloat(row.querySelector('.ti-colis')?.value)    || t.colis;
+    t.prixVente = parseFloat(row.querySelector('.ti-prix')?.value)     || t.prixVente;
   });
+
+  const coutBase = prixColisFor(1, 0, p); // coût de revient pur (0% marge)
 
   body.innerHTML = `
     <div class="tranche-header-row">
       <span>Description</span>
-      <span>Colis/jour</span>
-      <span>Marge %</span>
-      <span>Prix/colis</span>
-      <span>Prix/jour</span>
-      <span>Prix/mois</span>
+      <span>Colis/j</span>
+      <span>Coût/colis</span>
+      <span>Prix vente</span>
+      <span>Marge</span>
+      <span>Total/mois</span>
       <span></span>
     </div>
     ${tranches.map(t => {
-      const ppc  = prixColisFor(t.colis, t.marge, p);
-      const ppj  = ppc * t.colis;
-      const ppm  = ppj * p.joursParMois;
+      const cout  = coutBase;
+      const pv    = t.prixVente || cout;
+      const marge = pv > 0 ? (pv - cout) / pv * 100 : -999;
+      const ppj   = pv * t.colis;
+      const ppm   = ppj * p.joursParMois;
+      const mc    = marge >= 15 ? 'marge-ok' : marge >= 0 ? 'marge-warn' : 'marge-loss';
       return `
       <div class="tranche-row" data-tid="${t.id}">
-        <input class="ti-label" type="text" list="dlTranches" value="${esc(t.label)}" placeholder="Ex : Volume standard" title="Description de la tranche" oninput="syncTranche(${t.id})"/>
+        <input class="ti-label" type="text" list="dlTranches" value="${esc(t.label)}" placeholder="Ex : Volume standard" title="Description" oninput="syncTranche(${t.id})"/>
         <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
-        <input class="ti-marge" type="number" value="${t.marge}" min="0" title="Marge en %" oninput="recalcTranches()"/>
-        <span class="tranche-val">${fCHF(ppc)}</span>
-        <span class="tranche-val">${fCHF(ppj)}</span>
+        <span class="tranche-val tranche-cout">${fCHF(cout)}</span>
+        <input class="ti-prix" type="number" value="${fNum(pv,2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="recalcTranches()"/>
+        <span class="tranche-val ${mc}">${marge >= -99 ? fNum(marge,1)+'%' : '—'}</span>
         <span class="tranche-val">${fCHF(ppm)}</span>
         <button type="button" class="tranche-del" onclick="supprimerTranche(${t.id})" title="Supprimer">✕</button>
       </div>`;
@@ -217,21 +224,17 @@ function syncTranche(id) {
 }
 
 function recalcTranches() {
+  // Sync state from DOM then re-render
   const p = lireParams();
   document.querySelectorAll('.tranche-row').forEach(row => {
-    const id    = +row.dataset.tid;
-    const t     = tranches.find(x => x.id === id);
+    const id = +row.dataset.tid;
+    const t  = tranches.find(x => x.id === id);
     if (!t) return;
-    t.colis = parseFloat(row.querySelector('.ti-colis')?.value) || 1;
-    t.marge = parseFloat(row.querySelector('.ti-marge')?.value) || 0;
-    const ppc = prixColisFor(t.colis, t.marge, p);
-    const ppj = ppc * t.colis;
-    const ppm = ppj * p.joursParMois;
-    const vals = row.querySelectorAll('.tranche-val');
-    if (vals[0]) vals[0].textContent = fCHF(ppc);
-    if (vals[1]) vals[1].textContent = fCHF(ppj);
-    if (vals[2]) vals[2].textContent = fCHF(ppm);
+    t.label     = row.querySelector('.ti-label')?.value || '';
+    t.colis     = parseFloat(row.querySelector('.ti-colis')?.value) || t.colis;
+    t.prixVente = parseFloat(row.querySelector('.ti-prix')?.value)  || t.prixVente;
   });
+  renderTranches(p);
 }
 window.ajouterTranche  = ajouterTranche;
 window.recalcTranches  = recalcTranches;
@@ -261,9 +264,10 @@ function syncVitesse(id) {
   if (!row) return;
   const v = vitesses.find(x => x.id === id);
   if (!v) return;
-  v.label     = row.querySelector('.vi-label')?.value    || '';
-  v.pct       = parseFloat(row.querySelector('.vi-pct')?.value) || 0;
-  v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
+  v.label     = row.querySelector('.vi-label')?.value || '';
+  v.pct       = parseFloat(row.querySelector('.vi-pct')?.value)  || 0;
+  v.prixVente = parseFloat(row.querySelector('.vi-prix')?.value) || null;
+  renderVitesses();
 }
 window.syncVitesse = syncVitesse;
 
@@ -291,21 +295,24 @@ function renderVitesses() {
   const totalColis = num('cColisJour') || 1;
   const totalPct   = vitesses.reduce((s, v) => s + v.pct, 0);
 
-  // Prix de base calculé sur le volume TOTAL — partagé entre tous les colis
-  const basePPC = prixColisFor(totalColis, marge, p);
+  // Coût de revient de base (0% marge, volume total)
+  const coutBase = prixColisFor(totalColis, 0, p);
 
   body.innerHTML = `
     <div class="vitesse-header-row">
       <span>Libellé</span>
       <span>% volume</span>
-      <span>Suppl. %</span>
-      <span>Colis/jour</span>
-      <span>Prix/colis</span>
+      <span>Colis/j</span>
+      <span>Coût/colis</span>
+      <span>Prix vente</span>
+      <span>Marge</span>
       <span></span>
     </div>
     ${vitesses.map(v => {
       const colisV = totalColis * v.pct / 100;
-      const ppc    = basePPC * (1 + v.surcharge / 100);
+      const pv     = v.prixVente ?? (coutBase * (1 + v.surcharge / 100));
+      const marge  = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
+      const mc     = marge >= 15 ? 'marge-ok' : marge >= 0 ? 'marge-warn' : 'marge-loss';
       return `
       <div class="vitesse-row" data-vid="${v.id}">
         <input class="vi-label" type="text" list="dlVitesses" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé" oninput="syncVitesse(${v.id})"/>
@@ -313,16 +320,14 @@ function renderVitesses() {
           <input class="vi-pct" type="number" value="${v.pct}" min="0" max="100" step="5" title="Part du volume (%)" oninput="syncVitesse(${v.id})"/>
           <span>%</span>
         </div>
-        <div class="vitesse-surcharge-wrap">
-          <input class="vi-surcharge" type="number" value="${v.surcharge}" min="0" step="5" title="Supplément sur le prix de base (%)" oninput="syncVitesse(${v.id})"/>
-          <span>%</span>
-        </div>
         <span class="tranche-val">${fNum(colisV, 0)}</span>
-        <span class="tranche-val accent">${fCHF(ppc)}</span>
+        <span class="tranche-val tranche-cout">${fCHF(coutBase)}</span>
+        <input class="vi-prix" type="number" value="${fNum(pv,2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="syncVitesse(${v.id})"/>
+        <span class="tranche-val ${mc}">${fNum(marge,1)}%</span>
         <button type="button" class="tranche-del" onclick="supprimerVitesse(${v.id})" title="Supprimer">✕</button>
       </div>`;
     }).join('')}
-    ${totalPct !== 100 ? `<div class="vitesse-total-warn">⚠ Total volumes : ${totalPct}% (devrait être 100%)</div>` : `<div class="vitesse-total-ok">✓ Total volumes : 100%</div>`}
+    ${totalPct !== 100 ? `<div class="vitesse-total-warn">⚠ Total volumes : ${totalPct}%</div>` : `<div class="vitesse-total-ok">✓ Total volumes : 100%</div>`}
   `;
 }
 
@@ -474,8 +479,9 @@ function genererOffre() {
             <td><strong>${esc(v.label)}</strong></td>
             <td>${v.pct}%</td>
             ${tranches.map(t => {
-              const basePPC = prixColisFor(t.colis, t.marge, calcResult);
-              const ppc     = basePPC * (1 + v.surcharge / 100);
+              const coutBase = prixColisFor(1, 0, calcResult);
+              const basePrice = t.prixVente ?? coutBase;
+              const ppc = v.prixVente ?? (basePrice * (1 + v.surcharge / 100));
               return `<td class="tranche-price">${fCHF(ppc)}</td>`;
             }).join('')}
           </tr>
@@ -492,7 +498,8 @@ function genererOffre() {
       </thead>
       <tbody>
         ${tranches.map(t => {
-          const ppc = prixColisFor(t.colis, t.marge, calcResult);
+          const coutBase = prixColisFor(1, 0, calcResult);
+          const ppc = t.prixVente ?? coutBase;
           const ppj = ppc * t.colis;
           return `<tr>
             <td><strong>${t.colis} colis/jour</strong></td>
@@ -512,15 +519,14 @@ function genererOffre() {
       </thead>
       <tbody>
         ${(() => {
-          const basePPC = prixColisFor(calcResult.colisJour, calcResult.marge, calcResult);
+          const coutBase = prixColisFor(calcResult.colisJour, 0, calcResult);
           return vitesses.map(v => {
             const colisV = calcResult.colisJour * v.pct / 100;
-            const ppc    = basePPC * (1 + v.surcharge / 100);
+            const ppc    = v.prixVente ?? (coutBase * (1 + v.surcharge / 100));
             const ppj    = ppc * colisV;
             return `<tr>
               <td><strong>${esc(v.label)}</strong></td>
               <td>${fNum(colisV, 0)} colis (${v.pct}%)</td>
-              <td>${v.surcharge > 0 ? '+' + v.surcharge + '%' : '—'}</td>
               <td class="tranche-price">${fCHF(ppc)}</td>
               <td>${fCHF(ppj * 5)}</td>
               <td>${fCHF(ppj * calcResult.joursParMois)}</td>
