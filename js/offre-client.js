@@ -67,50 +67,74 @@ function activeSectionIdx() {
   return sections.findIndex(s => s.classList.contains('active'));
 }
 
-/* ── Calcul automatique ──────────────────────────────────── */
+/* ── État tranches ───────────────────────────────────────── */
+let tranches = [];
+let _tid = 0;
+
+/* ── Paramètres de base (partagés par tous les calculs) ──── */
+function lireParams() {
+  const nbVehicules   = num('cNbVehicules')      || 1;
+  const nbChauffeurs  = num('cNbChauffeurs')      || nbVehicules;
+  const kmJour        = num('cKmJour');
+  const litres100     = num('cLitres100')         || 8;
+  const prixCarburant = num('cPrixCarburant')     || 1.90;
+  const heuresJour    = num('cHeuresJour');
+  const coutHoraire   = num('cCoutHoraire')       || 35;
+  const fraisFixes    = num('cFraisFixes');
+  const joursParMois  = num('cJoursParMois')      || 22;
+  const prepColis     = chk('cPrepCommandes');
+  const coutPrep      = num('cCoutPrep')          || 2;
+  const colisRenta    = num('cColisRentabilite')  || 80;
+
+  // Coûts fixes journaliers (indépendants du volume client)
+  const coutCarburant = kmJour * litres100 / 100 * prixCarburant * nbVehicules;
+  const coutChauffeur = heuresJour * coutHoraire * nbChauffeurs;
+  const coutVehicule  = fraisFixes * nbVehicules;
+  // Coût logistique par colis (variable)
+  const coutPrepColis = prepColis ? coutPrep : 0;
+
+  return { nbVehicules, coutCarburant, coutChauffeur, coutVehicule,
+           coutPrepColis, colisRenta, joursParMois };
+}
+
+/* ── Prix par colis pour un volume donné ─────────────────── */
+// Frais fixes véhicule répartis sur le seuil de rentabilité,
+// coûts variables (chauffeur, carburant) sur le volume réel du client.
+function prixColisFor(colisJour, marge, p) {
+  const c = Math.max(colisJour, 1);
+  const cpVariable  = (p.coutCarburant + p.coutChauffeur) / c;
+  const cpVehicule  = p.coutVehicule / (p.colisRenta * p.nbVehicules);
+  const cpLogistique= p.coutPrepColis;
+  return (cpVariable + cpVehicule + cpLogistique) * (1 + marge / 100);
+}
+
+/* ── Calcul principal ────────────────────────────────────── */
 function calculer() {
-  const kmJour         = num('cKmJour');
-  const litres100      = num('cLitres100') || 8;
-  const prixCarburant  = num('cPrixCarburant') || 1.90;
-  const heuresJour     = num('cHeuresJour');
-  const coutHoraire    = num('cCoutHoraire') || 35;
-  const nbVehicules    = num('cNbVehicules') || 1;
-  const nbChauffeurs   = num('cNbChauffeurs') || nbVehicules;
-  const fraisFixes     = num('cFraisFixes');
-  const marge          = num('cMarge') || 20;
-  const colisJour      = num('cColisJour') || 1;
-  const joursParMois   = num('cJoursParMois') || 22;
-  const prepColis      = chk('cPrepCommandes');
-  const coutPrep       = num('cCoutPrep') || 2;
+  const p            = lireParams();
+  const marge        = num('cMarge') || 20;
+  const colisJour    = num('cColisJour') || 1;
 
-  // Calculs de coûts
-  const coutCarburant  = kmJour * litres100 / 100 * prixCarburant * nbVehicules;
-  const coutChauffeur  = heuresJour * coutHoraire * nbChauffeurs;
-  const coutVehicule   = fraisFixes * nbVehicules;
-  const coutLogistique = prepColis ? colisJour * coutPrep : 0;
-  const coutTotalJour  = coutCarburant + coutChauffeur + coutVehicule + coutLogistique;
-  const coutTotalMois  = coutTotalJour * joursParMois;
+  // Coût total réel (pour info)
+  const coutLogistique = p.coutPrepColis * colisJour;
+  const coutTotalJour  = p.coutCarburant + p.coutChauffeur + p.coutVehicule + coutLogistique;
+  const coutTotalMois  = coutTotalJour * p.joursParMois;
 
-  // Prix client avec marge
-  const margeCHFJour   = coutTotalJour * (marge / 100);
-  const prixClientJour = coutTotalJour + margeCHFJour;
-  const prixClientMois = prixClientJour * joursParMois;
-  const colisTotal     = colisJour || 1;
-  const prixParColis   = prixClientJour / colisTotal;
+  // Prix avec la nouvelle formule rentabilité
+  const prixParColis   = prixColisFor(colisJour, marge, p);
+  const prixClientJour = prixParColis * colisJour;
+  const prixClientMois = prixClientJour * p.joursParMois;
+  const margeCHFJour   = prixClientJour - (prixClientJour / (1 + marge / 100));
 
   calcResult = {
-    coutCarburant, coutChauffeur, coutVehicule, coutLogistique,
-    coutTotalJour, coutTotalMois,
-    margeCHFJour, marge,
-    prixClientJour, prixClientMois, prixParColis,
-    colisJour, kmJour, joursParMois,
+    ...p, marge, colisJour,
+    coutLogistique, coutTotalJour, coutTotalMois,
+    margeCHFJour, prixClientJour, prixClientMois, prixParColis,
   };
 
-  // Afficher résultats
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-  set('rCoutCarburant',  fCHF(coutCarburant));
-  set('rCoutChauffeur',  fCHF(coutChauffeur));
-  set('rCoutVehicule',   fCHF(coutVehicule));
+  set('rCoutCarburant',  fCHF(p.coutCarburant));
+  set('rCoutChauffeur',  fCHF(p.coutChauffeur));
+  set('rCoutVehicule',   fCHF(p.coutVehicule));
   set('rCoutLogistique', fCHF(coutLogistique));
   set('rCoutTotalJour',  fCHF(coutTotalJour));
   set('rCoutTotalMois',  fCHF(coutTotalMois));
@@ -118,7 +142,97 @@ function calculer() {
   set('rPrixJour',       fCHF(prixClientJour));
   set('rPrixMois',       fCHF(prixClientMois));
   set('rPrixColis',      fCHF(prixParColis));
+
+  renderTranches(p);
 }
+
+/* ── Tranches tarifaires ─────────────────────────────────── */
+function ajouterTranche() {
+  const colisDefaut = num('cColisJour') || 30;
+  const margeDefaut = num('cMarge')    || 20;
+  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, marge: margeDefaut });
+  renderTranches(lireParams());
+}
+
+function supprimerTranche(id) {
+  tranches = tranches.filter(t => t.id !== id);
+  renderTranches(lireParams());
+}
+window.supprimerTranche = supprimerTranche;
+
+function renderTranches(p) {
+  const body = $('tranchesBody');
+  if (!body) return;
+  if (!tranches.length) {
+    body.innerHTML = '<div class="tranches-empty">Aucune tranche — cliquez "+ Ajouter" pour en créer une.</div>';
+    return;
+  }
+
+  // Lire les valeurs actuelles des inputs existants avant de re-rendre
+  body.querySelectorAll('.tranche-row').forEach(row => {
+    const id = +row.dataset.tid;
+    const t  = tranches.find(x => x.id === id);
+    if (!t) return;
+    t.label = row.querySelector('.ti-label')?.value || '';
+    t.colis = parseFloat(row.querySelector('.ti-colis')?.value) || t.colis;
+    t.marge = parseFloat(row.querySelector('.ti-marge')?.value) || t.marge;
+  });
+
+  body.innerHTML = `
+    <div class="tranche-header-row">
+      <span>Description</span>
+      <span>Colis/jour</span>
+      <span>Marge %</span>
+      <span>Prix/colis</span>
+      <span>Prix/jour</span>
+      <span>Prix/mois</span>
+      <span></span>
+    </div>
+    ${tranches.map(t => {
+      const ppc  = prixColisFor(t.colis, t.marge, p);
+      const ppj  = ppc * t.colis;
+      const ppm  = ppj * p.joursParMois;
+      return `
+      <div class="tranche-row" data-tid="${t.id}">
+        <input class="ti-label" type="text"   value="${esc(t.label)}" placeholder="Ex : Volume standard" title="Description de la tranche" oninput="syncTranche(${t.id})"/>
+        <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
+        <input class="ti-marge" type="number" value="${t.marge}" min="0" title="Marge en %" oninput="recalcTranches()"/>
+        <span class="tranche-val">${fCHF(ppc)}</span>
+        <span class="tranche-val">${fCHF(ppj)}</span>
+        <span class="tranche-val">${fCHF(ppm)}</span>
+        <button type="button" class="tranche-del" onclick="supprimerTranche(${t.id})" title="Supprimer">✕</button>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function syncTranche(id) {
+  const row = document.querySelector(`.tranche-row[data-tid="${id}"]`);
+  if (!row) return;
+  const t = tranches.find(x => x.id === id);
+  if (t) t.label = row.querySelector('.ti-label')?.value || '';
+}
+
+function recalcTranches() {
+  const p = lireParams();
+  document.querySelectorAll('.tranche-row').forEach(row => {
+    const id    = +row.dataset.tid;
+    const t     = tranches.find(x => x.id === id);
+    if (!t) return;
+    t.colis = parseFloat(row.querySelector('.ti-colis')?.value) || 1;
+    t.marge = parseFloat(row.querySelector('.ti-marge')?.value) || 0;
+    const ppc = prixColisFor(t.colis, t.marge, p);
+    const ppj = ppc * t.colis;
+    const ppm = ppj * p.joursParMois;
+    const vals = row.querySelectorAll('.tranche-val');
+    if (vals[0]) vals[0].textContent = fCHF(ppc);
+    if (vals[1]) vals[1].textContent = fCHF(ppj);
+    if (vals[2]) vals[2].textContent = fCHF(ppm);
+  });
+}
+window.ajouterTranche  = ajouterTranche;
+window.recalcTranches  = recalcTranches;
+window.syncTranche     = syncTranche;
 
 /* ── Génération offre ────────────────────────────────────── */
 function genererOffre() {
@@ -252,6 +366,33 @@ function genererOffre() {
 
   <div class="offre-section offre-tarif-section">
     <div class="offre-section-title">5. TARIFICATION PROPOSÉE</div>
+    ${tranches.length ? `
+    <table class="offre-tranche-table">
+      <thead>
+        <tr>
+          <th>Volume</th>
+          <th>Description</th>
+          <th>Prix / colis</th>
+          <th>Prix / semaine</th>
+          <th>Prix / mois</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tranches.map(t => {
+          const p   = calcResult;
+          const ppc = prixColisFor(t.colis, t.marge, p);
+          const ppj = ppc * t.colis;
+          return `<tr>
+            <td><strong>${t.colis} colis/jour</strong></td>
+            <td>${esc(t.label) || '—'}</td>
+            <td class="tranche-price">${fCHF(ppc)}</td>
+            <td>${fCHF(ppj * 5)}</td>
+            <td>${fCHF(ppj * p.joursParMois)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    ` : `
     <div class="offre-tarif-grid">
       <div class="offre-tarif-card primary">
         <div class="offre-tarif-lbl">Prix journalier</div>
@@ -269,6 +410,7 @@ function genererOffre() {
         <div class="offre-tarif-sub">CHF HT / colis</div>
       </div>
     </div>
+    `}
     <p class="offre-tarif-note">Prix indicatifs, hors TVA. Sous réserve de validation opérationnelle. Ajustement possible si le volume réel, les kilomètres ou les contraintes changent.</p>
   </div>
 
