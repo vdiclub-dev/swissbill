@@ -522,8 +522,12 @@ document.addEventListener('DOMContentLoaded', () => {
   goSection(1);
 
   // Recalcul en temps réel sur les champs de la section calcul
+  // Init tranches vide
+  renderTranches(lireParams());
+
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
-    'cNbVehicules','cFraisFixes','cMarge','cColisJour','cJoursParMois','cCoutPrep'];
+    'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
+    'cCoutPrep','cColisRentabilite'];
   calcFields.forEach(id => {
     $(id)?.addEventListener('input', calculer);
   });
