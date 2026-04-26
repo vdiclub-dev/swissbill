@@ -67,9 +67,11 @@ function activeSectionIdx() {
   return sections.findIndex(s => s.classList.contains('active'));
 }
 
-/* ── État tranches ───────────────────────────────────────── */
+/* ── État tranches + vitesses ────────────────────────────── */
 let tranches = [];
 let _tid = 0;
+let vitesses = [];
+let _vid = 0;
 
 /* ── Paramètres de base (partagés par tous les calculs) ──── */
 function lireParams() {
@@ -233,6 +235,72 @@ function recalcTranches() {
 window.ajouterTranche  = ajouterTranche;
 window.recalcTranches  = recalcTranches;
 window.syncTranche     = syncTranche;
+window.ajouterVitesse  = ajouterVitesse;
+
+/* ── Niveaux de service (vitesses) ───────────────────────── */
+const VITESSES_DEFAUT = [
+  { label: 'Standard 48h', surcharge: 0   },
+  { label: 'Prioritaire 24h', surcharge: 10 },
+  { label: 'Express', surcharge: 50 },
+];
+
+function ajouterVitesse(label = '', surcharge = 0) {
+  vitesses.push({ id: ++_vid, label, surcharge });
+  renderVitesses();
+}
+
+function supprimerVitesse(id) {
+  vitesses = vitesses.filter(v => v.id !== id);
+  renderVitesses();
+}
+window.supprimerVitesse = supprimerVitesse;
+
+function syncVitesse(id) {
+  const row = document.querySelector(`.vitesse-row[data-vid="${id}"]`);
+  if (!row) return;
+  const v = vitesses.find(x => x.id === id);
+  if (!v) return;
+  v.label     = row.querySelector('.vi-label')?.value || '';
+  v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
+}
+window.syncVitesse = syncVitesse;
+
+function renderVitesses() {
+  const body = $('vitessesBody');
+  if (!body) return;
+
+  // Sync avant re-render
+  body.querySelectorAll('.vitesse-row').forEach(row => {
+    const id = +row.dataset.vid;
+    const v  = vitesses.find(x => x.id === id);
+    if (!v) return;
+    v.label     = row.querySelector('.vi-label')?.value || '';
+    v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
+  });
+
+  if (!vitesses.length) {
+    body.innerHTML = '<div class="vitesses-empty">Aucun niveau défini — cliquez "+ Ajouter" pour en créer.</div>';
+    return;
+  }
+
+  body.innerHTML = `
+    <div class="vitesse-header-row">
+      <span>Libellé (ex : Standard 48h)</span>
+      <span>Supplément %</span>
+      <span></span>
+    </div>
+    ${vitesses.map(v => `
+      <div class="vitesse-row" data-vid="${v.id}">
+        <input class="vi-label" type="text" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé du niveau de service" oninput="syncVitesse(${v.id})"/>
+        <div class="vitesse-surcharge-wrap">
+          <input class="vi-surcharge" type="number" value="${v.surcharge}" min="0" step="5" title="Supplément en %" oninput="syncVitesse(${v.id})"/>
+          <span>%</span>
+        </div>
+        <button type="button" class="tranche-del" onclick="supprimerVitesse(${v.id})" title="Supprimer">✕</button>
+      </div>
+    `).join('')}
+  `;
+}
 
 /* ── Génération offre ────────────────────────────────────── */
 function genererOffre() {
@@ -366,33 +434,73 @@ function genererOffre() {
 
   <div class="offre-section offre-tarif-section">
     <div class="offre-section-title">5. TARIFICATION PROPOSÉE</div>
-    ${tranches.length ? `
+    ${(tranches.length && vitesses.length) ? `
+    <!-- Matrice volume × niveau de service -->
     <table class="offre-tranche-table">
       <thead>
         <tr>
-          <th>Volume</th>
-          <th>Description</th>
-          <th>Prix / colis</th>
-          <th>Prix / semaine</th>
-          <th>Prix / mois</th>
+          <th>Niveau de service</th>
+          <th>Suppl.</th>
+          ${tranches.map(t => `<th>${t.colis} col/j${t.label ? '<br><small>' + esc(t.label) + '</small>' : ''}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${vitesses.map(v => `
+          <tr>
+            <td><strong>${esc(v.label)}</strong></td>
+            <td>${v.surcharge > 0 ? '+' + v.surcharge + '%' : '—'}</td>
+            ${tranches.map(t => {
+              const ppc = prixColisFor(t.colis, t.marge, calcResult) * (1 + v.surcharge / 100);
+              return `<td class="tranche-price">${fCHF(ppc)}</td>`;
+            }).join('')}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    ` : tranches.length ? `
+    <!-- Tranches seules -->
+    <table class="offre-tranche-table">
+      <thead>
+        <tr>
+          <th>Volume</th><th>Description</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th>
         </tr>
       </thead>
       <tbody>
         ${tranches.map(t => {
-          const p   = calcResult;
-          const ppc = prixColisFor(t.colis, t.marge, p);
+          const ppc = prixColisFor(t.colis, t.marge, calcResult);
           const ppj = ppc * t.colis;
           return `<tr>
             <td><strong>${t.colis} colis/jour</strong></td>
             <td>${esc(t.label) || '—'}</td>
             <td class="tranche-price">${fCHF(ppc)}</td>
             <td>${fCHF(ppj * 5)}</td>
-            <td>${fCHF(ppj * p.joursParMois)}</td>
+            <td>${fCHF(ppj * calcResult.joursParMois)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    ` : vitesses.length ? `
+    <!-- Vitesses seules -->
+    <table class="offre-tranche-table">
+      <thead>
+        <tr><th>Niveau de service</th><th>Supplément</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th></tr>
+      </thead>
+      <tbody>
+        ${vitesses.map(v => {
+          const ppc = calcResult.prixParColis * (1 + v.surcharge / 100);
+          const ppj = ppc * calcResult.colisJour;
+          return `<tr>
+            <td><strong>${esc(v.label)}</strong></td>
+            <td>${v.surcharge > 0 ? '+' + v.surcharge + '%' : 'Inclus'}</td>
+            <td class="tranche-price">${fCHF(ppc)}</td>
+            <td>${fCHF(ppj * 5)}</td>
+            <td>${fCHF(ppj * calcResult.joursParMois)}</td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>
     ` : `
+    <!-- Prix simple -->
     <div class="offre-tarif-grid">
       <div class="offre-tarif-card primary">
         <div class="offre-tarif-lbl">Prix journalier</div>
@@ -411,7 +519,7 @@ function genererOffre() {
       </div>
     </div>
     `}
-    <p class="offre-tarif-note">Prix indicatifs, hors TVA. Sous réserve de validation opérationnelle. Ajustement possible si le volume réel, les kilomètres ou les contraintes changent.</p>
+    <p class="offre-tarif-note">Prix indicatifs, hors TVA. Sous réserve de validation opérationnelle.</p>
   </div>
 
   <div class="offre-section">
@@ -524,6 +632,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Recalcul en temps réel sur les champs de la section calcul
   // Init tranches vide
   renderTranches(lireParams());
+
+  // Init vitesses avec les 3 niveaux par défaut
+  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.surcharge));
 
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
     'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
