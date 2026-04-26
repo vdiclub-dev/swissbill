@@ -377,7 +377,7 @@ function genererOffre() {
 
   <div class="offre-header">
     <div class="offre-logo">
-      <img src="../images/colixo-logo.png" alt="Colixo" class="offre-logo-img"/>
+      <img src="../images/colixo-logo-nobg.png" alt="Colixo" class="offre-logo-img"/>
       <div class="offre-logo-sub" style="margin-top:4px;font-size:.78rem;color:#888;">Livraison express · Suisse romande</div>
     </div>
     <div class="offre-ref">
