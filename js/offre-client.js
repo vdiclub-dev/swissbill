@@ -247,13 +247,13 @@ window.ajouterVitesse  = ajouterVitesse;
 
 /* ── Niveaux de service (vitesses) ───────────────────────── */
 const VITESSES_DEFAUT = [
-  { label: 'Standard 48h',    pct: 60, surcharge: 0  },
-  { label: 'Prioritaire 24h', pct: 30, surcharge: 15 },
-  { label: 'Express',          pct: 10, surcharge: 40 },
+  { label: 'Standard 48h',    pct: 60, supplement: 0    },
+  { label: 'Prioritaire 24h', pct: 30, supplement: 2.00 },
+  { label: 'Express',          pct: 10, supplement: 5.00 },
 ];
 
-function ajouterVitesse(label = '', pct = 0, surcharge = 0) {
-  vitesses.push({ id: ++_vid, label, pct, surcharge });
+function ajouterVitesse(label = '', pct = 0, supplement = 0) {
+  vitesses.push({ id: ++_vid, label, pct, supplement });
   renderVitesses();
 }
 
@@ -268,9 +268,10 @@ function syncVitesse(id) {
   if (!row) return;
   const v = vitesses.find(x => x.id === id);
   if (!v) return;
-  v.label     = row.querySelector('.vi-label')?.value || '';
-  v.pct       = parseFloat(row.querySelector('.vi-pct')?.value)  || 0;
-  v.prixVente = parseFloat(row.querySelector('.vi-prix')?.value) || null;
+  v.label      = row.querySelector('.vi-label')?.value || '';
+  v.pct        = parseFloat(row.querySelector('.vi-pct')?.value)   || 0;
+  v.supplement = parseFloat(row.querySelector('.vi-supp')?.value)  || 0;
+  v.prixVente  = parseFloat(row.querySelector('.vi-prix')?.value)  || null;
   renderVitesses();
 }
 window.syncVitesse = syncVitesse;
@@ -284,9 +285,9 @@ function renderVitesses() {
     const id = +row.dataset.vid;
     const v  = vitesses.find(x => x.id === id);
     if (!v) return;
-    v.label     = row.querySelector('.vi-label')?.value || '';
-    v.pct       = parseFloat(row.querySelector('.vi-pct')?.value)       || 0;
-    v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
+    v.label      = row.querySelector('.vi-label')?.value || '';
+    v.pct        = parseFloat(row.querySelector('.vi-pct')?.value)  || 0;
+    v.supplement = parseFloat(row.querySelector('.vi-supp')?.value) || 0;
   });
 
   if (!vitesses.length) {
@@ -307,16 +308,17 @@ function renderVitesses() {
       <span>Libellé</span>
       <span>% volume</span>
       <span>Colis/j</span>
-      <span>Coût/colis</span>
+      <span>Suppl. CHF</span>
       <span>Prix vente</span>
       <span>Marge</span>
       <span></span>
     </div>
     ${vitesses.map(v => {
       const colisV = totalColis * v.pct / 100;
-      const pv     = v.prixVente ?? (coutBase * (1 + v.surcharge / 100));
-      const marge  = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
-      const mc     = marge >= 15 ? 'marge-ok' : marge >= 0 ? 'marge-warn' : 'marge-loss';
+      const supp   = v.supplement ?? 0;
+      const pv     = v.prixVente ?? (coutBase + supp);
+      const margeP = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
+      const mc     = margeP >= 15 ? 'marge-ok' : margeP >= 0 ? 'marge-warn' : 'marge-loss';
       return `
       <div class="vitesse-row" data-vid="${v.id}">
         <input class="vi-label" type="text" list="dlVitesses" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé" oninput="syncVitesse(${v.id})"/>
@@ -325,9 +327,12 @@ function renderVitesses() {
           <span>%</span>
         </div>
         <span class="tranche-val">${fNum(colisV, 0)}</span>
-        <span class="tranche-val tranche-cout">${fCHF(coutBase)}</span>
-        <input class="vi-prix" type="number" value="${pv.toFixed(2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="syncVitesse(${v.id})"/>
-        <span class="tranche-val ${mc}">${fNum(marge,1)}%</span>
+        <div class="vitesse-surcharge-wrap">
+          <span>+</span>
+          <input class="vi-supp" type="number" value="${supp.toFixed(2)}" min="0" step="0.50" title="Supplément fixe CHF par colis" oninput="syncVitesse(${v.id})"/>
+        </div>
+        <input class="vi-prix" type="number" value="${pv.toFixed(2)}" min="0" step="0.05" title="Prix de vente final au colis" oninput="syncVitesse(${v.id})"/>
+        <span class="tranche-val ${mc}">${fNum(margeP,1)}%</span>
         <button type="button" class="tranche-del" onclick="supprimerVitesse(${v.id})" title="Supprimer">✕</button>
       </div>`;
     }).join('')}
@@ -485,7 +490,7 @@ function genererOffre() {
             ${tranches.map(t => {
               const coutBase = prixColisFor(1, calcResult.marge, calcResult);
               const basePrice = t.prixVente ?? coutBase;
-              const ppc = v.prixVente ?? (basePrice * (1 + v.surcharge / 100));
+              const ppc = v.prixVente ?? (basePrice + (v.supplement ?? 0));
               return `<td class="tranche-price">${fCHF(ppc)}</td>`;
             }).join('')}
           </tr>
@@ -526,7 +531,7 @@ function genererOffre() {
           const coutBase = prixColisFor(calcResult.colisJour, calcResult.marge, calcResult);
           return vitesses.map(v => {
             const colisV = calcResult.colisJour * v.pct / 100;
-            const ppc    = v.prixVente ?? (coutBase * (1 + v.surcharge / 100));
+            const ppc    = v.prixVente ?? (coutBase + (v.supplement ?? 0));
             const ppj    = ppc * colisV;
             return `<tr>
               <td><strong>${esc(v.label)}</strong></td>
@@ -701,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTranches(lireParams());
 
   // Init vitesses avec les 3 niveaux par défaut
-  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.pct, v.surcharge));
+  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.pct, v.supplement));
 
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
     'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
