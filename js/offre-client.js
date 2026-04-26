@@ -351,7 +351,9 @@ function genererOffre() {
   const delai       = val('cDelai')         || '';
   const colisJour   = val('cColisJour')     || '—';
   const colisHebdo  = val('cColisHebdo')    || '—';
-  const kmJour      = val('cKmJour')        || '—';
+  const kmJourVeh   = num('cKmJour');
+  const nbVehOffre  = num('cNbVehicules') || 1;
+  const kmJour      = kmJourVeh ? String(kmJourVeh * nbVehOffre) : '—';
   const poidsMoyen  = val('cPoidsMoyen')    || '—';
   const dateOffre   = new Date().toLocaleDateString('fr-CH', { day:'2-digit', month:'long', year:'numeric' });
   const refOffre    = 'COL-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
