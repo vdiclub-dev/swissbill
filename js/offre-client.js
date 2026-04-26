@@ -146,6 +146,10 @@ function calculer() {
   set('rPrixMois',       fCHF(prixClientMois));
   set('rPrixColis',      fCHF(prixParColis));
 
+  // Catégories de poids
+  set('rPoidsLegers', fCHF(prixParColis));
+  set('rPoidsLourds', fCHF(prixParColis * 1.20));
+
   renderTranches(p);
 }
 
@@ -556,6 +560,33 @@ function genererOffre() {
     </div>
     `}
     <p class="offre-tarif-note">Prix indicatifs, hors TVA. Sous réserve de validation opérationnelle.</p>
+
+    <!-- Grille poids -->
+    <div class="offre-poids-titre">Tarification par catégorie de poids</div>
+    <table class="offre-tranche-table offre-poids-table">
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th>Poids du colis</th>
+          <th>Supplément</th>
+          <th>Prix / colis</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Standard</strong></td>
+          <td>0 – 15 kg</td>
+          <td>—</td>
+          <td class="tranche-price">${fCHF(calcResult.prixParColis)}</td>
+        </tr>
+        <tr>
+          <td><strong>Lourd</strong></td>
+          <td>15 – 30 kg</td>
+          <td>+20%</td>
+          <td class="tranche-price">${fCHF(calcResult.prixParColis * 1.20)}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <div class="offre-section">
