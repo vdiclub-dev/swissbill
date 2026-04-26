@@ -132,8 +132,8 @@
     <div id="cpBox">
       <div id="cpHead">
         <h3>🏢 Clients</h3>
-        <button id="cpBtnNew" onclick="window._cpOuvrirForm(null)">+ Nouveau client</button>
-        <button id="cpClose" onclick="fermerClientPicker()">✕</button>
+        <button id="cpBtnNew">+ Nouveau client</button>
+        <button id="cpClose">✕</button>
       </div>
       <div id="cpSearchWrap">
         <input id="cpSearch" type="text" placeholder="🔍 Rechercher par nom, ville, numéro client…" autocomplete="off"/>
@@ -150,7 +150,7 @@
     <div id="cpFormBox">
       <div id="cpFormHead">
         <h3 id="cpFormTitle">Nouveau client</h3>
-        <button id="cpFormClose" onclick="window._cpFermerForm()">✕</button>
+        <button id="cpFormClose">✕</button>
       </div>
       <div id="cpFormBody">
         <div class="cpf-grid">
@@ -189,8 +189,8 @@
         </div>
       </div>
       <div id="cpFormFoot">
-        <button class="cpf-btn-cancel" onclick="window._cpFermerForm()">Annuler</button>
-        <button class="cpf-btn-save" id="cpfBtnSave" onclick="window._cpSauvegarder()">Enregistrer</button>
+        <button class="cpf-btn-cancel" id="cpfBtnCancel">Annuler</button>
+        <button class="cpf-btn-save" id="cpfBtnSave">Enregistrer</button>
       </div>
     </div>
   `;
@@ -219,14 +219,14 @@
       return;
     }
     list.innerHTML = items.map(c => `
-      <div class="cp-item" onclick="window._cpSelectClient(${c.id})">
+      <div class="cp-item" data-cpid="${c.id}">
         <div class="cp-avatar">${initials(c.nom)}</div>
         <div class="cp-info">
           <div class="cp-nom">${c.nom || '—'}</div>
           <div class="cp-sub">${[c.adresse, c.npa, c.ville].filter(Boolean).join(', ') || (c.email || '')}</div>
         </div>
         ${c.numero_client ? `<span class="cp-badge">${c.numero_client}</span>` : ''}
-        <button class="cp-edit-btn" onclick="event.stopPropagation();window._cpOuvrirForm(${c.id})">✏️ Modifier</button>
+        <button class="cp-edit-btn" data-cpedit="${c.id}">✏️ Modifier</button>
       </div>
     `).join('');
   }
@@ -263,17 +263,28 @@
     _loaded = true;
   }
 
-  /* ── Sélection ───────────────────────────────────────────── */
-  window._cpSelectClient = function (id) {
-    const client = _allClients.find(c => c.id === id);
-    if (client && _callback) _callback(client);
-    fermerClientPicker();
-  };
+  /* ── Délégation clics sur la liste ──────────────────────── */
+  document.getElementById('cpList').addEventListener('click', function (e) {
+    // Bouton modifier
+    const editBtn = e.target.closest('[data-cpedit]');
+    if (editBtn) {
+      e.stopPropagation();
+      ouvrirForm(editBtn.dataset.cpedit);
+      return;
+    }
+    // Clic sur la ligne → sélection
+    const item = e.target.closest('[data-cpid]');
+    if (item) {
+      const client = _allClients.find(c => String(c.id) === String(item.dataset.cpid));
+      if (client && _callback) _callback(client);
+      fermerClientPicker();
+    }
+  });
 
   /* ── Ouvrir formulaire ───────────────────────────────────── */
-  window._cpOuvrirForm = function (id) {
-    _editId = id;
-    const client = id ? _allClients.find(c => c.id === id) : null;
+  function ouvrirForm(id) {
+    _editId = id || null;
+    const client = id ? _allClients.find(c => String(c.id) === String(id)) : null;
     document.getElementById('cpFormTitle').textContent = client ? '✏️ Modifier le client' : '➕ Nouveau client';
     sf('cpfNom',        client?.nom);
     sf('cpfNumero',     client?.numero_client);
@@ -285,16 +296,15 @@
     sf('cpfVille',      client?.ville);
     formOverlay.classList.add('open');
     setTimeout(() => document.getElementById('cpfNom').focus(), 80);
-  };
+  }
 
-  /* ── Fermer formulaire ───────────────────────────────────── */
-  window._cpFermerForm = function () {
+  function fermerForm() {
     formOverlay.classList.remove('open');
     _editId = null;
-  };
+  }
 
   /* ── Sauvegarder (create ou update) ─────────────────────── */
-  window._cpSauvegarder = async function () {
+  async function sauvegarder() {
     const nom = gf('cpfNom');
     if (!nom) { document.getElementById('cpfNom').focus(); return; }
 
@@ -332,24 +342,25 @@
     }
 
     // Mettre à jour la liste locale
+    const wasNew = !_editId;
     if (_editId) {
-      const idx = _allClients.findIndex(c => c.id === _editId);
-      if (idx >= 0) _allClients[idx] = { ..._allClients[idx], ...payload };
+      const idx = _allClients.findIndex(c => String(c.id) === String(_editId));
+      if (idx >= 0) _allClients[idx] = { ..._allClients[idx], ...payload, id: _allClients[idx].id };
     } else {
       _allClients.unshift(data);
     }
     _allClients.sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
 
-    window._cpFermerForm();
+    fermerForm();
 
     // Si création → sélectionner automatiquement le nouveau client
-    if (!_editId && data && _callback) {
+    if (wasNew && data && _callback) {
       _callback(data);
       fermerClientPicker();
     } else {
       renderList(filterLocal(document.getElementById('cpSearch').value));
     }
-  };
+  }
 
   /* ── API publique ────────────────────────────────────────── */
   window.ouvrirClientPicker = function (callback) {
@@ -370,6 +381,15 @@
     _callback = null;
   };
 
+  /* ── Boutons header liste ────────────────────────────────── */
+  document.getElementById('cpBtnNew').addEventListener('click', () => ouvrirForm(null));
+  document.getElementById('cpClose').addEventListener('click', fermerClientPicker);
+
+  /* ── Boutons formulaire ──────────────────────────────────── */
+  document.getElementById('cpFormClose').addEventListener('click', fermerForm);
+  document.getElementById('cpfBtnCancel').addEventListener('click', fermerForm);
+  document.getElementById('cpfBtnSave').addEventListener('click', sauvegarder);
+
   /* ── Recherche temps réel ────────────────────────────────── */
   document.getElementById('cpSearch').addEventListener('input', function () {
     clearTimeout(_searchTimer);
@@ -378,12 +398,12 @@
 
   /* ── Fermer sur clic backdrop ────────────────────────────── */
   overlay.addEventListener('click', e => { if (e.target === overlay) fermerClientPicker(); });
-  formOverlay.addEventListener('click', e => { if (e.target === formOverlay) window._cpFermerForm(); });
+  formOverlay.addEventListener('click', e => { if (e.target === formOverlay) fermerForm(); });
 
   /* ── Escape ──────────────────────────────────────────────── */
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (formOverlay.classList.contains('open')) window._cpFermerForm();
+    if (formOverlay.classList.contains('open')) fermerForm();
     else fermerClientPicker();
   });
 
