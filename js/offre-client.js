@@ -239,13 +239,13 @@ window.ajouterVitesse  = ajouterVitesse;
 
 /* ── Niveaux de service (vitesses) ───────────────────────── */
 const VITESSES_DEFAUT = [
-  { label: 'Standard 48h', surcharge: 0   },
-  { label: 'Prioritaire 24h', surcharge: 10 },
-  { label: 'Express', surcharge: 50 },
+  { label: 'Standard 48h',   pct: 60 },
+  { label: 'Prioritaire 24h', pct: 30 },
+  { label: 'Express',          pct: 10 },
 ];
 
-function ajouterVitesse(label = '', surcharge = 0) {
-  vitesses.push({ id: ++_vid, label, surcharge });
+function ajouterVitesse(label = '', pct = 0) {
+  vitesses.push({ id: ++_vid, label, pct });
   renderVitesses();
 }
 
@@ -260,8 +260,8 @@ function syncVitesse(id) {
   if (!row) return;
   const v = vitesses.find(x => x.id === id);
   if (!v) return;
-  v.label     = row.querySelector('.vi-label')?.value || '';
-  v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
+  v.label = row.querySelector('.vi-label')?.value || '';
+  v.pct   = parseFloat(row.querySelector('.vi-pct')?.value) || 0;
 }
 window.syncVitesse = syncVitesse;
 
@@ -274,8 +274,8 @@ function renderVitesses() {
     const id = +row.dataset.vid;
     const v  = vitesses.find(x => x.id === id);
     if (!v) return;
-    v.label     = row.querySelector('.vi-label')?.value || '';
-    v.surcharge = parseFloat(row.querySelector('.vi-surcharge')?.value) || 0;
+    v.label = row.querySelector('.vi-label')?.value || '';
+    v.pct   = parseFloat(row.querySelector('.vi-pct')?.value) || 0;
   });
 
   if (!vitesses.length) {
@@ -283,22 +283,35 @@ function renderVitesses() {
     return;
   }
 
+  const p          = lireParams();
+  const marge      = num('cMarge') || 20;
+  const totalColis = num('cColisJour') || 1;
+  const totalPct   = vitesses.reduce((s, v) => s + v.pct, 0);
+
   body.innerHTML = `
     <div class="vitesse-header-row">
-      <span>Libellé (ex : Standard 48h)</span>
-      <span>Supplément %</span>
+      <span>Libellé</span>
+      <span>% du volume</span>
+      <span>Colis/jour</span>
+      <span>Prix/colis</span>
       <span></span>
     </div>
-    ${vitesses.map(v => `
+    ${vitesses.map(v => {
+      const colisV = Math.max(totalColis * v.pct / 100, 0.01);
+      const ppc    = prixColisFor(colisV, marge, p);
+      return `
       <div class="vitesse-row" data-vid="${v.id}">
-        <input class="vi-label" type="text" list="dlVitesses" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé du niveau de service" oninput="syncVitesse(${v.id})"/>
+        <input class="vi-label" type="text" list="dlVitesses" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé" oninput="syncVitesse(${v.id})"/>
         <div class="vitesse-surcharge-wrap">
-          <input class="vi-surcharge" type="number" value="${v.surcharge}" min="0" step="5" title="Supplément en %" oninput="syncVitesse(${v.id})"/>
+          <input class="vi-pct" type="number" value="${v.pct}" min="0" max="100" step="5" title="Part du volume total (%)" oninput="syncVitesse(${v.id})"/>
           <span>%</span>
         </div>
+        <span class="tranche-val">${fNum(colisV, 0)}</span>
+        <span class="tranche-val">${fCHF(ppc)}</span>
         <button type="button" class="tranche-del" onclick="supprimerVitesse(${v.id})" title="Supprimer">✕</button>
-      </div>
-    `).join('')}
+      </div>`;
+    }).join('')}
+    ${totalPct !== 100 ? `<div class="vitesse-total-warn">⚠ Total : ${totalPct}% — devrait être 100%</div>` : `<div class="vitesse-total-ok">✓ Total : 100%</div>`}
   `;
 }
 
@@ -440,7 +453,7 @@ function genererOffre() {
       <thead>
         <tr>
           <th>Niveau de service</th>
-          <th>Suppl.</th>
+          <th>% volume</th>
           ${tranches.map(t => `<th>${t.colis} col/j${t.label ? '<br><small>' + esc(t.label) + '</small>' : ''}</th>`).join('')}
         </tr>
       </thead>
@@ -448,9 +461,10 @@ function genererOffre() {
         ${vitesses.map(v => `
           <tr>
             <td><strong>${esc(v.label)}</strong></td>
-            <td>${v.surcharge > 0 ? '+' + v.surcharge + '%' : '—'}</td>
+            <td>${v.pct}%</td>
             ${tranches.map(t => {
-              const ppc = prixColisFor(t.colis, t.marge, calcResult) * (1 + v.surcharge / 100);
+              const colisV = Math.max(t.colis * v.pct / 100, 0.01);
+              const ppc    = prixColisFor(colisV, t.marge, calcResult);
               return `<td class="tranche-price">${fCHF(ppc)}</td>`;
             }).join('')}
           </tr>
@@ -483,15 +497,16 @@ function genererOffre() {
     <!-- Vitesses seules -->
     <table class="offre-tranche-table">
       <thead>
-        <tr><th>Niveau de service</th><th>Supplément</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th></tr>
+        <tr><th>Niveau de service</th><th>Volume/jour</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th></tr>
       </thead>
       <tbody>
         ${vitesses.map(v => {
-          const ppc = calcResult.prixParColis * (1 + v.surcharge / 100);
-          const ppj = ppc * calcResult.colisJour;
+          const colisV = Math.max(calcResult.colisJour * v.pct / 100, 0.01);
+          const ppc    = prixColisFor(colisV, calcResult.marge, calcResult);
+          const ppj    = ppc * colisV;
           return `<tr>
             <td><strong>${esc(v.label)}</strong></td>
-            <td>${v.surcharge > 0 ? '+' + v.surcharge + '%' : 'Inclus'}</td>
+            <td>${fNum(colisV, 0)} colis (${v.pct}%)</td>
             <td class="tranche-price">${fCHF(ppc)}</td>
             <td>${fCHF(ppj * 5)}</td>
             <td>${fCHF(ppj * calcResult.joursParMois)}</td>
@@ -634,7 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTranches(lireParams());
 
   // Init vitesses avec les 3 niveaux par défaut
-  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.surcharge));
+  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.pct));
 
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
     'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
