@@ -264,15 +264,31 @@
 
           <div class="row-2">
             <div class="field">
-              <label>Secteur</label>
-              <select id="secteur" onchange="updatePreviewLive()">
-                <option value="">Tous secteurs</option>
-                <option value="e-commerce">E-commerce</option>
-                <option value="transport">Transport / Logistique</option>
-                <option value="commerce">Commerce de détail</option>
-                <option value="restaurant">Restauration</option>
-                <option value="industrie">Industrie</option>
-              </select>
+              <label style="display:flex;align-items:center;justify-content:space-between;">
+                Secteur
+                <button type="button" onclick="ouvrirAjoutSecteur()" style="background:rgba(232,49,26,.15);border:1px solid rgba(232,49,26,.3);color:var(--accent-2);border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:700;">+ Ajouter</button>
+              </label>
+              <div style="display:flex;gap:6px;">
+                <select id="secteur" title="Secteur d'activité" onchange="updatePreviewLive()" style="flex:1;">
+                  <option value="">Tous secteurs</option>
+                  <option value="e-commerce">E-commerce</option>
+                  <option value="transport">Transport / Logistique</option>
+                  <option value="commerce">Commerce de détail</option>
+                  <option value="restaurant">Restauration</option>
+                  <option value="industrie">Industrie</option>
+                </select>
+                <button type="button" id="btnSupprimerSecteur" onclick="supprimerSecteurCustom()" title="Supprimer ce secteur" style="display:none;background:rgba(255,77,79,.12);border:1px solid rgba(255,77,79,.25);color:#ff4d4f;border-radius:8px;padding:0 10px;cursor:pointer;font-size:14px;">🗑</button>
+              </div>
+              <!-- Ajout secteur inline -->
+              <div id="ajoutSecteurPanel" style="display:none;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:12px;">
+                <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Nouveau secteur personnalisé</div>
+                <input type="text" id="newSecteurLabel" placeholder="Ex: Pharmacie, Médical, Horlogerie…" style="width:100%;margin-bottom:8px;"/>
+                <input type="text" id="newSecteurKeyword" placeholder="Mot-clé OSM (optionnel) — ex: pharmacy" style="width:100%;margin-bottom:10px;"/>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" onclick="sauvegarderSecteurCustom()" style="flex:1;background:var(--accent);border:none;color:#fff;border-radius:8px;padding:8px;font-size:13px;font-weight:700;cursor:pointer;">✓ Ajouter</button>
+                  <button type="button" onclick="document.getElementById('ajoutSecteurPanel').style.display='none'" style="background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">Annuler</button>
+                </div>
+              </div>
             </div>
             <div class="field">
               <label>Nb max prospects</label>
@@ -423,6 +439,95 @@
   function showLoad(v){document.getElementById('loader').classList.toggle('on',v);}
 
   // ===== OVERPASS SEARCH =====
+  // ── Secteurs personnalisés (localStorage) ──────────────────────
+  const CUSTOM_SECTEURS_KEY = 'colixo_custom_secteurs';
+
+  function chargerSecteursCustom() {
+    try { return JSON.parse(localStorage.getItem(CUSTOM_SECTEURS_KEY) || '[]'); }
+    catch { return []; }
+  }
+
+  function sauvegarderSecteursCustom(list) {
+    localStorage.setItem(CUSTOM_SECTEURS_KEY, JSON.stringify(list));
+  }
+
+  function injecterSecteursCustom() {
+    const sel = document.getElementById('secteur');
+    // Supprimer les options custom existantes
+    Array.from(sel.options).filter(o => o.dataset.custom).forEach(o => o.remove());
+    const list = chargerSecteursCustom();
+    if (list.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = '— Mes secteurs —';
+      list.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.value;
+        opt.textContent = s.label;
+        opt.dataset.custom = '1';
+        grp.appendChild(opt);
+      });
+      sel.appendChild(grp);
+    }
+  }
+
+  function ouvrirAjoutSecteur() {
+    const panel = document.getElementById('ajoutSecteurPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('newSecteurLabel').focus();
+  }
+
+  function sauvegarderSecteurCustom() {
+    const label = document.getElementById('newSecteurLabel').value.trim();
+    if (!label) { toast('⚠️ Saisissez un nom de secteur'); return; }
+    const keyword = document.getElementById('newSecteurKeyword').value.trim();
+    const value = 'custom_' + label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    // Ajouter le filtre OSM dynamiquement
+    const osmFilter = keyword
+      ? `["name"~"${keyword}",i]`
+      : `["name"~"${label}",i]`;
+    SECTEUR_FILTERS[value] = osmFilter;
+    // Sauvegarder
+    const list = chargerSecteursCustom();
+    if (!list.find(s => s.value === value)) {
+      list.push({ label, value, osmFilter });
+      sauvegarderSecteursCustom(list);
+    }
+    injecterSecteursCustom();
+    // Sélectionner le nouveau secteur
+    document.getElementById('secteur').value = value;
+    document.getElementById('ajoutSecteurPanel').style.display = 'none';
+    document.getElementById('newSecteurLabel').value = '';
+    document.getElementById('newSecteurKeyword').value = '';
+    majBoutonSupprimer();
+    toast('✅ Secteur "' + label + '" ajouté');
+  }
+
+  function supprimerSecteurCustom() {
+    const sel = document.getElementById('secteur');
+    const val = sel.value;
+    if (!val.startsWith('custom_')) { toast('Seuls les secteurs personnalisés peuvent être supprimés'); return; }
+    const list = chargerSecteursCustom().filter(s => s.value !== val);
+    sauvegarderSecteursCustom(list);
+    delete SECTEUR_FILTERS[val];
+    injecterSecteursCustom();
+    sel.value = '';
+    majBoutonSupprimer();
+    toast('🗑 Secteur supprimé');
+  }
+
+  function majBoutonSupprimer() {
+    const val = document.getElementById('secteur').value;
+    document.getElementById('btnSupprimerSecteur').style.display = val.startsWith('custom_') ? '' : 'none';
+  }
+
+  document.getElementById('secteur').addEventListener('change', majBoutonSupprimer);
+
+  // Init : charger les filtres custom en mémoire et dans le select
+  (function initSecteursCustom() {
+    chargerSecteursCustom().forEach(s => { SECTEUR_FILTERS[s.value] = s.osmFilter; });
+    injecterSecteursCustom();
+  })();
+
   const SECTEUR_FILTERS={
     'e-commerce':'["shop"]',
     'transport':'["office"~"logistics|transport|shipping|courier",i]',
