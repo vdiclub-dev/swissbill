@@ -299,8 +299,8 @@ function renderVitesses() {
   const totalColis = num('cColisJour') || 1;
   const totalPct   = vitesses.reduce((s, v) => s + v.pct, 0);
 
-  // Coût de revient de base (0% marge, volume total)
-  const coutBase = prixColisFor(totalColis, 0, p);
+  // Prix de vente de base (avec marge) — même base que les catégories de poids
+  const coutBase = prixColisFor(totalColis, marge, p);
 
   body.innerHTML = `
     <div class="vitesse-header-row">
@@ -483,7 +483,7 @@ function genererOffre() {
             <td><strong>${esc(v.label)}</strong></td>
             <td>${v.pct}%</td>
             ${tranches.map(t => {
-              const coutBase = prixColisFor(1, 0, calcResult);
+              const coutBase = prixColisFor(1, calcResult.marge, calcResult);
               const basePrice = t.prixVente ?? coutBase;
               const ppc = v.prixVente ?? (basePrice * (1 + v.surcharge / 100));
               return `<td class="tranche-price">${fCHF(ppc)}</td>`;
@@ -523,7 +523,7 @@ function genererOffre() {
       </thead>
       <tbody>
         ${(() => {
-          const coutBase = prixColisFor(calcResult.colisJour, 0, calcResult);
+          const coutBase = prixColisFor(calcResult.colisJour, calcResult.marge, calcResult);
           return vitesses.map(v => {
             const colisV = calcResult.colisJour * v.pct / 100;
             const ppc    = v.prixVente ?? (coutBase * (1 + v.surcharge / 100));
