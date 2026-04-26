@@ -207,7 +207,7 @@ function renderTranches(p) {
         <input class="ti-label" type="text" list="dlTranches" value="${esc(t.label)}" placeholder="Ex : Volume standard" title="Description" oninput="syncTranche(${t.id})"/>
         <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
         <span class="tranche-val tranche-cout">${fCHF(cout)}</span>
-        <input class="ti-prix" type="number" value="${fNum(pv,2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="recalcTranches()"/>
+        <input class="ti-prix" type="number" value="${pv.toFixed(2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="recalcTranches()"/>
         <span class="tranche-val ${mc}">${marge >= -99 ? fNum(marge,1)+'%' : '—'}</span>
         <span class="tranche-val">${fCHF(ppm)}</span>
         <button type="button" class="tranche-del" onclick="supprimerTranche(${t.id})" title="Supprimer">✕</button>
@@ -322,7 +322,7 @@ function renderVitesses() {
         </div>
         <span class="tranche-val">${fNum(colisV, 0)}</span>
         <span class="tranche-val tranche-cout">${fCHF(coutBase)}</span>
-        <input class="vi-prix" type="number" value="${fNum(pv,2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="syncVitesse(${v.id})"/>
+        <input class="vi-prix" type="number" value="${pv.toFixed(2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="syncVitesse(${v.id})"/>
         <span class="tranche-val ${mc}">${fNum(marge,1)}%</span>
         <button type="button" class="tranche-del" onclick="supprimerVitesse(${v.id})" title="Supprimer">✕</button>
       </div>`;
