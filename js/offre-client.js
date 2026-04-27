@@ -67,11 +67,10 @@ function activeSectionIdx() {
   return sections.findIndex(s => s.classList.contains('active'));
 }
 
-/* ── État tranches + vitesses ────────────────────────────── */
+/* ── État tranches ────────────────────────────────────────── */
 let tranches = [];
 let _tid = 0;
-let vitesses = [];
-let _vid = 0;
+let _sid = 0;
 
 /* ── Paramètres de base (partagés par tous les calculs) ──── */
 function lireParams() {
@@ -154,13 +153,18 @@ function calculer() {
 }
 
 /* ── Tranches tarifaires ─────────────────────────────────── */
+function _defaultSpeeds() {
+  return [
+    { id: ++_sid, label: 'Standard 48h',    supplement: 0    },
+    { id: ++_sid, label: 'Prioritaire 24h', supplement: 2.00 },
+    { id: ++_sid, label: 'Express',          supplement: 5.00 },
+  ];
+}
+
 function ajouterTranche() {
   const colisDefaut = num('cColisJour') || 30;
-  const p = lireParams();
-  const marge = num('cMarge') || 20;
-  const prixAuto = prixColisFor(colisDefaut, marge, p);
-  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, prixVente: prixAuto });
-  renderTranches(p);
+  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, speeds: _defaultSpeeds() });
+  renderTranches(lireParams());
 }
 
 function supprimerTranche(id) {
@@ -168,6 +172,41 @@ function supprimerTranche(id) {
   renderTranches(lireParams());
 }
 window.supprimerTranche = supprimerTranche;
+
+function ajouterSpeed(tid) {
+  _syncAllTranchesFromDOM();
+  const t = tranches.find(x => x.id === tid);
+  if (!t) return;
+  t.speeds.push({ id: ++_sid, label: '', supplement: 0 });
+  renderTranches(lireParams());
+}
+window.ajouterSpeed = ajouterSpeed;
+
+function supprimerSpeed(tid, sid) {
+  _syncAllTranchesFromDOM();
+  const t = tranches.find(x => x.id === tid);
+  if (!t) return;
+  t.speeds = t.speeds.filter(s => s.id !== sid);
+  renderTranches(lireParams());
+}
+window.supprimerSpeed = supprimerSpeed;
+
+function _syncAllTranchesFromDOM() {
+  document.querySelectorAll('.tranche-block').forEach(block => {
+    const tid = +block.dataset.tid;
+    const t   = tranches.find(x => x.id === tid);
+    if (!t) return;
+    t.label = block.querySelector('.ti-label')?.value || '';
+    t.colis = parseFloat(block.querySelector('.ti-colis')?.value) || t.colis;
+    block.querySelectorAll('.speed-row').forEach(row => {
+      const sid = +row.dataset.sid;
+      const s   = t.speeds.find(x => x.id === sid);
+      if (!s) return;
+      s.label      = row.querySelector('.si-label')?.value || '';
+      s.supplement = parseFloat(row.querySelector('.si-supp')?.value) || 0;
+    });
+  });
+}
 
 function renderTranches(p) {
   const body = $('tranchesBody');
@@ -177,168 +216,62 @@ function renderTranches(p) {
     return;
   }
 
-  // Sync avant re-render
-  body.querySelectorAll('.tranche-row').forEach(row => {
-    const id = +row.dataset.tid;
-    const t  = tranches.find(x => x.id === id);
-    if (!t) return;
-    t.label     = row.querySelector('.ti-label')?.value || '';
-    t.colis     = parseFloat(row.querySelector('.ti-colis')?.value)    || t.colis;
-    t.prixVente = parseFloat(row.querySelector('.ti-prix')?.value)     || t.prixVente;
-  });
+  _syncAllTranchesFromDOM();
+  const marge = num('cMarge') || 20;
 
-  const coutBase = prixColisFor(1, 0, p); // coût de revient pur (0% marge)
+  body.innerHTML = tranches.map(t => {
+    const coutBase  = prixColisFor(t.colis, 0, p);
+    const basePrice = prixColisFor(t.colis, marge, p);
 
-  body.innerHTML = `
-    <div class="tranche-header-row">
-      <span>Description</span>
-      <span>Colis/j</span>
-      <span>Coût/colis</span>
-      <span>Prix vente</span>
-      <span>Marge</span>
-      <span>Total/mois</span>
-      <span></span>
-    </div>
-    ${tranches.map(t => {
-      const cout  = coutBase;
-      const pv    = t.prixVente || cout;
-      const marge = pv > 0 ? (pv - cout) / pv * 100 : -999;
-      const ppj   = pv * t.colis;
-      const ppm   = ppj * p.joursParMois;
-      const mc    = marge >= 15 ? 'marge-ok' : marge >= 0 ? 'marge-warn' : 'marge-loss';
-      return `
-      <div class="tranche-row" data-tid="${t.id}">
-        <input class="ti-label" type="text" list="dlTranches" value="${esc(t.label)}" placeholder="Ex : Volume standard" title="Description" oninput="syncTranche(${t.id})"/>
-        <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
-        <span class="tranche-val tranche-cout">${fCHF(cout)}</span>
-        <input class="ti-prix" type="number" value="${pv.toFixed(2)}" min="0" step="0.05" title="Votre prix de vente au colis" oninput="recalcTranches()"/>
-        <span class="tranche-val ${mc}">${marge >= -99 ? fNum(marge,1)+'%' : '—'}</span>
-        <span class="tranche-val">${fCHF(ppm)}</span>
-        <button type="button" class="tranche-del" onclick="supprimerTranche(${t.id})" title="Supprimer">✕</button>
-      </div>`;
-    }).join('')}
-  `;
-}
-
-function syncTranche(id) {
-  const row = document.querySelector(`.tranche-row[data-tid="${id}"]`);
-  if (!row) return;
-  const t = tranches.find(x => x.id === id);
-  if (t) t.label = row.querySelector('.ti-label')?.value || '';
-}
-
-function recalcTranches() {
-  // Sync state from DOM then re-render
-  const p = lireParams();
-  document.querySelectorAll('.tranche-row').forEach(row => {
-    const id = +row.dataset.tid;
-    const t  = tranches.find(x => x.id === id);
-    if (!t) return;
-    t.label     = row.querySelector('.ti-label')?.value || '';
-    t.colis     = parseFloat(row.querySelector('.ti-colis')?.value) || t.colis;
-    t.prixVente = parseFloat(row.querySelector('.ti-prix')?.value)  || t.prixVente;
-  });
-  renderTranches(p);
-}
-window.ajouterTranche  = ajouterTranche;
-window.recalcTranches  = recalcTranches;
-window.syncTranche     = syncTranche;
-window.ajouterVitesse  = ajouterVitesse;
-
-/* ── Niveaux de service (vitesses) ───────────────────────── */
-const VITESSES_DEFAUT = [
-  { label: 'Standard 48h',    pct: 60, supplement: 0    },
-  { label: 'Prioritaire 24h', pct: 30, supplement: 2.00 },
-  { label: 'Express',          pct: 10, supplement: 5.00 },
-];
-
-function ajouterVitesse(label = '', pct = 0, supplement = 0) {
-  vitesses.push({ id: ++_vid, label, pct, supplement });
-  renderVitesses();
-}
-
-function supprimerVitesse(id) {
-  vitesses = vitesses.filter(v => v.id !== id);
-  renderVitesses();
-}
-window.supprimerVitesse = supprimerVitesse;
-
-function syncVitesse(id) {
-  const row = document.querySelector(`.vitesse-row[data-vid="${id}"]`);
-  if (!row) return;
-  const v = vitesses.find(x => x.id === id);
-  if (!v) return;
-  v.label      = row.querySelector('.vi-label')?.value || '';
-  v.pct        = parseFloat(row.querySelector('.vi-pct')?.value)   || 0;
-  v.supplement = parseFloat(row.querySelector('.vi-supp')?.value)  || 0;
-  v.prixVente  = parseFloat(row.querySelector('.vi-prix')?.value)  || null;
-  renderVitesses();
-}
-window.syncVitesse = syncVitesse;
-
-function renderVitesses() {
-  const body = $('vitessesBody');
-  if (!body) return;
-
-  // Sync avant re-render
-  body.querySelectorAll('.vitesse-row').forEach(row => {
-    const id = +row.dataset.vid;
-    const v  = vitesses.find(x => x.id === id);
-    if (!v) return;
-    v.label      = row.querySelector('.vi-label')?.value || '';
-    v.pct        = parseFloat(row.querySelector('.vi-pct')?.value)  || 0;
-    v.supplement = parseFloat(row.querySelector('.vi-supp')?.value) || 0;
-  });
-
-  if (!vitesses.length) {
-    body.innerHTML = '<div class="vitesses-empty">Aucun niveau défini — cliquez "+ Ajouter" pour en créer.</div>';
-    return;
-  }
-
-  const p          = lireParams();
-  const marge      = num('cMarge') || 20;
-  const totalColis = num('cColisJour') || 1;
-  const totalPct   = vitesses.reduce((s, v) => s + v.pct, 0);
-
-  // Prix de vente de base (avec marge) — même base que les catégories de poids
-  const coutBase = prixColisFor(totalColis, marge, p);
-
-  body.innerHTML = `
-    <div class="vitesse-header-row">
-      <span>Libellé</span>
-      <span>% volume</span>
-      <span>Colis/j</span>
-      <span>Suppl. CHF</span>
-      <span>Prix vente</span>
-      <span>Marge</span>
-      <span></span>
-    </div>
-    ${vitesses.map(v => {
-      const colisV = totalColis * v.pct / 100;
-      const supp   = v.supplement ?? 0;
-      const pv     = v.prixVente ?? (coutBase + supp);
+    const speedsHTML = t.speeds.map(s => {
+      const pv     = basePrice + s.supplement;
       const margeP = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
       const mc     = margeP >= 15 ? 'marge-ok' : margeP >= 0 ? 'marge-warn' : 'marge-loss';
       return `
-      <div class="vitesse-row" data-vid="${v.id}">
-        <input class="vi-label" type="text" list="dlVitesses" value="${esc(v.label)}" placeholder="Ex : Standard 48h" title="Libellé" oninput="syncVitesse(${v.id})"/>
-        <div class="vitesse-surcharge-wrap">
-          <input class="vi-pct" type="number" value="${v.pct}" min="0" max="100" step="5" title="Part du volume (%)" oninput="syncVitesse(${v.id})"/>
-          <span>%</span>
+        <div class="speed-row" data-sid="${s.id}">
+          <input class="si-label" type="text" list="dlVitesses" value="${esc(s.label)}" placeholder="Ex : Standard 48h" oninput="recalcTranches()"/>
+          <div class="speed-supp-wrap">
+            <span>+</span>
+            <input class="si-supp" type="number" value="${s.supplement.toFixed(2)}" min="0" step="0.50" title="Supplément CHF/colis" oninput="recalcTranches()"/>
+            <span class="speed-supp-unit">CHF</span>
+          </div>
+          <span class="tranche-val">${fCHF(pv)}</span>
+          <span class="tranche-val ${mc}">${fNum(margeP, 1)}%</span>
+          <button type="button" class="tranche-del" onclick="supprimerSpeed(${t.id}, ${s.id})" title="Supprimer">✕</button>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="tranche-block" data-tid="${t.id}">
+      <div class="tranche-main">
+        <input class="ti-label" type="text" list="dlTranches" value="${esc(t.label)}" placeholder="Ex : Volume standard" oninput="recalcTranches()"/>
+        <div class="tranche-colis-wrap">
+          <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
+          <span class="tranche-colis-unit">col/j</span>
         </div>
-        <span class="tranche-val">${fNum(colisV, 0)}</span>
-        <div class="vitesse-surcharge-wrap">
-          <span>+</span>
-          <input class="vi-supp" type="number" value="${supp.toFixed(2)}" min="0" step="0.50" title="Supplément fixe CHF par colis" oninput="syncVitesse(${v.id})"/>
+        <span class="tranche-val tranche-cout" title="Coût de revient">${fCHF(coutBase)}</span>
+        <button type="button" class="btn-ghost btn-sm tranche-add-speed" onclick="ajouterSpeed(${t.id})">+ Délai</button>
+        <button type="button" class="tranche-del" onclick="supprimerTranche(${t.id})" title="Supprimer la tranche">✕</button>
+      </div>
+      <div class="speeds-body">
+        <div class="speed-header-row">
+          <span>Délai de livraison</span>
+          <span>Supplément</span>
+          <span>Prix/colis</span>
+          <span>Marge</span>
+          <span></span>
         </div>
-        <input class="vi-prix" type="number" value="${pv.toFixed(2)}" min="0" step="0.05" title="Prix de vente final au colis" oninput="syncVitesse(${v.id})"/>
-        <span class="tranche-val ${mc}">${fNum(margeP,1)}%</span>
-        <button type="button" class="tranche-del" onclick="supprimerVitesse(${v.id})" title="Supprimer">✕</button>
-      </div>`;
-    }).join('')}
-    ${totalPct !== 100 ? `<div class="vitesse-total-warn">⚠ Total volumes : ${totalPct}%</div>` : `<div class="vitesse-total-ok">✓ Total volumes : 100%</div>`}
-  `;
+        ${speedsHTML || '<div class="tranches-empty" style="padding:10px 0;font-size:.8rem;">Aucun délai — cliquez "+ Délai"</div>'}
+      </div>
+    </div>`;
+  }).join('');
 }
+
+function recalcTranches() {
+  renderTranches(lireParams());
+}
+window.ajouterTranche = ajouterTranche;
+window.recalcTranches = recalcTranches;
 
 /* ── Génération offre ────────────────────────────────────── */
 function genererOffre() {
@@ -471,127 +404,52 @@ function genererOffre() {
   </div>` : ''}
 
   <div class="offre-section offre-tarif-section">
-    <div class="offre-section-title">5. TARIFICATION PROPOSÉE</div>
-    ${(tranches.length && vitesses.length) ? `
-    <!-- Matrice volume × niveau de service -->
-    <table class="offre-tranche-table">
-      <thead>
-        <tr>
-          <th>Niveau de service</th>
-          <th>% volume</th>
-          ${tranches.map(t => `<th>${t.colis} col/j${t.label ? '<br><small>' + esc(t.label) + '</small>' : ''}</th>`).join('')}
-        </tr>
-      </thead>
-      <tbody>
-        ${vitesses.map(v => `
-          <tr>
-            <td><strong>${esc(v.label)}</strong></td>
-            <td>${v.pct}%</td>
-            ${tranches.map(t => {
-              const coutBase = prixColisFor(1, calcResult.marge, calcResult);
-              const basePrice = t.prixVente ?? coutBase;
-              const ppc = v.prixVente ?? (basePrice + (v.supplement ?? 0));
-              return `<td class="tranche-price">${fCHF(ppc)}</td>`;
-            }).join('')}
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    ` : tranches.length ? `
-    <!-- Tranches seules -->
-    <table class="offre-tranche-table">
-      <thead>
-        <tr>
-          <th>Volume</th><th>Description</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${tranches.map(t => {
-          const coutBase = prixColisFor(1, 0, calcResult);
-          const ppc = t.prixVente ?? coutBase;
-          const ppj = ppc * t.colis;
-          return `<tr>
-            <td><strong>${t.colis} colis/jour</strong></td>
-            <td>${esc(t.label) || '—'}</td>
-            <td class="tranche-price">${fCHF(ppc)}</td>
-            <td>${fCHF(ppj * 5)}</td>
-            <td>${fCHF(ppj * calcResult.joursParMois)}</td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>
-    ` : vitesses.length ? `
-    <!-- Vitesses seules -->
-    <table class="offre-tranche-table">
-      <thead>
-        <tr><th>Niveau de service</th><th>Volume/jour</th><th>Suppl.</th><th>Prix / colis</th><th>Prix / semaine</th><th>Prix / mois</th></tr>
-      </thead>
-      <tbody>
-        ${(() => {
-          const coutBase = prixColisFor(calcResult.colisJour, calcResult.marge, calcResult);
-          return vitesses.map(v => {
-            const colisV = calcResult.colisJour * v.pct / 100;
-            const ppc    = v.prixVente ?? (coutBase + (v.supplement ?? 0));
-            const ppj    = ppc * colisV;
-            return `<tr>
-              <td><strong>${esc(v.label)}</strong></td>
-              <td>${fNum(colisV, 0)} colis (${v.pct}%)</td>
-              <td class="tranche-price">${fCHF(ppc)}</td>
-              <td>${fCHF(ppj * 5)}</td>
-              <td>${fCHF(ppj * calcResult.joursParMois)}</td>
-            </tr>`;
-          }).join('');
-        })()}
-      </tbody>
-    </table>
-    ` : `
-    <!-- Prix simple -->
-    <div class="offre-tarif-grid">
-      <div class="offre-tarif-card primary">
-        <div class="offre-tarif-lbl">Prix journalier</div>
-        <div class="offre-tarif-val">${fCHF(calcResult.prixClientJour)}</div>
-        <div class="offre-tarif-sub">CHF HT / jour ouvrable</div>
-      </div>
-      <div class="offre-tarif-card">
-        <div class="offre-tarif-lbl">Prix mensuel estimé</div>
-        <div class="offre-tarif-val">${fCHF(calcResult.prixClientMois)}</div>
-        <div class="offre-tarif-sub">CHF HT / mois (${calcResult.joursParMois} jours)</div>
-      </div>
-      <div class="offre-tarif-card">
-        <div class="offre-tarif-lbl">Prix par colis</div>
-        <div class="offre-tarif-val">${fCHF(calcResult.prixParColis)}</div>
-        <div class="offre-tarif-sub">CHF HT / colis</div>
-      </div>
-    </div>
-    `}
-    <p class="offre-tarif-note">Prix indicatifs, hors TVA. Sous réserve de validation opérationnelle.</p>
+    <div class="offre-section-title">5. TARIFICATION PAR CATÉGORIE DE POIDS</div>
+    ${(() => {
+      // Construire les lignes : une source de prix par tranche ou prix de base
+      const sources = tranches.length
+        ? tranches.map(t => ({
+            label: t.label || (tranches.length > 1 ? `${t.colis} colis/jour` : ''),
+            speeds: t.speeds,
+            basePrice: prixColisFor(t.colis, calcResult.marge, calcResult),
+          }))
+        : [{
+            label: '',
+            speeds: [{ label: 'Standard', supplement: 0 }],
+            basePrice: calcResult.prixParColis,
+          }];
 
-    <!-- Grille poids -->
-    <div class="offre-poids-titre">Tarification par catégorie de poids</div>
-    <table class="offre-tranche-table offre-poids-table">
-      <thead>
-        <tr>
-          <th>Catégorie</th>
-          <th>Poids du colis</th>
-          <th>Supplément</th>
-          <th>Prix / colis</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Standard</strong></td>
-          <td>0 – 15 kg</td>
-          <td>—</td>
-          <td class="tranche-price">${fCHF(calcResult.prixParColis)}</td>
-        </tr>
-        <tr>
-          <td><strong>Lourd</strong></td>
-          <td>15 – 30 kg</td>
-          <td>+20%</td>
-          <td class="tranche-price">${fCHF(calcResult.prixParColis * 1.20)}</td>
-        </tr>
-      </tbody>
-    </table>
+      return sources.map(src => `
+        ${src.label ? `<div class="offre-tarif-sous-titre">${esc(src.label)}</div>` : ''}
+        <table class="offre-tranche-table offre-tarif-simple">
+          <thead>
+            <tr>
+              <th>Catégorie</th>
+              <th>Poids du colis</th>
+              <th>Prix du colis</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${src.speeds.map(s => {
+              const pStd = src.basePrice + s.supplement;
+              const pLrd = pStd * 1.20;
+              return `
+              <tr>
+                <td><strong>${esc(s.label) || '—'}</strong></td>
+                <td>0 – 15 kg</td>
+                <td class="tranche-price">${fCHF(pStd)}</td>
+              </tr>
+              <tr class="offre-row-lourd">
+                <td></td>
+                <td>15 – 30 kg</td>
+                <td class="tranche-price">${fCHF(pLrd)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `).join('<div style="height:14px;"></div>');
+    })()}
+    <p class="offre-tarif-note">Prix au colis, hors TVA. Colis 15–30 kg majorés de 20%. Sous réserve de validation opérationnelle.</p>
   </div>
 
   <div class="offre-section">
@@ -704,9 +562,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Recalcul en temps réel sur les champs de la section calcul
   // Init tranches vide
   renderTranches(lireParams());
-
-  // Init vitesses avec les 3 niveaux par défaut
-  VITESSES_DEFAUT.forEach(v => ajouterVitesse(v.label, v.pct, v.supplement));
 
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
     'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
