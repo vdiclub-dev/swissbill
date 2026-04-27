@@ -1,6 +1,6 @@
 const { takeDailyQuota } = require("./_rate-limit");
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
 function json(res, status, payload, extraHeaders) {
   if (extraHeaders) {
@@ -40,12 +40,12 @@ module.exports = async function handler(req, res) {
     }, quotaHeaders);
   }
 
-  const apiKey = process.env.BRIMOT_RESEND_API_KEY;
+  const apiKey = process.env.BRIMOT_BREVO_API_KEY;
   const from = process.env.BRIMOT_MAIL_FROM;
 
   if (!apiKey || !from) {
     return json(res, 503, {
-      error: "Service mail non configure (BRIMOT_RESEND_API_KEY ou BRIMOT_MAIL_FROM manquant)"
+      error: "Service mail non configure (BRIMOT_BREVO_API_KEY ou BRIMOT_MAIL_FROM manquant)"
     }, quotaHeaders);
   }
 
@@ -62,18 +62,18 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(RESEND_ENDPOINT, {
+    const response = await fetch(BREVO_ENDPOINT, {
       method: "POST",
       headers: {
-        Authorization: "Bearer " + apiKey,
+        "api-key": apiKey,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from,
-        to: [to],
+        sender: { email: from },
+        to: [{ email: to }],
         subject,
-        text,
-        html
+        textContent: text,
+        htmlContent: html
       })
     });
 
@@ -87,7 +87,7 @@ module.exports = async function handler(req, res) {
 
     return json(res, 200, {
       ok: true,
-      id: data && data.id ? data.id : null,
+      id: data && data.messageId ? data.messageId : null,
       quota
     }, quotaHeaders);
   } catch (error) {
