@@ -145,9 +145,9 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Adresse email destinataire invalide." });
   }
 
-  const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
+  const brevoKey = Deno.env.get("BREVO_API_KEY")?.trim();
   const from = (
-    Deno.env.get("BRIMOT_FROM_EMAIL") ?? "Brimot Nettoyage <onboarding@resend.dev>"
+    Deno.env.get("BRIMOT_FROM_EMAIL") ?? "info@saniguard.ch"
   ).trim();
 
   let replyTo = (payload.reply_to ?? "").trim();
@@ -157,11 +157,11 @@ Deno.serve(async (req) => {
     replyTo = rt && isValidEmailLoose(rt) ? rt : "";
   }
 
-  if (!resendKey) {
+  if (!brevoKey) {
     return json({
       ok: false,
       error:
-        "RESEND_API_KEY manquant : ajoutez le secret dans Supabase (Edge Functions → Secrets).",
+        "BREVO_API_KEY manquant : ajoutez le secret dans Supabase (Edge Functions → Secrets).",
     });
   }
 
@@ -178,34 +178,34 @@ Deno.serve(async (req) => {
     `</div>`;
 
   const textBody = bodyTextWithoutViewUrl(bodyText, viewUrl);
-  const resendBody: Record<string, unknown> = {
-    from,
-    to: [to],
+  const brevoBody: Record<string, unknown> = {
+    sender: { email: from },
+    to: [{ email: to }],
     subject,
-    text: textBody + (viewUrl ? `\n\nVoir la facture en ligne :\n${viewUrl}\n` : ""),
-    html: bodyHtml,
+    textContent: textBody + (viewUrl ? `\n\nVoir la facture en ligne :\n${viewUrl}\n` : ""),
+    htmlContent: bodyHtml,
   };
 
   if (replyTo) {
-    resendBody.reply_to = replyTo;
+    brevoBody.replyTo = { email: replyTo };
   }
 
   if (pdfB64) {
-    resendBody.attachments = [{ filename: pdfName, content: pdfB64 }];
+    brevoBody.attachment = [{ name: pdfName, content: pdfB64 }];
   }
 
-  const res = await fetch("https://api.resend.com/emails", {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${resendKey}`,
+      "api-key": brevoKey,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(resendBody),
+    body: JSON.stringify(brevoBody),
   });
 
   const resText = await res.text();
   if (!res.ok) {
-    console.error("Resend error", res.status, resText);
+    console.error("Brevo error", res.status, resText);
     let detail = resText.slice(0, 400);
     try {
       const j = JSON.parse(resText) as { message?: string };
@@ -213,19 +213,13 @@ Deno.serve(async (req) => {
     } catch {
       /* ignore */
     }
-    let hint =
-      " Vérifiez aussi l’expéditeur (secret BRIMOT_FROM_EMAIL ou domaine vérifié chez Resend) et les destinataires autorisés.";
+    let hint = " Vérifiez BRIMOT_FROM_EMAIL et BREVO_API_KEY dans Supabase → Edge Functions → Secrets.";
     if (res.status === 401) {
-      hint =
-        " La clé Resend est refusée : créez une clé sur resend.com/api-keys, puis dans Supabase → Project Settings → Edge Functions → Secrets, définissez ou remplacez RESEND_API_KEY (souvent pas besoin de redéployer la fonction).";
-    }
-    if (res.status === 403) {
-      hint =
-        " Resend limite les tests : sans domaine 100 % validé pour l’envoi, seul le destinataire = l’email du compte Resend est accepté. Pour envoyer aux clients : (1) resend.com/domains → saniguard.ch avec « Enable Sending » entièrement vert (MX + TXT sur l’hôte send) ; (2) Supabase → secret BRIMOT_FROM_EMAIL = « Brimot Nettoyage <info@saniguard.ch> » (ou autre adresse @saniguard.ch). En attendant, testez avec le destinataire = email du compte Resend.";
+      hint = " Clé Brevo refusée : vérifiez BREVO_API_KEY dans Supabase → Edge Functions → Secrets.";
     }
     return json({
       ok: false,
-      error: `Resend a refusé l’envoi (${res.status}). ${detail} —${hint}`,
+      error: `Brevo a refusé l’envoi (${res.status}). ${detail} —${hint}`,
     });
   }
 

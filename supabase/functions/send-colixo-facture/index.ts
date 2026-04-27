@@ -154,11 +154,11 @@ Deno.serve(async (req) => {
     });
   }
 
-  const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
+  const brevoKey = Deno.env.get("BREVO_API_KEY")?.trim();
   const from = (
     Deno.env.get("COLIXO_FROM_EMAIL")?.trim() ||
     Deno.env.get("BRIMOT_FROM_EMAIL")?.trim() ||
-    "Colixo <onboarding@resend.dev>"
+    "info@colixo.ch"
   );
 
   let replyTo = (payload.reply_to ?? "").trim();
@@ -168,11 +168,11 @@ Deno.serve(async (req) => {
     replyTo = rt && isValidEmailLoose(rt) ? rt : "";
   }
 
-  if (!resendKey) {
+  if (!brevoKey) {
     return json({
       ok: false,
       error:
-        "RESEND_API_KEY manquant : ajoutez le secret dans Supabase (Edge Functions → Secrets).",
+        "BREVO_API_KEY manquant : ajoutez le secret dans Supabase (Edge Functions → Secrets).",
     });
   }
 
@@ -204,33 +204,33 @@ Deno.serve(async (req) => {
     (viewUrl ? `\n\nVoir la facture en ligne :\n${viewUrl}\n` : "") +
     (pdfB64 ? `\n\n(PDF joint : ${pdfName})\n` : "");
 
-  const resendBody: Record<string, unknown> = {
-    from,
-    to: [to],
+  const brevoBody: Record<string, unknown> = {
+    sender: { email: from },
+    to: [{ email: to }],
     subject,
-    text:
+    textContent:
       textCombined ||
       (htmlFull ? "Facture Colixo — ouvrez la version HTML de ce message." : ""),
-    html: htmlEmail,
+    htmlContent: htmlEmail,
   };
 
-  if (replyTo) resendBody.reply_to = replyTo;
+  if (replyTo) brevoBody.replyTo = { email: replyTo };
   if (pdfB64) {
-    resendBody.attachments = [{ filename: pdfName, content: pdfB64 }];
+    brevoBody.attachment = [{ name: pdfName, content: pdfB64 }];
   }
 
-  const res = await fetch("https://api.resend.com/emails", {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${resendKey}`,
+      "api-key": brevoKey,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(resendBody),
+    body: JSON.stringify(brevoBody),
   });
 
   const resText = await res.text();
   if (!res.ok) {
-    console.error("Resend error", res.status, resText);
+    console.error("Brevo error", res.status, resText);
     let detail = resText.slice(0, 400);
     try {
       const j = JSON.parse(resText) as { message?: string };
@@ -238,19 +238,13 @@ Deno.serve(async (req) => {
     } catch {
       /* ignore */
     }
-    let hint =
-      " Vérifiez COLIXO_FROM_EMAIL ou BRIMOT_FROM_EMAIL (domaine vérifié Resend).";
+    let hint = " Vérifiez COLIXO_FROM_EMAIL ou BRIMOT_FROM_EMAIL et BREVO_API_KEY dans Supabase → Edge Functions → Secrets.";
     if (res.status === 401) {
-      hint =
-        " Clé Resend : vérifiez RESEND_API_KEY dans Supabase → Edge Functions → Secrets.";
-    }
-    if (res.status === 403) {
-      hint =
-        " Domaine Resend ou destinataire de test : vérifiez resend.com/domains et l’adresse From.";
+      hint = " Clé Brevo refusée : vérifiez BREVO_API_KEY dans Supabase → Edge Functions → Secrets.";
     }
     return json({
       ok: false,
-      error: `Resend a refusé l’envoi (${res.status}). ${detail} —${hint}`,
+      error: `Brevo a refusé l’envoi (${res.status}). ${detail} —${hint}`,
     });
   }
 
