@@ -10,10 +10,14 @@ function remplirClientOffre(c) {
   const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
   set('cEntreprise',       c.nom);
   set('cContactNom',       c.contact_nom);
+  set('cContactFonction',  c.contact_fonction);
   set('cEmail',            c.email);
   set('cTelephone',        c.telephone);
   set('cAdresse',          c.adresse);
   set('cVille',            c.ville);
+  set('cCanton',           c.canton);
+  set('cSiteWeb',          c.site_web);
+  set('cSecteur',          c.secteur);
 }
 
 /* ── Utilitaires ─────────────────────────────────────────── */

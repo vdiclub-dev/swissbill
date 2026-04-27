@@ -167,6 +167,10 @@
             <input id="cpfContactNom" type="text" placeholder="Ex : Jean Dupont"/>
           </div>
           <div class="cpf-field">
+            <label>Fonction</label>
+            <input id="cpfFonction" type="text" placeholder="Ex : Directeur logistique"/>
+          </div>
+          <div class="cpf-field">
             <label>Email</label>
             <input id="cpfEmail" type="email" placeholder="jean@exemple.ch"/>
           </div>
@@ -185,6 +189,18 @@
           <div class="cpf-field">
             <label>Ville</label>
             <input id="cpfVille" type="text" placeholder="Lausanne"/>
+          </div>
+          <div class="cpf-field">
+            <label>Canton</label>
+            <input id="cpfCanton" type="text" placeholder="Ex : VD"/>
+          </div>
+          <div class="cpf-field">
+            <label>Site web</label>
+            <input id="cpfSiteWeb" type="url" placeholder="https://entreprise.ch"/>
+          </div>
+          <div class="cpf-field cpf-full">
+            <label>Secteur d'activité</label>
+            <input id="cpfSecteur" type="text" placeholder="Ex : E-commerce, Pharmacie…"/>
           </div>
         </div>
       </div>
@@ -297,11 +313,15 @@
     document.getElementById('cpFormTitle').textContent = client ? '✏️ Modifier le client' : '➕ Nouveau client';
     sf('cpfNom',        client?.nom);
     sf('cpfContactNom', client?.contact_nom);
+    sf('cpfFonction',   client?.contact_fonction);
     sf('cpfEmail',      client?.email);
     sf('cpfTelephone',  client?.telephone);
     sf('cpfAdresse',    client?.adresse);
     sf('cpfNpa',        client?.npa);
     sf('cpfVille',      client?.ville);
+    sf('cpfCanton',     client?.canton);
+    sf('cpfSiteWeb',    client?.site_web);
+    sf('cpfSecteur',    client?.secteur);
 
     const numEl  = document.getElementById('cpfNumero');
     const hint   = document.getElementById('cpfNumeroHint');
@@ -336,13 +356,17 @@
 
     const payload = {
       nom,
-      numero_client: gf('cpfNumero') || null,
-      contact_nom:   gf('cpfContactNom') || null,
-      email:         gf('cpfEmail') || null,
-      telephone:     gf('cpfTelephone') || null,
-      adresse:       gf('cpfAdresse') || null,
-      npa:           gf('cpfNpa') || null,
-      ville:         gf('cpfVille') || null,
+      numero_client:    gf('cpfNumero')     || null,
+      contact_nom:      gf('cpfContactNom') || null,
+      contact_fonction: gf('cpfFonction')   || null,
+      email:            gf('cpfEmail')      || null,
+      telephone:        gf('cpfTelephone')  || null,
+      adresse:          gf('cpfAdresse')    || null,
+      npa:              gf('cpfNpa')        || null,
+      ville:            gf('cpfVille')      || null,
+      canton:           gf('cpfCanton')     || null,
+      site_web:         gf('cpfSiteWeb')    || null,
+      secteur:          gf('cpfSecteur')    || null,
     };
 
     const btn = document.getElementById('cpfBtnSave');
