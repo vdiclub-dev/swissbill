@@ -309,7 +309,7 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
                     <th>Adresse enlèvement</th><th>Adresse livraison</th>
                     <th>Destinataire</th><th>Chauffeur</th>
                     <th>Poids / Qté</th><th>Km / Min</th>
-                    <th>Tournée</th><th>Créé</th><th>POD</th><th>Actions</th>
+                    <th>Tournée</th><th>Créé</th><th>Livraison prévue</th><th>POD</th><th>Actions</th>
                 </tr></thead>
                 <tbody id="tbody"></tbody>
             </table>
@@ -547,6 +547,29 @@ var ROUTE_KM_TOLERANCE=650;
 
 function esc(s){if(s==null)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fdate(d){return d?new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';}
+function calcDeliveryDate(o){
+    var base=o.validated_at?new Date(o.validated_at):null;
+    if(!base)return null;
+    var days=getDispatchServiceLevel(o)==='24h'?1:2;
+    var d=new Date(base),added=0;
+    while(added<days){d.setDate(d.getDate()+1);var dw=d.getDay();if(dw!==0&&dw!==6)added++;}
+    return d;
+}
+function fdelivery(o){
+    if(o.status==='delivered'){
+        var dl=o.delivered_at?new Date(o.delivered_at).toLocaleDateString('fr-CH',{weekday:'short',day:'2-digit',month:'2-digit'}):'—';
+        return'<span style="font-size:12px;font-weight:700;color:var(--green);">✅ '+dl+'</span>';
+    }
+    var d=calcDeliveryDate(o);
+    if(!d)return'<span style="font-size:11px;color:var(--muted);">—</span>';
+    var today=new Date();today.setHours(0,0,0,0);
+    var dDay=new Date(d);dDay.setHours(0,0,0,0);
+    var diff=Math.round((dDay-today)/86400000);
+    var lbl=d.toLocaleDateString('fr-CH',{weekday:'short',day:'2-digit',month:'2-digit'});
+    var color=diff<0?'#f87171':diff===0?'var(--yellow)':diff===1?'var(--blue)':'var(--muted2)';
+    var sub=diff<0?'<br><span style="font-size:10px;color:#f87171;">'+Math.abs(diff)+'j retard</span>':diff===0?'<br><span style="font-size:10px;color:var(--yellow);">Aujourd\'hui</span>':'';
+    return'<span style="font-size:12px;font-weight:700;color:'+color+';">'+lbl+'</span>'+sub;
+}
 function nowCH(){var d=new Date(),off=-d.getTimezoneOffset(),s=off>=0?'+':'-',h=String(Math.floor(Math.abs(off)/60)).padStart(2,'0'),m=String(Math.abs(off)%60).padStart(2,'0');return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,-1)+s+h+':'+m;}
 function fmtMoney(n){return new Intl.NumberFormat('fr-CH',{style:'currency',currency:'CHF',minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);}
 function startOfToday(){var d=new Date();d.setHours(0,0,0,0);return d;}
@@ -771,7 +794,7 @@ window.pushTournee=async function(tid){
         catch(e){toast('Erreur : '+(e.message||e),false);return;}
     }else{
         var tids=rows.filter(function(r){return r.tournee_id===tid&&r.status==='pending';}).map(function(r){return r.id;});
-        if(tids.length)await db.from('transport_orders_simple').update({driver_id:t._chauffeur_id,admin_status:'accepted',status:'planned'}).in('id',tids);
+        if(tids.length)await db.from('transport_orders_simple').update({driver_id:t._chauffeur_id,admin_status:'accepted',validated_at:nowCH(),status:'planned'}).in('id',tids);
     }
     toast('Tournée «'+t.nom+'» envoyée vers '+drv+' !',true);
     await load({silent:true});
@@ -905,6 +928,7 @@ function renderTable(list){
             +'<td style="font-size:12px;color:var(--muted2);">'+(o.distance_km?Math.round(o.distance_km)+' km':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.duration_min?Math.round(o.duration_min)+' min':'—')+'</span></td>'
             +'<td>'+(t?'<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--blue);"><span style="width:8px;height:8px;border-radius:50%;background:'+(t.couleur||'#3b82f6')+'"></span>'+esc(t.nom)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
             +'<td style="font-size:11px;color:var(--muted);white-space:nowrap;">'+fdate(o.created_at)+'</td>'
+            +'<td style="white-space:nowrap;">'+fdelivery(o)+'</td>'
             +(o.status==='delivered'||o.status==='completed'
                 ?'<td style="text-align:center;">'+(o.pod_status
                     ?'<span title="POD complet" style="color:var(--green);cursor:pointer;" onclick="openPODModal(\''+o.id+'\')">✅</span>'
