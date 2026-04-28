@@ -302,6 +302,11 @@
           </div>
 
           <div class="field">
+            <label>Mot-clé <span class="field-hint">CoreSignal uniquement — ex: vigneron, cave, wein</span></label>
+            <input type="text" id="coresignalKeyword" placeholder="Ex: vigneron, cave, transport…">
+          </div>
+
+          <div class="field">
             <label>Sujet de l'e-mail</label>
             <input type="text" id="emailSujet" placeholder="Ex: Livraison express pour {nom} — découvrez Colixo" oninput="updatePreviewLive()">
           </div>
@@ -344,7 +349,7 @@
 
         <div class="actions">
           <button type="button" class="btn btn-secondary" onclick="rechercherProspects()">🔍 OpenStreetMap</button>
-          <button type="button" class="btn btn-secondary" onclick="rechercherCoresignal()" style="background:linear-gradient(135deg,#1a73e8,#0d47a1);border:none;color:#fff;">⚡ CoreSignal</button>
+          <button type="button" class="btn btn-secondary" onclick="rechercherGooglePlaces()" style="background:linear-gradient(135deg,#1a73e8,#0d47a1);border:none;color:#fff;">🗺️ Google Maps</button>
           <button type="button" class="btn btn-primary" onclick="lancerCampagne()">🚀 Lancer</button>
         </div>
       </div>
@@ -953,36 +958,28 @@
   window.supprimerSecteurCustom=supprimerSecteurCustom;
   chargerStats();
 
-  // ===== CORESIGNAL =====
-  window.rechercherCoresignal = async function(){
-    const secteur = document.getElementById('secteur').value;
+  // ===== GOOGLE PLACES =====
+  window.rechercherGooglePlaces = async function(){
     const region  = document.getElementById('region').value;
     const max     = parseInt(document.getElementById('maxProspects').value||'20',10);
-    const fnUrl   = (window.SUPABASE_CONFIG?.url||'').replace('/rest/v1','') + '/functions/v1/coresignal-search';
+    const keyword = document.getElementById('coresignalKeyword').value.trim();
+    const fnUrl   = (window.SUPABASE_CONFIG?.url||'').replace('/rest/v1','') + '/functions/v1/google-places-search';
 
-    // Mapping secteur FR → anglais CoreSignal
-    const secteurMap = {
-      'e-commerce':  'Retail',
-      'transport':   'Transportation, Logistics, Supply Chain and Storage',
-      'commerce':    'Retail',
-      'restaurant':  'Food and Beverage Services',
-      'industrie':   'Manufacturing',
-    };
-    const industryEn = secteurMap[secteur] || secteur;
+    if (!keyword) { toast('⚠️ Saisissez un mot-clé (ex: vigneron, cave, boulanger)'); return; }
 
     showLoad(true);
-    setProgression('⏳ Recherche CoreSignal…');
+    setProgression('⏳ Recherche Google Maps…');
     try {
       const res = await fetch(fnUrl, {
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':window.SUPABASE_CONFIG?.anonKey||''},
-        body: JSON.stringify({ industry: industryEn||undefined, location: region||undefined, limit: max })
+        body: JSON.stringify({ keyword, location: region||undefined, limit: Math.min(max,20) })
       });
       const data = await res.json();
-      if(!res.ok) throw new Error(data.error||'Erreur CoreSignal');
+      if(!res.ok) throw new Error((data.detail||'')+(data.error||'Erreur Google Places'));
       currentProspects = data.prospects || [];
       afficherProspects();
-      toast(`✅ ${currentProspects.length} entreprises trouvées via CoreSignal (${data.total_ids} au total)`);
+      toast(`✅ ${currentProspects.length} entreprises trouvées via Google Maps`);
     } catch(e) {
       toast('❌ '+e.message);
     } finally {
