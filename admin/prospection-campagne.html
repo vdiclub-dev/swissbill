@@ -343,7 +343,8 @@
         </div>
 
         <div class="actions">
-          <button type="button" class="btn btn-secondary" onclick="rechercherProspects()">🔍 Rechercher</button>
+          <button type="button" class="btn btn-secondary" onclick="rechercherProspects()">🔍 OpenStreetMap</button>
+          <button type="button" class="btn btn-secondary" onclick="rechercherCoresignal()" style="background:linear-gradient(135deg,#1a73e8,#0d47a1);border:none;color:#fff;">⚡ CoreSignal</button>
           <button type="button" class="btn btn-primary" onclick="lancerCampagne()">🚀 Lancer</button>
         </div>
       </div>
@@ -951,6 +952,43 @@
   window.sauvegarderSecteurCustom=sauvegarderSecteurCustom;
   window.supprimerSecteurCustom=supprimerSecteurCustom;
   chargerStats();
+
+  // ===== CORESIGNAL =====
+  window.rechercherCoresignal = async function(){
+    const secteur = document.getElementById('secteur').value;
+    const region  = document.getElementById('region').value;
+    const max     = parseInt(document.getElementById('maxProspects').value||'20',10);
+    const fnUrl   = (window.SUPABASE_CONFIG?.url||'').replace('/rest/v1','') + '/functions/v1/coresignal-search';
+
+    // Mapping secteur FR → anglais CoreSignal
+    const secteurMap = {
+      'e-commerce':  'Retail',
+      'transport':   'Transportation, Logistics, Supply Chain and Storage',
+      'commerce':    'Retail',
+      'restaurant':  'Food and Beverage Services',
+      'industrie':   'Manufacturing',
+    };
+    const industryEn = secteurMap[secteur] || secteur;
+
+    showLoad(true);
+    setProgression('⏳ Recherche CoreSignal…');
+    try {
+      const res = await fetch(fnUrl, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':window.SUPABASE_CONFIG?.anonKey||''},
+        body: JSON.stringify({ industry: industryEn||undefined, location: region||undefined, limit: max })
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error||'Erreur CoreSignal');
+      currentProspects = data.prospects || [];
+      renderProspects(currentProspects);
+      toast(`✅ ${currentProspects.length} entreprises trouvées via CoreSignal (${data.total_ids} au total)`);
+    } catch(e) {
+      toast('❌ '+e.message);
+    } finally {
+      hideLoad();
+    }
+  };
 })();
 </script>
 </body>
