@@ -37,19 +37,66 @@ Deno.serve(async (req) => {
     });
   }
 
-  let body: { prospect: Record<string,string>; template: string; sujet: string; campagne_id?: string };
+  let body: {
+    prospect: Record<string,string>;
+    template?: string;
+    sujet: string;
+    campagne_id?: string;
+    brevo_template_id?: number;
+  };
   try { body = await req.json(); } catch {
     return new Response(JSON.stringify({ error: "JSON invalide" }), { status: 400, headers: corsHeaders });
   }
 
-  const { prospect, template, sujet } = body;
-  if (!prospect?.email || !template || !sujet) {
-    return new Response(JSON.stringify({ error: "Champs manquants: prospect.email, template, sujet" }), {
+  const { prospect, template, sujet, brevo_template_id } = body;
+  if (!prospect?.email || !sujet) {
+    return new Response(JSON.stringify({ error: "Champs manquants: prospect.email, sujet" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 
-  // 1. Générer l'email personnalisé avec Claude
+  const resolvedSubject = sujet
+    .replace(/\{nom\}/g, prospect.nom || "")
+    .replace(/\{ville\}/g, prospect.ville || "");
+
+  // Mode template Brevo : on envoie directement sans passer par OpenAI
+  if (brevo_template_id && brevo_template_id > 0) {
+    const sendRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sender: { email: fromEmail },
+        to: [{ email: prospect.email }],
+        templateId: brevo_template_id,
+        subject: resolvedSubject,
+        params: {
+          nom:     prospect.nom     || "",
+          ville:   prospect.ville   || "",
+          secteur: prospect.secteur || "",
+          site:    prospect.site    || "",
+          email:   prospect.email   || "",
+        },
+      })
+    });
+    const sendJson = await sendRes.json();
+    if (!sendRes.ok) {
+      return new Response(JSON.stringify({ error: "Brevo error", detail: sendJson }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+    return new Response(JSON.stringify({ ok: true, email_id: sendJson.messageId, to: prospect.email, mode: "brevo_template" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
+  // Mode éditeur : génération IA + envoi HTML custom
+  if (!template) {
+    return new Response(JSON.stringify({ error: "template requis en mode éditeur" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
+  // 1. Générer l'email personnalisé avec OpenAI
   const baseEmail = template
     .replace(/\{nom\}/g, prospect.nom || "")
     .replace(/\{ville\}/g, prospect.ville || "")
@@ -104,16 +151,13 @@ Maximum 200 mots. Ton direct, professionnel, proposition de valeur claire.`
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;">
   <tr><td style="background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.12);border:1px solid rgba(0,0,0,.06);">
     <table width="100%" cellpadding="0" cellspacing="0">
-
       <tr><td style="background:linear-gradient(135deg,#111111,#1b1b1b);padding:24px 28px;border-bottom:5px solid #e8311a;">
         <table width="100%" cellpadding="0" cellspacing="0"><tr>
           <td style="font-size:22px;font-weight:900;letter-spacing:.05em;color:#ffffff;">COLIXO</td>
           <td align="right"><span style="background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:8px 14px;font-size:12px;color:#ffe0cd;">🚚 Livraison express · Suisse</span></td>
         </tr></table>
       </td></tr>
-
       <tr><td style="padding:30px 28px 20px;color:#151515;font-size:15px;line-height:1.75;">${emailHtml}</td></tr>
-
       <tr><td style="padding:0 28px 28px;">
         <table cellpadding="0" cellspacing="0">
           <tr><td style="background:linear-gradient(135deg,#e8311a,#ff6a3d);border-radius:12px;box-shadow:0 10px 28px rgba(232,49,26,.3);">
@@ -121,7 +165,6 @@ Maximum 200 mots. Ton direct, professionnel, proposition de valeur claire.`
           </td></tr>
         </table>
       </td></tr>
-
       <tr><td style="padding:18px 28px;border-top:1px solid #ececf1;background:#fafafa;border-radius:0 0 20px 20px;">
         <p style="margin:0;font-size:11px;color:#999;line-height:1.6;">
           Colixo · Impasse des Griottes 3, 1462 Yvonand · Suisse<br>
@@ -130,20 +173,19 @@ Maximum 200 mots. Ton direct, professionnel, proposition de valeur claire.`
           <span style="font-size:10px;color:#ccc;">Pour ne plus recevoir nos e-mails, répondez avec "désabonnement".</span>
         </p>
       </td></tr>
-
     </table>
   </td></tr>
 </table>
 </body></html>`;
 
-  // 2. Envoyer via Resend
+  // 2. Envoyer via Brevo
   const sendRes = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: { "api-key": brevoKey, "Content-Type": "application/json" },
     body: JSON.stringify({
       sender: { email: fromEmail },
       to: [{ email: prospect.email }],
-      subject: sujet.replace(/\{nom\}/g, prospect.nom || "").replace(/\{ville\}/g, prospect.ville || ""),
+      subject: resolvedSubject,
       htmlContent: fullHtml,
     })
   });
@@ -155,7 +197,7 @@ Maximum 200 mots. Ton direct, professionnel, proposition de valeur claire.`
     });
   }
 
-  return new Response(JSON.stringify({ ok: true, email_id: sendJson.messageId, to: prospect.email }), {
+  return new Response(JSON.stringify({ ok: true, email_id: sendJson.messageId, to: prospect.email, mode: "editor" }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" }
   });
 });

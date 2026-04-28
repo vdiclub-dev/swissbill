@@ -306,8 +306,26 @@
             <input type="text" id="emailSujet" placeholder="Ex: Livraison express pour {nom} — découvrez Colixo" oninput="updatePreviewLive()">
           </div>
 
-          <!-- TEMPLATE EDITOR -->
+          <!-- SOURCE TEMPLATE -->
           <div class="field">
+            <label style="display:flex;align-items:center;gap:10px;">
+              Source du template
+              <span style="display:flex;gap:6px;margin-left:auto;">
+                <button type="button" id="btnModeLocal" onclick="setTemplateMode('local')" style="background:var(--accent);border:none;color:#fff;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">✏️ Éditeur</button>
+                <button type="button" id="btnModeBrevo" onclick="setTemplateMode('brevo')" style="background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">📧 Template Brevo</button>
+              </span>
+            </label>
+          </div>
+
+          <!-- BREVO TEMPLATE ID -->
+          <div id="brevoTemplateBlock" class="field" style="display:none;">
+            <label>ID du template Brevo</label>
+            <input type="number" id="brevoTemplateId" placeholder="Ex: 42  — trouvez l'ID dans Brevo → Email Templates" min="1">
+            <div style="font-size:11px;color:var(--muted);margin-top:5px;">Les variables <code>{{ params.nom }}</code>, <code>{{ params.ville }}</code>, <code>{{ params.secteur }}</code> seront remplacées automatiquement.</div>
+          </div>
+
+          <!-- TEMPLATE EDITOR -->
+          <div id="localTemplateBlock" class="field">
             <label>Contenu HTML de l'e-mail</label>
             <div class="preset-row">
               <button type="button" class="preset-btn" onclick="chargerTemplate('default')">✨ Défaut</button>
@@ -791,13 +809,31 @@
   setTimeout(()=>chargerTemplate('default'),100);
 
   // ===== ENVOI VIA EDGE FUNCTION =====
+  // ===== MODE TEMPLATE =====
+  let _templateMode = 'local';
+  window.setTemplateMode = function(mode){
+    _templateMode = mode;
+    document.getElementById('localTemplateBlock').style.display = mode==='local' ? '' : 'none';
+    document.getElementById('brevoTemplateBlock').style.display = mode==='brevo' ? '' : 'none';
+    document.getElementById('btnModeLocal').style.background = mode==='local' ? 'var(--accent)' : 'rgba(255,255,255,.06)';
+    document.getElementById('btnModeLocal').style.color = mode==='local' ? '#fff' : 'var(--muted)';
+    document.getElementById('btnModeLocal').style.border = mode==='local' ? 'none' : '1px solid var(--line)';
+    document.getElementById('btnModeBrevo').style.background = mode==='brevo' ? 'var(--accent)' : 'rgba(255,255,255,.06)';
+    document.getElementById('btnModeBrevo').style.color = mode==='brevo' ? '#fff' : 'var(--muted)';
+    document.getElementById('btnModeBrevo').style.border = mode==='brevo' ? 'none' : '1px solid var(--line)';
+  };
+
   async function envoyerViaAgent(prospect,sujet,template){
     const fnUrl=(window.SUPABASE_CONFIG?.url||'')
       .replace('/rest/v1','')
       .replace('https://','https://')+'/functions/v1/prospect-agent';
+    const brevoId = _templateMode==='brevo' ? parseInt(document.getElementById('brevoTemplateId').value||'0',10) : 0;
+    const payload = brevoId > 0
+      ? {prospect, sujet, brevo_template_id: brevoId}
+      : {prospect, sujet, template};
     const res=await fetch(fnUrl,{method:'POST',
       headers:{'Content-Type':'application/json','apikey':window.SUPABASE_CONFIG?.anonKey||''},
-      body:JSON.stringify({prospect,sujet,template})});
+      body:JSON.stringify(payload)});
     if(!res.ok){const e=await res.json();throw new Error(e.error||'Erreur envoi');}
     return await res.json();
   }
@@ -845,7 +881,8 @@
     const sujet=document.getElementById('emailSujet').value;
     const template=document.getElementById('emailTemplate').value;
     if(!nom){toast('❌ Donnez un nom à la campagne');return;}
-    if(!sujet||!template){toast('❌ Remplissez le sujet et le template');return;}
+    const brevoId = _templateMode==='brevo' ? parseInt(document.getElementById('brevoTemplateId').value||'0',10) : 0;
+    if(!sujet||(brevoId<=0&&!template)){toast('❌ Remplissez le sujet et le template (ou l\'ID Brevo)');return;}
     const avecEmail=selected.filter(p=>p.email).length;
     const sansEmail=selected.length-avecEmail;
     document.getElementById('confirmNom').textContent=nom;
