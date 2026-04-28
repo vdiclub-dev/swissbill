@@ -57,37 +57,31 @@ Deno.serve(async (req) => {
   const ids: number[] = await searchRes.json();
   if (!Array.isArray(ids) || ids.length === 0) return json({ prospects: [] });
 
-  // 2. Récupérer les détails pour les N premiers IDs
-  const slice = ids.slice(0, limit * 2); // prendre plus car certains n'ont pas de site web
-  const prospects = [];
+  // 2. Récupérer les détails en parallèle pour les N premiers IDs
+  const slice = ids.slice(0, limit);
 
-  for (const id of slice) {
-    if (prospects.length >= limit) break;
-    try {
-      const r = await fetch(`https://api.coresignal.com/cdapi/v2/company_base/collect/${id}`, {
-        headers: { "apikey": apiKey },
-      });
-      if (!r.ok) continue;
-      const c = await r.json();
-      if (c.deleted || !c.name) continue;
+  const results = await Promise.all(
+    slice.map(async (id) => {
+      try {
+        const r = await fetch(`https://api.coresignal.com/cdapi/v2/company_base/collect/${id}`, {
+          headers: { "apikey": apiKey },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!r.ok) return null;
+        const c = await r.json();
+        if (c.deleted || !c.name) return null;
 
-      const website = (c.website || "").trim();
-      const email   = website ? domainEmail(website) : "";
-      const ville   = (c.headquarters_new_address || c.headquarters_country_parsed || "Suisse").split(",")[0].trim();
+        const website = (c.website || "").trim();
+        const email   = website ? domainEmail(website) : "";
+        const ville   = (c.headquarters_new_address || c.headquarters_country_parsed || "Suisse").split(",")[0].trim();
 
-      prospects.push({
-        nom:     c.name,
-        email,
-        site:    website,
-        secteur: c.industry || "",
-        ville,
-        taille:  c.size || "",
-        employes: c.employees_count || 0,
-      });
-    } catch {
-      continue;
-    }
-  }
+        return { nom: c.name, email, site: website, secteur: c.industry || "", ville, taille: c.size || "", employes: c.employees_count || 0 };
+      } catch {
+        return null;
+      }
+    })
+  );
 
+  const prospects = results.filter(Boolean);
   return json({ prospects, total_ids: ids.length });
 });
