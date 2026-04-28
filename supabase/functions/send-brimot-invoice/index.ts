@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
 
   const brevoKey = Deno.env.get("BREVO_API_KEY")?.trim();
   const from = (
-    Deno.env.get("BRIMOT_FROM_EMAIL") ?? "info@saniguard.ch"
+    Deno.env.get("BRIMOT_FROM_EMAIL") ?? "info@brimot.ch"
   ).trim();
 
   let replyTo = (payload.reply_to ?? "").trim();
