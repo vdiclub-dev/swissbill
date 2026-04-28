@@ -11,7 +11,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-colixo-user-id, x-colixo-user-role",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -85,31 +85,35 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Méthode non autorisée (utilisez POST)." });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return json({ ok: false, error: "Non authentifié — reconnectez-vous sur Colixo." });
-  }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const supabase = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: userData, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !userData.user) {
-    return json({ ok: false, error: "Session invalide ou expirée — reconnectez-vous." });
-  }
-
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!serviceKey) {
     return json({ ok: false, error: "Configuration serveur : SUPABASE_SERVICE_ROLE_KEY manquant." });
   }
   const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+
+  // Résoudre l'utilisateur : JWT Supabase OU login par code (x-colixo-user-id)
+  let resolvedUserId: string | null = null;
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user) resolvedUserId = userData.user.id;
+  }
+  if (!resolvedUserId) {
+    resolvedUserId = req.headers.get("x-colixo-user-id") || null;
+  }
+  if (!resolvedUserId) {
+    return json({ ok: false, error: "Non authentifié — reconnectez-vous sur Colixo." });
+  }
+
   const { data: prof, error: profErr } = await supabaseAdmin
     .from("utilisateurs")
     .select("role")
-    .eq("id", userData.user.id)
+    .eq("id", resolvedUserId)
     .maybeSingle();
 
   if (profErr) {
