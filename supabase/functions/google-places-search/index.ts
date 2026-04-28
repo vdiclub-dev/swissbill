@@ -1,6 +1,7 @@
 /**
  * Proxy Google Places Text Search → retourne des prospects formatés.
  * Secret : GOOGLE_PLACES_API_KEY
+ * Pagination : jusqu'à 3 pages × 20 = 60 résultats max
  */
 
 const corsHeaders = {
@@ -20,17 +21,21 @@ function domainEmail(website: string): string {
   try {
     const url = new URL(website.startsWith("http") ? website : "https://" + website);
     return "info@" + url.hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
+  } catch { return ""; }
 }
 
 function extractCity(address: string): string {
-  // Format CH : "Rue des Alpes 1, 1950 Sion, Suisse"
   const parts = address.split(",").map((p) => p.trim());
-  // Avant-dernier élément = "NPA Ville", retirer le NPA
   const cityPart = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
   return cityPart.replace(/^\d{4}\s+/, "").trim();
+}
+
+async function fetchPage(params: URLSearchParams): Promise<{ results: unknown[]; next_page_token?: string }> {
+  const res = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`);
+  if (!res.ok) return { results: [] };
+  const data = await res.json();
+  if (data.status !== "OK" && data.status !== "ZERO_RESULTS") return { results: [] };
+  return { results: data.results ?? [], next_page_token: data.next_page_token };
 }
 
 Deno.serve(async (req) => {
@@ -43,60 +48,68 @@ Deno.serve(async (req) => {
   let body: { keyword?: string; location?: string; limit?: number };
   try { body = await req.json(); } catch { return json({ error: "JSON invalide" }, 400); }
 
-  const limit    = Math.min(body.limit ?? 20, 20); // Places API max 20 par requête
+  const limit    = Math.min(body.limit ?? 20, 60);
   const keyword  = (body.keyword || "").trim();
   const location = (body.location || "").trim();
 
   if (!keyword) return json({ error: "keyword requis" }, 400);
 
-  // Construire la requête texte : "vigneron Valais Suisse"
   const textQuery = [keyword, location, "Suisse"].filter(Boolean).join(" ");
 
-  const placesRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": [
-        "places.displayName",
-        "places.formattedAddress",
-        "places.websiteUri",
-        "places.nationalPhoneNumber",
-        "places.businessStatus",
-        "places.primaryType",
-        "places.types",
-      ].join(","),
-    },
-    body: JSON.stringify({
-      textQuery,
-      languageCode: "fr",
-      regionCode: "CH",
-      maxResultCount: limit,
-    }),
-  });
+  // Récupérer jusqu'à 3 pages pour atteindre la limite demandée
+  const allPlaces: unknown[] = [];
+  const baseParams = new URLSearchParams({ query: textQuery, key: apiKey, language: "fr", region: "ch" });
 
-  if (!placesRes.ok) {
-    const err = await placesRes.text();
-    return json({ error: "Google Places error", detail: err, prospects: [] }, 502);
+  const page1 = await fetchPage(baseParams);
+  allPlaces.push(...page1.results);
+
+  if (allPlaces.length < limit && page1.next_page_token) {
+    await new Promise((r) => setTimeout(r, 2000)); // délai requis par Google
+    const page2 = await fetchPage(new URLSearchParams({ pagetoken: page1.next_page_token, key: apiKey }));
+    allPlaces.push(...page2.results);
+
+    if (allPlaces.length < limit && page2.next_page_token) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const page3 = await fetchPage(new URLSearchParams({ pagetoken: page2.next_page_token, key: apiKey }));
+      allPlaces.push(...page3.results);
+    }
   }
 
-  const data = await placesRes.json();
-  const places = data.places ?? [];
+  const places = allPlaces.slice(0, limit) as Record<string, unknown>[];
+
+  // Récupérer website + téléphone via Place Details en parallèle
+  const details = await Promise.all(
+    places.map(async (p) => {
+      try {
+        const dp = new URLSearchParams({
+          place_id: p.place_id as string,
+          fields: "website,formatted_phone_number",
+          key: apiKey,
+          language: "fr",
+        });
+        const dr = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?${dp}`,
+          { signal: AbortSignal.timeout(6000) });
+        if (!dr.ok) return {};
+        const dd = await dr.json();
+        return dd.result ?? {};
+      } catch { return {}; }
+    })
+  );
 
   const prospects = places
-    .filter((p: Record<string, unknown>) => p.businessStatus !== "CLOSED_PERMANENTLY")
-    .map((p: Record<string, unknown>) => {
-      const nom     = (p.displayName as Record<string, string>)?.text ?? "";
-      const address = (p.formattedAddress as string) ?? "";
-      const site    = (p.websiteUri as string)?.replace(/\/$/, "") ?? "";
+    .filter((p) => p.business_status !== "CLOSED_PERMANENTLY")
+    .map((p, i) => {
+      const nom     = (p.name as string) ?? "";
+      const address = (p.formatted_address as string) ?? "";
+      const site    = ((details[i]?.website as string) ?? "").replace(/\/$/, "");
       const email   = site ? domainEmail(site) : "";
       const ville   = address ? extractCity(address) : "";
-      const tel     = (p.nationalPhoneNumber as string) ?? "";
-      const type    = (p.primaryType as string) ?? ((p.types as string[])?.[0] ?? "");
-      const secteur = type.replace(/_/g, " ");
+      const types   = (p.types as string[]) ?? [];
+      const secteur = types[0]?.replace(/_/g, " ") ?? "";
+      const tel     = (details[i]?.formatted_phone_number as string) ?? "";
       return { nom, email, site, secteur, ville, tel, adresse: address };
     })
-    .filter((p: { nom: string }) => p.nom);
+    .filter((p) => p.nom);
 
-  return json({ prospects, total: places.length });
+  return json({ prospects, total: allPlaces.length });
 });
