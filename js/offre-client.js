@@ -91,9 +91,9 @@ function lireParams() {
   const coutPrep      = num('cCoutPrep')          || 2;
   const colisRenta    = num('cColisRentabilite')  || 80;
 
-  // Coûts journaliers — carburant et chauffeur × rotations, frais fixes × véhicules seulement
-  const coutCarburant = kmJour * litres100 / 100 * prixCarburant * nbVehicules * nbChauffeurs;
-  const coutChauffeur = heuresJour * coutHoraire * nbChauffeurs * nbVehicules;
+  // Coûts journaliers — carburant et chauffeur × nb chauffeurs, frais fixes × véhicules
+  const coutCarburant = kmJour * litres100 / 100 * prixCarburant * nbChauffeurs;
+  const coutChauffeur = heuresJour * coutHoraire * nbChauffeurs;
   const coutVehicule  = fraisFixes * nbVehicules;
   // Coût logistique par colis (variable)
   const coutPrepColis = prepColis ? coutPrep : 0;
