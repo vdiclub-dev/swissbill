@@ -460,9 +460,70 @@ async function soumettreProspect(e) {
   toast('✅ Prospect ajouté avec succès');
 }
 
+/* ── Onglets CRM / Campagnes ─────────────────────────────── */
+let activeTab = 'crm';
+
+function switchTab(tab) {
+  activeTab = tab;
+  const isCrm = tab === 'crm';
+  document.getElementById('prospectGrid').style.display  = 'none';
+  document.getElementById('emptyState').style.display    = 'none';
+  document.getElementById('campagneView').style.display  = isCrm ? 'none' : 'block';
+  document.getElementById('btnAjout').style.display      = isCrm ? '' : 'none';
+  document.getElementById('btnTabCRM').style.fontWeight      = isCrm ? '700' : '400';
+  document.getElementById('btnTabCampagne').style.fontWeight = isCrm ? '400' : '700';
+  if (isCrm) { appliquerFiltres(); } else { chargerCampagnes(); }
+}
+
+window.actualiser = function() {
+  activeTab === 'crm' ? chargerProspects() : chargerCampagnes();
+};
+
+async function chargerCampagnes() {
+  const db = window.SUPABASE_CLIENT;
+  const tbody = document.getElementById('campagneBody');
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8;">Chargement…</td></tr>';
+
+  const { data, error } = await db
+    .from('mail_prospects')
+    .select('company,email,notes,email_count,last_subject,last_contact_at,campagne_names,status')
+    .eq('brand', 'colixo')
+    .order('last_contact_at', { ascending: false });
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="8" style="color:red;padding:20px;">${error.message}</td></tr>`; return; }
+  if (!data?.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8;">Aucun contact de campagne</td></tr>'; return; }
+
+  const countBadge = (n) => {
+    if (!n) return '<span style="color:#94a3b8;">—</span>';
+    const col = n === 1 ? '#1a73e8' : n === 2 ? '#f59e0b' : '#e8311a';
+    return `<span style="background:${col};color:#fff;font-size:.72rem;font-weight:700;border-radius:10px;padding:2px 9px;">${n} ✉</span>`;
+  };
+
+  // Extraire ville/secteur depuis notes "Secteur: X | Ville: Y | Sujet: Z"
+  const parseNotes = (notes) => {
+    const s = (notes||'').match(/Secteur:\s*([^|]+)/)?.[1]?.trim() || '';
+    const v = (notes||'').match(/Ville:\s*([^|]+)/)?.[1]?.trim() || '';
+    return { secteur: s, ville: v };
+  };
+
+  tbody.innerHTML = data.map(r => {
+    const { secteur, ville } = parseNotes(r.notes);
+    const date = r.last_contact_at ? new Date(r.last_contact_at).toLocaleDateString('fr-CH') : '—';
+    return `<tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:10px 12px;font-weight:600;">${esc(r.company||'')}</td>
+      <td style="padding:10px 12px;color:#3b82f6;">${esc(r.email||'')}</td>
+      <td style="padding:10px 12px;color:#64748b;">${esc(ville)}</td>
+      <td style="padding:10px 12px;color:#64748b;">${esc(secteur)}</td>
+      <td style="padding:10px 12px;text-align:center;">${countBadge(r.email_count)}</td>
+      <td style="padding:10px 12px;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.last_subject||'')}">${esc(r.last_subject||'—')}</td>
+      <td style="padding:10px 12px;color:#64748b;">${date}</td>
+      <td style="padding:10px 12px;color:#64748b;font-size:.78rem;">${esc(r.campagne_names||'—')}</td>
+    </tr>`;
+  }).join('');
+}
+
 /* ── Init ────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  // Attendre que config.js ait créé SUPABASE_CLIENT
   const tryInit = () => {
     if (window.SUPABASE_CLIENT) {
       chargerProspects();
@@ -501,3 +562,4 @@ window.copierMessage     = copierMessage;
 window.copierTexte       = copierTexte;
 window.appliquerFiltres  = appliquerFiltres;
 window.chargerProspects  = chargerProspects;
+window.switchTab         = switchTab;
