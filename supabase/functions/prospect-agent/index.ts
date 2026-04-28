@@ -28,11 +28,11 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
-  const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
+  const brevoKey = Deno.env.get("BREVO_API_KEY")?.trim();
   const fromEmail = (Deno.env.get("NOTIFY_FROM_EMAIL") ?? "Colixo <info@colixo.ch>").trim();
 
-  if (!openaiKey || !resendKey) {
-    return new Response(JSON.stringify({ error: "Secrets manquants (OPENAI_API_KEY, RESEND_API_KEY)" }), {
+  if (!openaiKey || !brevoKey) {
+    return new Response(JSON.stringify({ error: "Secrets manquants (OPENAI_API_KEY, BREVO_API_KEY)" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
@@ -137,25 +137,25 @@ Maximum 200 mots. Ton direct, professionnel, proposition de valeur claire.`
 </body></html>`;
 
   // 2. Envoyer via Resend
-  const sendRes = await fetch("https://api.resend.com/emails", {
+  const sendRes = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
-    headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+    headers: { "api-key": brevoKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: fromEmail,
-      to: [prospect.email],
+      sender: { email: fromEmail },
+      to: [{ email: prospect.email }],
       subject: sujet.replace(/\{nom\}/g, prospect.nom || "").replace(/\{ville\}/g, prospect.ville || ""),
-      html: fullHtml,
+      htmlContent: fullHtml,
     })
   });
 
   const sendJson = await sendRes.json();
   if (!sendRes.ok) {
-    return new Response(JSON.stringify({ error: "Resend error", detail: sendJson }), {
+    return new Response(JSON.stringify({ error: "Brevo error", detail: sendJson }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 
-  return new Response(JSON.stringify({ ok: true, email_id: sendJson.id, to: prospect.email }), {
+  return new Response(JSON.stringify({ ok: true, email_id: sendJson.messageId, to: prospect.email }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" }
   });
 });

@@ -82,14 +82,14 @@ Deno.serve(async (req) => {
     });
   }
 
-  const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
+  const brevoKey = Deno.env.get("BREVO_API_KEY")?.trim();
   const to = Deno.env.get("NOTIFY_TO_EMAIL")?.trim();
   const from = (
-    Deno.env.get("NOTIFY_FROM_EMAIL") ?? "Colixo <onboarding@resend.dev>"
+    Deno.env.get("NOTIFY_FROM_EMAIL") ?? "info@colixo.ch"
   ).trim();
 
-  if (!resendKey || !to) {
-    console.error("Missing RESEND_API_KEY or NOTIFY_TO_EMAIL");
+  if (!brevoKey || !to) {
+    console.error("Missing BREVO_API_KEY or NOTIFY_TO_EMAIL");
     return new Response("Server misconfigured", { status: 500, headers: corsHeaders });
   }
 
@@ -147,23 +147,23 @@ Deno.serve(async (req) => {
     `Téléphone : ${tel}\n` +
     `Utilisateur id : ${uid}\n`;
 
-  const res = await fetch("https://api.resend.com/emails", {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${resendKey}`,
+      "api-key": brevoKey,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from,
-      to: [to],
+      sender: { email: from },
+      to: [{ email: to }],
       subject,
-      text,
+      textContent: text,
     }),
   });
 
   if (!res.ok) {
     const errBody = await res.text();
-    console.error("Resend error", res.status, errBody);
+    console.error("Brevo error", res.status, errBody);
     return new Response(errBody, { status: 502, headers: corsHeaders });
   }
 
