@@ -271,11 +271,14 @@
               <div style="display:flex;gap:6px;">
                 <select id="secteur" title="Secteur d'activité" onchange="updatePreviewLive()" style="flex:1;">
                   <option value="">Tous secteurs</option>
+                  <option value="hotel">Hôtels &amp; Hébergements</option>
+                  <option value="restaurant">Restauration</option>
                   <option value="e-commerce">E-commerce</option>
                   <option value="transport">Transport / Logistique</option>
                   <option value="commerce">Commerce de détail</option>
-                  <option value="restaurant">Restauration</option>
                   <option value="industrie">Industrie</option>
+                  <option value="sante">Santé &amp; Pharmacie</option>
+                  <option value="vins">Vins &amp; Vignerons</option>
                 </select>
                 <button type="button" id="btnSupprimerSecteur" onclick="supprimerSecteurCustom()" title="Supprimer ce secteur" style="display:none;background:rgba(255,77,79,.12);border:1px solid rgba(255,77,79,.25);color:#ff4d4f;border-radius:8px;padding:0 10px;cursor:pointer;font-size:14px;">🗑</button>
               </div>
@@ -547,12 +550,22 @@
   document.getElementById('secteur').addEventListener('change', majBoutonSupprimer);
 
   const SECTEUR_FILTERS={
+    'hotel':     '["tourism"~"hotel|hostel|guest_house|motel|apartment",i]',
     'e-commerce':'["shop"]',
-    'transport':'["office"~"logistics|transport|shipping|courier",i]',
-    'commerce':'["shop"]',
+    'transport': '["office"~"logistics|transport|shipping|courier",i]',
+    'commerce':  '["shop"]',
     'restaurant':'["amenity"~"restaurant|cafe|fast_food|bar|bistro|brasserie",i]',
-    'industrie':'["office"~"company|industrial|manufacturer",i]',
-    '':'["name"]["shop"]'
+    'industrie': '["office"~"company|industrial|manufacturer",i]',
+    'sante':     '["amenity"~"pharmacy|hospital|clinic|doctors",i]',
+    'vins':      '["tourism"~"winery|wine",i]["craft"~"winery",i]',
+    '':          '["name"]["shop"]'
+  };
+
+  // Cantons suisses → nom OSM pour recherche par zone admin
+  const CANTON_OSM = {
+    'vaud':'Vaud','valais':'Valais','geneve':'Geneva','fribourg':'Fribourg',
+    'neuchatel':'Neuchâtel','berne':'Bern','zurich':'Zürich','bâle':'Basel-Stadt',
+    'lucerne':'Luzern','argovie':'Aargau','soleure':'Solothurn','thurgovie':'Thurgau',
   };
 
   // Init secteurs custom APRÈS SECTEUR_FILTERS
@@ -574,14 +587,24 @@
     const max=parseInt(document.getElementById('maxProspects').value)||20;
     if(!region){toast('⚠️ Indiquez une région ou ville');return;}
     showLoad(true);
-    setProgression('🔍 Géolocalisation…');
+    setProgression('🔍 Recherche…');
     setProgress(0);
     try{
-      const bbox=await geocodeRegion(region);
       const filter=SECTEUR_FILTERS[secteur]||SECTEUR_FILTERS[''];
-      const bboxStr=`${bbox.s},${bbox.w},${bbox.n},${bbox.e}`;
-      setProgression('🔍 Recherche des entreprises…');
-      const query=`[out:json][timeout:30];(node${filter}(${bboxStr});way${filter}(${bboxStr}););out body ${max*2};`;
+      const cantonOsm=CANTON_OSM[region.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')];
+      let query;
+      if(cantonOsm){
+        // Recherche par zone administrative (canton exact — plus précis)
+        setProgression(`🔍 Recherche dans le canton ${region}…`);
+        query=`[out:json][timeout:60];area["name"="${cantonOsm}"]["admin_level"~"4|6"]->.zone;(node${filter}(area.zone);way${filter}(area.zone););out body ${Math.min(max*3,300)};`;
+      } else {
+        // Fallback bounding box pour une ville
+        setProgression('🔍 Géolocalisation…');
+        const bbox=await geocodeRegion(region);
+        const bboxStr=`${bbox.s},${bbox.w},${bbox.n},${bbox.e}`;
+        setProgression('🔍 Recherche des entreprises…');
+        query=`[out:json][timeout:30];(node${filter}(${bboxStr});way${filter}(${bboxStr}););out body ${max*2};`;
+      }
       const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',
         headers:{'Content-Type':'application/x-www-form-urlencoded'},
         body:'data='+encodeURIComponent(query)});
