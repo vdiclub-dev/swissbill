@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colixo — Demande de devis</title>
+  <meta name="description" content="Obtenez un devis Colixo en 2 minutes. Estimez le coût de vos livraisons B2B en Suisse romande." />
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/colixo.css" />
+  <style>
+    /* ── Page layout ──────────────────────────────── */
+    .page-header {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 80px 0 48px; text-align: center;
+    }
+    .page-header h1 { font-size: clamp(28px, 4vw, 44px); }
+    .page-header p  { font-size: 17px; color: var(--text2); max-width: 520px; margin: 16px auto 0; line-height: 1.7; }
+
+    .devis-layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 32px;
+      max-width: 1080px;
+      margin: 48px auto;
+      padding: 0 24px 80px;
+    }
+    @media (max-width: 900px) {
+      .devis-layout { grid-template-columns: 1fr; }
+      .estimate-sidebar { order: -1; }
+    }
+
+    /* ── Form ─────────────────────────────────────── */
+    .form-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 36px;
+    }
+    .form-section { margin-bottom: 32px; }
+    .form-section-title {
+      font-size: 13px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 20px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .form-group.error input,
+    .form-group.error select,
+    .form-group.error textarea {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px rgba(239,68,68,0.10);
+    }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
+
+    /* Slider */
+    .slider-wrap { margin-top: 8px; }
+    .slider-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .slider-val { font-size: 14px; font-weight: 600; color: var(--orange); }
+    input[type="range"] {
+      width: 100%; height: 6px; padding: 0;
+      background: var(--border2); border: none; border-radius: 3px;
+      appearance: none; -webkit-appearance: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--orange); border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(255,106,0,0.4);
+    }
+    input[type="range"]:focus { outline: none; border-color: transparent; box-shadow: none; }
+    .slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* Submit */
+    .submit-row { display: flex; gap: 16px; align-items: center; margin-top: 8px; }
+    .submit-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    #submitBtn { min-width: 200px; font-size: 15px; padding: 15px 28px; }
+
+    /* ── Estimate sidebar ─────────────────────────── */
+    .estimate-sidebar { position: sticky; top: 90px; }
+    .estimate-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--r-lg); overflow: hidden;
+    }
+    .estimate-header {
+      background: linear-gradient(135deg, var(--card2), var(--card));
+      border-bottom: 1px solid var(--border);
+      padding: 24px;
+    }
+    .estimate-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .estimate-price {
+      font-size: 44px; font-weight: 800; color: var(--orange);
+      letter-spacing: -2px; line-height: 1;
+    }
+    .estimate-forfait { font-size: 13px; color: var(--text2); margin-top: 6px; }
+    .estimate-body { padding: 20px 24px; }
+    .estimate-detail { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
+    .price-bar-track { height: 4px; background: var(--border2); border-radius: 2px; overflow: hidden; margin-bottom: 20px; }
+    .price-bar { height: 100%; background: linear-gradient(90deg, var(--orange), var(--orange-glow)); border-radius: 2px; transition: width 0.4s ease; width: 20%; }
+    .estimate-features { display: flex; flex-direction: column; gap: 10px; }
+    .estimate-feature {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--text2);
+    }
+    .estimate-feature::before { content: '✓'; color: var(--orange); font-weight: 700; flex-shrink: 0; }
+    .estimate-cta { padding: 20px 24px; border-top: 1px solid var(--border); }
+    .estimate-note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 12px; line-height: 1.5; }
+
+    /* ── Success block ────────────────────────────── */
+    #successBlock {
+      display: none;
+      background: var(--card); border: 1px solid var(--border);
+      border-top: 3px solid var(--success);
+      border-radius: var(--r-lg); padding: 48px 36px;
+      text-align: center;
+    }
+    .success-icon { font-size: 52px; margin-bottom: 20px; }
+    .success-title { font-size: 26px; font-weight: 700; margin-bottom: 12px; }
+    .success-subtitle { font-size: 16px; color: var(--text2); line-height: 1.7; max-width: 400px; margin: 0 auto 32px; }
+    .success-detail {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 20px 24px;
+      display: inline-flex; flex-direction: column; gap: 8px;
+      text-align: left; margin-bottom: 32px; min-width: 260px;
+    }
+    .success-row { display: flex; justify-content: space-between; gap: 24px; font-size: 14px; }
+    .success-row-label { color: var(--muted); }
+    .success-row-value { font-weight: 600; color: var(--text); }
+
+    /* ── Print ────────────────────────────────────── */
+    @media print {
+      .nav, .page-header, .estimate-sidebar, .submit-row, .print-hide { display: none !important; }
+      .devis-layout { grid-template-columns: 1fr; margin: 0; padding: 0; }
+      .form-card { border: none; padding: 0; box-shadow: none; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ─────────────────────────────────────────────────── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">Col<span>i</span>xo</a>
+    <div class="nav-links" id="navLinks">
+      <a href="/">Accueil</a>
+      <a href="/#services">Services</a>
+      <a href="/#tarifs">Tarifs</a>
+      <a href="/offre-client.html">Espace client</a>
+    </div>
+    <button type="button" class="nav-hamburger" id="hamburger" aria-label="Menu">☰</button>
+  </div>
+</nav>
+
+<!-- ── Page header ──────────────────────────────────────────── -->
+<div class="page-header">
+  <div class="eyebrow" style="justify-content:center">Devis gratuit</div>
+  <h1>Votre offre personnalisée<br><span class="gradient-text">en 2 minutes</span></h1>
+  <p>Renseignez votre activité et obtenez une estimation immédiate. Notre équipe vous recontacte sous 24h.</p>
+</div>
+
+<!-- ── Devis layout ─────────────────────────────────────────── -->
+<div class="devis-layout">
+
+  <!-- Form -->
+  <div>
+    <div id="devisForm" class="form-card">
+      <form id="devisFormEl" novalidate>
+
+        <!-- Entreprise -->
+        <div class="form-section">
+          <div class="form-section-title">Votre entreprise</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="entreprise">Nom de l'entreprise <span class="req">*</span></label>
+              <input type="text" id="entreprise" name="entreprise" placeholder="Hôtel Beau-Rivage SA" autocomplete="organization" />
+            </div>
+            <div class="form-group">
+              <label for="secteur">Secteur d'activité <span class="req">*</span></label>
+              <select id="secteur" name="secteur">
+                <option value="">Choisir…</option>
+                <option value="hotellerie">Hôtellerie</option>
+                <option value="restauration">Restauration & Vignobles</option>
+                <option value="industrie">Industrie & Commerce</option>
+                <option value="frais">Produits frais / Froid</option>
+                <option value="express">Express & Urgent</option>
+                <option value="autre">Autre</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label for="adresse">Adresse de chargement</label>
+              <input type="text" id="adresse" name="adresse" placeholder="Rue du Port 12, 1800 Vevey" autocomplete="street-address" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Volume -->
+        <div class="form-section">
+          <div class="form-section-title">Vos besoins</div>
+          <div class="form-group">
+            <label for="forfait">Forfait souhaité <span class="req">*</span></label>
+            <select id="forfait" name="forfait">
+              <option value="starter">Starter — livraisons ponctuelles</option>
+              <option value="pro" selected>Pro — abonnement mensuel</option>
+              <option value="entreprise">Entreprise — grand compte</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="volume">Volume estimé de livraisons par mois</label>
+            <div class="slider-wrap">
+              <div class="slider-row">
+                <span style="font-size:13px;color:var(--text2)">Nombre de livraisons</span>
+                <span class="slider-val" id="volumeVal">20</span>
+              </div>
+              <input type="range" id="volume" name="volume" min="1" max="100" value="20" />
+              <div class="slider-labels"><span>1</span><span>25</span><span>50</span><span>75</span><span>100+</span></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="distance">Distance moyenne par livraison (km)</label>
+            <div class="slider-wrap">
+              <div class="slider-row">
+                <span style="font-size:13px;color:var(--text2)">Distance aller/retour</span>
+                <span class="slider-val" id="distanceVal">20 km</span>
+              </div>
+              <input type="range" id="distance" name="distance" min="5" max="150" value="20" step="5" />
+              <div class="slider-labels"><span>5 km</span><span>40 km</span><span>80 km</span><span>150 km</span></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="destinations">Destinations habituelles</label>
+            <input type="text" id="destinations" name="destinations" placeholder="Lausanne, Vevey, Montreux…" />
+          </div>
+        </div>
+
+        <!-- Contact -->
+        <div class="form-section">
+          <div class="form-section-title">Vos coordonnées</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="nom">Nom et prénom <span class="req">*</span></label>
+              <input type="text" id="nom" name="nom" placeholder="Jean Dupont" autocomplete="name" />
+            </div>
+            <div class="form-group">
+              <label for="telephone">Téléphone <span class="req">*</span></label>
+              <input type="tel" id="telephone" name="telephone" placeholder="+41 79 000 00 00" autocomplete="tel" />
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label for="email">Email <span class="req">*</span></label>
+              <input type="email" id="email" name="email" placeholder="contact@monentreprise.ch" autocomplete="email" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="message">Informations complémentaires</label>
+            <textarea id="message" name="message" rows="3" placeholder="Horaires préférés, contraintes particulières, type de marchandises…"></textarea>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="submit-row">
+          <button type="submit" id="submitBtn" class="btn btn-primary">
+            Envoyer ma demande <span class="arrow">→</span>
+          </button>
+          <p class="submit-note">Réponse garantie sous 24h.<br>Aucun engagement à ce stade.</p>
+        </div>
+      </form>
+    </div>
+
+    <!-- Success -->
+    <div id="successBlock">
+      <div class="success-icon">✅</div>
+      <div class="success-title">Demande envoyée !</div>
+      <div class="success-subtitle">
+        Merci <strong id="successNom"></strong>, notre équipe vous contactera sous 24h à l'adresse <strong id="successEmail"></strong>.
+      </div>
+      <div class="success-detail">
+        <div class="success-row">
+          <span class="success-row-label">Estimation</span>
+          <span class="success-row-value" id="successEstimation">—</span>
+        </div>
+        <div class="success-row">
+          <span class="success-row-label">Délai de réponse</span>
+          <span class="success-row-value">≤ 24 heures</span>
+        </div>
+      </div>
+      <a href="/" class="btn btn-ghost">← Retour à l'accueil</a>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="estimate-sidebar">
+    <div class="estimate-card">
+      <div class="estimate-header">
+        <div class="estimate-label">Estimation en temps réel</div>
+        <div class="estimate-price" id="estPrix">CHF —</div>
+        <div class="estimate-forfait" id="estForfait">Pro (mensuel)</div>
+      </div>
+      <div class="estimate-body">
+        <div class="estimate-detail" id="estDetail">Ajustez les curseurs pour voir l'estimation.</div>
+        <div class="price-bar-track">
+          <div class="price-bar" id="priceBar"></div>
+        </div>
+        <div class="estimate-features">
+          <div class="estimate-feature">Carburant inclus</div>
+          <div class="estimate-feature">Assurance marchandise</div>
+          <div class="estimate-feature">Suivi en temps réel</div>
+          <div class="estimate-feature">Facturation mensuelle</div>
+          <div class="estimate-feature">Sans engagement durée</div>
+        </div>
+      </div>
+      <div class="estimate-cta">
+        <button type="button" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="imprimerDevis()">
+          🖨 Imprimer / PDF
+        </button>
+        <p class="estimate-note">Estimation indicative. Le devis définitif est établi après analyse de vos besoins.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast-zone" id="toastZone"></div>
+
+<script src="/js/devis.js"></script>
+<script>
+  // Hamburger
+  document.getElementById('hamburger').addEventListener('click', () => {
+    const links = document.getElementById('navLinks');
+    if (links.style.display === 'flex') {
+      links.style.display = '';
+    } else {
+      links.style.display = 'flex';
+      links.style.flexDirection = 'column';
+      links.style.position = 'absolute';
+      links.style.top = '66px';
+      links.style.left = '0';
+      links.style.right = '0';
+      links.style.background = 'rgba(10,10,10,0.97)';
+      links.style.padding = '20px 24px';
+      links.style.borderBottom = '1px solid var(--border)';
+      links.style.gap = '16px';
+    }
+  });
+
+  // Volume slider label
+  document.getElementById('volume').addEventListener('input', function() {
+    document.getElementById('volumeVal').textContent = this.value;
+  });
+
+  // Distance slider label
+  document.getElementById('distance').addEventListener('input', function() {
+    document.getElementById('distanceVal').textContent = this.value + ' km';
+  });
+
+  // Wire form submit
+  document.getElementById('devisFormEl').addEventListener('submit', envoyerDevis);
+</script>
+</body>
+</html>
