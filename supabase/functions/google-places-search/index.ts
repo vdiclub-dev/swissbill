@@ -1,13 +1,24 @@
 /**
  * Proxy Google Places Text Search → retourne des prospects formatés.
  * Secret : GOOGLE_PLACES_API_KEY
- * Pagination : jusqu'à 3 pages × 20 = 60 résultats max
+ * Mode canton : recherche multi-villes + déduplication par place_id
  */
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+// Villes principales par canton pour couvrir tout le territoire
+const CANTON_CITIES: Record<string, string[]> = {
+  "vaud":    ["Lausanne","Montreux","Vevey","Nyon","Yverdon-les-Bains","Morges","Aigle","Leysin","Villars-sur-Ollon","Château-d'Oex","Payerne","Orbe"],
+  "valais":  ["Sion","Sierre","Martigny","Monthey","Verbier","Zermatt","Saas-Fee","Crans-Montana","Leukerbad","Nendaz"],
+  "geneve":  ["Genève","Carouge","Meyrin","Vernier","Lancy","Onex","Thônex"],
+  "fribourg":["Fribourg","Bulle","Romont","Châtel-Saint-Denis","Morat"],
+  "berne":   ["Berne","Interlaken","Thoune","Biel","Grindelwald","Wengen","Gstaad"],
+  "zurich":  ["Zürich","Winterthur","Uster","Küsnacht","Rapperswil"],
+  "neuchatel":["Neuchâtel","La Chaux-de-Fonds","Le Locle","Yverdon"],
 };
 
 function json(data: unknown, status = 200) {
@@ -38,6 +49,23 @@ async function fetchPage(params: URLSearchParams): Promise<{ results: unknown[];
   return { results: data.results ?? [], next_page_token: data.next_page_token };
 }
 
+async function searchCity(keyword: string, city: string, apiKey: string): Promise<unknown[]> {
+  const params = new URLSearchParams({
+    query: `${keyword} ${city} Suisse`,
+    key: apiKey,
+    language: "fr",
+    region: "ch",
+  });
+  const p1 = await fetchPage(params);
+  const results = [...p1.results];
+  if (p1.next_page_token) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const p2 = await fetchPage(new URLSearchParams({ pagetoken: p1.next_page_token, key: apiKey }));
+    results.push(...p2.results);
+  }
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "POST requis" }, 405);
@@ -48,34 +76,57 @@ Deno.serve(async (req) => {
   let body: { keyword?: string; location?: string; limit?: number };
   try { body = await req.json(); } catch { return json({ error: "JSON invalide" }, 400); }
 
-  const limit    = Math.min(body.limit ?? 20, 60);
+  const limit    = Math.min(body.limit ?? 20, 300);
   const keyword  = (body.keyword || "").trim();
   const location = (body.location || "").trim();
 
   if (!keyword) return json({ error: "keyword requis" }, 400);
 
-  const textQuery = [keyword, location, "Suisse"].filter(Boolean).join(" ");
+  // Détecter si la région est un canton connu
+  const cantonKey = location.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "");
+  const cities = CANTON_CITIES[cantonKey];
 
-  // Récupérer jusqu'à 3 pages pour atteindre la limite demandée
-  const allPlaces: unknown[] = [];
-  const baseParams = new URLSearchParams({ query: textQuery, key: apiKey, language: "fr", region: "ch" });
+  let allPlaces: unknown[] = [];
 
-  const page1 = await fetchPage(baseParams);
-  allPlaces.push(...page1.results);
-
-  if (allPlaces.length < limit && page1.next_page_token) {
-    await new Promise((r) => setTimeout(r, 2000)); // délai requis par Google
-    const page2 = await fetchPage(new URLSearchParams({ pagetoken: page1.next_page_token, key: apiKey }));
-    allPlaces.push(...page2.results);
-
-    if (allPlaces.length < limit && page2.next_page_token) {
+  if (cities) {
+    // Mode canton : recherche par ville en séquentiel (évite rate limit Google)
+    for (const city of cities) {
+      const results = await searchCity(keyword, city, apiKey);
+      allPlaces.push(...results);
+      if (allPlaces.length >= limit * 2) break;
+    }
+  } else {
+    // Mode ville/région normal avec pagination
+    const textQuery = [keyword, location, "Suisse"].filter(Boolean).join(" ");
+    const baseParams = new URLSearchParams({ query: textQuery, key: apiKey, language: "fr", region: "ch" });
+    const p1 = await fetchPage(baseParams);
+    allPlaces.push(...p1.results);
+    if (allPlaces.length < limit && p1.next_page_token) {
       await new Promise((r) => setTimeout(r, 2000));
-      const page3 = await fetchPage(new URLSearchParams({ pagetoken: page2.next_page_token, key: apiKey }));
-      allPlaces.push(...page3.results);
+      const p2 = await fetchPage(new URLSearchParams({ pagetoken: p1.next_page_token, key: apiKey }));
+      allPlaces.push(...p2.results);
+      if (allPlaces.length < limit && p2.next_page_token) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const p3 = await fetchPage(new URLSearchParams({ pagetoken: p2.next_page_token, key: apiKey }));
+        allPlaces.push(...p3.results);
+      }
     }
   }
 
-  const places = allPlaces.slice(0, limit) as Record<string, unknown>[];
+  // Déduplication par place_id
+  const seen = new Set<string>();
+  const unique = allPlaces.filter((p) => {
+    const id = (p as Record<string, unknown>).place_id as string;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }) as Record<string, unknown>[];
+
+  const places = unique
+    .filter((p) => p.business_status !== "CLOSED_PERMANENTLY")
+    .slice(0, limit);
 
   // Récupérer website + téléphone via Place Details en parallèle
   const details = await Promise.all(
@@ -96,20 +147,17 @@ Deno.serve(async (req) => {
     })
   );
 
-  const prospects = places
-    .filter((p) => p.business_status !== "CLOSED_PERMANENTLY")
-    .map((p, i) => {
-      const nom     = (p.name as string) ?? "";
-      const address = (p.formatted_address as string) ?? "";
-      const site    = ((details[i]?.website as string) ?? "").replace(/\/$/, "");
-      const email   = site ? domainEmail(site) : "";
-      const ville   = address ? extractCity(address) : "";
-      const types   = (p.types as string[]) ?? [];
-      const secteur = types[0]?.replace(/_/g, " ") ?? "";
-      const tel     = (details[i]?.formatted_phone_number as string) ?? "";
-      return { nom, email, site, secteur, ville, tel, adresse: address };
-    })
-    .filter((p) => p.nom);
+  const prospects = places.map((p, i) => {
+    const nom     = (p.name as string) ?? "";
+    const address = (p.formatted_address as string) ?? "";
+    const site    = ((details[i]?.website as string) ?? "").replace(/\/$/, "");
+    const email   = site ? domainEmail(site) : "";
+    const ville   = address ? extractCity(address) : "";
+    const types   = (p.types as string[]) ?? [];
+    const secteur = types[0]?.replace(/_/g, " ") ?? "";
+    const tel     = (details[i]?.formatted_phone_number as string) ?? "";
+    return { nom, email, site, secteur, ville, tel, adresse: address };
+  }).filter((p) => p.nom);
 
-  return json({ prospects, total: allPlaces.length });
+  return json({ prospects, total: unique.length });
 });
