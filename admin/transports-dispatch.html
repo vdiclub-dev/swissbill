@@ -1309,24 +1309,49 @@ window.toggleMap=function(){
     else{overlay.classList.add('open');setTimeout(renderMap,120);}
 };
 
-// Cache geocodage pour éviter les requêtes répétées
+// Cache géocodage session
 var _geocodeCache={};
 
+// Photon (Komoot) — pas de rate limit strict, plus rapide que Nominatim
 async function geocodeAddress(addr){
     if(!addr)return null;
     var key=addr.trim().toLowerCase();
     if(_geocodeCache[key])return _geocodeCache[key];
     try{
-        var url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ch&q='+encodeURIComponent(addr);
-        var r=await fetch(url,{headers:{'Accept-Language':'fr'}});
+        // Photon : centré sur la Suisse (lat:46.8, lon:8.2)
+        var url='https://photon.komoot.io/api/?q='+encodeURIComponent(addr+' Suisse')+'&limit=1&lang=fr&lat=46.8&lon=8.2';
+        var r=await fetch(url);
         var d=await r.json();
-        if(d&&d[0]){
-            var pt=[parseFloat(d[0].lat),parseFloat(d[0].lon)];
+        if(d&&d.features&&d.features[0]){
+            var c=d.features[0].geometry.coordinates;
+            var pt=[parseFloat(c[1]),parseFloat(c[0])];
             _geocodeCache[key]=pt;
             return pt;
         }
     }catch(e){}
     return null;
+}
+
+// Géocoder par lots de 5 en parallèle + sauvegarder en base
+async function geocodeBatch(toGeocode, onProgress){
+    var BATCH=5;
+    var saved=0;
+    for(var i=0;i<toGeocode.length;i+=BATCH){
+        var batch=toGeocode.slice(i,i+BATCH);
+        await Promise.all(batch.map(async function(r){
+            var pt=await geocodeAddress(r.delivery_address);
+            if(pt){
+                r.delivery_lat=pt[0];
+                r.delivery_lng=pt[1];
+                // Sauvegarder en base pour ne plus avoir à géocoder
+                try{await db.from('transport_orders_simple').update({delivery_lat:pt[0],delivery_lng:pt[1]}).eq('id',r.id);}catch(e){}
+                saved++;
+            }
+        }));
+        if(onProgress)onProgress(Math.min(i+BATCH,toGeocode.length),toGeocode.length);
+        if(i+BATCH<toGeocode.length)await new Promise(function(res){setTimeout(res,300);});
+    }
+    return saved;
 }
 
 window.renderMap=async function(){
@@ -1341,15 +1366,13 @@ window.renderMap=async function(){
     }
 
     var legend=document.getElementById('mapLegend');
-    legend.innerHTML='<div style="font-size:11px;color:rgba(255,255,255,0.5)">⏳ Géolocalisation…</div>';
-
-    // Géocoder tous les transports sans coordonnées
     var toGeocode=rows.filter(function(r){return(!r.delivery_lat||!r.delivery_lng)&&r.delivery_address;});
-    for(var i=0;i<toGeocode.length;i++){
-        var pt=await geocodeAddress(toGeocode[i].delivery_address);
-        if(pt){toGeocode[i].delivery_lat=pt[0];toGeocode[i].delivery_lng=pt[1];}
-        // Petit délai pour respecter la limite Nominatim (1 req/s)
-        if(i<toGeocode.length-1)await new Promise(function(res){setTimeout(res,1100);});
+
+    if(toGeocode.length){
+        legend.innerHTML='<div style="font-size:11px;color:rgba(255,255,255,0.6)">⏳ Géolocalisation 0/'+toGeocode.length+'…</div>';
+        await geocodeBatch(toGeocode,function(done,total){
+            legend.innerHTML='<div style="font-size:11px;color:rgba(255,255,255,0.6)">⏳ '+done+'/'+total+' adresses…</div>';
+        });
     }
 
     var legendHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.42);margin-bottom:8px;letter-spacing:1px;">Légende</div>';
