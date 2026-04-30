@@ -1397,21 +1397,21 @@ window.toggleMap=function(){
     else{overlay.classList.add('open');setTimeout(renderMap,120);}
 };
 
-// ── Google Maps API ──────────────────────────────────────────
-var GMAPS_KEY='AIzaSyDQRPWBKWmWSHUDMOhXh91qxPPGudvS6D0';
+// ── Geocoding + routing (Photon + OSRM, no CORS issues) ──────
 var _geocodeCache={};
 
 async function geocodeAddress(addr){
     if(!addr)return null;
     var key=addr.trim().toLowerCase();
     if(_geocodeCache[key])return _geocodeCache[key];
+    // Photon (Komoot) — free, no rate limit, excellent Swiss coverage
     try{
-        var url='https://maps.googleapis.com/maps/api/geocode/json?address='+encodeURIComponent(addr+', Suisse')+'&key='+GMAPS_KEY+'&language=fr&region=ch';
+        var url='https://photon.komoot.io/api/?q='+encodeURIComponent(addr+' Schweiz')+'&limit=1&lang=fr&bbox=5.9,45.8,10.5,47.8';
         var r=await fetch(url);
         var d=await r.json();
-        if(d.status==='OK'&&d.results&&d.results[0]){
-            var loc=d.results[0].geometry.location;
-            var pt=[loc.lat,loc.lng];
+        if(d.features&&d.features[0]){
+            var c=d.features[0].geometry.coordinates;
+            var pt=[c[1],c[0]];
             _geocodeCache[key]=pt;
             return pt;
         }
@@ -1420,17 +1420,15 @@ async function geocodeAddress(addr){
 }
 
 async function calcRouteKm(pLat,pLng,dLat,dLng){
+    // OSRM — free, no auth, works from browser
     try{
-        var orig=pLat+','+pLng;
-        var dest=dLat+','+dLng;
-        var url='https://maps.googleapis.com/maps/api/distancematrix/json?origins='+orig+'&destinations='+dest+'&key='+GMAPS_KEY+'&mode=driving&language=fr';
+        var url='https://router.project-osrm.org/route/v1/driving/'+pLng+','+pLat+';'+dLng+','+dLat+'?overview=false';
         var r=await fetch(url);
         var j=await r.json();
-        if(j.status==='OK'&&j.rows[0]&&j.rows[0].elements[0]&&j.rows[0].elements[0].status==='OK'){
-            var el=j.rows[0].elements[0];
+        if(j.code==='Ok'&&j.routes&&j.routes[0]){
             return{
-                distance_km: Math.round(el.distance.value/100)/10,
-                duration_min: Math.round(el.duration.value/60)
+                distance_km: Math.round(j.routes[0].distance/100)/10,
+                duration_min: Math.round(j.routes[0].duration/60)
             };
         }
     }catch(e){}
