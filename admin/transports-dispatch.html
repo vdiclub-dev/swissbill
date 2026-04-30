@@ -342,8 +342,8 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 <div class="toast" id="toast"></div>
 
 <!-- BON DE LIVRAISON MODAL -->
-<div class="modal" id="modalBL" style="display:none;">
-    <div class="modal-box" style="max-width:680px;">
+<div class="overlay" id="modalBL">
+    <div class="modal-box" style="max-width:680px;max-height:90vh;overflow-y:auto;">
         <div class="modal-head">
             <span class="modal-title">🧾 Bon de livraison</span>
             <div style="display:flex;gap:8px;align-items:center;">
@@ -530,6 +530,23 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
 </div>
 
 <!-- MODAL NOUVELLE TOURNÉE -->
+<!-- EDIT DATE TOURNÉE -->
+<div class="overlay" id="modalEditDate">
+    <div class="mbox sm">
+        <div class="mhead"><div class="mtitle"><i class="fas fa-calendar-alt"></i> Date de la tournée</div><button type="button" class="mclose" onclick="closeModal('modalEditDate')">✕</button></div>
+        <input type="hidden" id="editDateTourneeId">
+        <div class="fgrid">
+            <div class="field s2"><label>Date</label><input type="date" id="editTDate"></div>
+            <div class="field"><label>Heure début</label><input type="time" id="editTDebut"></div>
+            <div class="field"><label>Heure fin</label><input type="time" id="editTFin"></div>
+        </div>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalEditDate')">Annuler</button>
+            <button type="button" class="btn btn-red" onclick="saveTourneeDate()"><i class="fas fa-check"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
 <div class="overlay" id="modalNewTournee">
     <div class="mbox sm">
         <div class="mhead"><div class="mtitle">Nouvelle tournée</div><button type="button" class="mclose" onclick="closeModal('modalNewTournee')">✕</button></div>
@@ -670,10 +687,24 @@ async function notifyOrderDecision(order,title,body){
 
 function toast(msg,ok){var t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=ok?'rgba(34,197,94,0.4)':'rgba(232,49,26,0.4)';t.classList.add('show');setTimeout(function(){t.classList.remove('show');},ok?4000:9000);}
 function openModal(id){document.getElementById(id).classList.add('open');}
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function closeModal(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.classList.remove('open');
+    if(el.style.display)el.style.display='none';
+}
 window.closeModal=closeModal;
 document.querySelectorAll('.overlay').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)closeModal(m.id);});});
-document.addEventListener('keydown',function(e){if(e.key==='Escape')document.querySelectorAll('.overlay.open').forEach(function(m){closeModal(m.id);});});
+document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){
+        document.querySelectorAll('.overlay.open').forEach(function(m){closeModal(m.id);});
+        // Modaux inline (display:flex)
+        ['modalBL','modalPOD'].forEach(function(id){
+            var el=document.getElementById(id);
+            if(el&&el.style.display==='flex')closeModal(id);
+        });
+    }
+});
 
 var CHIP={pending:{c:'pending',l:'Attente'},planned:{c:'planned',l:'Planifié'},in_transit:{c:'in_transit',l:'En route'},delivered:{c:'delivered',l:'Livré'},urgent:{c:'urgent',l:'URGENT'}};
 function chipCls(o){
@@ -774,7 +805,7 @@ function renderTourneePanel(){
             +(trItems?'<div class="t-transports">'+trItems+'</div>':'')
             +(window.ColixoProfit?window.ColixoProfit.renderProfitBadge(t.id):'')
             +'<div class="t-drop-zone"><i class="fas fa-hand-point-up" style="margin-right:5px;opacity:0.5;"></i>Glisser un transport ici</div>'
-            +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-ghost btn-xs" onclick="optimizeTournee(\''+t.id+'\')" title="Optimiser l\'ordre de livraison via OSRM"><i class="fas fa-route"></i> Opt.</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
+            +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-ghost btn-xs" onclick="editTourneeDate(\''+t.id+'\',\''+esc(t.date||'')+'\',\''+esc(t.heure_debut||'')+'\',\''+esc(t.heure_fin||'')+'\')"><i class="fas fa-calendar-alt"></i> Date</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-ghost btn-xs" onclick="optimizeTournee(\''+t.id+'\')" title="Optimiser l\'ordre de livraison via OSRM"><i class="fas fa-route"></i> Opt.</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
         +'</div>';
     }).join('');
 }
@@ -1485,6 +1516,31 @@ window.renderMap=async function(){
     leafletMap.invalidateSize();
 };
 
+// ── EDIT DATE TOURNÉE ────────────────────────────────────────
+window.editTourneeDate=function(id,date,debut,fin){
+    document.getElementById('editDateTourneeId').value=id;
+    document.getElementById('editTDate').value=date||'';
+    document.getElementById('editTDebut').value=debut||'08:00';
+    document.getElementById('editTFin').value=fin||'18:00';
+    openModal('modalEditDate');
+};
+
+window.saveTourneeDate=async function(){
+    var id=document.getElementById('editDateTourneeId').value;
+    var date=document.getElementById('editTDate').value;
+    var debut=document.getElementById('editTDebut').value;
+    var fin=document.getElementById('editTFin').value;
+    try{
+        var r=await db.from('tournees').update({date:date||null,heure_debut:debut||null,heure_fin:fin||null}).eq('id',id);
+        if(r.error)throw r.error;
+        var t=tournees.find(function(x){return x.id===id;});
+        if(t){t.date=date;t.heure_debut=debut;t.heure_fin=fin;}
+        closeModal('modalEditDate');
+        renderTourneePanel();
+        toast('Date mise à jour',true);
+    }catch(e){toast('Erreur : '+e.message,false);}
+};
+
 // ── BON DE LIVRAISON ─────────────────────────────────────────
 window.openBL=function(id){
     var o=rows.find(function(r){return r.id===id;});
@@ -1573,7 +1629,7 @@ window.openBL=function(id){
       </div>
     </div>`;
 
-    document.getElementById('modalBL').style.display='flex';
+    openModal('modalBL');
 };
 
 window.printBL=function(){
