@@ -1042,7 +1042,7 @@ function renderTable(list){
             +'<td style="font-size:13px;">'+(o.destinataire_nom?'<strong>'+esc(o.destinataire_nom)+'</strong>'+(o.destinataire_tel?'<br><span style="font-size:11px;color:var(--muted)">'+esc(o.destinataire_tel)+'</span>':''):'<span style="color:var(--muted)">—</span>')+'</td>'
             +'<td>'+(o.external_carrier_name?'<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#f59e0b;border-radius:12px;padding:2px 8px;" title="Transporteur externe'+(o.external_carrier_price?' — '+o.external_carrier_price+' CHF':'')+'"><i class="fas fa-truck" style="font-size:9px;"></i>'+esc(o.external_carrier_name)+'</span>'+(o.external_carrier_price?'<br><span style="font-size:11px;color:var(--muted)">'+o.external_carrier_price+' CHF</span>':''):drv?'<span style="font-size:12px;color:var(--blue)"><i class="fas fa-user" style="font-size:10px;margin-right:3px;"></i>'+esc(drv)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
             +'<td style="font-size:12px;color:var(--muted2);">'+(o.weight?o.weight+' kg':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.quantity||1)+' u</span></td>'
-            +'<td style="font-size:12px;color:var(--muted2);">'+(o.distance_km?Math.round(o.distance_km)+' km':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.duration_min?Math.round(o.duration_min)+' min':'—')+'</span></td>'
+            +'<td style="font-size:12px;color:var(--muted2);">'+(o.distance_km?Math.round(o.distance_km)+' km <button onclick="recalcKm(\''+o.id+'\')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--muted);padding:0 0 0 3px;" title="Recalculer">↺</button>':'<button onclick="recalcKm(\''+o.id+'\')" style="background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.3);color:var(--orange);border-radius:5px;cursor:pointer;font-size:10px;padding:2px 6px;" title="Calculer km">⟳ km</button>')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.duration_min?Math.round(o.duration_min)+' min':'—')+'</span></td>'
             +'<td>'+(t?'<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--blue);"><span style="width:8px;height:8px;border-radius:50%;background:'+(t.couleur||'#3b82f6')+'"></span>'+esc(t.nom)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
             +'<td style="font-size:11px;color:var(--muted);white-space:nowrap;">'+fdate(o.created_at)+'</td>'
             +'<td style="white-space:nowrap;">'+fdelivery(o)+'</td>'
@@ -1425,20 +1425,50 @@ async function geocodeAddress(addr){
     if(!addr)return null;
     var key=addr.trim().toLowerCase();
     if(_geocodeCache[key])return _geocodeCache[key];
-    // Photon (Komoot) — free, no rate limit, excellent Swiss coverage
+    // Nominatim — excellente précision pour NPA suisses
     try{
-        var url='https://photon.komoot.io/api/?q='+encodeURIComponent(addr+' Schweiz')+'&limit=1&lang=fr&bbox=5.9,45.8,10.5,47.8';
-        var r=await fetch(url);
+        var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(addr+', Switzerland')+'&format=json&limit=1&countrycodes=ch&accept-language=fr';
+        var r=await fetch(url,{headers:{'User-Agent':'Colixo-Dispatch/1.0'}});
         var d=await r.json();
-        if(d.features&&d.features[0]){
-            var c=d.features[0].geometry.coordinates;
-            var pt=[c[1],c[0]];
+        if(d&&d[0]){
+            var pt=[parseFloat(d[0].lat),parseFloat(d[0].lon)];
             _geocodeCache[key]=pt;
             return pt;
         }
     }catch(e){}
+    // Photon (Komoot) — fallback
+    try{
+        var url2='https://photon.komoot.io/api/?q='+encodeURIComponent(addr+' Schweiz')+'&limit=1&lang=fr&bbox=5.9,45.8,10.5,47.8';
+        var r2=await fetch(url2);
+        var d2=await r2.json();
+        if(d2.features&&d2.features[0]){
+            var c=d2.features[0].geometry.coordinates;
+            var pt2=[c[1],c[0]];
+            _geocodeCache[key]=pt2;
+            return pt2;
+        }
+    }catch(e){}
     return null;
 }
+
+// Forcer recalcul km pour un ordre (ignore coords en cache)
+window.recalcKm=async function(id){
+    var r=rows.find(function(x){return x.id===id;});
+    if(!r)return;
+    toast('⏳ Recalcul en cours…',true);
+    r.pickup_lat=null;r.pickup_lng=null;r.delivery_lat=null;r.delivery_lng=null;
+    delete _geocodeCache[(r.pickup_address||'').toLowerCase()];
+    delete _geocodeCache[(r.delivery_address||'').toLowerCase()];
+    if(r.delivery_address){var dPt=await geocodeAddress(r.delivery_address);if(dPt){r.delivery_lat=dPt[0];r.delivery_lng=dPt[1];}}
+    if(r.pickup_address){var pPt=await geocodeAddress(r.pickup_address);if(pPt){r.pickup_lat=pPt[0];r.pickup_lng=pPt[1];}}
+    if(!r.pickup_lat||!r.delivery_lat){toast('❌ Geocodage impossible',false);return;}
+    var route=await calcRouteKm(r.pickup_lat,r.pickup_lng,r.delivery_lat,r.delivery_lng);
+    if(!route){toast('❌ Route impossible',false);return;}
+    r.distance_km=route.distance_km;r.duration_min=route.duration_min;
+    try{await db.from('transport_orders_simple').update({pickup_lat:r.pickup_lat,pickup_lng:r.pickup_lng,delivery_lat:r.delivery_lat,delivery_lng:r.delivery_lng,distance_km:r.distance_km,duration_min:r.duration_min}).eq('id',id);}catch(e){}
+    applyFilter();
+    toast('✅ '+Math.round(r.distance_km)+' km calculés',true);
+};
 
 async function calcRouteKm(pLat,pLng,dLat,dLng){
     // OSRM — free, no auth, works from browser
