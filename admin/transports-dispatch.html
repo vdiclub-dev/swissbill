@@ -863,7 +863,27 @@ function setupTableDrag(){
 var pollTimer=null;
 async function load(opts){
     opts=opts||{};
-    try{var r=await db.from('transport_orders_simple').select('*').order('created_at',{ascending:false});if(r.error)throw r.error;rows=r.data||[];applyFilter();renderTourneePanel();}
+    try{
+        var r=await db.from('transport_orders_simple').select('*').order('created_at',{ascending:false});
+        if(r.error)throw r.error;
+        rows=r.data||[];
+        applyFilter();
+        renderTourneePanel();
+        // Recalculer km en arrière-plan pour les transports avec coords mais sans distance
+        var needKm=rows.filter(function(x){return!x.distance_km&&x.pickup_lat&&x.pickup_lng&&x.delivery_lat&&x.delivery_lng;});
+        if(needKm.length){
+            needKm.forEach(async function(r){
+                var route=await calcRouteKm(r.pickup_lat,r.pickup_lng,r.delivery_lat,r.delivery_lng);
+                if(route){
+                    r.distance_km=route.distance_km;
+                    r.duration_min=route.duration_min;
+                    try{await db.from('transport_orders_simple').update({distance_km:route.distance_km,duration_min:route.duration_min}).eq('id',r.id);}catch(e){}
+                }
+            });
+            // Réafficher après un délai
+            setTimeout(function(){applyFilter();renderTourneePanel();},3000);
+        }
+    }
     catch(e){if(!opts.silent)toast('Erreur : '+(e.message||e),false);}
 }
 function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(function(){if(document.visibilityState==='visible')load({silent:true});},15000);}
@@ -1332,21 +1352,56 @@ async function geocodeAddress(addr){
     return null;
 }
 
-// Géocoder par lots de 5 en parallèle + sauvegarder en base
+// Calcule la distance OSRM entre deux points
+async function calcRouteKm(pLat,pLng,dLat,dLng){
+    try{
+        var url='https://router.project-osrm.org/route/v1/driving/'+pLng+','+pLat+';'+dLng+','+dLat+'?overview=false';
+        var r=await fetch(url);
+        var j=await r.json();
+        if(j.routes&&j.routes[0]){
+            return{
+                distance_km: Math.round(j.routes[0].distance/100)/10,
+                duration_min: Math.round(j.routes[0].duration/60)
+            };
+        }
+    }catch(e){}
+    return null;
+}
+
+// Géocoder par lots de 5 en parallèle + calculer km + sauvegarder en base
 async function geocodeBatch(toGeocode, onProgress){
     var BATCH=5;
     var saved=0;
     for(var i=0;i<toGeocode.length;i+=BATCH){
         var batch=toGeocode.slice(i,i+BATCH);
         await Promise.all(batch.map(async function(r){
-            var pt=await geocodeAddress(r.delivery_address);
-            if(pt){
-                r.delivery_lat=pt[0];
-                r.delivery_lng=pt[1];
-                // Sauvegarder en base pour ne plus avoir à géocoder
-                try{await db.from('transport_orders_simple').update({delivery_lat:pt[0],delivery_lng:pt[1]}).eq('id',r.id);}catch(e){}
-                saved++;
+            // Géocoder l'adresse de livraison
+            var dPt=await geocodeAddress(r.delivery_address);
+            if(!dPt)return;
+            r.delivery_lat=dPt[0];
+            r.delivery_lng=dPt[1];
+
+            var update={delivery_lat:dPt[0],delivery_lng:dPt[1]};
+
+            // Géocoder l'adresse d'enlèvement si pas de coordonnées
+            if(r.pickup_address&&(!r.pickup_lat||!r.pickup_lng)){
+                var pPt=await geocodeAddress(r.pickup_address);
+                if(pPt){r.pickup_lat=pPt[0];r.pickup_lng=pPt[1];update.pickup_lat=pPt[0];update.pickup_lng=pPt[1];}
             }
+
+            // Calculer la distance via OSRM si on a les deux points et pas encore de km
+            if(!r.distance_km&&r.pickup_lat&&r.pickup_lng){
+                var route=await calcRouteKm(r.pickup_lat,r.pickup_lng,dPt[0],dPt[1]);
+                if(route){
+                    r.distance_km=route.distance_km;
+                    r.duration_min=route.duration_min;
+                    update.distance_km=route.distance_km;
+                    update.duration_min=route.duration_min;
+                }
+            }
+
+            try{await db.from('transport_orders_simple').update(update).eq('id',r.id);}catch(e){}
+            saved++;
         }));
         if(onProgress)onProgress(Math.min(i+BATCH,toGeocode.length),toGeocode.length);
         if(i+BATCH<toGeocode.length)await new Promise(function(res){setTimeout(res,300);});
