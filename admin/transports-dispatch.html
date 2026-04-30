@@ -574,6 +574,7 @@ if(!window.SUPABASE_CLIENT){document.body.innerHTML='<div style="padding:40px;co
 var db=window.SUPABASE_CLIENT;
 var rows=[],chauffeurs=[],tournees=[];
 var pickupCoords=null,deliveryCoords=null,orderCounter=1;
+var _kmProcessed=new Set();
 var displayOrder=[],dragId=null,dragSrcRow=null;
 var portalHighlightId=new URLSearchParams(window.location.search).get('highlight');
 var ROUTE_COST_DAY_CHF=320;
@@ -916,7 +917,7 @@ async function load(opts){
         renderTourneePanel();
         // Recalculer km en arrière-plan : geocoder si besoin + calculer distance
         var needProcess=rows.filter(function(x){
-            return !x.distance_km && (x.delivery_address||x.pickup_address);
+            return !x.distance_km && (x.delivery_address||x.pickup_address) && !_kmProcessed.has(x.id);
         });
         if(needProcess.length){
             toast('⏳ Calcul des distances pour '+needProcess.length+' transport'+(needProcess.length>1?'s':'')+'…',true);
@@ -952,6 +953,7 @@ async function load(opts){
                             r.duration_min=Math.round(r.distance_km/0.5);
                         }
                         done++;
+                        _kmProcessed.add(r.id);
                         try{
                             await db.from('transport_orders_simple').update({
                                 pickup_lat:r.pickup_lat,pickup_lng:r.pickup_lng,
