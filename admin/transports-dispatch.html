@@ -914,17 +914,19 @@ async function load(opts){
         rows=r.data||[];
         applyFilter();
         renderTourneePanel();
-        // Recalculer km en arrière-plan : géocoder si besoin + calculer distance
+        // Recalculer km en arrière-plan : geocoder si besoin + calculer distance
         var needProcess=rows.filter(function(x){
             return !x.distance_km && (x.delivery_address||x.pickup_address);
         });
         if(needProcess.length){
+            toast('⏳ Calcul des distances pour '+needProcess.length+' transport'+(needProcess.length>1?'s':'')+'…',true);
             (async function(){
                 var BATCH=5;
+                var done=0;
                 for(var i=0;i<needProcess.length;i+=BATCH){
                     var batch=needProcess.slice(i,i+BATCH);
                     await Promise.all(batch.map(async function(r){
-                        // Géocoder si coordonnées manquantes
+                        // Geocoder si coordonnées manquantes
                         if(!r.delivery_lat&&r.delivery_address){
                             var dPt=await geocodeAddress(r.delivery_address);
                             if(dPt){r.delivery_lat=dPt[0];r.delivery_lng=dPt[1];}
@@ -933,21 +935,34 @@ async function load(opts){
                             var pPt=await geocodeAddress(r.pickup_address);
                             if(pPt){r.pickup_lat=pPt[0];r.pickup_lng=pPt[1];}
                         }
-                        if(!r.pickup_lat||!r.delivery_lat)return;
+                        if(!r.pickup_lat||!r.delivery_lat){
+                            // Fallback: distance à vol d'oiseau * 1.3
+                            var km=haversineKm(r.pickup_lat||46.5,r.pickup_lng||6.6,r.delivery_lat||46.5,r.delivery_lng||6.6);
+                            if(km>0){r.distance_km=Math.round(km*1.3*10)/10;r.duration_min=Math.round(r.distance_km/0.5);}
+                            done++;return;
+                        }
                         var route=await calcRouteKm(r.pickup_lat,r.pickup_lng,r.delivery_lat,r.delivery_lng);
-                        if(!route)return;
-                        r.distance_km=route.distance_km;
-                        r.duration_min=route.duration_min;
+                        if(route){
+                            r.distance_km=route.distance_km;
+                            r.duration_min=route.duration_min;
+                        } else {
+                            // Fallback haversine si OSRM échoue
+                            var km=haversineKm(r.pickup_lat,r.pickup_lng,r.delivery_lat,r.delivery_lng);
+                            r.distance_km=Math.round(km*1.3*10)/10;
+                            r.duration_min=Math.round(r.distance_km/0.5);
+                        }
+                        done++;
                         try{
                             await db.from('transport_orders_simple').update({
                                 pickup_lat:r.pickup_lat,pickup_lng:r.pickup_lng,
                                 delivery_lat:r.delivery_lat,delivery_lng:r.delivery_lng,
-                                distance_km:route.distance_km,duration_min:route.duration_min
+                                distance_km:r.distance_km,duration_min:r.duration_min
                             }).eq('id',r.id);
                         }catch(e){}
                     }));
+                    applyFilter();renderTourneePanel();
                 }
-                applyFilter();renderTourneePanel();
+                toast('✅ Distances calculées pour '+done+' transport'+(done>1?'s':''),true);
             })();
         }
     }
@@ -1399,6 +1414,12 @@ window.toggleMap=function(){
 
 // ── Geocoding + routing (Photon + OSRM, no CORS issues) ──────
 var _geocodeCache={};
+
+function haversineKm(lat1,lng1,lat2,lng2){
+    var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+    var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
 
 async function geocodeAddress(addr){
     if(!addr)return null;
