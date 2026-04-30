@@ -1309,7 +1309,27 @@ window.toggleMap=function(){
     else{overlay.classList.add('open');setTimeout(renderMap,120);}
 };
 
-window.renderMap=function(){
+// Cache geocodage pour éviter les requêtes répétées
+var _geocodeCache={};
+
+async function geocodeAddress(addr){
+    if(!addr)return null;
+    var key=addr.trim().toLowerCase();
+    if(_geocodeCache[key])return _geocodeCache[key];
+    try{
+        var url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ch&q='+encodeURIComponent(addr);
+        var r=await fetch(url,{headers:{'Accept-Language':'fr'}});
+        var d=await r.json();
+        if(d&&d[0]){
+            var pt=[parseFloat(d[0].lat),parseFloat(d[0].lon)];
+            _geocodeCache[key]=pt;
+            return pt;
+        }
+    }catch(e){}
+    return null;
+}
+
+window.renderMap=async function(){
     var overlay=document.getElementById('mapOverlay');
     if(!overlay.classList.contains('open'))return;
     if(typeof L==='undefined'){toast('Leaflet non chargé',false);return;}
@@ -1319,7 +1339,19 @@ window.renderMap=function(){
     } else {
         leafletMap.eachLayer(function(l){if(l._cx)leafletMap.removeLayer(l);});
     }
+
     var legend=document.getElementById('mapLegend');
+    legend.innerHTML='<div style="font-size:11px;color:rgba(255,255,255,0.5)">⏳ Géolocalisation…</div>';
+
+    // Géocoder tous les transports sans coordonnées
+    var toGeocode=rows.filter(function(r){return(!r.delivery_lat||!r.delivery_lng)&&r.delivery_address;});
+    for(var i=0;i<toGeocode.length;i++){
+        var pt=await geocodeAddress(toGeocode[i].delivery_address);
+        if(pt){toGeocode[i].delivery_lat=pt[0];toGeocode[i].delivery_lng=pt[1];}
+        // Petit délai pour respecter la limite Nominatim (1 req/s)
+        if(i<toGeocode.length-1)await new Promise(function(res){setTimeout(res,1100);});
+    }
+
     var legendHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.42);margin-bottom:8px;letter-spacing:1px;">Légende</div>';
     var allPoints=[];
 
@@ -1331,7 +1363,7 @@ window.renderMap=function(){
         var sorted=optimized
             ?optimized.map(function(id){return tOrders.find(function(r){return r.id===id;});}).filter(Boolean)
             :tOrders;
-        sorted.forEach(function(r,idx){
+        sorted.forEach(function(r){
             var m=L.circleMarker([parseFloat(r.delivery_lat),parseFloat(r.delivery_lng)],{radius:8,color:col,weight:2,fillColor:col,fillOpacity:0.85}).addTo(leafletMap);
             m._cx=true;
             m.bindPopup('<strong>'+(r.order_number||r.id.slice(0,8))+'</strong><br>'+(r.delivery_address||'')+'<br>'+(r.destinataire_nom||''));
