@@ -914,19 +914,41 @@ async function load(opts){
         rows=r.data||[];
         applyFilter();
         renderTourneePanel();
-        // Recalculer km en arrière-plan pour les transports avec coords mais sans distance
-        var needKm=rows.filter(function(x){return!x.distance_km&&x.pickup_lat&&x.pickup_lng&&x.delivery_lat&&x.delivery_lng;});
-        if(needKm.length){
-            needKm.forEach(async function(r){
-                var route=await calcRouteKm(r.pickup_lat,r.pickup_lng,r.delivery_lat,r.delivery_lng);
-                if(route){
-                    r.distance_km=route.distance_km;
-                    r.duration_min=route.duration_min;
-                    try{await db.from('transport_orders_simple').update({distance_km:route.distance_km,duration_min:route.duration_min}).eq('id',r.id);}catch(e){}
+        // Recalculer km en arrière-plan : géocoder si besoin + calculer distance
+        var needProcess=rows.filter(function(x){
+            return !x.distance_km && (x.delivery_address||x.pickup_address);
+        });
+        if(needProcess.length){
+            (async function(){
+                var BATCH=5;
+                for(var i=0;i<needProcess.length;i+=BATCH){
+                    var batch=needProcess.slice(i,i+BATCH);
+                    await Promise.all(batch.map(async function(r){
+                        // Géocoder si coordonnées manquantes
+                        if(!r.delivery_lat&&r.delivery_address){
+                            var dPt=await geocodeAddress(r.delivery_address);
+                            if(dPt){r.delivery_lat=dPt[0];r.delivery_lng=dPt[1];}
+                        }
+                        if(!r.pickup_lat&&r.pickup_address){
+                            var pPt=await geocodeAddress(r.pickup_address);
+                            if(pPt){r.pickup_lat=pPt[0];r.pickup_lng=pPt[1];}
+                        }
+                        if(!r.pickup_lat||!r.delivery_lat)return;
+                        var route=await calcRouteKm(r.pickup_lat,r.pickup_lng,r.delivery_lat,r.delivery_lng);
+                        if(!route)return;
+                        r.distance_km=route.distance_km;
+                        r.duration_min=route.duration_min;
+                        try{
+                            await db.from('transport_orders_simple').update({
+                                pickup_lat:r.pickup_lat,pickup_lng:r.pickup_lng,
+                                delivery_lat:r.delivery_lat,delivery_lng:r.delivery_lng,
+                                distance_km:route.distance_km,duration_min:route.duration_min
+                            }).eq('id',r.id);
+                        }catch(e){}
+                    }));
                 }
-            });
-            // Réafficher après un délai
-            setTimeout(function(){applyFilter();renderTourneePanel();},3000);
+                applyFilter();renderTourneePanel();
+            })();
         }
     }
     catch(e){if(!opts.silent)toast('Erreur : '+(e.message||e),false);}
