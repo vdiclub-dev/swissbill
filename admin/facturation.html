@@ -481,7 +481,7 @@
         showLoad();
         const[{data:e},{data:f},{data:t},{data:o}]=await Promise.all([
             db.from('entreprises').select('*').order('nom'),
-            db.from('factures').select('*,entreprises(nom)').order('created_at',{ascending:false}).limit(50),
+            db.from('factures').select('*').order('created_at',{ascending:false}).limit(50),
             db.from('tarifs_clients').select('*'),
             db.from('transport_orders_simple').select('*').eq('status','delivered').is('facture_id',null).order('delivered_at',{ascending:false})
         ]);
@@ -528,7 +528,7 @@
     async function loadFactures(){
         const statut=document.getElementById('filtreStatut').value;
         const clientId=document.getElementById('filtreClient').value;
-        let q=db.from('factures').select('*,entreprises(nom)').order('created_at',{ascending:false});
+        let q=db.from('factures').select('*').order('created_at',{ascending:false});
         if(statut)q=q.eq('statut',statut);
         if(clientId)q=q.eq('entreprise_id',clientId);
         const{data}=await q.limit(100);
@@ -541,7 +541,7 @@
     function renderFactureRow(f,full=false){
         const statutBadge={brouillon:'badge-muted',envoyee:'badge-blue',payee:'badge-green',en_retard:'badge-red'}[f.statut]||'badge-muted';
         const statutLabel={brouillon:'Brouillon',envoyee:'Envoyée',payee:'Payée ✓',en_retard:'En retard ⚠️'}[f.statut]||f.statut;
-        const ent=f.entreprises?.nom||(entreprises.find(e=>e.id===f.entreprise_id)?.nom||'—');
+        const ent=entreprises.find(e=>e.id===f.entreprise_id)?.nom||f.client_nom||'—';
         const isRetard=f.statut==='envoyee'&&f.echeance_date&&new Date(f.echeance_date)<new Date();
         return `<tr style="${isRetard?'background:rgba(232,49,26,0.04)':''}">
             <td><strong>${f.numero||'—'}</strong></td>
@@ -564,7 +564,7 @@
     // ── À facturer ──
     async function loadAFacturer(){
         const{data}=await db.from('transport_orders_simple')
-            .select('*,entreprises(nom)')
+            .select('*')
             .eq('status','delivered')
             .is('facture_id',null)
             .not('entreprise_id','is',null)
@@ -575,7 +575,7 @@
         tbody.innerHTML=ordersAfacturer.map(o=>{
             const tarif=getTarif(o.entreprise_id);
             const prix=calcPrixColis(o,tarif);
-            const ent=o.entreprises?.nom||entreprises.find(e=>e.id===o.entreprise_id)?.nom||'—';
+            const ent=entreprises.find(e=>e.id===o.entreprise_id)?.nom||'—';
             return `<tr>
                 <td><strong>${o.order_number||o.id.slice(0,8)}</strong></td>
                 <td>${ent}</td>
