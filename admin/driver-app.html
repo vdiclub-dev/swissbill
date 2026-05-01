@@ -2641,15 +2641,17 @@
         const prevMissionsCount = missions.length;
         const prevMissionIds = new Set(missions.map(m => m.id));
         
-        // Seules les commandes validées par l'admin (admin_status='accepted') sont visibles
+        // Seules les commandes actives (non terminées, non annulées)
         const { data } = await db.from('transport_orders_simple')
-            .select('*').eq('driver_id',driver.id).neq('status','delivered')
+            .select('*').eq('driver_id',driver.id)
             .eq('admin_status','accepted')
+            .not('status','in',('delivered,completed,refused,cancelled,invoiced'))
             .order('created_at',{ascending:true});
         missions = data||[];
 
         const { data:done } = await db.from('transport_orders_simple')
-            .select('id').eq('driver_id',driver.id).eq('status','delivered')
+            .select('id').eq('driver_id',driver.id)
+            .not('status','in','(pending,planned,in_transit,refused)')
             .gte('delivered_at', today()+'T00:00:00');
 
         document.getElementById('srMissions').textContent = missions.length;
