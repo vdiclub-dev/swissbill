@@ -429,6 +429,29 @@
                 <div class="kpi"><div class="kpi-ico" style="background:rgba(34,197,94,0.12);color:var(--green)"><i class="fas fa-file-invoice-dollar"></i></div><div class="kpi-val" id="cTTC">—</div><div class="kpi-lbl">Total TTC CHF</div></div>
                 <div class="kpi"><div class="kpi-ico" style="background:rgba(168,85,247,0.12);color:var(--purple)"><i class="fas fa-list"></i></div><div class="kpi-val" id="cNb">—</div><div class="kpi-lbl">Pièces / lignes</div></div>
             </div>
+            <!-- Tableau TVA trimestrielle -->
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                    <div class="card-title">TVA PAR TRIMESTRE — <span id="tvaTriAnneeLabel"></span></div>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="exportTvaTrimestrielleCSV()"><i class="fas fa-file-csv"></i> Export trimestriel</button>
+                </div>
+                <div class="table-wrap">
+                <table class="tbl">
+                    <thead>
+                        <tr>
+                            <th>Trimestre</th>
+                            <th>CA HT Colixo</th><th>TVA Colixo</th>
+                            <th>CA HT Brimot</th><th>TVA Brimot</th>
+                            <th style="color:var(--yellow)">Total TVA à déclarer</th>
+                            <th>Total TTC</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tvaTriTable"></tbody>
+                    <tfoot id="tvaTriFoot"></tfoot>
+                </table>
+                </div>
+            </div>
+
             <div class="grid2">
                 <div class="card">
                     <div class="card-head"><div class="card-title">TVA PAR TAUX (période sélectionnée)</div></div>
@@ -732,7 +755,7 @@
             db.from('utilisateurs').select('id,nom,prenom').in('role',['chauffeur','admin','super_admin']),
             db.from('entreprises').select('id,nom'),
             db.from('dispatch_tour_snapshots').select('*').gte('tour_planned_date',mStart).lte('tour_planned_date',mEnd).order('created_at',{ascending:false}),
-            db.from('brimot_factures').select('*').gte('date_facture',mStart).lte('date_facture',mEnd)
+            db.from('brimot_factures').select('*').gte('date_facture',aStart).lte('date_facture',aEnd).order('date_facture',{ascending:true})
         ]);
 
         vehicules=vehs||[]; fraisList=frais||[]; kmList=km||[]; transports=trans||[]; chauffeurs=chauf||[]; entreprises=ents||[];
@@ -771,7 +794,7 @@
         const periodLabel=`${selAnnee}-${String(selMois).padStart(2,'0')}`;
         const fraisMois=comptaFraisMois||[];
         const transMois=comptaTransMois||[];
-        const brimotRows=(brimotFactures||[]).filter(brimotComptaOk);
+        const brimotRows=(brimotFactures||[]).filter(f=>brimotComptaOk(f)&&f.date_facture>=periodLabel+'-01'&&f.date_facture<=new Date(selAnnee,selMois,0).toISOString().slice(0,10));
 
         const buckets=new Map();
         function addBucket(key,ht,tva){
@@ -881,8 +904,120 @@
                 </tr>`;
             }).join('');
         }
+
+        renderTvaTrimestrielle();
     }
     window.renderComptaCH=renderComptaCH;
+
+    /* ── TVA TRIMESTRIELLE ── */
+    function renderTvaTrimestrielle(){
+        const entity=(document.getElementById('comptaEntity')||{}).value||'both';
+        const lbl=document.getElementById('tvaTriAnneeLabel');
+        if(lbl) lbl.textContent=selAnnee;
+
+        const quarters=[
+            { label:'T1 — Jan–Mar', months:[1,2,3] },
+            { label:'T2 — Avr–Jun', months:[4,5,6] },
+            { label:'T3 — Jul–Sep', months:[7,8,9] },
+            { label:'T4 — Oct–Déc', months:[10,11,12] }
+        ];
+
+        const rows=quarters.map(q=>{
+            let cHt=0, cTva=0, cTtc=0;
+            let bHt=0, bTva=0, bTtc=0;
+
+            if(entity==='colixo'||entity==='both'){
+                for(const t of (transports||[])){
+                    const d=new Date(t.created_at);
+                    if(d.getFullYear()!==selAnnee) continue;
+                    if(!q.months.includes(d.getMonth()+1)) continue;
+                    const s=colixoTtcSplit(t.price_chf);
+                    cHt+=s.ht; cTva+=s.tva; cTtc+=s.ttc;
+                }
+            }
+            if(entity==='brimot'||entity==='both'){
+                for(const f of (brimotFactures||[])){
+                    if(!brimotComptaOk(f)) continue;
+                    const m=parseInt((f.date_facture||'').slice(5,7));
+                    if(!q.months.includes(m)) continue;
+                    bHt+=parseFloat(f.montant_ht)||0;
+                    bTva+=parseFloat(f.montant_tva)||0;
+                    bTtc+=parseFloat(f.montant_ttc)||0;
+                }
+            }
+
+            return { label:q.label, cHt, cTva, cTtc, bHt, bTva, bTtc,
+                     totalTva:cTva+bTva, totalTtc:cTtc+bTtc };
+        });
+
+        const fmt=v=>v.toLocaleString('fr-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+        const tb=document.getElementById('tvaTriTable');
+        const tf=document.getElementById('tvaTriFoot');
+        if(!tb) return;
+
+        const hasData=rows.some(r=>r.totalTtc>0);
+        if(!hasData){
+            tb.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-txt">Aucune donnée pour '+selAnnee+'</div></div></td></tr>';
+            if(tf) tf.innerHTML='';
+            return;
+        }
+
+        tb.innerHTML=rows.map(r=>`<tr>
+            <td style="font-weight:600;color:var(--white)">${esc(r.label)}</td>
+            <td>${entity==='brimot'?'—':fmt(r.cHt)}</td>
+            <td>${entity==='brimot'?'—':fmt(r.cTva)}</td>
+            <td>${entity==='colixo'?'—':fmt(r.bHt)}</td>
+            <td>${entity==='colixo'?'—':fmt(r.bTva)}</td>
+            <td style="color:var(--yellow);font-weight:700">${fmt(r.totalTva)}</td>
+            <td style="color:var(--text2)">${fmt(r.totalTtc)}</td>
+        </tr>`).join('');
+
+        const tot=rows.reduce((a,r)=>({cHt:a.cHt+r.cHt,cTva:a.cTva+r.cTva,bHt:a.bHt+r.bHt,bTva:a.bTva+r.bTva,totalTva:a.totalTva+r.totalTva,totalTtc:a.totalTtc+r.totalTtc}),{cHt:0,cTva:0,bHt:0,bTva:0,totalTva:0,totalTtc:0});
+        if(tf) tf.innerHTML=`<tr style="border-top:2px solid var(--border2);font-weight:700">
+            <td style="color:var(--orange)">TOTAL ${selAnnee}</td>
+            <td>${entity==='brimot'?'—':fmt(tot.cHt)}</td>
+            <td>${entity==='brimot'?'—':fmt(tot.cTva)}</td>
+            <td>${entity==='colixo'?'—':fmt(tot.bHt)}</td>
+            <td>${entity==='colixo'?'—':fmt(tot.bTva)}</td>
+            <td style="color:var(--yellow);font-weight:700">${fmt(tot.totalTva)}</td>
+            <td>${fmt(tot.totalTtc)}</td>
+        </tr>`;
+    }
+    window.renderTvaTrimestrielle=renderTvaTrimestrielle;
+
+    function exportTvaTrimestrielleCSV(){
+        const entity=(document.getElementById('comptaEntity')||{}).value||'both';
+        const quarters=[
+            { label:'T1',months:[1,2,3] },
+            { label:'T2',months:[4,5,6] },
+            { label:'T3',months:[7,8,9] },
+            { label:'T4',months:[10,11,12] }
+        ];
+        const lines=[['Trimestre','CA HT Colixo','TVA Colixo','CA HT Brimot','TVA Brimot','Total TVA','Total TTC']];
+        let totC={ht:0,tva:0}, totB={ht:0,tva:0}, totTva=0, totTtc=0;
+        for(const q of quarters){
+            let cHt=0,cTva=0,cTtc=0,bHt=0,bTva=0,bTtc=0;
+            if(entity!=='brimot') for(const t of (transports||[])){
+                const d=new Date(t.created_at);
+                if(d.getFullYear()!==selAnnee||!q.months.includes(d.getMonth()+1)) continue;
+                const s=colixoTtcSplit(t.price_chf); cHt+=s.ht; cTva+=s.tva; cTtc+=s.ttc;
+            }
+            if(entity!=='colixo') for(const f of (brimotFactures||[])){
+                if(!brimotComptaOk(f)) continue;
+                const m=parseInt((f.date_facture||'').slice(5,7));
+                if(!q.months.includes(m)) continue;
+                bHt+=parseFloat(f.montant_ht)||0; bTva+=parseFloat(f.montant_tva)||0; bTtc+=parseFloat(f.montant_ttc)||0;
+            }
+            const tva=cTva+bTva, ttc=cTtc+bTtc;
+            totC.ht+=cHt; totC.tva+=cTva; totB.ht+=bHt; totB.tva+=bTva; totTva+=tva; totTtc+=ttc;
+            const f2=v=>v.toFixed(2).replace('.',',');
+            lines.push([`${q.label} ${selAnnee}`,f2(cHt),f2(cTva),f2(bHt),f2(bTva),f2(tva),f2(ttc)]);
+        }
+        const f2=v=>v.toFixed(2).replace('.',',');
+        lines.push([`TOTAL ${selAnnee}`,f2(totC.ht),f2(totC.tva),f2(totB.ht),f2(totB.tva),f2(totTva),f2(totTtc)]);
+        downloadCsv(`TVA_trimestrielle_${selAnnee}.csv`, lines);
+    }
+    window.exportTvaTrimestrielleCSV=exportTvaTrimestrielleCSV;
 
     function downloadCsv(filename, lines){
         const csv=lines.join('\n');
