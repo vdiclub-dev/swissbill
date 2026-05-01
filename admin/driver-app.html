@@ -2424,36 +2424,71 @@
                     carburant_montant_chf = Math.round(litres * prixL * 100) / 100;
                 }
             }
-            const row = {
-                vehicule_id:   vid,
-                chauffeur_id:  driver.id,
-                date:          todayKm,
-                km_debut:      debut,
-                km_fin:        fin || debut,
-                km_parcourus:  kmParc,
+
+            const rowFull = {
+                vehicule_id:  vid,
+                chauffeur_id: driver.id,
+                date:         todayKm,
+                km_debut:     debut,
+                km_fin:       fin || debut,
+                km_parcourus: kmParc,
                 carburant_litres,
                 carburant_prix_litre_chf,
                 carburant_montant_chf
             };
-            const { error } = await db.from('vehicule_km').upsert([row], { onConflict: 'vehicule_id,date' });
+            const rowBase = {
+                vehicule_id:  vid,
+                chauffeur_id: driver.id,
+                date:         todayKm,
+                km_debut:     debut,
+                km_fin:       fin || debut,
+                km_parcourus: kmParc
+            };
+
+            let usedFull = true;
+            let { error } = await db.from('vehicule_km').upsert([rowFull], { onConflict: 'vehicule_id,date' });
+
             if (error) {
                 const em = String(error.message || '');
-                if (em.includes('carburant') || em.includes('schema cache') || em.includes('column')) {
-                    toast('error', 'Colonnes carburant absentes : exécutez le script SQL chauffeur_depenses_schema.sql dans Supabase.');
+                const isColErr = em.includes('carburant') || em.includes('schema cache') || em.includes('column');
+                const isConstraint = em.includes('constraint') || em.includes('unique') || em.includes('onConflict');
+                if (isColErr) {
+                    // colonnes carburant absentes → retry sans elles
+                    usedFull = false;
+                    const r2 = await db.from('vehicule_km').upsert([rowBase], { onConflict: 'vehicule_id,date' });
+                    if (r2.error) {
+                        const em2 = String(r2.error.message || '');
+                        if (em2.includes('constraint') || em2.includes('unique') || em2.includes('duplicate')) {
+                            // contrainte unique absente → update manuel
+                            const r3 = await db.from('vehicule_km')
+                                .update(rowBase)
+                                .eq('vehicule_id', vid).eq('date', todayKm);
+                            if (r3.error) throw r3.error;
+                        } else {
+                            throw r2.error;
+                        }
+                    }
+                } else if (isConstraint) {
+                    // contrainte unique absente → update manuel
+                    const r2 = await db.from('vehicule_km')
+                        .update(rowFull)
+                        .eq('vehicule_id', vid).eq('date', todayKm);
+                    if (r2.error) throw r2.error;
                 } else {
                     throw error;
                 }
-                return;
             }
 
             const status = document.getElementById('kmStatus');
             status.className = 'pc-status work';
             status.textContent = `${kmParc} km`;
             let msg = `${kmParc} km enregistrés ✓`;
-            if (carburant_litres != null && carburant_montant_chf != null) {
+            if (usedFull && carburant_litres != null && carburant_montant_chf != null) {
                 msg += ` · Plein ${carburant_montant_chf.toFixed(2)} CHF`;
-            } else if (carburant_litres != null) {
-                msg += ` · ${carburant_litres} L (ajoutez le prix/L pour le montant)`;
+            } else if (usedFull && carburant_litres != null) {
+                msg += ` · ${carburant_litres} L`;
+            } else if (!usedFull) {
+                msg += ' (exécutez fix_vehicule_km_schema.sql pour enregistrer le carburant)';
             }
             toast('success', msg);
         } catch(e) { toast('error', e.message); }
