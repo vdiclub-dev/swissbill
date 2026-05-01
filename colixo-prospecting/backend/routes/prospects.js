@@ -6,7 +6,9 @@ const { validateProspect } = require('../utils/validator');
 router.get('/', async (req, res) => {
   try {
     const { statut, secteur, score_classe, search, sort } = req.query;
-    const data = await supa.getAllProspects({ statut, secteur, score_classe, search, sort });
+    const page  = Math.max(0, parseInt(req.query.page  || '0'));
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || '100')));
+    const data  = await supa.getAllProspects({ statut, secteur, score_classe, search, sort, page, limit });
     res.json({ ok: true, data });
   } catch (err) {
     res.status(err.statusCode || 500).json({ ok: false, error: err.message });

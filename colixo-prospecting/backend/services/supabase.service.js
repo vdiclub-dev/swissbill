@@ -88,8 +88,8 @@ async function findDuplicate(payload) {
 
 // ── Prospects ────────────────────────────────────────────────
 
-async function getAllProspects({ statut, secteur, score_classe, search, sort } = {}) {
-  let q = db.from('prospects').select('*');
+async function getAllProspects({ statut, secteur, score_classe, search, sort, page = 0, limit = 100 } = {}) {
+  let q = db.from('prospects').select('*', { count: 'exact' });
 
   if (statut)       q = q.eq('statut', statut);
   if (secteur)      q = q.eq('secteur', secteur);
@@ -102,9 +102,12 @@ async function getAllProspects({ statut, secteur, score_classe, search, sort } =
   else if (sort === 'activite') q = q.order('updated_at', { ascending: false });
   else                          q = q.order('created_at', { ascending: false });
 
-  const { data, error } = await q;
+  const from = page * limit;
+  q = q.range(from, from + limit - 1);
+
+  const { data, count, error } = await q;
   assertOk(error, 'getAllProspects');
-  return data;
+  return { items: data, total: count, page, limit };
 }
 
 async function getProspectById(id) {

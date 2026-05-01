@@ -570,9 +570,13 @@ async function renderProspects(filters = {}) {
   if (filters.search)  params += `${params ? '&' : '?'}search=${encodeURIComponent(filters.search)}`;
   if (filters.secteur) params += `${params ? '&' : '?'}secteur=${encodeURIComponent(filters.secteur)}`;
 
-  let prospects;
+  const currentPage = filters.page || 0;
+  const sep = params ? '&' : '?';
+  params += `${sep}page=${currentPage}&limit=100`;
+
+  let raw;
   try {
-    prospects = await api.get('/prospects' + params);
+    raw = await api.get('/prospects' + params);
   } catch (err) {
     hideLoader();
     document.getElementById('content').innerHTML = `
@@ -584,9 +588,12 @@ async function renderProspects(filters = {}) {
       </div>`;
     return;
   }
-  if (!Array.isArray(prospects)) prospects = [];
+  const prospects = Array.isArray(raw) ? raw : (raw?.items || []);
+  const total     = raw?.total ?? prospects.length;
+  const totalPages = Math.ceil(total / 100);
   state.prospects = prospects;
-  updateNavCount(prospects.length);
+  state.currentFilters = filters;
+  updateNavCount(total);
   hideLoader();
 
   document.getElementById('topbarRight').innerHTML = `
@@ -618,7 +625,7 @@ async function renderProspects(filters = {}) {
         <option value="score" ${filters.sort==='score'?'selected':''}>Tri: Score</option>
         <option value="activite" ${filters.sort==='activite'?'selected':''}>Tri: Activité récente</option>
       </select>
-      <span style="font-size:12px;color:var(--muted);margin-left:auto;">${prospects.length} prospect${prospects.length > 1 ? 's' : ''}</span>
+      <span style="font-size:12px;color:var(--muted);margin-left:auto;">${total} prospect${total > 1 ? 's' : ''}${totalPages > 1 ? ` — page ${currentPage+1}/${totalPages}` : ''}</span>
     </div>
 
     ${prospects.length === 0 ? `
@@ -676,8 +683,20 @@ async function renderProspects(filters = {}) {
           </tbody>
         </table>
       </div>
-    </div>`}
+    </div>
+    ${totalPages > 1 ? `
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:16px 0;">
+      <button class="btn btn-sm btn-ghost" onclick="goPage(${currentPage-1})" ${currentPage===0?'disabled':''}>← Précédent</button>
+      <span style="font-size:13px;color:var(--muted);">Page ${currentPage+1} / ${totalPages}</span>
+      <button class="btn btn-sm btn-ghost" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages-1?'disabled':''}>Suivant →</button>
+    </div>` : ''}
+    `}
   `;
+}
+
+function goPage(page) {
+  const f = state.currentFilters || {};
+  renderProspects({ ...f, page });
 }
 
 let searchTimeout;
@@ -693,6 +712,7 @@ function applyFilters() {
     score_classe: document.getElementById('filtreClasse')?.value || '',
     secteur:      document.getElementById('filtreSecteur')?.value|| '',
     sort:         document.getElementById('filtreSort')?.value   || '',
+    page: 0,
   });
 }
 
