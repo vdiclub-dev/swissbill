@@ -570,7 +570,21 @@ async function renderProspects(filters = {}) {
   if (filters.search)  params += `${params ? '&' : '?'}search=${encodeURIComponent(filters.search)}`;
   if (filters.secteur) params += `${params ? '&' : '?'}secteur=${encodeURIComponent(filters.secteur)}`;
 
-  const prospects = await api.get('/prospects' + params);
+  let prospects;
+  try {
+    prospects = await api.get('/prospects' + params);
+  } catch (err) {
+    hideLoader();
+    document.getElementById('content').innerHTML = `
+      <div style="padding:40px;text-align:center;color:#f87171;">
+        <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
+        <div style="font-weight:700;margin-bottom:8px;">Impossible de charger les prospects</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px;">${escHtml(err.message)}</div>
+        <button class="btn btn-sm btn-ghost" onclick="renderProspects()">↺ Réessayer</button>
+      </div>`;
+    return;
+  }
+  if (!Array.isArray(prospects)) prospects = [];
   state.prospects = prospects;
   updateNavCount(prospects.length);
   hideLoader();
