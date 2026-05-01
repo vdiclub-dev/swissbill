@@ -9,6 +9,26 @@ ALTER TABLE public.vehicule_km
     ADD COLUMN IF NOT EXISTS carburant_prix_litre_chf    NUMERIC(8,4),
     ADD COLUMN IF NOT EXISTS carburant_montant_chf       NUMERIC(10,2);
 
+-- km_parcourus : si colonne normale, la rendre générée automatiquement
+-- (si déjà GENERATED, cette commande peut échouer → ignorer l'erreur)
+DO $$
+BEGIN
+    -- Vérifier si km_parcourus est déjà une colonne générée
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name   = 'vehicule_km'
+          AND column_name  = 'km_parcourus'
+          AND is_generated = 'ALWAYS'
+    ) THEN
+        -- Supprimer la colonne normale et la recréer comme générée
+        ALTER TABLE public.vehicule_km DROP COLUMN IF EXISTS km_parcourus;
+        ALTER TABLE public.vehicule_km
+            ADD COLUMN km_parcourus NUMERIC(10,2)
+            GENERATED ALWAYS AS (GREATEST(km_fin - km_debut, 0)) STORED;
+    END IF;
+END $$;
+
 -- 2. Contrainte unique pour l'upsert (vehicule_id, date)
 DO $$
 BEGIN
