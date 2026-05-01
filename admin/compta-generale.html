@@ -748,9 +748,11 @@ document.getElementById('selExercice').addEventListener('change', loadData);
 
 async function init(){
     const { data:{ session } }=await db.auth.getSession();
-    if(!session){ window.location.href='../login/index.html'; return; }
-    const { data:user }=await db.from('utilisateurs').select('*').eq('id',session.user.id).single();
-    if(!user||!['admin','super_admin'].includes(user.role)){ await db.auth.signOut(); window.location.href='../login/index.html'; return; }
+    const codeUser=JSON.parse(localStorage.getItem('colixo_user')||'null');
+    if(!session&&!codeUser){ window.location.href='../login/index.html'; return; }
+    const uid=session?.user?.id||codeUser?.id;
+    const { data:user }=await db.from('utilisateurs').select('*').eq('id',uid).single();
+    if(!user||!['admin','super_admin'].includes(user.role)){ localStorage.removeItem('colixo_user'); window.location.href='../login/index.html'; return; }
     document.getElementById('sbAv').textContent=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'A';
     document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
     document.getElementById('btnLogout').addEventListener('click', async()=>{ await db.auth.signOut(); window.location.href='../login/index.html'; });
