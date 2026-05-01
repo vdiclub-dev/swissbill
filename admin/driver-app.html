@@ -2444,37 +2444,37 @@
                 km_fin:       fin || debut
             };
 
-            let usedFull = true;
-            let { error } = await db.from('vehicule_km').upsert([rowFull], { onConflict: 'vehicule_id,date' });
+            // Chercher si une ligne existe déjà pour ce véhicule + date
+            const { data: existing } = await db.from('vehicule_km')
+                .select('id').eq('vehicule_id', vid).eq('date', todayKm).maybeSingle();
 
-            if (error) {
-                const em = String(error.message || '');
-                const isColErr = em.includes('carburant') || em.includes('schema cache') || em.includes('column');
-                const isConstraint = em.includes('constraint') || em.includes('unique') || em.includes('onConflict');
-                if (isColErr) {
-                    // colonnes carburant absentes → retry sans elles
-                    usedFull = false;
-                    const r2 = await db.from('vehicule_km').upsert([rowBase], { onConflict: 'vehicule_id,date' });
-                    if (r2.error) {
-                        const em2 = String(r2.error.message || '');
-                        if (em2.includes('constraint') || em2.includes('unique') || em2.includes('duplicate')) {
-                            // contrainte unique absente → update manuel
-                            const r3 = await db.from('vehicule_km')
-                                .update(rowBase)
-                                .eq('vehicule_id', vid).eq('date', todayKm);
-                            if (r3.error) throw r3.error;
-                        } else {
-                            throw r2.error;
-                        }
-                    }
-                } else if (isConstraint) {
-                    // contrainte unique absente → update manuel
-                    const r2 = await db.from('vehicule_km')
-                        .update(rowFull)
-                        .eq('vehicule_id', vid).eq('date', todayKm);
-                    if (r2.error) throw r2.error;
+            let usedFull = true;
+            let saveOk = false;
+
+            const tryRow = async (row) => {
+                if (existing?.id) {
+                    const { data: upd, error: e } = await db.from('vehicule_km')
+                        .update(row).eq('id', existing.id).select('id');
+                    if (e) throw e;
+                    if (!upd || upd.length === 0) throw new Error('RLS bloqué — exécutez fix_vehicule_km_schema.sql dans Supabase');
                 } else {
-                    throw error;
+                    const { data: ins, error: e } = await db.from('vehicule_km')
+                        .insert([row]).select('id');
+                    if (e) throw e;
+                    if (!ins || ins.length === 0) throw new Error('RLS bloqué — exécutez fix_vehicule_km_schema.sql dans Supabase');
+                }
+                saveOk = true;
+            };
+
+            try {
+                await tryRow(rowFull);
+            } catch (e) {
+                const em = String(e.message || '');
+                if (em.includes('carburant') || em.includes('schema cache') || em.includes('column')) {
+                    usedFull = false;
+                    await tryRow(rowBase);
+                } else {
+                    throw e;
                 }
             }
 
