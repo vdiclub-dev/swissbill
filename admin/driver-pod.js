@@ -136,12 +136,14 @@ async function validateDelivery(params) {
     if (signatureUrl) orderPayload.signature_url = signatureUrl;
     if (note)         orderPayload.instructions  = note;
 
-    var { error: orderErr } = await client
+    var { data: updRows, error: orderErr } = await client
         .from('transport_orders_simple')
         .update(orderPayload)
-        .eq('id', missionId);
+        .eq('id', missionId)
+        .select('id');
 
     if (orderErr) return { ok: false, error: orderErr.message };
+    if (!updRows || updRows.length === 0) return { ok: false, error: 'RLS bloqué — exécutez fix_transport_orders_rls.sql dans Supabase' };
 
     // ── Save to deliveries table ──────────────────────────────────────────────
     var record = {
