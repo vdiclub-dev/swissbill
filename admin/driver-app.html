@@ -2243,11 +2243,12 @@
 
             // Seulement confirmer l'enlèvement physique (picked_up_at + status)
             // driver_id et assigned_at restent inchangés (définis par le dispatch)
-            const { error } = await db.from('transport_orders_simple').update({
+            const { data: updPu, error } = await db.from('transport_orders_simple').update({
                 status:       'in_transit',
                 picked_up_at: nowCH()
-            }).eq('id', id);
+            }).eq('id', id).select('id');
             if(error) throw error;
+            if(!updPu || updPu.length === 0) throw new Error('RLS bloqué — exécutez fix_transport_orders_rls.sql dans Supabase');
             toast('success', '✅ Enlèvement confirmé !');
             renderBatchLogRow(
                 'success',
@@ -2820,9 +2821,10 @@
                 toast('error', '❌ Cette commande n\'a pas encore été validée par l\'administration.');
                 return;
             }
-            const { error } = await db.from('transport_orders_simple')
-                .update({status:'in_transit', picked_up_at:nowCH()}).eq('id',id);
+            const { data: updated, error } = await db.from('transport_orders_simple')
+                .update({status:'in_transit', picked_up_at:nowCH()}).eq('id',id).select('id');
             if(error) throw error;
+            if(!updated || updated.length === 0) throw new Error('RLS bloqué — exécutez fix_transport_orders_rls.sql dans Supabase');
             toast('success','Mission démarrée !');
             await loadMissions();
         } catch(e) { toast('error',e.message); }
@@ -3465,12 +3467,13 @@
             showLoad();
             const now = nowCH();
             let signatureData = hasSig && sigCanvas ? sigCanvas.toDataURL('image/jpeg', 0.8) : null;
-            const { error: oe } = await db.from('transport_orders_simple').update({
+            const { data: updOe, error: oe } = await db.from('transport_orders_simple').update({
                 status: 'delivered', delivered_at: now,
                 receiver_name: receiverName, pod_status: mode !== 'quick',
                 pod_mode: mode, instructions: note || curMission.instructions || null
-            }).eq('id', curMission.id);
+            }).eq('id', curMission.id).select('id');
             if(oe) { hideLoad(); toast('error', oe.message); return; }
+            if(!updOe || updOe.length === 0) { hideLoad(); toast('error', 'RLS bloqué — exécutez fix_transport_orders_rls.sql dans Supabase'); return; }
             try {
                 const rec = {
                     order_id: curMission.id, driver_id: driver.id, delivered_at: now,
