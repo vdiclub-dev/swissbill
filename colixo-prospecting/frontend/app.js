@@ -912,7 +912,8 @@ function renderTasks(tasks, prospectId) {
 // ── Pipeline ───────────────────────────────────────────────────
 async function renderPipeline() {
   showLoader('Chargement du pipeline...');
-  const prospects = await api.get('/prospects');
+  const raw = await api.get('/prospects?limit=200');
+  const prospects = Array.isArray(raw) ? raw : (raw?.items || []);
   state.prospects = prospects;
   hideLoader();
 
@@ -932,7 +933,7 @@ async function renderPipeline() {
   prospects.forEach(p => { if (grouped[p.statut] !== undefined) grouped[p.statut].push(p); });
 
   document.getElementById('content').innerHTML = `
-    <div style="margin-bottom:16px;color:var(--muted);font-size:13px;">Vue pipeline — ${prospects.length} prospects · Cliquez sur une carte pour ouvrir la fiche</div>
+    <div style="margin-bottom:16px;color:var(--muted);font-size:13px;">Vue pipeline — ${raw?.total ?? prospects.length} prospects · Cliquez sur une carte pour ouvrir la fiche</div>
     <div class="pipeline-grid">
       ${STAGES.map(s => `
         <div class="pipeline-col">
