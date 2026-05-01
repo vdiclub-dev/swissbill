@@ -2016,11 +2016,13 @@
             .eq('entreprise_id', getClientScopeId())
             .order('created_at', { ascending: false })
             .limit(50);
-        // Commandes actives = non livrées + livrées dans les dernières 24h
-        const orders = (data || []).filter(o =>
-            o.status !== 'delivered' ||
-            (new Date() - new Date(o.delivered_at || o.created_at)) < 86400000
-        );
+        // Commandes actives = non livrées/complétées + livrées dans les dernières 24h
+        const TERMINAL = ['completed', 'invoiced'];
+        const orders = (data || []).filter(o => {
+            if (TERMINAL.includes(o.status)) return false;
+            if (o.status === 'delivered') return (new Date() - new Date(o.delivered_at || o.created_at)) < 86400000;
+            return true;
+        });
         document.getElementById('badgeOrders').textContent = orders.length;
         const el = document.getElementById('ordersList');
         if(!orders.length) { el.innerHTML = '<div class="empty">📦 Aucune expédition en cours</div>'; return; }
