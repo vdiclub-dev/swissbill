@@ -438,18 +438,11 @@
         throw error || new Error('Création du compte échouée');
     }
 
-    /* ── Protection session ── */
+    /* ── Protection session — vérif rapide sans signOut ── */
     (async () => {
         const { data: { session } } = await db.auth.getSession();
         const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        const userId = session?.user?.id || codeUser?.id;
-        if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
-        if (!userId) { window.location.replace('../login/index.html'); return; }
-        const { data: user } = await db.from('utilisateurs').select('role').eq('id', userId).single();
-        if (!user || !['admin','super_admin'].includes(user.role)) {
-            await db.auth.signOut();
-            window.location.replace('../login/index.html');
-        }
+        if (!session && !codeUser) { window.location.replace('../login/index.html'); }
     })();
 
     /* ── Curseur personnalisé ── */
@@ -839,7 +832,6 @@
         const { data: user } = await db.from('utilisateurs').select('*').eq('id', uid).single();
         if (!user || !['admin','super_admin'].includes(user.role)) {
             localStorage.removeItem('colixo_user');
-            await db.auth.signOut();
             window.location.href = '../login/index.html';
             return;
         }
