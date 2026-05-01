@@ -179,6 +179,10 @@
         </div>
     </div>
 
+    <div id="debugBar" style="background:#1a0a00;border:1px solid #e8311a;border-radius:8px;margin:16px 32px 0;padding:10px 16px;font-size:12px;color:#f97316;display:none;">
+        <strong>Debug :</strong> <span id="debugMsg">—</span>
+    </div>
+
     <div class="content">
 
         <!-- Stats -->
@@ -833,13 +837,16 @@
     /* ── AUTH ── */
     async function init() {
         try {
+            dbg('Démarrage…');
             const { data: { session } } = await db.auth.getSession();
             const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
             const uid = session?.user?.id || codeUser?.id;
+            dbg('uid=' + (uid||'null') + ' session=' + (session?'oui':'non') + ' codeUser=' + (codeUser?'oui':'non'));
 
             if (!uid) { window.location.href = '../login/index.html'; return; }
 
             const { data: user, error: userErr } = await db.from('utilisateurs').select('*').eq('id', uid).single();
+            dbg('user=' + (user?.role||'null') + (userErr?' ERR:'+userErr.message:''));
             if (userErr) { showInitError('Erreur auth: ' + userErr.message); return; }
             if (!user || !['admin','super_admin'].includes(user.role)) {
                 localStorage.removeItem('colixo_user');
@@ -857,17 +864,26 @@
                 await db.auth.signOut();
                 window.location.href = '../login/index.html';
             });
+            dbg('Auth OK — chargement des utilisateurs…');
             await loadUsers();
+            dbg('loadUsers terminé — ' + allUsers.length + ' utilisateurs');
             await loadDemandes();
         } catch(e) {
             showInitError('Erreur inattendue: ' + e.message);
         }
     }
 
+    function dbg(msg) {
+        const bar = document.getElementById('debugBar');
+        const txt = document.getElementById('debugMsg');
+        if (bar) bar.style.display = 'block';
+        if (txt) txt.textContent = msg;
+        console.log('[users.html]', msg);
+    }
     function showInitError(msg) {
+        dbg(msg);
         const tbody = document.getElementById('usersTableBody');
         if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:#ef4444;font-size:13px;">${msg}</td></tr>`;
-        console.error(msg);
     }
 
     init();
