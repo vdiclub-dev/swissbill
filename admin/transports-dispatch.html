@@ -1421,9 +1421,16 @@ async function geocodeAddress(addr){
     if(!addr)return null;
     var key=addr.trim().toLowerCase();
     if(_geocodeCache[key])return _geocodeCache[key];
+    // Extraire la partie adresse (après " - " ou "·") en ignorant le nom
+    var clean=addr;
+    if(addr.indexOf(' - ')!==-1)clean=addr.split(' - ').slice(1).join(' - ').trim();
+    else if(addr.indexOf(' | ')!==-1)clean=addr.split(' | ').slice(-1)[0].trim();
+    // Supprimer téléphone et infos entre parenthèses
+    clean=clean.replace(/·.*/,'').replace(/\(.*?\)/g,'').replace(/☎.*/,'').trim();
+    if(!clean)clean=addr;
     // Photon (Komoot) — priorité, pas de limite de taux
     try{
-        var url='https://photon.komoot.io/api/?q='+encodeURIComponent(addr+' Schweiz')+'&limit=1&lang=fr&bbox=5.9,45.8,10.5,47.8';
+        var url='https://photon.komoot.io/api/?q='+encodeURIComponent(clean+' Schweiz')+'&limit=1&lang=fr&bbox=5.9,45.8,10.5,47.8';
         var r=await fetch(url);
         var d=await r.json();
         if(d.features&&d.features[0]){
@@ -1438,7 +1445,7 @@ async function geocodeAddress(addr){
     }catch(e){}
     // Nominatim — fallback (1 req/s, usage séquentiel)
     try{
-        var url2='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(addr+', Switzerland')+'&format=json&limit=1&countrycodes=ch&accept-language=fr';
+        var url2='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(clean+', Switzerland')+'&format=json&limit=1&countrycodes=ch&accept-language=fr';
         var r2=await fetch(url2,{headers:{'User-Agent':'Colixo-Dispatch/1.0'}});
         var d2=await r2.json();
         if(d2&&d2[0]){
