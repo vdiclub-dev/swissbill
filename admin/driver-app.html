@@ -2828,6 +2828,14 @@
                 .update({status:'in_transit', picked_up_at:nowCH()}).eq('id',id).select('id');
             if(error) throw error;
             if(!updated || updated.length === 0) throw new Error('RLS bloqué — exécutez fix_transport_orders_rls.sql dans Supabase');
+
+            // Vérification immédiate : lire le statut réel en base après update
+            const { data: check } = await db.from('transport_orders_simple')
+                .select('status, admin_status').eq('id', id).single();
+            if(check?.status !== 'in_transit') {
+                throw new Error('Update ignoré par la DB — statut actuel: ' + (check?.status || 'inconnu') + ', admin_status: ' + (check?.admin_status || 'inconnu'));
+            }
+
             toast('success','Mission démarrée !');
             await loadMissions();
         } catch(e) { toast('error',e.message); }
