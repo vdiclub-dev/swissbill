@@ -534,7 +534,7 @@
     window.loadUsers = async function() {
         const tbody = document.getElementById('usersTableBody');
         if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>';
-        const { data, error } = await db.from('utilisateurs').select('*').order('created_at', { ascending: false });
+        const { data, error } = await db.from('utilisateurs').select('*').order('nom', { ascending: true });
         if (error) {
             if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:#ef4444;">
                 <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Erreur de chargement</div>
@@ -832,28 +832,42 @@
 
     /* ── AUTH ── */
     async function init() {
-        const { data: { session } } = await db.auth.getSession();
-        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        const uid = session?.user?.id || codeUser?.id;
+        try {
+            const { data: { session } } = await db.auth.getSession();
+            const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+            const uid = session?.user?.id || codeUser?.id;
 
-        if (!uid) { window.location.href = '../login/index.html'; return; }
+            if (!uid) { window.location.href = '../login/index.html'; return; }
 
-        const { data: user } = await db.from('utilisateurs').select('*').eq('id', uid).single();
-        if (!user || !['admin','super_admin'].includes(user.role)) {
-            localStorage.removeItem('colixo_user');
-            window.location.href = '../login/index.html';
-            return;
+            const { data: user, error: userErr } = await db.from('utilisateurs').select('*').eq('id', uid).single();
+            if (userErr) { showInitError('Erreur auth: ' + userErr.message); return; }
+            if (!user || !['admin','super_admin'].includes(user.role)) {
+                localStorage.removeItem('colixo_user');
+                window.location.href = '../login/index.html';
+                return;
+            }
+            const initials = ((user.prenom?.[0]||'') + (user.nom?.[0]||'')).toUpperCase() || 'SA';
+            const sbAv = document.getElementById('sbAv');
+            const sbName = document.getElementById('sbName');
+            if (sbAv) sbAv.textContent = initials;
+            if (sbName) sbName.textContent = [user.prenom, user.nom].filter(Boolean).join(' ') || 'Admin';
+            const btnOut = document.getElementById('btnLogout');
+            if (btnOut) btnOut.addEventListener('click', async () => {
+                localStorage.removeItem('colixo_user');
+                await db.auth.signOut();
+                window.location.href = '../login/index.html';
+            });
+            await loadUsers();
+            await loadDemandes();
+        } catch(e) {
+            showInitError('Erreur inattendue: ' + e.message);
         }
-        const initials = ((user.prenom?.[0]||'') + (user.nom?.[0]||'')).toUpperCase() || 'SA';
-        document.getElementById('sbAv').textContent   = initials;
-        document.getElementById('sbName').textContent = [user.prenom, user.nom].filter(Boolean).join(' ') || 'Admin';
-        document.getElementById('btnLogout').addEventListener('click', async () => {
-            localStorage.removeItem('colixo_user');
-            await db.auth.signOut();
-            window.location.href = '../login/index.html';
-        });
-        await loadUsers();
-        await loadDemandes();
+    }
+
+    function showInitError(msg) {
+        const tbody = document.getElementById('usersTableBody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:#ef4444;font-size:13px;">${msg}</td></tr>`;
+        console.error(msg);
     }
 
     init();
