@@ -563,3 +563,44 @@ window.copierTexte       = copierTexte;
 window.appliquerFiltres  = appliquerFiltres;
 window.chargerProspects  = chargerProspects;
 window.switchTab         = switchTab;
+window.exporterExcel     = exporterExcel;
+
+/* ── Export Excel (CSV UTF-8) ────────────────────────────── */
+function exporterExcel() {
+  const liste = filtered.length ? filtered : allProspects;
+  if (!liste.length) { toast('Aucun prospect à exporter', 'error'); return; }
+
+  const cols = [
+    ['Entreprise',       p => p.entreprise || ''],
+    ['Ville',            p => p.ville || ''],
+    ['Secteur',          p => p.secteur || ''],
+    ['Contact',          p => p.contact_nom || ''],
+    ['Email',            p => p.email || ''],
+    ['Téléphone',        p => p.telephone || ''],
+    ['Site web',         p => p.site_web || ''],
+    ['Statut',           p => (STATUTS[p.statut] || {}).label || p.statut || ''],
+    ['Score',            p => p.score ?? ''],
+    ['Besoin détecté',   p => p.besoin_detecte || ''],
+    ['Angle commercial', p => p.angle_commercial || ''],
+    ['Notes',            p => p.notes || ''],
+    ['Dernier contact',  p => p.dernier_contact ? p.dernier_contact.slice(0,10) : ''],
+    ['Créé le',          p => p.created_at ? p.created_at.slice(0,10) : ''],
+  ];
+
+  const csvEsc = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const header = cols.map(([h]) => csvEsc(h)).join(';');
+  const rows   = liste.map(p => cols.map(([, fn]) => csvEsc(fn(p))).join(';'));
+  const csv    = '\uFEFF' + [header, ...rows].join('\r\n'); // BOM pour Excel
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href     = url;
+  a.download = `prospects_colixo_${date}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`${liste.length} prospect(s) exportés`, 'ok');
+}
