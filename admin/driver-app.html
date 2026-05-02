@@ -3268,7 +3268,40 @@
                 const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
                 pointage = fresh;
                 clearInterval(workTimer);
-                toast('success',`Journée terminée — ${heures.toFixed(1)}h travaillées ✓`);
+
+                // ── Auto-save km si km_debut et km_fin renseignés ──
+                const vid = kmSelectedVehId || document.getElementById('kmVehiculeSelect').value;
+                const kmD = parseFloat(document.getElementById('kmDebut').value) || 0;
+                const kmF = parseFloat(document.getElementById('kmFin').value) || 0;
+                let kmMsg = '';
+                if (vid && kmD > 0 && kmF >= kmD) {
+                    try {
+                        const kmParc = kmF - kmD;
+                        const litres = parseFloat(document.getElementById('kmLitres').value);
+                        const prixL  = parseFloat(document.getElementById('kmPrixLitre').value);
+                        const rowFull = {
+                            vehicule_id: vid, chauffeur_id: driver.id, date: today(),
+                            km_debut: kmD, km_fin: kmF,
+                            carburant_litres: (!isNaN(litres) && litres > 0) ? litres : null,
+                            carburant_prix_litre_chf: (!isNaN(litres) && litres > 0 && !isNaN(prixL) && prixL > 0) ? prixL : null,
+                            carburant_montant_chf: (!isNaN(litres) && litres > 0 && !isNaN(prixL) && prixL > 0) ? Math.round(litres * prixL * 100) / 100 : null,
+                        };
+                        const { data: existing } = await db.from('vehicule_km')
+                            .select('id').eq('vehicule_id', vid).eq('date', today()).maybeSingle();
+                        if (existing?.id) {
+                            await db.from('vehicule_km').update(rowFull).eq('id', existing.id);
+                        } else {
+                            await db.from('vehicule_km').insert([rowFull]);
+                        }
+                        document.getElementById('kmStatus').className = 'pc-status work';
+                        document.getElementById('kmStatus').textContent = `${kmParc} km`;
+                        kmMsg = ` · ${kmParc} km enregistrés 🚗`;
+                    } catch(kmErr) {
+                        console.warn('Auto km save failed:', kmErr.message);
+                    }
+                }
+
+                toast('success',`Journée terminée — ${heures.toFixed(1)}h travaillées ✓${kmMsg}`);
             }
             renderPointage();
         } catch(e) { toast('error',e.message); }
