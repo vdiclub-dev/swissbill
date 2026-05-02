@@ -595,6 +595,10 @@
 
         <!-- ══ CONGÉS ══ -->
         <div class="tab-pane" id="pane-conges">
+            <!-- Bouton saisie manuelle -->
+            <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+                <button class="btn btn-green" onclick="openNewAbsenceModal()"><i class="fas fa-plus"></i> Saisir une absence</button>
+            </div>
             <!-- En attente -->
             <div class="card" style="margin-bottom:20px;">
                 <div class="card-head">
@@ -1108,6 +1112,67 @@
 </div>
 
 <!-- ═══ MODAL CONFIRM ═══ -->
+<div id="modalAbsence" class="modal">
+    <div class="modal-box" style="max-width:480px;">
+        <div class="modal-head">
+            <div class="modal-title" id="absenceModalTitle">SAISIR UNE ABSENCE</div>
+            <button class="modal-close" onclick="closeModal('modalAbsence')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+            <div>
+                <label class="form-label">Chauffeur</label>
+                <select id="absDriverId" class="toolbar-select" style="width:100%;font-size:13px;padding:9px 12px;">
+                    <option value="">— Choisir —</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Type d'absence</label>
+                <select id="absType" class="toolbar-select" style="width:100%;font-size:13px;padding:9px 12px;">
+                    <option value="vacances">🏖️ Vacances</option>
+                    <option value="compensation">⚖️ Compensation</option>
+                    <option value="maladie">🤒 Maladie</option>
+                    <option value="accident">🩹 Accident</option>
+                    <option value="militaire">🪖 Service militaire</option>
+                    <option value="maternite">🍼 Maternité / Paternité</option>
+                    <option value="formation">📚 Formation</option>
+                    <option value="autre">📌 Autre</option>
+                </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                    <label class="form-label">Date début</label>
+                    <input type="date" id="absDateDebut" class="toolbar-select" style="width:100%;font-size:13px;padding:9px 12px;" oninput="calcAbsJours()">
+                </div>
+                <div>
+                    <label class="form-label">Date fin</label>
+                    <input type="date" id="absDateFin" class="toolbar-select" style="width:100%;font-size:13px;padding:9px 12px;" oninput="calcAbsJours()">
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
+                <div>
+                    <label class="form-label">Nb. jours ouvrés <span id="absJoursCalc" style="color:var(--blue);font-size:11px;"></span></label>
+                    <input type="number" id="absNbJours" class="toolbar-select" style="width:100%;font-size:13px;padding:9px 12px;" min="0.5" step="0.5" placeholder="Ex: 5">
+                </div>
+                <div>
+                    <label class="form-label">Statut</label>
+                    <select id="absStatut" class="toolbar-select" style="width:100%;font-size:13px;padding:9px 12px;">
+                        <option value="approuve">✅ Approuvé</option>
+                        <option value="en_attente">⏳ En attente</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="form-label">Note (optionnel)</label>
+                <input type="text" id="absNote" class="toolbar-select" style="width:100%;font-size:13px;padding:9px 12px;" placeholder="Médecin, no dossier…">
+            </div>
+        </div>
+        <div class="modal-foot" style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);">
+            <button class="btn btn-ghost" onclick="closeModal('modalAbsence')">Annuler</button>
+            <button class="btn btn-green" onclick="saveAbsence()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
 <div id="modalConfirm" class="modal">
     <div class="confirm-box">
         <div class="confirm-ico" id="confirmIco">❓</div>
@@ -1521,7 +1586,7 @@
     /* ── CONGÉS ── */
     window.loadConges = function() {
         const driverId = document.getElementById('filterDriverCg').value;
-        const typeLabel = { vacances:'🏖️ Vacances', maladie:'🤒 Maladie', compensation:'⚖️ Compensation', autre:'📌 Autre' };
+        const typeLabel = { vacances:'🏖️ Vacances', maladie:'🤒 Maladie', compensation:'⚖️ Compensation', accident:'🩹 Accident', militaire:'🪖 Militaire', maternite:'🍼 Maternité', formation:'📚 Formation', autre:'📌 Autre' };
 
         // En attente
         const attente = conges.filter(c=>c.statut==='en_attente');
@@ -1621,6 +1686,74 @@
             finally { hideLoad(); }
         };
         openModal('modalConfirm');
+    };
+
+    /* ── SAISIE ABSENCE ── */
+    window.openNewAbsenceModal = function(driverId) {
+        // Remplir la liste des chauffeurs
+        const sel = document.getElementById('absDriverId');
+        sel.innerHTML = '<option value="">— Choisir —</option>' +
+            chauffeurs.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        if(driverId) sel.value = driverId;
+        document.getElementById('absType').value = 'vacances';
+        document.getElementById('absDateDebut').value = '';
+        document.getElementById('absDateFin').value = '';
+        document.getElementById('absNbJours').value = '';
+        document.getElementById('absJoursCalc').textContent = '';
+        document.getElementById('absNote').value = '';
+        document.getElementById('absStatut').value = 'approuve';
+        openModal('modalAbsence');
+    };
+
+    window.calcAbsJours = function() {
+        const d1 = document.getElementById('absDateDebut').value;
+        const d2 = document.getElementById('absDateFin').value;
+        if(!d1 || !d2) return;
+        const start = new Date(d1), end = new Date(d2);
+        if(end < start) return;
+        let count = 0;
+        const cur = new Date(start);
+        while(cur <= end) {
+            const dow = cur.getDay();
+            if(dow !== 0 && dow !== 6) count++;
+            cur.setDate(cur.getDate()+1);
+        }
+        document.getElementById('absNbJours').value = count;
+        document.getElementById('absJoursCalc').textContent = `(${count}j calculés)`;
+    };
+
+    window.saveAbsence = async function() {
+        const driverId = document.getElementById('absDriverId').value;
+        const type     = document.getElementById('absType').value;
+        const debut    = document.getElementById('absDateDebut').value;
+        const fin      = document.getElementById('absDateFin').value;
+        const nbJours  = parseFloat(document.getElementById('absNbJours').value);
+        const statut   = document.getElementById('absStatut').value;
+        const note     = document.getElementById('absNote').value.trim();
+        if(!driverId) { toast('error','Sélectionner un chauffeur'); return; }
+        if(!debut || !fin) { toast('error','Dates requises'); return; }
+        if(!nbJours || nbJours <= 0) { toast('error','Nombre de jours requis'); return; }
+        showLoad();
+        try {
+            const { error } = await db.from('conges').insert({
+                driver_id: driverId, type, date_debut: debut, date_fin: fin,
+                nb_jours: nbJours, statut, note: note||null
+            });
+            if(error) throw error;
+            // Déduire du solde si approuvé
+            if(statut === 'approuve' && (type==='vacances'||type==='compensation')) {
+                const col = type==='vacances' ? 'solde_vacances' : 'jours_comp';
+                const s = soldes.find(x=>x.driver_id===driverId);
+                if(s) {
+                    const newVal = Math.max(0,(s[col]||0)-nbJours);
+                    await db.from('soldes_rh').update({[col]:newVal}).eq('driver_id',driverId);
+                }
+            }
+            toast('success','Absence enregistrée ✓');
+            closeModal('modalAbsence');
+            await loadAll(); loadConges();
+        } catch(e) { toast('error',e.message); }
+        finally { hideLoad(); }
     };
 
     /* ── SOLDE MODAL ── */
