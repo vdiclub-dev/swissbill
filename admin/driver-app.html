@@ -174,6 +174,27 @@
         .km-save:active { transform:scale(0.98); }
         .km-divider { height:1px; background:var(--border2); margin:14px 0 10px; }
         .plein-title { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--orange); margin-bottom:8px; }
+        .km-veh-badge { margin-bottom:10px; padding:8px 12px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:9px; font-size:13px; color:var(--green); display:flex; align-items:center; gap:8px; }
+        .km-veh-badge button { margin-left:auto; background:none; border:none; color:var(--muted); font-size:11px; cursor:pointer; padding:2px 6px; }
+        .km-debut-label-auto { font-size:9px; color:var(--green); font-weight:600; }
+        .km-debut-input { opacity:0.75; }
+        /* Modal véhicule démarrage */
+        .veh-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9000; display:flex; align-items:flex-end; justify-content:center; }
+        .veh-modal-sheet { background:var(--night2); border-radius:20px 20px 0 0; width:100%; max-width:480px; padding:24px 20px 36px; }
+        .veh-modal-title { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; color:var(--white); margin-bottom:6px; }
+        .veh-modal-sub { font-size:12px; color:var(--muted); margin-bottom:18px; }
+        .veh-list { display:flex; flex-direction:column; gap:10px; max-height:50vh; overflow-y:auto; }
+        .veh-item { background:var(--surface); border:1.5px solid var(--border2); border-radius:12px; padding:14px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition:border-color .15s; }
+        .veh-item:active, .veh-item.selected { border-color:var(--green); background:rgba(34,197,94,0.08); }
+        .veh-item-icon { width:38px; height:38px; border-radius:10px; background:rgba(34,197,94,0.12); display:flex; align-items:center; justify-content:center; color:var(--green); font-size:18px; flex-shrink:0; }
+        .veh-item-info { flex:1; }
+        .veh-item-imm { font-weight:700; font-size:14px; color:var(--white); }
+        .veh-item-detail { font-size:11px; color:var(--muted); margin-top:2px; }
+        .veh-item-km { font-size:11px; color:var(--muted2); text-align:right; flex-shrink:0; }
+        .veh-modal-overlay { display:none; }
+        .veh-modal-overlay.open { display:flex; }
+        .veh-modal-skip { width:100%; margin-top:14px; padding:12px; background:none; border:1px solid var(--border2); border-radius:10px; color:var(--muted); font-family:'Outfit',sans-serif; font-size:13px; cursor:pointer; }
+        .veh-modal-skip.hidden { display:none; }
 
         /* Page frais */
         .frais-screen { flex:1; overflow-y:auto; padding:0 14px 100px; }
@@ -618,7 +639,7 @@
             </div>
         </div>
         <div class="pc-actions">
-            <button class="pc-btn start"  id="btnStart"  onclick="pointageAction('start')"><i class="fas fa-play"></i> Démarrer</button>
+            <button class="pc-btn start"  id="btnStart"  onclick="openVehiculeStartModal()"><i class="fas fa-play"></i> Démarrer</button>
             <button class="pc-btn stop"    id="btnStop"   onclick="pointageAction('stop')"   disabled><i class="fas fa-stop"></i> Fin de journée</button>
             <button class="pc-btn pause"   id="btnPause"  onclick="pointageAction('pause')"  disabled><i class="fas fa-pause"></i> Pause</button>
             <button class="pc-btn resume"  id="btnResume" onclick="pointageAction('resume')" disabled style="display:none"><i class="fas fa-play"></i> Reprendre</button>
@@ -630,23 +651,28 @@
             KM DU JOUR
             <span id="kmStatus" class="pc-status off">Non saisi</span>
         </div>
+        <!-- Véhicule sélectionné -->
+        <div id="kmVehBadge" class="km-veh-badge" style="display:none;">
+            <i class="fas fa-truck"></i> <span id="kmVehName">—</span>
+            <button type="button" onclick="openVehiculeChangeModal()">Changer</button>
+        </div>
+        <!-- Sélecteur fallback -->
         <div class="km-field" id="kmVehWrap" style="display:none;margin-bottom:10px;">
             <label id="kmVehLabel">Véhicule</label>
             <select id="kmVehiculeSelect"></select>
-            <div class="km-multi-hint" id="kmVehHint">Un relevé début/fin par véhicule utilisé aujourd’hui.</div>
         </div>
         <div class="km-inputs">
             <div class="km-field">
-                <label>🔢 Km début</label>
-                <input type="number" id="kmDebut" placeholder="Ex: 45230" inputmode="numeric">
+                <label>🔢 Km début <span id="kmDebutAuto" class="km-debut-label-auto"></span></label>
+                <input type="number" id="kmDebut" placeholder="Auto" inputmode="numeric" class="km-debut-input">
             </div>
             <div class="km-field">
                 <label>🏁 Km fin</label>
-                <input type="number" id="kmFin" placeholder="Ex: 45580" inputmode="numeric">
+                <input type="number" id="kmFin" placeholder="Saisir à la fin" inputmode="numeric">
             </div>
         </div>
         <div class="km-total">
-            <div class="km-total-lbl">Km parcourus aujourd'hui</div>
+            <div class="km-total-lbl">Km parcourus aujourd’hui</div>
             <div class="km-total-val" id="kmTotal">— km</div>
         </div>
         <div class="km-divider"></div>
@@ -2348,6 +2374,116 @@
         else toast('info', 'Allez dans Missions pour voir ce transport');
     };
 
+    /* ── MODAL SÉLECTION VÉHICULE ── */
+    let allActiveVehicles = [];
+    let vehModalCanSkip = false;
+    let vehModalMode = 'start'; // 'start' | 'change'
+
+    async function loadAllVehicles() {
+        const { data } = await db.from('vehicules').select('*').eq('actif', true).order('immatriculation');
+        allActiveVehicles = data || [];
+    }
+
+    async function openVehiculeStartModal() {
+        if (!driver) return;
+        // Si journée déjà démarrée, ne pas re-afficher
+        if (pointage) { toast('info','Journée déjà démarrée'); return; }
+        vehModalMode = 'start';
+        vehModalCanSkip = true;
+        await buildVehModalList();
+        document.getElementById('vehModalSub').textContent = 'Sélectionnez le véhicule — le km de départ sera rempli automatiquement.';
+        document.getElementById('vehModalSkip').classList.remove('hidden');
+        document.getElementById('vehStartModal').classList.add('open');
+    }
+
+    window.openVehiculeChangeModal = async function() {
+        vehModalMode = 'change';
+        vehModalCanSkip = false;
+        await buildVehModalList();
+        document.getElementById('vehModalSub').textContent = 'Changer de véhicule pour aujourd\'hui.';
+        document.getElementById('vehModalSkip').classList.add('hidden');
+        document.getElementById('vehStartModal').classList.add('open');
+    };
+
+    window.closeVehModal = function() {
+        document.getElementById('vehStartModal').classList.remove('open');
+        // Si mode start et skip → démarrer sans véhicule
+        if (vehModalMode === 'start') pointageAction('start');
+    };
+
+    async function buildVehModalList() {
+        if (!allActiveVehicles.length) await loadAllVehicles();
+        const list = document.getElementById('vehModalList');
+        if (!allActiveVehicles.length) {
+            list.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px;">Aucun véhicule actif trouvé.<br>Contactez le dispatcher.</div>';
+            return;
+        }
+        // Récupérer les derniers km de chaque véhicule
+        const vids = allActiveVehicles.map(v => v.id);
+        const { data: lastKms } = await db.from('vehicule_km')
+            .select('vehicule_id, km_fin, date')
+            .in('vehicule_id', vids)
+            .order('date', { ascending: false });
+        // Map vehicule_id → dernière entrée
+        const lastKmMap = {};
+        (lastKms || []).forEach(r => {
+            if (!lastKmMap[r.vehicule_id]) lastKmMap[r.vehicule_id] = r;
+        });
+        list.innerHTML = allActiveVehicles.map(v => {
+            const last = lastKmMap[v.id];
+            const kmInfo = last ? `Dernier km : ${last.km_fin?.toLocaleString('fr-CH')} (${last.date})` : 'Pas de km enregistré';
+            const mm = [v.marque, v.modele].filter(Boolean).join(' ');
+            const isSelected = v.id === kmSelectedVehId ? 'selected' : '';
+            return `<div class="veh-item ${isSelected}" onclick="selectVehiculeAndStart('${v.id}')">
+                <div class="veh-item-icon"><i class="fas fa-truck"></i></div>
+                <div class="veh-item-info">
+                    <div class="veh-item-imm">${v.immatriculation || '—'}</div>
+                    <div class="veh-item-detail">${mm || 'Véhicule'}</div>
+                </div>
+                <div class="veh-item-km">${kmInfo}</div>
+            </div>`;
+        }).join('');
+    }
+
+    window.selectVehiculeAndStart = async function(vid) {
+        document.getElementById('vehStartModal').classList.remove('open');
+        kmSelectedVehId = vid;
+        const veh = allActiveVehicles.find(v => v.id === vid);
+        // Afficher le badge véhicule
+        if (veh) {
+            const mm = [veh.marque, veh.modele].filter(Boolean).join(' ');
+            document.getElementById('kmVehName').textContent = `${veh.immatriculation || ''}${mm ? ' · ' + mm : ''}`;
+            document.getElementById('kmVehBadge').style.display = 'flex';
+            document.getElementById('kmVehWrap').style.display = 'none';
+        }
+        // Auto-remplir km_debut depuis dernier km_fin
+        const { data: lastKm } = await db.from('vehicule_km')
+            .select('km_fin, date')
+            .eq('vehicule_id', vid)
+            .order('date', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (lastKm?.km_fin) {
+            document.getElementById('kmDebut').value = lastKm.km_fin;
+            document.getElementById('kmDebutAuto').textContent = `(auto · ${lastKm.date})`;
+            updateKmTotal();
+        }
+        // Vérifier si une entrée existe déjà aujourd'hui
+        const { data: todayKm } = await db.from('vehicule_km')
+            .select('*').eq('vehicule_id', vid).eq('date', today()).maybeSingle();
+        if (todayKm) {
+            document.getElementById('kmDebut').value = todayKm.km_debut ?? lastKm?.km_fin ?? '';
+            document.getElementById('kmFin').value = todayKm.km_fin ?? '';
+            if (todayKm.carburant_litres) document.getElementById('kmLitres').value = todayKm.carburant_litres;
+            if (todayKm.carburant_prix_litre_chf) document.getElementById('kmPrixLitre').value = todayKm.carburant_prix_litre_chf;
+            updateKmTotal(); updatePleinMontant();
+        }
+        // Aussi mettre à jour le select legacy
+        const sel = document.getElementById('kmVehiculeSelect');
+        if (sel) sel.value = vid;
+        if (vehModalMode === 'start') await pointageAction('start');
+    };
+
     /* ── KM JOURNALIERS (plusieurs véhicules / même chauffeur) ── */
     let driverKmVehicles = [];
     let kmSelectedVehId = null;
@@ -2360,7 +2496,6 @@
 
     async function loadKmRowForToday() {
         if (!kmSelectedVehId) return;
-        document.getElementById('kmDebut').value = '';
         document.getElementById('kmFin').value = '';
         document.getElementById('kmLitres').value = '';
         document.getElementById('kmPrixLitre').value = '';
@@ -2369,18 +2504,32 @@
         const status = document.getElementById('kmStatus');
         status.className = 'pc-status off';
         status.textContent = 'Non saisi';
-        const { data:km } = await db.from('vehicule_km')
-            .select('*').eq('vehicule_id', kmSelectedVehId)
-            .eq('date', today()).maybeSingle();
+
+        // Chercher entrée d'aujourd'hui
+        const { data: km } = await db.from('vehicule_km')
+            .select('*').eq('vehicule_id', kmSelectedVehId).eq('date', today()).maybeSingle();
         if (km) {
             document.getElementById('kmDebut').value = km.km_debut ?? '';
             document.getElementById('kmFin').value = km.km_fin ?? '';
             if (km.carburant_litres != null) document.getElementById('kmLitres').value = String(km.carburant_litres);
             if (km.carburant_prix_litre_chf != null) document.getElementById('kmPrixLitre').value = String(km.carburant_prix_litre_chf);
-            updateKmTotal();
-            updatePleinMontant();
+            updateKmTotal(); updatePleinMontant();
             status.className = 'pc-status work';
-            status.textContent = `${km.km_parcourus ?? 0} km`;
+            status.textContent = `${(km.km_fin && km.km_debut) ? km.km_fin - km.km_debut : 0} km`;
+            return;
+        }
+
+        // Pas d'entrée aujourd'hui → auto-remplir km_debut depuis le dernier relevé
+        const { data: last } = await db.from('vehicule_km')
+            .select('km_fin, date').eq('vehicule_id', kmSelectedVehId)
+            .order('date', { ascending: false }).limit(1).maybeSingle();
+        if (last?.km_fin) {
+            document.getElementById('kmDebut').value = last.km_fin;
+            document.getElementById('kmDebutAuto').textContent = `(auto · ${last.date})`;
+            updateKmTotal();
+        } else {
+            document.getElementById('kmDebut').value = '';
+            document.getElementById('kmDebutAuto').textContent = '';
         }
     }
 
@@ -2399,50 +2548,43 @@
     async function loadVehicule() {
         if (!driver) return;
         driverKmVehicles = [];
-        kmSelectedVehId = null;
-        const sel = document.getElementById('kmVehiculeSelect');
-        const wrap = document.getElementById('kmVehWrap');
-        const card = document.getElementById('kmCard');
+        const card = document.getElementById(‘kmCard’);
+        card.style.display = ‘block’;
+        document.getElementById(‘kmDebut’).disabled = false;
+        document.getElementById(‘kmFin’).disabled = false;
         try {
-            const { data: list, error } = await db.from('vehicules')
-                .select('*').eq('chauffeur_id', driver.id).eq('actif', true).order('immatriculation');
-            if (error) throw error;
-            driverKmVehicles = list || [];
-            if (!driverKmVehicles.length) {
-                card.style.display = 'block';
-                wrap.style.display = 'block';
-                document.getElementById('kmVehLabel').style.display = 'none';
-                sel.style.display = 'none';
-                document.getElementById('kmVehHint').textContent = 'Aucun véhicule assigné. Le dispatch doit vous lier à un ou plusieurs véhicules dans Finances (plusieurs camions = plusieurs fiches véhicule avec le même chauffeur).';
-                document.getElementById('kmVehHint').style.display = 'block';
-                document.getElementById('kmDebut').disabled = false;
-                document.getElementById('kmFin').disabled = false;
-                syncFraisVehiculeSelect();
-                return;
-            }
-            document.getElementById('kmVehLabel').style.display = '';
-            sel.style.display = '';
-            document.getElementById('kmDebut').disabled = false;
-            document.getElementById('kmFin').disabled = false;
-            card.style.display = 'block';
-            sel.innerHTML = driverKmVehicles.map(v => `<option value="${v.id}">${vehiculeLabelKm(v)}</option>`).join('');
-            if (driverKmVehicles.length > 1) {
-                wrap.style.display = 'block';
-                document.getElementById('kmVehLabel').style.display = '';
-                sel.style.display = '';
-                document.getElementById('kmVehHint').style.display = 'block';
-                document.getElementById('kmVehHint').textContent = 'Un relevé début/fin par véhicule utilisé aujourd’hui.';
+            await loadAllVehicles();
+            driverKmVehicles = allActiveVehicles;
+            const sel = document.getElementById(‘kmVehiculeSelect’);
+            sel.innerHTML = allActiveVehicles.map(v => `<option value="${v.id}">${vehiculeLabelKm(v)}</option>`).join(‘’);
+            if (kmSelectedVehId) {
+                // Véhicule déjà choisi (modal démarrage) → afficher badge
+                const veh = allActiveVehicles.find(v => v.id === kmSelectedVehId);
+                if (veh) {
+                    const mm = [veh.marque, veh.modele].filter(Boolean).join(‘ ‘);
+                    document.getElementById(‘kmVehName’).textContent = `${veh.immatriculation || ‘’}${mm ? ‘ · ‘+mm : ‘’}`;
+                    document.getElementById(‘kmVehBadge’).style.display = ‘flex’;
+                    document.getElementById(‘kmVehWrap’).style.display = ‘none’;
+                    sel.value = kmSelectedVehId;
+                }
+                await loadKmRowForToday();
+            } else if (allActiveVehicles.length === 1) {
+                // Un seul véhicule → sélection automatique silencieuse
+                kmSelectedVehId = allActiveVehicles[0].id;
+                sel.value = kmSelectedVehId;
+                const v = allActiveVehicles[0];
+                const mm = [v.marque, v.modele].filter(Boolean).join(‘ ‘);
+                document.getElementById(‘kmVehName’).textContent = `${v.immatriculation || ‘’}${mm ? ‘ · ‘+mm : ‘’}`;
+                document.getElementById(‘kmVehBadge’).style.display = ‘flex’;
+                document.getElementById(‘kmVehWrap’).style.display = ‘none’;
+                await loadKmRowForToday();
             } else {
-                wrap.style.display = 'none';
+                document.getElementById(‘kmVehWrap’).style.display = ‘block’;
             }
-            kmSelectedVehId = driverKmVehicles[0].id;
-            sel.value = kmSelectedVehId;
-            await loadKmRowForToday();
             syncFraisVehiculeSelect();
-        } catch (e) {
-            console.error('[Driver] loadVehicule', e);
-            card.style.display = 'block';
-            toast('error', 'Véhicules : ' + (e.message || 'erreur'));
+        } catch(e) {
+            console.error(‘[Driver] loadVehicule’, e);
+            toast(‘error’, ‘Véhicules : ‘ + (e.message || ‘erreur’));
             syncFraisVehiculeSelect();
         }
     }
@@ -3879,5 +4021,15 @@
     checkSession();
 })();
 </script>
+
+<!-- ═══ MODAL SÉLECTION VÉHICULE ═══ -->
+<div id="vehStartModal" class="veh-modal-overlay" onclick="if(event.target===this && vehModalCanSkip) closeVehModal()">
+    <div class="veh-modal-sheet">
+        <div class="veh-modal-title">Quel véhicule utilisez-vous ?</div>
+        <div class="veh-modal-sub" id="vehModalSub">Sélectionnez le véhicule pour pré-remplir le km de départ automatiquement.</div>
+        <div class="veh-list" id="vehModalList"></div>
+        <button type="button" id="vehModalSkip" class="veh-modal-skip hidden" onclick="closeVehModal()">Passer (sans véhicule)</button>
+    </div>
+</div>
 </body>
 </html>
