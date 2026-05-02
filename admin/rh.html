@@ -1350,6 +1350,50 @@
     </div>
 </div>
 
+<div id="modalEditPointage" class="modal">
+    <div class="modal-box" style="max-width:480px;">
+        <div class="modal-head">
+            <span class="modal-title">✏️ Modifier pointage</span>
+            <button class="modal-close" onclick="closeModal('modalEditPointage')">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px 24px;">
+            <input type="hidden" id="epId"/>
+            <div style="margin-bottom:14px;">
+                <span id="epChauffeurLabel" style="font-weight:700;font-size:15px;"></span>
+                &nbsp;—&nbsp;
+                <span id="epDateLabel" style="color:var(--muted2);"></span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                    <label class="form-label">Début travail</label>
+                    <input type="time" id="epDebut" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="epRecalc()"/>
+                </div>
+                <div>
+                    <label class="form-label">Fin travail</label>
+                    <input type="time" id="epFin" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="epRecalc()"/>
+                </div>
+                <div>
+                    <label class="form-label">Début pause</label>
+                    <input type="time" id="epPauseDebut" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="epRecalcPause()"/>
+                </div>
+                <div>
+                    <label class="form-label">Fin pause</label>
+                    <input type="time" id="epPauseFin" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="epRecalcPause()"/>
+                </div>
+                <div style="grid-column:1/-1;">
+                    <label class="form-label">Pause totale (minutes)</label>
+                    <input type="number" id="epPauseMin" min="0" max="480" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="epRecalc()"/>
+                </div>
+            </div>
+            <div id="epRecap" style="margin-top:14px;padding:10px 14px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;color:var(--muted2);min-height:36px;"></div>
+        </div>
+        <div class="modal-foot" style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);">
+            <button class="btn btn-ghost" onclick="closeModal('modalEditPointage')">Annuler</button>
+            <button class="btn btn-green" onclick="saveEditPointage()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     'use strict';
@@ -1745,8 +1789,132 @@
                 <td><strong>${h.toFixed(2)}h</strong>${p.pause_minutes?`<br><span style="font-size:10px;color:var(--muted)">pause: ${p.pause_minutes}min</span>`:''}</td>
                 <td style="font-size:12px;">${supplements||'—'}</td>
                 <td>${statut}</td>
+                <td><button class="btn btn-ghost btn-sm" title="Modifier" onclick="editPointage('${p.id}')"><i class="fas fa-pencil-alt"></i></button></td>
             </tr>`;
         }).join('');
+    };
+
+    /* ── EDIT POINTAGE ── */
+    function isFeriesCH(date) {
+        const d = new Date(date);
+        const mo = d.getMonth()+1, da = d.getDate();
+        const fixed = [[1,1],[1,8],[8,1],[9,1],[12,25],[12,26]];
+        if(fixed.some(([m,dd])=>mo===m&&da===dd)) return true;
+        // Vendredi Saint, Lundi de Pâques, Ascension, Lundi de Pentecôte
+        const y = d.getFullYear();
+        const a=y%19,b=Math.floor(y/100),c=y%100,dd2=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-dd2-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m2=Math.floor((a+11*h+22*l)/451);
+        const easterMonth=Math.floor((h+l-7*m2+114)/31),easterDay=((h+l-7*m2+114)%31)+1;
+        const easter=new Date(y,easterMonth-1,easterDay);
+        const vSaint=new Date(easter); vSaint.setDate(easter.getDate()-2);
+        const lunPaques=new Date(easter); lunPaques.setDate(easter.getDate()+1);
+        const ascension=new Date(easter); ascension.setDate(easter.getDate()+39);
+        const pentecote=new Date(easter); pentecote.setDate(easter.getDate()+50);
+        return [vSaint,lunPaques,ascension,pentecote].some(f2=>f2.toDateString()===d.toDateString());
+    }
+    function calculerHeuresDetailees(debutISO, finISO, pauseMinutes) {
+        if(!debutISO||!finISO) return {heures_total:0,heures_nuit:0,heures_dimanche:0,heures_feries:0,heures_supp:0};
+        const debut=new Date(debutISO), fin=new Date(finISO);
+        let totalMin=0,nuitMin=0,dimMin=0,ferMin=0;
+        let cur=new Date(debut);
+        while(cur<fin){
+            const h=cur.getHours();
+            const isNuit=(h>=23||h<6);
+            const isSun=(cur.getDay()===0);
+            const isFer=isFeriesCH(cur);
+            if(isFer) ferMin++;
+            else if(isSun) dimMin++;
+            if(isNuit) nuitMin++;
+            totalMin++;
+            cur.setMinutes(cur.getMinutes()+1);
+        }
+        const pause=Math.max(0,pauseMinutes||0);
+        const travailleMin=Math.max(0,totalMin-pause);
+        const heures_total=travailleMin/60;
+        const heures_supp=Math.max(0,heures_total-8);
+        return {heures_total:Math.round(heures_total*100)/100, heures_nuit:Math.round(nuitMin/60*100)/100, heures_dimanche:Math.round(dimMin/60*100)/100, heures_feries:Math.round(ferMin/60*100)/100, heures_supp:Math.round(heures_supp*100)/100};
+    }
+    function tsToTime(iso) {
+        if(!iso) return '';
+        const d=new Date(iso);
+        return d.toTimeString().slice(0,5);
+    }
+    function buildISO(date, timeStr) {
+        if(!date||!timeStr) return null;
+        return `${date}T${timeStr}:00+01:00`;
+    }
+    window.epRecalcPause = function() {
+        const pb=document.getElementById('epPauseDebut').value;
+        const pf=document.getElementById('epPauseFin').value;
+        if(pb&&pf){
+            const [bh,bm]=pb.split(':').map(Number);
+            const [fh,fm]=pf.split(':').map(Number);
+            const mins=(fh*60+fm)-(bh*60+bm);
+            if(mins>0) document.getElementById('epPauseMin').value=mins;
+        }
+        epRecalc();
+    };
+    window.epRecalc = function() {
+        const id=document.getElementById('epId').value;
+        const p=pointages.find(x=>x.id===id);
+        if(!p) return;
+        const debut=document.getElementById('epDebut').value;
+        const fin=document.getElementById('epFin').value;
+        const pause=parseInt(document.getElementById('epPauseMin').value)||0;
+        const recap=document.getElementById('epRecap');
+        if(!debut||!fin){recap.textContent='';return;}
+        const debutISO=buildISO(p.date,debut);
+        const finISO=buildISO(p.date,fin);
+        const r=calculerHeuresDetailees(debutISO,finISO,pause);
+        recap.innerHTML=`Total: <strong>${r.heures_total.toFixed(2)}h</strong> | Supp: <strong>${r.heures_supp.toFixed(2)}h</strong> | Nuit: <strong>${r.heures_nuit.toFixed(2)}h</strong> | Dim: <strong>${r.heures_dimanche.toFixed(2)}h</strong> | Férié: <strong>${r.heures_feries.toFixed(2)}h</strong>`;
+    };
+    window.editPointage = function(id) {
+        const p=pointages.find(x=>x.id===id);
+        if(!p) return;
+        const c=chauffeurs.find(x=>x.id===p.driver_id);
+        const name=c?`${c.prenom||''} ${c.nom||''}`.trim():'—';
+        document.getElementById('epId').value=id;
+        document.getElementById('epChauffeurLabel').textContent=name;
+        document.getElementById('epDateLabel').textContent=fmtDate(p.date);
+        document.getElementById('epDebut').value=tsToTime(p.debut_travail);
+        document.getElementById('epFin').value=tsToTime(p.fin_travail);
+        document.getElementById('epPauseDebut').value=tsToTime(p.debut_pause);
+        document.getElementById('epPauseFin').value=tsToTime(p.fin_pause);
+        document.getElementById('epPauseMin').value=p.pause_minutes||0;
+        document.getElementById('epRecap').textContent='';
+        epRecalc();
+        openModal('modalEditPointage');
+    };
+    window.saveEditPointage = async function() {
+        const id=document.getElementById('epId').value;
+        const p=pointages.find(x=>x.id===id);
+        if(!p) return;
+        const debut=document.getElementById('epDebut').value;
+        const fin=document.getElementById('epFin').value;
+        const pauseMin=parseInt(document.getElementById('epPauseMin').value)||0;
+        const pauseDebut=document.getElementById('epPauseDebut').value;
+        const pauseFin=document.getElementById('epPauseFin').value;
+        if(!debut||!fin){toast('error','Début et fin obligatoires');return;}
+        const debutISO=buildISO(p.date,debut);
+        const finISO=buildISO(p.date,fin);
+        const r=calculerHeuresDetailees(debutISO,finISO,pauseMin);
+        const updates={
+            debut_travail:debutISO,
+            fin_travail:finISO,
+            debut_pause:pauseDebut?buildISO(p.date,pauseDebut):null,
+            fin_pause:pauseFin?buildISO(p.date,pauseFin):null,
+            pause_minutes:pauseMin,
+            heures_travaillees:r.heures_total,
+            heures_supp:r.heures_supp,
+            heures_nuit:r.heures_nuit,
+            heures_dimanche:r.heures_dimanche,
+            heures_feries:r.heures_feries,
+        };
+        const {error}=await db.from('pointages').update(updates).eq('id',id);
+        if(error){toast('error','Erreur: '+error.message);return;}
+        Object.assign(p,updates);
+        closeModal('modalEditPointage');
+        loadPointages();
+        toast('ok','Pointage mis à jour');
     };
 
     /* ── CONGÉS ── */
