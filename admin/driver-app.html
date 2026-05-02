@@ -3160,8 +3160,13 @@
             else if(action==='resume') {
                 if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
                 const pid = pointage.id;
+                // Cumuler la durée de cette pause
+                const pauseDurMin = pointage.debut_pause
+                    ? Math.round((new Date() - new Date(pointage.debut_pause)) / 60000)
+                    : 0;
+                const totalPauseMin = (pointage.pause_minutes || 0) + pauseDurMin;
                 const { error: upErr } = await db.from('pointages')
-                    .update({ fin_pause:now, statut:'en_cours' })
+                    .update({ fin_pause:now, statut:'en_cours', pause_minutes: totalPauseMin })
                     .eq('id', pid);
                 if(upErr) throw upErr;
                 // Recharger
@@ -3172,11 +3177,13 @@
             }
             else if(action==='stop') {
                 if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
-                // Calculate hours
+                // Calculate hours — cumul toutes les pauses
                 const ms = new Date() - new Date(pointage.debut_travail);
-                let pauseMs = 0;
-                if(pointage.debut_pause && pointage.fin_pause)
-                    pauseMs = new Date(pointage.fin_pause) - new Date(pointage.debut_pause);
+                // Si encore en pause au moment du stop, ajouter la pause en cours
+                let extraPauseMin = 0;
+                if(pointage.statut === 'pause' && pointage.debut_pause)
+                    extraPauseMin = Math.round((new Date() - new Date(pointage.debut_pause)) / 60000);
+                const pauseMs = ((pointage.pause_minutes || 0) + extraPauseMin) * 60000;
                 const heures = (ms - pauseMs) / 3600000;
                 const heuresSupp = Math.max(0, heures - 8.5);
                 const { data: upRows, error: upErr } = await db.from('pointages')
