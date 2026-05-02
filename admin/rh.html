@@ -488,6 +488,7 @@
         <div class="tab" data-tab="fiches"><i class="fas fa-id-card"></i> Fiches chauffeurs</div>
         <div class="tab" data-tab="salaires"><i class="fas fa-money-check-alt"></i> Fiches de salaire</div>
         <div class="tab" data-tab="embauche"><i class="fas fa-file-signature"></i> Formulaire embauche</div>
+        <div class="tab" data-tab="candidatures"><i class="fas fa-folder-open"></i> Candidatures <span class="tab-badge" id="badgeCandidatures" style="display:none"></span></div>
     </div>
 
     <div class="content">
@@ -670,6 +671,7 @@
                 <button type="button" class="btn btn-ghost" onclick="resetEmbaucheForm()"><i class="fas fa-undo"></i> Réinitialiser</button>
                 <button type="button" class="btn btn-ghost" onclick="printEmbaucheForm()"><i class="fas fa-print"></i> Imprimer rempli</button>
                 <button type="button" class="btn btn-ghost" style="border-color:rgba(59,130,246,0.4);color:var(--blue);" onclick="printEmbaucheBlanc()"><i class="fas fa-file-alt"></i> Imprimer vierge</button>
+                <button type="button" class="btn btn-green" onclick="saveEmbaucheForm()"><i class="fas fa-save"></i> Enregistrer la candidature</button>
                 <button type="button" class="btn btn-red" onclick="exportEmbaucheJSON()"><i class="fas fa-file-export"></i> Exporter JSON</button>
             </div>
 
@@ -952,6 +954,33 @@
             </form>
         </div>
 
+        <!-- ══ CANDIDATURES ══ -->
+        <div class="tab-pane" id="pane-candidatures">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <select id="filterCandStatut" class="toolbar-select" style="font-size:12px;padding:6px 12px;" onchange="loadCandidatures()">
+                        <option value="">Tous les statuts</option>
+                        <option value="nouveau">Nouveau</option>
+                        <option value="en_cours">En cours</option>
+                        <option value="embauche">Embauché</option>
+                        <option value="refuse">Refusé</option>
+                        <option value="archive">Archivé</option>
+                    </select>
+                    <input type="text" id="searchCand" class="toolbar-select" placeholder="Rechercher un candidat…" style="font-size:12px;padding:6px 12px;min-width:200px;" oninput="renderCandidatures()">
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body table-scroll">
+                    <table class="tbl">
+                        <thead><tr>
+                            <th>Candidat</th><th>E-mail</th><th>Poste visé</th><th>Date</th><th>Statut</th><th>Actions</th>
+                        </tr></thead>
+                        <tbody id="candidaturesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </div><!-- /content -->
 </div><!-- /main -->
 
@@ -1113,6 +1142,34 @@
 </div>
 
 <!-- ═══ MODAL CONFIRM ═══ -->
+<div id="modalCandidature" class="modal">
+    <div class="modal-box" style="max-width:700px;max-height:88vh;display:flex;flex-direction:column;">
+        <div class="modal-head">
+            <div class="modal-title" id="candModalTitle">CANDIDATURE</div>
+            <button class="modal-close" onclick="closeModal('modalCandidature')"><i class="fas fa-times"></i></button>
+        </div>
+        <div style="display:flex;gap:10px;padding:12px 24px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap;">
+            <select id="candStatutSelect" class="toolbar-select" style="font-size:12px;padding:6px 12px;" onchange="updateCandStatut()">
+                <option value="nouveau">🆕 Nouveau</option>
+                <option value="en_cours">🔄 En cours</option>
+                <option value="embauche">✅ Embauché</option>
+                <option value="refuse">❌ Refusé</option>
+                <option value="archive">📦 Archivé</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="printCandidature()"><i class="fas fa-print"></i> Imprimer</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteCandidature()"><i class="fas fa-trash"></i> Supprimer</button>
+        </div>
+        <div id="candContent" style="overflow-y:auto;padding:20px 24px;flex:1;font-size:13px;"></div>
+        <div style="padding:12px 24px;border-top:1px solid var(--border);">
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);display:block;margin-bottom:6px;">Note interne</label>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="candNoteInput" class="toolbar-select" style="flex:1;font-size:13px;padding:8px 12px;" placeholder="Ajouter une note…">
+                <button class="btn btn-green btn-sm" onclick="saveCandNote()"><i class="fas fa-save"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="modalAbsence" class="modal">
     <div class="modal-box" style="max-width:480px;">
         <div class="modal-head">
@@ -1231,10 +1288,11 @@
             document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
             t.classList.add('active');
             document.getElementById('pane-'+t.dataset.tab)?.classList.add('active');
-            if(t.dataset.tab==='pointages') loadPointages();
-            if(t.dataset.tab==='conges')    loadConges();
-            if(t.dataset.tab==='fiches')    renderFiches();
-            if(t.dataset.tab==='salaires') renderFichesSalaire();
+            if(t.dataset.tab==='pointages')    loadPointages();
+            if(t.dataset.tab==='conges')       loadConges();
+            if(t.dataset.tab==='fiches')       renderFiches();
+            if(t.dataset.tab==='salaires')     renderFichesSalaire();
+            if(t.dataset.tab==='candidatures') loadCandidatures();
         });
     });
 
@@ -2538,6 +2596,204 @@
     window.resetEmbaucheForm = function () {
         var f = document.getElementById('formEmbauche');
         if (f) { f.reset(); toast('info', 'Formulaire réinitialisé'); }
+    };
+
+    /* ── SAVE CANDIDATURE ── */
+    window.saveEmbaucheForm = async function () {
+        const form = document.getElementById('formEmbauche');
+        if (!form) return;
+        const fd = new FormData(form);
+        const data = {};
+        fd.forEach((v, k) => {
+            if (Object.prototype.hasOwnProperty.call(data, k)) {
+                if (!Array.isArray(data[k])) data[k] = [data[k]];
+                data[k].push(v);
+            } else { data[k] = v; }
+        });
+        const nom    = (data.nom    || '').trim();
+        const prenom = (data.prenom || '').trim();
+        if (!nom && !prenom) { toast('error', 'Remplir au minimum le nom ou le prénom'); return; }
+        const poste = prompt('Poste visé (facultatif) :', '') ?? '';
+        showLoad();
+        try {
+            const { error } = await db.from('formulaires_embauche').insert({
+                nom, prenom, email: data.email || null,
+                poste_vise: poste || null,
+                statut: 'nouveau',
+                data
+            });
+            if (error) throw error;
+            toast('success', `Candidature ${prenom} ${nom} enregistrée ✓`);
+            form.reset();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    /* ── CANDIDATURES LIST ── */
+    let candidatures = [];
+    let currentCandId = null;
+
+    async function loadCandidatures() {
+        const statut = document.getElementById('filterCandStatut')?.value || '';
+        showLoad();
+        try {
+            let q = db.from('formulaires_embauche').select('*').order('created_at', {ascending: false});
+            if (statut) q = q.eq('statut', statut);
+            const { data, error } = await q;
+            if (error) throw error;
+            candidatures = data || [];
+            renderCandidatures();
+            const badge = document.getElementById('badgeCandidatures');
+            const nv = candidatures.filter(c=>c.statut==='nouveau').length;
+            if (nv > 0) { badge.textContent = nv; badge.style.display = ''; }
+            else badge.style.display = 'none';
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    }
+
+    window.renderCandidatures = function () {
+        const q = (document.getElementById('searchCand')?.value || '').toLowerCase();
+        const STATUT_CHIP = {
+            nouveau:  '<span class="chip yellow">Nouveau</span>',
+            en_cours: '<span class="chip blue">En cours</span>',
+            embauche: '<span class="chip green">Embauché</span>',
+            refuse:   '<span class="chip red">Refusé</span>',
+            archive:  '<span class="chip muted">Archivé</span>'
+        };
+        let list = candidatures;
+        if (q) list = list.filter(c =>
+            `${c.nom} ${c.prenom} ${c.email||''} ${c.poste_vise||''}`.toLowerCase().includes(q));
+        const tbody = document.getElementById('candidaturesBody');
+        tbody.innerHTML = list.length ? list.map(c => {
+            const name = `${c.prenom||''} ${c.nom||''}`.trim() || '—';
+            const initials = name.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
+            return `<tr>
+                <td><div class="cell-user"><div class="avatar">${initials}</div><div class="cell-main">${name}</div></div></td>
+                <td style="color:var(--muted2)">${c.email||'—'}</td>
+                <td>${c.poste_vise||'—'}</td>
+                <td style="color:var(--muted2)">${fmtDate(c.created_at)}</td>
+                <td>${STATUT_CHIP[c.statut]||c.statut}</td>
+                <td><button class="btn btn-ghost btn-sm" onclick="openCandidature('${c.id}')"><i class="fas fa-eye"></i> Consulter</button></td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="6"><div class="empty-state"><div class="empty-ico">📂</div><div class="empty-txt">Aucune candidature</div></div></td></tr>`;
+    };
+
+    window.openCandidature = function (id) {
+        const c = candidatures.find(x => x.id === id);
+        if (!c) return;
+        currentCandId = id;
+        const name = `${c.prenom||''} ${c.nom||''}`.trim() || 'Candidat';
+        document.getElementById('candModalTitle').textContent = `CANDIDATURE — ${name.toUpperCase()}`;
+        document.getElementById('candStatutSelect').value = c.statut || 'nouveau';
+        document.getElementById('candNoteInput').value = c.note_interne || '';
+        const d = c.data || {};
+        const row = (label, val) => val ? `<tr><td style="color:var(--muted);font-size:11px;width:38%;padding:5px 8px;vertical-align:top;">${label}</td><td style="padding:5px 8px;font-weight:500;">${val}</td></tr>` : '';
+        const sec = (title, rows) => rows ? `<div style="margin-bottom:14px;"><div style="font-family:'Bebas Neue',cursive;font-size:13px;letter-spacing:1px;color:var(--muted2);border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:8px;">${title}</div><table style="width:100%;border-collapse:collapse;">${rows}</table></div>` : '';
+        document.getElementById('candContent').innerHTML = `
+            ${sec('1 · Identité', [
+                row('Nom', d.nom), row('Prénom', d.prenom), row('Sexe', d.sexe),
+                row('Date de naissance', d.date_naissance), row('Lieu de naissance', d.lieu_naissance),
+                row('Nationalité', d.nationalite), row('N° AVS', d.avs)
+            ].join(''))}
+            ${sec('2 · Coordonnées', [
+                row('Adresse', `${d.rue||''} ${d.npa||''} ${d.localite||''} ${d.pays||''}`.trim()),
+                row('Tél. principal', d.tel), row('Tél. secondaire', d.tel_secondaire), row('E-mail', d.email)
+            ].join(''))}
+            ${sec('3 · État civil', [
+                row('État civil', d.etat_civil),
+                row('Conjoint(e)', `${d.conjoint_nom||''} ${d.conjoint_prenom||''}`.trim()||null),
+                row('N° AVS conjoint', d.conjoint_avs),
+                row('Enfant 1', d.enfant1_nom ? `${d.enfant1_prenom||''} ${d.enfant1_nom||''} — ${d.enfant1_date_naissance||''}` : null),
+                row('Enfant 2', d.enfant2_nom ? `${d.enfant2_prenom||''} ${d.enfant2_nom||''} — ${d.enfant2_date_naissance||''}` : null),
+                row('Enfant 3', d.enfant3_nom ? `${d.enfant3_prenom||''} ${d.enfant3_nom||''} — ${d.enfant3_date_naissance||''}` : null),
+                row('Enfant 4', d.enfant4_nom ? `${d.enfant4_prenom||''} ${d.enfant4_nom||''} — ${d.enfant4_date_naissance||''}` : null),
+            ].join(''))}
+            ${sec('4 · Autorisation travail', [
+                row('Statut', d.statut_travail), row('N° permis', d.permis_no), row('Valable jusqu\'au', d.permis_fin)
+            ].join(''))}
+            ${sec('5 · Permis de conduire', [
+                row('Catégories', Array.isArray(d.permis_cat) ? d.permis_cat.join(', ') : d.permis_cat),
+                row('1ère délivrance', d.permis_conduite_depuis), row('Valable jusqu\'au', d.permis_conduite_valid),
+                row('Infractions', d.infractions)
+            ].join(''))}
+            ${sec('6 · Formation & langues', [
+                row('Scolarité', d.scolarite), row('Formations', d.formations),
+                row('Français', d.lang_fr), row('Allemand', d.lang_de), row('Anglais', d.lang_en), row('Autres langues', d.lang_autres)
+            ].join(''))}
+            ${sec('7 · Expérience', [
+                row('Emploi 1', d.e1_employeur ? `${d.e1_employeur} · ${d.e1_periode||''} · ${d.e1_fonction||''}` : null),
+                row('Emploi 2', d.e2_employeur ? `${d.e2_employeur} · ${d.e2_periode||''} · ${d.e2_fonction||''}` : null),
+                row('Emploi 3', d.e3_employeur ? `${d.e3_employeur} · ${d.e3_periode||''} · ${d.e3_fonction||''}` : null),
+            ].join(''))}
+            ${c.note_interne ? `<div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:10px 12px;font-size:12px;"><span style="font-weight:700;color:var(--orange);">Note interne : </span>${c.note_interne}</div>` : ''}
+        `;
+        openModal('modalCandidature');
+    };
+
+    window.updateCandStatut = async function () {
+        if (!currentCandId) return;
+        const statut = document.getElementById('candStatutSelect').value;
+        showLoad();
+        try {
+            const { error } = await db.from('formulaires_embauche').update({statut}).eq('id', currentCandId);
+            if (error) throw error;
+            toast('success', 'Statut mis à jour ✓');
+            await loadCandidatures();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.saveCandNote = async function () {
+        if (!currentCandId) return;
+        const note = document.getElementById('candNoteInput').value.trim();
+        showLoad();
+        try {
+            const { error } = await db.from('formulaires_embauche').update({note_interne: note||null}).eq('id', currentCandId);
+            if (error) throw error;
+            toast('success', 'Note enregistrée ✓');
+            await loadCandidatures();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.deleteCandidature = function () {
+        if (!currentCandId) return;
+        document.getElementById('confirmIco').textContent   = '🗑️';
+        document.getElementById('confirmTitle').textContent = 'SUPPRIMER CETTE CANDIDATURE';
+        document.getElementById('confirmText').textContent  = 'Cette action est irréversible.';
+        document.getElementById('confirmYes').onclick = async () => {
+            showLoad();
+            try {
+                const { error } = await db.from('formulaires_embauche').delete().eq('id', currentCandId);
+                if (error) throw error;
+                toast('success', 'Candidature supprimée');
+                closeModal('modalConfirm'); closeModal('modalCandidature');
+                await loadCandidatures();
+            } catch(e) { toast('error', e.message); }
+            finally { hideLoad(); }
+        };
+        openModal('modalConfirm');
+    };
+
+    window.printCandidature = function () {
+        if (!currentCandId) return;
+        const c = candidatures.find(x => x.id === currentCandId);
+        if (!c) return;
+        document.getElementById('formEmbauche').reset();
+        const d = c.data || {};
+        Object.entries(d).forEach(([k, v]) => {
+            if (Array.isArray(v)) {
+                v.forEach(val => {
+                    const el = document.querySelector(`[name="${k}"][value="${val}"]`);
+                    if (el) el.checked = true;
+                });
+            } else {
+                const el = document.querySelector(`[name="${k}"]`);
+                if (el) el.tagName === 'SELECT' ? (el.value = v) : (el.value = v);
+            }
+        });
+        closeModal('modalCandidature');
+        setTimeout(() => { printEmbaucheForm(); }, 200);
     };
 
     window.printEmbaucheForm = function () {
