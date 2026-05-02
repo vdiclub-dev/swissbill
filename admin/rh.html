@@ -668,7 +668,8 @@
         <div class="tab-pane" id="pane-embauche">
             <div class="fe-toolbar">
                 <button type="button" class="btn btn-ghost" onclick="resetEmbaucheForm()"><i class="fas fa-undo"></i> Réinitialiser</button>
-                <button type="button" class="btn btn-ghost" onclick="printEmbaucheForm()"><i class="fas fa-print"></i> Imprimer / PDF</button>
+                <button type="button" class="btn btn-ghost" onclick="printEmbaucheForm()"><i class="fas fa-print"></i> Imprimer rempli</button>
+                <button type="button" class="btn btn-ghost" style="border-color:rgba(59,130,246,0.4);color:var(--blue);" onclick="printEmbaucheBlanc()"><i class="fas fa-file-alt"></i> Imprimer vierge</button>
                 <button type="button" class="btn btn-red" onclick="exportEmbaucheJSON()"><i class="fas fa-file-export"></i> Exporter JSON</button>
             </div>
 
@@ -2543,6 +2544,194 @@
         document.body.classList.add('print-embauche');
         window.print();
         setTimeout(function () { document.body.classList.remove('print-embauche'); }, 800);
+    };
+
+    window.printEmbaucheBlanc = function () {
+        const L = (label, hint) => `
+            <div class="field">
+                <div class="flabel">${label}${hint?`<span class="fhint"> — ${hint}</span>`:''}</div>
+                <div class="fline"></div>
+            </div>`;
+        const LW = (label, hint) => `
+            <div class="field full">
+                <div class="flabel">${label}${hint?`<span class="fhint"> — ${hint}</span>`:''}</div>
+                <div class="fline"></div>
+            </div>`;
+        const LTA = (label, hint) => `
+            <div class="field full">
+                <div class="flabel">${label}${hint?`<span class="fhint"> — ${hint}</span>`:''}</div>
+                <div class="fline"></div>
+                <div class="fline" style="margin-top:8px;"></div>
+            </div>`;
+        const SEC = (num, title, hint, content) => `
+            <div class="section">
+                <div class="sec-head"><span class="sec-num">${num}</span> ${title}</div>
+                ${hint?`<div class="sec-hint">${hint}</div>`:''}
+                <div class="grid">${content}</div>
+            </div>`;
+        const CHECK = (items) => `
+            <div class="field full">
+                <div class="flabel">Catégories détenues</div>
+                <div class="checks">${items.map(i=>`<label class="chk"><span class="chkbox"></span> ${i}</label>`).join('')}</div>
+            </div>`;
+        const SELECT = (label, opts) => `
+            <div class="field">
+                <div class="flabel">${label}</div>
+                <div class="checks" style="flex-wrap:wrap;gap:6px 16px;">${opts.map(o=>`<label class="chk"><span class="chkbox"></span> ${o}</label>`).join('')}</div>
+            </div>`;
+
+        const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Formulaire d'embauche — Colixo</title>
+<style>
+  @page { size: A4; margin: 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #111; margin: 0; background: #fff; }
+  .doc-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2.5px solid #111; padding-bottom: 8px; margin-bottom: 14px; }
+  .doc-title { font-size: 18px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
+  .doc-sub { font-size: 10px; color: #555; margin-top: 2px; }
+  .doc-right { text-align: right; font-size: 10px; color: #555; }
+  .legal { font-size: 9px; color: #666; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 7px 10px; margin-bottom: 14px; line-height: 1.5; }
+  .legal strong { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .section { border: 1px solid #ccc; border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; break-inside: avoid; }
+  .sec-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+  .sec-num { display: inline-block; background: #111; color: #fff; border-radius: 3px; padding: 1px 5px; font-size: 10px; margin-right: 5px; }
+  .sec-hint { font-size: 9px; color: #777; margin-bottom: 8px; line-height: 1.45; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+  .field { }
+  .field.full { grid-column: 1 / -1; }
+  .flabel { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #444; margin-bottom: 3px; }
+  .fhint { font-weight: 400; text-transform: none; color: #888; }
+  .fline { border-bottom: 1px solid #aaa; height: 18px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 4px; }
+  .chk { display: flex; align-items: center; gap: 5px; font-size: 10px; cursor: default; }
+  .chkbox { display: inline-block; width: 11px; height: 11px; border: 1.5px solid #666; border-radius: 2px; flex-shrink: 0; }
+  .subsec { grid-column: 1/-1; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #666; border-top: 1px dashed #ddd; padding-top: 7px; margin-top: 4px; }
+  .enfant-row { grid-column: 1/-1; display: grid; grid-template-columns: 2fr 2fr 0.6fr 1.5fr 2fr; gap: 6px; }
+  .sign-area { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 18px; break-inside: avoid; }
+  .sign-box { border-top: 1.5px solid #555; padding-top: 6px; }
+  .sign-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #444; }
+  .sign-space { height: 30px; }
+  .footer { font-size: 8.5px; color: #aaa; text-align: center; margin-top: 14px; border-top: 1px solid #eee; padding-top: 6px; }
+  @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+</style></head><body>
+
+<div class="doc-header">
+  <div>
+    <div class="doc-title">Colixo · Formulaire d'embauche</div>
+    <div class="doc-sub">Données collectées dans le cadre de la procédure de recrutement — LPD / nLPD</div>
+  </div>
+  <div class="doc-right">Date :  _____ / _____ / _________<br>Poste visé : _______________________</div>
+</div>
+
+<div class="legal">
+  <strong>Cadre légal (rappel — Suisse) :</strong> Ce formulaire respecte la loi fédérale sur l'égalité et la LPD. Ne sont pas demandés : grossesse, religion, orientation sexuelle, état de santé général. Le numéro AVS, l'état civil et les enfants ne sont requis qu'à des fins administratives (AVS/LPP/allocations) et n'influencent pas la décision de recrutement. Le candidat dispose d'un droit d'accès et de rectification.
+</div>
+
+${SEC(1,'Identité &amp; N° AVS',null,`
+  ${L('Nom de famille')} ${L('Prénom(s)')}
+  ${SELECT('Sexe (mention admin.)',['Féminin','Masculin','X (non binaire)'])}
+  ${L('Date de naissance','jj.mm.aaaa')} ${L('Lieu de naissance','Ville, pays')}
+  ${L('Nationalité(s)')} ${LW('N° AVS / AHV','format 756.xxxx.xxxx.xx — 13 chiffres')}
+`)}
+
+${SEC(2,'Adresse &amp; téléphones',null,`
+  ${LW('Rue et numéro')}
+  ${L('NPA')} ${L('Localité')} ${L('Pays','')}
+  ${L('Téléphone principal')} ${L('Téléphone secondaire (facultatif)')}
+  ${LW('E-mail')}
+`)}
+
+${SEC(3,'État civil, conjoint(e) &amp; enfants','Ces renseignements servent aux déclarations AVS/LPP et aux allocations familiales. Sans influence sur la décision de recrutement.',`
+  ${SELECT('État civil',['Célibataire','Marié(e)','Partenariat enregistré','Divorcé(e)','Veuf / Veuve','Séparé(e)'])}
+  <div class="subsec">Conjoint(e) ou partenaire enregistré (facultatif)</div>
+  ${L('Nom')} ${L('Prénom')}
+  ${SELECT('Sexe',['F','M','X'])} ${L('Date de naissance','jj.mm.aaaa')}
+  ${LW('N° AVS du/de la conjoint(e)','756.…')}
+  <div class="subsec">Enfants à charge — Nom, Prénom, Sexe, Date de naissance, N° AVS</div>
+  <div class="enfant-row"><div class="flabel">Enfant 1 — Nom</div><div class="flabel">Prénom</div><div class="flabel">Sexe</div><div class="flabel">Date naissance</div><div class="flabel">N° AVS</div></div>
+  <div class="enfant-row"><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div></div>
+  <div class="enfant-row"><div class="flabel">Enfant 2 — Nom</div><div class="flabel">Prénom</div><div class="flabel">Sexe</div><div class="flabel">Date naissance</div><div class="flabel">N° AVS</div></div>
+  <div class="enfant-row"><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div></div>
+  <div class="enfant-row"><div class="flabel">Enfant 3 — Nom</div><div class="flabel">Prénom</div><div class="flabel">Sexe</div><div class="flabel">Date naissance</div><div class="flabel">N° AVS</div></div>
+  <div class="enfant-row"><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div></div>
+  <div class="enfant-row"><div class="flabel">Enfant 4 — Nom</div><div class="flabel">Prénom</div><div class="flabel">Sexe</div><div class="flabel">Date naissance</div><div class="flabel">N° AVS</div></div>
+  <div class="enfant-row"><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div><div class="fline"></div></div>
+`)}
+
+${SEC(4,'Autorisation de travail en Suisse','Vérification de l\'aptitude à occuper l\'emploi.',`
+  ${SELECT('Statut',['Citoyen(ne) suisse','Ressortissant(e) UE/AELE','Permis B','Permis L','Permis G (frontalier)','Carte de légitimation','Demande en cours','Autre'])}
+  ${L('N° titre / permis')} ${L('Valable jusqu\'au','jj.mm.aaaa')}
+`)}
+
+${SEC(5,'Permis de conduire','Pertinent pour chauffeur / livreur.',`
+  ${CHECK(['B — véhicules légers','C — poids lourds','C1','CE — ensemble','D — transport personnes','BE — remorque'])}
+  ${L('1ère délivrance catégorie pertinente','jj.mm.aaaa')} ${L('Permis valable jusqu\'au','jj.mm.aaaa')}
+  ${LTA('Condamnations ou retraits de permis (déclaration sur l\'honneur — indiquer « néant » ou décrire)')}
+`)}
+
+${SEC(6,'Formation &amp; langues',null,`
+  ${SELECT('Scolarité / formation la plus élevée',['École obligatoire','Secondaire II (gymnase/maturité)','Tertiaire (HES/université)','CFC / apprentissage','Autre'])}
+  ${LTA('Formations professionnelles, certificats (FPA, sécurité, CACES, etc.)')}
+  ${SELECT('Français',['A1','A2','B1','B2','C1','C2 / langue maternelle'])}
+  ${SELECT('Allemand',['A1','A2','B1','B2','C1','C2'])}
+  ${SELECT('Anglais',['A1','A2','B1','B2','C1','C2'])}
+  ${L('Autres langues','')}
+`)}
+
+${SEC(7,'Parcours professionnel (3 derniers emplois)','Limiter aux éléments utiles au poste.',`
+  <div class="subsec">Emploi 1 (le plus récent)</div>
+  ${L('Employeur')} ${L('Période (de — à)','ex. 01.2022 – 06.2024')}
+  ${LW('Fonction / tâches')}
+  ${LW('Motif de départ (factuel)','ex. fin de CDD, démission, licenciement économique')}
+  <div class="subsec">Emploi 2</div>
+  ${L('Employeur')} ${L('Période')}
+  ${LW('Fonction / tâches')}
+  <div class="subsec">Emploi 3</div>
+  ${L('Employeur')} ${L('Période')}
+  ${LW('Fonction / tâches')}
+`)}
+
+${SEC(8,'Références professionnelles','Uniquement avec accord des personnes.',`
+  ${L('Réf. 1 — Nom &amp; prénom')} ${L('Fonction &amp; entreprise')}
+  ${L('Téléphone')} ${L('E-mail')}
+  ${L('Réf. 2 — Nom &amp; prénom')} ${L('Fonction &amp; entreprise')}
+  ${L('Téléphone')} ${L('E-mail')}
+`)}
+
+${SEC(9,'Coordonnées bancaires (virement salaire)','Données sensibles — traitement strictement confidentiel.',`
+  ${LW('Titulaire du compte (si différent du candidat)')}
+  ${L('IBAN','CH…')} ${L('BIC / SWIFT','')}
+  ${L('Banque')} ${L('NPA / localité banque','')}
+`)}
+
+${SEC(10,'Remarques &amp; informations complémentaires',null,`
+  ${LTA('')}${LTA('')}
+`)}
+
+<div class="sign-area">
+  <div class="sign-box">
+    <div class="sign-lbl">Signature du candidat(e)</div>
+    <div class="sign-space"></div>
+    <div class="fline" style="width:60%"></div>
+    <div style="font-size:8.5px;color:#888;margin-top:3px;">Lieu, date &amp; signature</div>
+  </div>
+  <div class="sign-box">
+    <div class="sign-lbl">Visa employeur / RH</div>
+    <div class="sign-space"></div>
+    <div class="fline" style="width:60%"></div>
+    <div style="font-size:8.5px;color:#888;margin-top:3px;">Lieu, date &amp; signature</div>
+  </div>
+</div>
+
+<div class="footer">Colixo SA · Formulaire d'embauche · Données traitées conformément à la nLPD (Loi fédérale sur la protection des données) · ${new Date().getFullYear()}</div>
+
+</body></html>`;
+
+        const w = window.open('', '_blank', 'width=900,height=750');
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 500);
     };
 
     window.exportEmbaucheJSON = function () {
