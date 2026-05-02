@@ -1079,6 +1079,69 @@
     // Retourne la date locale suisse YYYY-MM-DD (évite le décalage UTC minuit)
     const today = () => new Date().toLocaleDateString('fr-CA', {timeZone:'Europe/Zurich'}); // fr-CA donne YYYY-MM-DD
 
+    // ── Jours fériés fédéraux suisses ────────────────────────────
+    function isFeriesCH(date) {
+        const d = new Date(date);
+        const mm = d.getMonth() + 1, dd = d.getDate(), y = d.getFullYear();
+        // Fériés fixes
+        if((mm===1&&dd===1)||(mm===8&&dd===1)||(mm===12&&dd===25)||(mm===12&&dd===26)) return true;
+        // Pâques (algorithme de Meeus)
+        const a=y%19,b=Math.floor(y/100),c=y%100,d2=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d2-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),month=Math.floor((h+l-7*m+114)/31),day=((h+l-7*m+114)%31)+1;
+        const easter=new Date(y,month-1,day);
+        const venSaint=new Date(easter); venSaint.setDate(easter.getDate()-2);
+        const lundiPaques=new Date(easter); lundiPaques.setDate(easter.getDate()+1);
+        const ascension=new Date(easter); ascension.setDate(easter.getDate()+39);
+        const pentecote=new Date(easter); pentecote.setDate(easter.getDate()+49);
+        const lundiPentecote=new Date(easter); lundiPentecote.setDate(easter.getDate()+50);
+        for(const f2 of [venSaint,lundiPaques,ascension,pentecote,lundiPentecote]) {
+            if(f2.getFullYear()===y&&f2.getMonth()+1===mm&&f2.getDate()===dd) return true;
+        }
+        return false;
+    }
+
+    // ── Calcul détaillé des heures selon les tranches ────────────
+    // Retourne {heures_total, heures_nuit, heures_dimanche, heures_feries, heures_supp}
+    // Règles : 6h-23h = ×1.1 | 23h-6h = +10% nuit | Dim = +50% | Fériés = +50%
+    function calculerHeuresDetailees(debutISO, finISO, pauseMinutes) {
+        const debut = new Date(debutISO);
+        const fin   = new Date(finISO);
+        let cursor  = new Date(debut);
+
+        let hTotal = 0, hNuit = 0, hDim = 0, hFeries = 0;
+        const STEP  = 60000; // 1 minute
+
+        while(cursor < fin) {
+            const next = new Date(Math.min(cursor.getTime() + STEP, fin.getTime()));
+            const heureCH = cursor.toLocaleString('fr-CH', {timeZone:'Europe/Zurich', hour:'2-digit', hour12:false});
+            const h = parseInt(heureCH);
+            const jourSemaine = new Date(cursor.toLocaleString('en-US',{timeZone:'Europe/Zurich'})).getDay(); // 0=dim
+            const dateStr = cursor.toLocaleDateString('fr-CA',{timeZone:'Europe/Zurich'});
+            const frac = (next - cursor) / 3600000; // fraction d'heure
+
+            hTotal += frac;
+            if(h >= 23 || h < 6)  hNuit     += frac;
+            if(jourSemaine === 0)  hDim      += frac;
+            if(isFeriesCH(dateStr)) hFeries  += frac;
+
+            cursor = next;
+        }
+
+        // Soustraire les pauses
+        const pauseH = (pauseMinutes || 0) / 60;
+        hTotal = Math.max(0, hTotal - pauseH);
+
+        // Heures supp = au-delà de 8.5h/jour
+        const hSupp = Math.max(0, hTotal - 8.5);
+
+        return {
+            heures_total:     parseFloat(hTotal.toFixed(2)),
+            heures_nuit:      parseFloat(hNuit.toFixed(2)),
+            heures_dimanche:  parseFloat(hDim.toFixed(2)),
+            heures_feries:    parseFloat(hFeries.toFixed(2)),
+            heures_supp:      parseFloat(hSupp.toFixed(2)),
+        };
+    }
+
     // Retourne un timestamp ISO avec offset suisse (+01:00 / +02:00) pour stockage correct en DB
     function nowCH() {
         const d = new Date();
@@ -3177,22 +3240,29 @@
             }
             else if(action==='stop') {
                 if(!pointage?.id) { toast('error','Pointage introuvable'); return; }
-                // Calculate hours — cumul toutes les pauses
-                const ms = new Date() - new Date(pointage.debut_travail);
-                // Si encore en pause au moment du stop, ajouter la pause en cours
+                // Pause en cours au moment du stop
                 let extraPauseMin = 0;
                 if(pointage.statut === 'pause' && pointage.debut_pause)
                     extraPauseMin = Math.round((new Date() - new Date(pointage.debut_pause)) / 60000);
-                const pauseMs = ((pointage.pause_minutes || 0) + extraPauseMin) * 60000;
-                const heures = (ms - pauseMs) / 3600000;
-                const heuresSupp = Math.max(0, heures - 8.5);
+                const totalPauseMin = (pointage.pause_minutes || 0) + extraPauseMin;
+
+                // Calcul détaillé (nuit, dimanche, fériés)
+                const det = calculerHeuresDetailees(pointage.debut_travail, now, totalPauseMin);
                 const { data: upRows, error: upErr } = await db.from('pointages')
-                    .update({ fin_travail:now, statut:'termine',
-                        heures_travaillees: parseFloat(heures.toFixed(2)),
-                        heures_supp: parseFloat(heuresSupp.toFixed(2)) })
+                    .update({
+                        fin_travail:       now,
+                        statut:            'termine',
+                        pause_minutes:     totalPauseMin,
+                        heures_travaillees: det.heures_total,
+                        heures_supp:       det.heures_supp,
+                        heures_nuit:       det.heures_nuit,
+                        heures_dimanche:   det.heures_dimanche,
+                        heures_feries:     det.heures_feries,
+                    })
                     .eq('id', pointage.id).select('id');
                 if(upErr) throw upErr;
                 if(!upRows || upRows.length === 0) throw new Error('RLS bloqué — exécutez fix_pointages_rls.sql dans Supabase');
+                const heures = det.heures_total;
                 // Recharger
                 const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
                 pointage = fresh;
