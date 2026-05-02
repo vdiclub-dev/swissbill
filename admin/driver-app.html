@@ -3179,12 +3179,13 @@
                     pauseMs = new Date(pointage.fin_pause) - new Date(pointage.debut_pause);
                 const heures = (ms - pauseMs) / 3600000;
                 const heuresSupp = Math.max(0, heures - 8.5);
-                const { error: upErr } = await db.from('pointages')
+                const { data: upRows, error: upErr } = await db.from('pointages')
                     .update({ fin_travail:now, statut:'termine',
                         heures_travaillees: parseFloat(heures.toFixed(2)),
                         heures_supp: parseFloat(heuresSupp.toFixed(2)) })
-                    .eq('id', pointage.id);
+                    .eq('id', pointage.id).select('id');
                 if(upErr) throw upErr;
+                if(!upRows || upRows.length === 0) throw new Error('RLS bloqué — exécutez fix_pointages_rls.sql dans Supabase');
                 // Recharger
                 const { data: fresh } = await db.from('pointages').select('*').eq('id', pointage.id).single();
                 pointage = fresh;
