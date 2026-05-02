@@ -312,6 +312,7 @@
         .cell-main { font-weight:600; font-size:13px; }
         .cell-sub  { font-size:11px; color:var(--muted); margin-top:1px; }
 
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }
         /* Chips */
         .chip { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:100px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
         .chip.green  { background:rgba(34,197,94,0.12);  color:var(--green);  border:1px solid rgba(34,197,94,0.25); }
@@ -562,6 +563,8 @@
 
         <!-- ══ POINTAGES ══ -->
         <div class="tab-pane" id="pane-pointages">
+            <!-- Barre live temps réel -->
+            <div id="liveStatusBar" style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px;min-height:32px;"></div>
             <div class="toolbar-bar">
                 <select id="filterDriverPt" class="toolbar-select" onchange="loadPointages()" aria-label="Chauffeur">
                     <option value="">Tous les chauffeurs</option>
@@ -1292,6 +1295,62 @@
 
         renderFichesSalaire();
         hideLoad();
+        startRealtimePointages();
+    }
+
+    // ── Realtime pointages ────────────────────────────────────────
+    let realtimeChannel = null;
+    function startRealtimePointages() {
+        if(realtimeChannel) db.removeChannel(realtimeChannel);
+        realtimeChannel = db.channel('rh-pointages')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pointages' }, payload => {
+                const p = payload.new || payload.old;
+                if(!p) return;
+                if(payload.eventType === 'INSERT') {
+                    pointages.unshift(p);
+                    showLiveBadge(p);
+                } else if(payload.eventType === 'UPDATE') {
+                    const idx = pointages.findIndex(x => x.id === p.id);
+                    if(idx >= 0) pointages[idx] = p; else pointages.unshift(p);
+                }
+                renderKPIs();
+                renderDriverSummary();
+                loadPointages();
+                updateLiveStatus();
+            })
+            .subscribe();
+        updateLiveStatus();
+    }
+
+    function updateLiveStatus() {
+        const today = new Date().toLocaleDateString('fr-CA', {timeZone:'Europe/Zurich'});
+        const actifs = pointages.filter(p => p.date === today && p.statut === 'en_cours');
+        const el = document.getElementById('liveStatusBar');
+        if(!el) return;
+        if(actifs.length === 0) {
+            el.innerHTML = '<span style="color:var(--muted);font-size:12px;">⚪ Aucun chauffeur en service</span>';
+            return;
+        }
+        el.innerHTML = actifs.map(p => {
+            const c = chauffeurs.find(x => x.id === p.driver_id);
+            const name = c ? `${c.prenom||''} ${c.nom||''}`.trim() : '—';
+            const since = p.debut_travail ? new Date(p.debut_travail).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'}) : '—';
+            const isPause = p.statut === 'pause';
+            return `<span style="display:inline-flex;align-items:center;gap:6px;background:${isPause?'rgba(245,158,11,.12)':'rgba(34,197,94,.12)'};border:1px solid ${isPause?'rgba(245,158,11,.3)':'rgba(34,197,94,.3)'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;">
+                <span style="width:7px;height:7px;border-radius:50%;background:${isPause?'#f59e0b':'#22c55e'};display:inline-block;${isPause?'':'animation:pulse 1.5s infinite'}"></span>
+                ${name} — ${isPause?'⏸ Pause':'🚗 En route'} depuis ${since}
+            </span>`;
+        }).join('');
+    }
+
+    function showLiveBadge(p) {
+        const c = chauffeurs.find(x => x.id === p.driver_id);
+        const name = c ? `${c.prenom||''} ${c.nom||''}`.trim() : 'Chauffeur';
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:80px;right:24px;background:#22c55e;color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;font-size:14px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);';
+        toast.textContent = `🟢 ${name} a démarré sa journée`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
     }
 
     function populateDriverSelects() {
