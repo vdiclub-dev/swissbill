@@ -1419,6 +1419,7 @@
                 <td>${cgsAtt>0?`<span class="chip yellow">${cgsAtt} en attente</span>`:'<span class="chip muted">—</span>'}</td>
                 <td><div style="display:flex;gap:6px;">
                     <button class="btn btn-ghost btn-sm" onclick="showFiche('${c.id}')"><i class="fas fa-id-card"></i></button>
+                    <button class="btn btn-ghost btn-sm" onclick="printFicheTemps('${c.id}')" title="Feuille mensuelle A4"><i class="fas fa-print"></i></button>
                     <button class="btn btn-ghost btn-sm" onclick="openSoldeModal('${c.id}','${c.prenom||''} ${c.nom||''}')"><i class="fas fa-edit"></i></button>
                 </div></td>
             </tr>`;
@@ -1706,6 +1707,141 @@
                 </tbody>
             </table>`;
         openModal('modalFiche');
+    };
+
+    window.printFicheTemps = function(driverId) {
+        const c   = chauffeurs.find(x=>x.id===driverId);
+        if(!c) return;
+        const pts  = pointages.filter(p=>p.driver_id===driverId).sort((a,b)=>a.date>b.date?1:-1);
+        const s    = soldes.find(x=>x.driver_id===driverId)||{};
+        const cgs  = conges.filter(g=>g.driver_id===driverId && g.statut==='approuve' && congeOverlapsMonth(g));
+        const name = `${c.prenom||''} ${c.nom||''}`.trim();
+        const moisLabel = new Date(currentYear, currentMonth-1, 1).toLocaleDateString('fr-CH',{month:'long',year:'numeric'});
+
+        const totalH    = pts.reduce((s,p)=>s+(parseFloat(p.heures_travaillees)||0),0);
+        const totalSupp = pts.reduce((s,p)=>s+(parseFloat(p.heures_supp)||0),0);
+        const totalNuit = pts.reduce((s,p)=>s+(parseFloat(p.heures_nuit)||0),0);
+        const totalDim  = pts.reduce((s,p)=>s+(parseFloat(p.heures_dimanche)||0),0);
+        const totalFer  = pts.reduce((s,p)=>s+(parseFloat(p.heures_feries)||0),0);
+        const totalPause= pts.reduce((s,p)=>s+(parseInt(p.pause_minutes)||0),0);
+        const joursWork = pts.filter(p=>parseFloat(p.heures_travaillees)>0).length;
+        const joursConge= cgs.reduce((s,g)=>s+(parseFloat(g.nb_jours)||1),0);
+
+        const rows = pts.map(p=>{
+            const h = parseFloat(p.heures_travaillees)||0;
+            const sup = parseFloat(p.heures_supp)||0;
+            const nuit = parseFloat(p.heures_nuit)||0;
+            const dim  = parseFloat(p.heures_dimanche)||0;
+            const fer  = parseFloat(p.heures_feries)||0;
+            const pmin = parseInt(p.pause_minutes)||0;
+            const d = new Date(p.date+'T12:00:00');
+            const dateStr = d.toLocaleDateString('fr-CH',{weekday:'short',day:'2-digit',month:'2-digit'});
+            const supTags = [
+                nuit>0?`<span class="tag nuit">🌙 ${nuit.toFixed(2)}h</span>`:'',
+                dim>0?`<span class="tag dim">☀️ ${dim.toFixed(2)}h</span>`:'',
+                fer>0?`<span class="tag fer">🎉 ${fer.toFixed(2)}h</span>`:''
+            ].join('');
+            return `<tr>
+                <td>${dateStr}</td>
+                <td>${fmt(p.debut_travail)}</td>
+                <td>${fmt(p.fin_travail)}</td>
+                <td>${pmin>0?pmin+'min':'—'}</td>
+                <td class="${h>0?'num':''}">${h>0?h.toFixed(2)+'h':'—'}</td>
+                <td class="${sup>0?'orange':''}">${sup>0?'+'+sup.toFixed(2)+'h':'—'}</td>
+                <td>${supTags}</td>
+            </tr>`;
+        }).join('');
+
+        const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Fiche ${name} — ${moisLabel}</title>
+<style>
+  @page { size: A4; margin: 18mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Arial', sans-serif; font-size: 11px; color: #222; margin: 0; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #222; padding-bottom: 10px; margin-bottom: 16px; }
+  .header h1 { font-size: 20px; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+  .header .sub { font-size: 12px; color: #555; margin-top: 4px; }
+  .header .period { text-align: right; font-size: 13px; font-weight: 600; text-transform: capitalize; }
+  .stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 18px; }
+  .stat { border: 1px solid #ddd; border-radius: 6px; padding: 8px; text-align: center; }
+  .stat .val { font-size: 18px; font-weight: 700; }
+  .stat .lbl { font-size: 9px; color: #888; text-transform: uppercase; margin-top: 2px; }
+  .green { color: #16a34a; } .blue { color: #2563eb; } .orange { color: #ea580c; } .purple { color: #7c3aed; } .red { color: #dc2626; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+  thead tr { background: #f4f4f4; }
+  th { font-size: 9px; text-transform: uppercase; padding: 6px 8px; text-align: left; border-bottom: 1px solid #ccc; color: #666; letter-spacing: 0.5px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #eee; }
+  tr:nth-child(even) td { background: #fafafa; }
+  td.num { font-weight: 600; }
+  .tfoot-row td { font-weight: 700; background: #f4f4f4; border-top: 2px solid #222; font-size: 11px; }
+  .tag { display: inline-block; font-size: 9px; border-radius: 4px; padding: 1px 5px; margin-right: 2px; }
+  .tag.nuit { background: #dbeafe; color: #1e40af; }
+  .tag.dim  { background: #fef9c3; color: #854d0e; }
+  .tag.fer  { background: #fce7f3; color: #9d174d; }
+  .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #888; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin: 18px 0 10px; }
+  .balance-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 24px; }
+  .bal { border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; }
+  .bal .bval { font-size: 16px; font-weight: 700; }
+  .bal .blbl { font-size: 9px; color: #888; text-transform: uppercase; margin-top: 2px; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px; }
+  .sign-box { border-top: 1px solid #999; padding-top: 6px; font-size: 10px; color: #666; }
+  .footer { font-size: 9px; color: #aaa; text-align: center; margin-top: 20px; border-top: 1px solid #eee; padding-top: 8px; }
+  @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+</style></head><body>
+<div class="header">
+  <div>
+    <h1>${name}</h1>
+    <div class="sub">Fiche de temps mensuelle · Colixo</div>
+  </div>
+  <div class="period">${moisLabel}<br><span style="font-size:11px;color:#888;font-weight:400">Imprimé le ${new Date().toLocaleDateString('fr-CH')}</span></div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="val green">${joursWork}</div><div class="lbl">Jours travaillés</div></div>
+  <div class="stat"><div class="val blue">${totalH.toFixed(2)}h</div><div class="lbl">Heures totales</div></div>
+  <div class="stat"><div class="val orange">${totalSupp>0?'+':''}${totalSupp.toFixed(2)}h</div><div class="lbl">Heures supp.</div></div>
+  <div class="stat"><div class="val">${Math.floor(totalPause/60)}h${(totalPause%60).toString().padStart(2,'0')}</div><div class="lbl">Total pauses</div></div>
+  <div class="stat"><div class="val purple">${joursConge.toFixed(1)}j</div><div class="lbl">Congés ce mois</div></div>
+</div>
+
+<div class="section-title">Détail des pointages — ${moisLabel}</div>
+<table>
+  <thead><tr>
+    <th>Date</th><th>Début</th><th>Fin</th><th>Pause</th><th>Heures</th><th>Supp.</th><th>Suppléments horaires</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr class="tfoot-row">
+    <td colspan="4">TOTAL</td>
+    <td>${totalH.toFixed(2)}h</td>
+    <td>${totalSupp>0?'+':''}${totalSupp.toFixed(2)}h</td>
+    <td style="font-size:9px;">
+      ${totalNuit>0?`<span class="tag nuit">🌙 ${totalNuit.toFixed(2)}h nuit</span>`:''}
+      ${totalDim>0?`<span class="tag dim">☀️ ${totalDim.toFixed(2)}h dim.</span>`:''}
+      ${totalFer>0?`<span class="tag fer">🎉 ${totalFer.toFixed(2)}h fériés</span>`:''}
+    </td>
+  </tr></tfoot>
+</table>
+
+<div class="section-title">Soldes</div>
+<div class="balance-grid">
+  <div class="bal"><div class="bval green">${s.solde_vacances||20}j</div><div class="blbl">Solde vacances</div></div>
+  <div class="bal"><div class="bval blue">${s.jours_comp||0}j</div><div class="blbl">Jours compensation</div></div>
+  <div class="bal"><div class="bval orange">${s.heures_supp_total||0}h</div><div class="blbl">Report heures supp.</div></div>
+</div>
+
+<div class="sign">
+  <div class="sign-box">Signature employé(e) :<br><br><br></div>
+  <div class="sign-box">Visa employeur :<br><br><br></div>
+</div>
+
+<div class="footer">Colixo SA · Fiche générée automatiquement · ${new Date().toLocaleDateString('fr-CH',{day:'2-digit',month:'long',year:'numeric'})}</div>
+
+<script>window.onload = () => window.print();</script>
+</body></html>`;
+
+        const w = window.open('','_blank','width=900,height=700');
+        w.document.write(html);
+        w.document.close();
     };
 
     /* ── FICHES GRID ── */
