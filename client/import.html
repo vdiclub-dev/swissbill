@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Importer des livraisons - Portail Client Colixo</title>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="/client/css/style.css">
+    <link rel="stylesheet" href="/client/css/import.css">
+    
+    <!-- Librairies externes -->
+    <!-- Supabase JS v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- XLSX.js pour Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- PapaParse pour CSV -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <!-- Navigation (à adapter selon votre portail existant) -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <a href="/client/portal.html">
+                <img src="/client/img/colixo-logo.svg" alt="Colixo" height="40">
+            </a>
+        </div>
+        <div class="navbar-menu">
+            <a href="/client/portal.html" class="nav-link">Tableau de bord</a>
+            <a href="/client/orders.html" class="nav-link">Commandes</a>
+            <a href="/client/import.html" class="nav-link active">Importer</a>
+            <a href="/client/profile.html" class="nav-link">Profil</a>
+            <a href="#" class="nav-link" id="logoutBtn">Déconnexion</a>
+        </div>
+    </nav>
+
+    <!-- Container principal -->
+    <div class="import-container">
+        <!-- En-tête -->
+        <header class="page-header">
+            <h1>📦 Importer des livraisons</h1>
+            <p>Importez vos commandes en masse depuis un fichier Excel ou CSV</p>
+        </header>
+
+        <!-- Indicateur d'étapes -->
+        <div class="step-indicator">
+            <div class="step-item active" id="step1-indicator">
+                <div class="step-number">1</div>
+                <div class="step-label">Fichier</div>
+            </div>
+            <div class="step-item" id="step2-indicator">
+                <div class="step-number">2</div>
+                <div class="step-label">Mapping</div>
+            </div>
+            <div class="step-item" id="step3-indicator">
+                <div class="step-number">3</div>
+                <div class="step-label">Validation</div>
+            </div>
+            <div class="step-item" id="step4-indicator">
+                <div class="step-number">4</div>
+                <div class="step-label">Import</div>
+            </div>
+        </div>
+
+        <!-- ÉTAPE 1: Upload du fichier -->
+        <div class="import-step active" id="upload-step">
+            <h2 class="section-title">1. Déposer votre fichier</h2>
+            
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📁</div>
+                <div class="drop-zone-text">Glissez-déposez votre fichier ici</div>
+                <div class="drop-zone-hint">ou cliquez pour sélectionner (CSV, XLS, XLSX - Max 10 MB)</div>
+                <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+                <div id="fileNameDisplay">Aucun fichier sélectionné</div>
+            </div>
+
+            <div class="alert alert-info mt-2">
+                <strong>Formats supportés:</strong> CSV, Excel (.xlsx, .xls)<br>
+                <strong>Taille maximale:</strong> 10 MB<br>
+                <strong>Encodage recommandé:</strong> UTF-8 pour les fichiers CSV
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" id="analyzeBtn" disabled>Analyser le fichier</button>
+                <button class="btn btn-secondary" id="cancelBtn">Annuler</button>
+            </div>
+        </div>
+
+        <!-- ÉTAPE 2: Mapping des colonnes -->
+        <div class="import-step" id="mapping-step">
+            <h2 class="section-title">2. Vérifier et corriger le mapping</h2>
+            
+            <p>Le système a automatiquement détecté les colonnes de votre fichier. 
+               Veuillez vérifier et corriger si nécessaire.</p>
+
+            <!-- Prévisualisation des données brutes -->
+            <div class="table-container">
+                <h3>Aperçu de votre fichier (10 premières lignes)</h3>
+                <table class="data-table">
+                    <thead id="previewTableHead"></thead>
+                    <tbody id="previewTableBody"></tbody>
+                </table>
+                <p id="previewCount" class="text-center mt-2"></p>
+            </div>
+
+            <!-- Interface de mapping -->
+            <div class="table-container">
+                <h3>Mapping des colonnes</h3>
+                <div id="mappingWarning"></div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">Colonne dans votre fichier</th>
+                            <th style="width: 50%;">Champ Colixo</th>
+                            <th style="width: 20%;">Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mappingTableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>Champs obligatoires:</strong> Référence client, Nom destinataire, 
+                Adresse livraison, NPA livraison, Ville livraison, Nombre de colis
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="showStep('upload-step')">Retour</button>
+                <button class="btn btn-primary" id="saveMappingBtn">Sauvegarder ce mapping</button>
+                <button class="btn btn-success" id="importBtn">Valider et continuer</button>
+            </div>
+        </div>
+
+        <!-- ÉTAPE 3: Validation et prévisualisation -->
+        <div class="import-step" id="preview-step">
+            <h2 class="section-title">3. Vérifier les résultats</h2>
+
+            <!-- Résumé statistique -->
+            <div id="importSummary"></div>
+
+            <!-- Tableau de prévisualisation -->
+            <div class="table-container">
+                <h3>Prévisualisation des livraisons</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Statut</th>
+                            <th>Référence</th>
+                            <th>Destinataire</th>
+                            <th>Ville</th>
+                            <th>Colis</th>
+                            <th>Poids</th>
+                            <th>Service</th>
+                            <th>Prix</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="validationTableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="showStep('mapping-step')">Retour</button>
+                <button class="btn btn-info" id="recalculateBtn">Recalculer les prix</button>
+                <button class="btn btn-warning" id="downloadErrorsBtn">Télécharger rapport d'erreurs</button>
+                <button class="btn btn-success" id="confirmImportBtn" onclick="finalizeImport()">
+                    ✅ Importer les lignes valides
+                </button>
+            </div>
+        </div>
+
+        <!-- ÉTAPE 4: Confirmation (affichée après import réussi) -->
+        <div class="import-step" id="success-step">
+            <h2 class="section-title">✅ Import terminé avec succès</h2>
+            
+            <div class="text-center">
+                <p class="mb-2">Vos livraisons ont été créées avec succès.</p>
+                <p>Vous allez être redirigé vers la liste des commandes...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Notification Container -->
+    <div class="notification-container" id="notificationContainer"></div>
+
+    <!-- Scripts JavaScript -->
+    <script src="/client/js/supabase-config.js"></script>
+    <script src="/client/js/import-mapping.js"></script>
+    <script src="/client/js/pricing-engine.js"></script>
+    <script src="/client/js/csv-error-report.js"></script>
+    <script src="/client/js/import.js"></script>
+</body>
+</html>
