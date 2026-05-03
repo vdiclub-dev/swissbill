@@ -129,15 +129,40 @@
     if ($('defaultServiceLevel')) $('defaultServiceLevel').value = values.service_level || 'eco_48h';
   }
 
+  function getStoredPortalClient() {
+    try {
+      const raw = localStorage.getItem('colixo_user');
+      if (!raw) return null;
+      const user = JSON.parse(raw);
+      const allowedRoles = ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'];
+      if (!user || !user.id || allowedRoles.indexOf(user.role) === -1) return null;
+      return {
+        session: null,
+        authUser: null,
+        profile: user,
+        userId: user.id,
+        role: user.role,
+        isLegacy: true,
+        profileLookup: 'localStorage'
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
   async function getCurrentClient() {
     if (typeof window.colixoGetAuthContext !== 'function') {
       throw new Error('Protection de route indisponible. Vérifiez js/auth.js.');
     }
 
-    const auth = await window.colixoGetAuthContext({
+    let auth = await window.colixoGetAuthContext({
       roles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'],
       legacyRoles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur']
     });
+
+    if (!auth || !auth.profile) {
+      auth = getStoredPortalClient();
+    }
 
     if (!auth || !auth.profile) {
       throw new Error('Connectez-vous au portail client pour ouvrir l’import.');
