@@ -600,10 +600,10 @@
       showSection('summarySection', true);
       showSection('validatedPreviewSection', true);
       $('validatedPreviewSection')?.classList.add('is-collapsed');
-      setStep(5);
+      setStep(6);
       renderNextAction(summary);
       $('importNextAction')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setStatus('Prévisualisation prête. Importez uniquement quand le résumé est correct.', 'success');
+      setStatus('Étape 6 prête: vérifiez le résumé puis cliquez sur “Étape 7 · Importer maintenant”.', 'success');
     } catch (error) {
       setStatus(`Erreur de validation: ${error.message}`, 'error');
     } finally {
@@ -938,7 +938,7 @@
     const text = $('importNextText');
     const bottomButton = $('btnImportValidBottom');
     const canImport = summary.validRows > 0;
-    if (title) title.textContent = canImport ? `${summary.validRows} ligne(s) prête(s) à importer` : 'Aucune ligne valide à importer';
+    if (title) title.textContent = canImport ? `${summary.validRows} ligne(s) prête(s) pour l’étape 7` : 'Aucune ligne valide à importer';
     if (text) {
       text.textContent = canImport
         ? `${summary.errorRows} ligne(s) resteront bloquées. Total estimé: ${formatMoney(summary.totalEstimatedPrice)}.`
