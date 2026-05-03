@@ -19,6 +19,8 @@
 
   const state = {
     user: null,
+    authContext: null,
+    isLegacySession: false,
     profile: null,
     clientId: null,
     company: null,
@@ -128,19 +130,17 @@
   }
 
   async function getCurrentClient() {
-    if (typeof window.colixoRequireRoute !== 'function') {
+    if (typeof window.colixoGetAuthContext !== 'function') {
       throw new Error('Protection de route indisponible. Vérifiez js/auth.js.');
     }
 
-    const auth = await window.colixoRequireRoute({
+    const auth = await window.colixoGetAuthContext({
       roles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'],
-      legacyRoles: [],
-      redirectTo: '/login/',
-      allowSuperAdmin: false
+      legacyRoles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur']
     });
 
-    if (!auth || !auth.session || !auth.profile) {
-      throw new Error('Connexion Supabase complète requise pour importer des livraisons.');
+    if (!auth || !auth.profile) {
+      throw new Error('Connectez-vous au portail client pour ouvrir l’import.');
     }
 
     const db = getDb();
@@ -157,7 +157,9 @@
       if (!error) company = data;
     }
 
-    state.user = auth.user;
+    state.authContext = auth;
+    state.user = auth.authUser || auth.user || null;
+    state.isLegacySession = Boolean(auth.isLegacy || !auth.session);
     state.profile = profile;
     state.clientId = clientId;
     state.company = company;
@@ -167,7 +169,39 @@
     if ($('clientScope')) $('clientScope').textContent = `Client ID: ${clientId}`;
     fillDefaultValues();
 
+    if (state.isLegacySession) {
+      renderAuthRequired();
+      throw new Error('Import sécurisé indisponible avec le mode code d’accès.');
+    }
+
     return { user: auth.user, profile, clientId, company };
+  }
+
+  function renderAuthRequired() {
+    const portalUrl = typeof window.colixoHref === 'function' ? window.colixoHref('/admin/client/portal.html') : '/admin/client/portal.html';
+    const loginUrl = typeof window.colixoHref === 'function' ? window.colixoHref('/login/index.html?switch=1') : '/login/index.html?switch=1';
+    showSection('uploadSection', true);
+    showSection('mappingSection', false);
+    showSection('previewSection', false);
+    showSection('summarySection', false);
+    showSection('validatedPreviewSection', false);
+    const upload = $('uploadSection');
+    if (!upload) return;
+    upload.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h2>Session sécurisée requise</h2>
+          <p class="panel-subtitle">Votre portail est ouvert avec un code d’accès. Pour créer des commandes en masse avec RLS Supabase, l’import doit utiliser une session Auth complète.</p>
+        </div>
+      </div>
+      <div class="callout callout-warning">
+        La page ne redirige plus automatiquement vers le login. L’accès au portail reste ouvert, mais l’import réel est bloqué tant qu’une session Supabase complète n’est pas disponible.
+      </div>
+      <div class="toolbar" style="margin-top:18px;">
+        <a class="btn" href="${portalUrl}"><i class="fas fa-arrow-left"></i> Retour portail</a>
+        <a class="btn btn-primary" href="${loginUrl}"><i class="fas fa-right-to-bracket"></i> Reconnexion</a>
+      </div>
+    `;
   }
 
   async function loadActiveImportProfile() {
@@ -854,7 +888,7 @@
       setStatus('Prêt. Déposez un fichier Excel ou CSV pour commencer.', 'info');
     } catch (error) {
       setStatus(error.message, 'error');
-      showSection('uploadSection', false);
+      if (!state.isLegacySession) showSection('uploadSection', false);
     } finally {
       setBusy(false);
     }
