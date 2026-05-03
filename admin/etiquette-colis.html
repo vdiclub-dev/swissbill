@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root{
@@ -98,7 +99,7 @@
     <div class="toolbar">
         <div class="title">Étiquette colis</div>
         <div class="actions">
-            <a class="btn btn-ghost" href="dispatch.html">Retour</a>
+            <a class="btn btn-ghost" href="transports-dispatch.html">Retour</a>
             <button id="btnEditAddr" class="btn btn-blue" style="display:none" onclick="openModal()">✏️ Modifier l'adresse</button>
             <button class="btn btn-red" onclick="window.print()">🖨️ Imprimer</button>
         </div>
@@ -227,7 +228,7 @@
 
     function renderLabel(o){
         const orderRef = o.order_number || String(o.id).slice(0,8).toUpperCase();
-        const qrData = `https://colixo.ch/admin/driver-app.html?id=${o.id}`;
+        const qrData = `https://colixo.ch/driver/index.html?id=${o.id}&order=${encodeURIComponent(o.order_number || '')}`;
 
         document.getElementById('docNum').textContent = orderRef;
         document.getElementById('createdAt').textContent = `Créée le ${fmtDate(o.created_at)}`;
@@ -414,18 +415,13 @@
             if(!id){ fail('Commande introuvable : identifiant manquant.'); return; }
             _orderId = id;
 
-            const { data:{ session } } = await db.auth.getSession();
-            const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-            if(!session && !codeUser){ location.href='../login/index.html'; return; }
-
-            let user = null;
-            if(codeUser && codeUser.role){
-                user = codeUser;
-            } else {
-                const uid = session?.user?.id;
-                const { data:u } = await db.from('utilisateurs').select('*').eq('id', uid).single();
-                user = u;
-            }
+            const auth = await window.colixoRequireRoute({
+                roles: ['admin','super_admin','magasinier'],
+                legacyRoles: ['admin','super_admin','magasinier'],
+                redirectTo: '../login/index.html'
+            });
+            if (!auth) return;
+            let user = auth.profile;
 
             const isAdmin = user && ['admin','super_admin','magasinier'].includes(String(user.role||''));
             const isClient = user && ['client','gestionnaire','comptable'].includes(String(user.role||''));
