@@ -48,7 +48,7 @@
           role: profile.role || null,
           nom: profile.nom || null,
           prenom: profile.prenom || null,
-          code: profile.code_usr || null,
+          code: profile.code_usr || profile.code || profile.code_acces || profile.code_connexion || getLegacyCode() || null,
           entreprise_id: profile.entreprise_id || null
         })
       );
@@ -66,8 +66,13 @@
 
   function getLegacyCode() {
     var legacyUser = readLegacyUser();
-    if (!legacyUser || !legacyUser.code) return null;
-    return String(legacyUser.code).trim().toUpperCase() || null;
+    var code = legacyUser && (legacyUser.code || legacyUser.code_usr || legacyUser.code_acces || legacyUser.code_connexion);
+    if (!code) {
+      try {
+        code = localStorage.getItem("colixo_access_code");
+      } catch (e) {}
+    }
+    return code ? String(code).trim().toUpperCase() : null;
   }
 
   function firstRow(data) {

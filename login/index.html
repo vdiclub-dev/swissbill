@@ -39,6 +39,7 @@
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260463"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     
     <style>
         :root {
@@ -293,6 +294,21 @@
         return;
     }
 
+    if (new URLSearchParams(location.search).get('switch') !== '1' &&
+        new URLSearchParams(location.search).get('register') !== '1') {
+        (async function () {
+            try {
+                var auth = await window.colixoGetAuthContext({
+                    roles: ['super_admin', 'admin', 'chauffeur', 'magasinier', 'client', 'gestionnaire', 'comptable', 'sous_utilisateur'],
+                    legacyRoles: ['super_admin', 'admin', 'chauffeur', 'magasinier', 'client', 'gestionnaire', 'comptable', 'sous_utilisateur']
+                });
+                if (auth && auth.profile && auth.role) {
+                    redirectByRole(auth.role);
+                }
+            } catch (e) {}
+        })();
+    }
+
     function showLoginTab(which) {
         var isReg = which === 'register';
         document.getElementById('tabConnexion').classList.toggle('active', !isReg);
@@ -521,11 +537,8 @@
 
         showLoad();
         try {
-            const { data: user, error } = await db
-                .from('utilisateurs')
-                .select('id, role, nom, prenom, code_usr, actif')
-                .eq('code_usr', code)
-                .maybeSingle();
+            const { data, error } = await db.rpc('login_with_code', { p_code: code });
+            const user = Array.isArray(data) ? (data[0] || null) : (data || null);
 
             if (error) {
                 hideLoad();
@@ -550,9 +563,10 @@
                 role:         user.role,
                 nom:          user.nom,
                 prenom:       user.prenom,
-                code:         user.code_usr,
+                code:         user.code_usr || user.code || user.code_acces || user.code_connexion || code,
                 entreprise_id: user.entreprise_id
             }));
+            localStorage.setItem('colixo_access_code', code);
 
             toast('success', 'Bienvenue ! Redirection en cours…');
             setTimeout(() => redirectByRole(user.role), 800);

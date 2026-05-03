@@ -137,6 +137,10 @@
       const user = JSON.parse(raw);
       const allowedRoles = ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'];
       if (!user || !user.id || allowedRoles.indexOf(user.role) === -1) return null;
+      let storedCode = user.code || user.code_usr || user.code_acces || user.code_connexion || null;
+      if (!storedCode) {
+        try { storedCode = localStorage.getItem('colixo_access_code'); } catch (error) {}
+      }
       return {
         session: null,
         authUser: null,
@@ -144,7 +148,7 @@
         userId: user.id,
         role: user.role,
         isLegacy: true,
-        legacyCode: user.code || null,
+        legacyCode: storedCode,
         profileLookup: 'localStorage'
       };
     } catch (error) {
@@ -210,7 +214,7 @@
 
   function getLegacyRpcPayload(extra) {
     if (!state.profile?.id || !state.legacyCode) {
-      throw new Error('Session code client incomplète. Retournez au portail puis rouvrez l’import.');
+      throw new Error('Session code client incomplète. Déconnectez-vous puis reconnectez-vous une fois avec votre code client pour activer l’import.');
     }
     return Object.assign({
       p_user_id: state.profile.id,
