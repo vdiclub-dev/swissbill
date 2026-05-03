@@ -21,6 +21,7 @@
     user: null,
     authContext: null,
     isLegacySession: false,
+    legacyCode: null,
     profile: null,
     clientId: null,
     company: null,
@@ -143,6 +144,7 @@
         userId: user.id,
         role: user.role,
         isLegacy: true,
+        legacyCode: user.code || null,
         profileLookup: 'localStorage'
       };
     } catch (error) {
@@ -185,21 +187,59 @@
     state.authContext = auth;
     state.user = auth.authUser || auth.user || null;
     state.isLegacySession = Boolean(auth.isLegacy || !auth.session);
+    state.legacyCode = auth.legacyCode || profile.code || profile.code_usr || (typeof window.colixoGetStoredCode === 'function' ? window.colixoGetStoredCode() : null);
     state.profile = profile;
     state.clientId = clientId;
     state.company = company;
 
-    const name = company?.nom || [profile.prenom, profile.nom].filter(Boolean).join(' ') || profile.email || 'Client';
+    if (state.isLegacySession) {
+      await loadLegacyBootstrap();
+    }
+
+    const name = state.company?.nom || [state.profile.prenom, state.profile.nom].filter(Boolean).join(' ') || state.profile.email || 'Client';
     if ($('clientName')) $('clientName').textContent = name;
-    if ($('clientScope')) $('clientScope').textContent = `Client ID: ${clientId}`;
-    fillDefaultValues();
+    if ($('clientScope')) $('clientScope').textContent = `Client ID: ${state.clientId}`;
+    fillDefaultValues(state.activeProfile?.default_values || {});
 
     if (state.isLegacySession) {
-      renderAuthRequired();
-      throw new Error('Import sécurisé indisponible avec le mode code d’accès.');
+      setStatus('Mode code client actif: l’import utilise une fonction Supabase sécurisée côté serveur.', 'info');
     }
 
     return { user: auth.user, profile, clientId, company };
+  }
+
+  function getLegacyRpcPayload(extra) {
+    if (!state.profile?.id || !state.legacyCode) {
+      throw new Error('Session code client incomplète. Retournez au portail puis rouvrez l’import.');
+    }
+    return Object.assign({
+      p_user_id: state.profile.id,
+      p_code: state.legacyCode
+    }, extra || {});
+  }
+
+  async function loadLegacyBootstrap() {
+    const db = getDb();
+    const { data, error } = await db.rpc('client_import_load_bootstrap', getLegacyRpcPayload());
+    if (error) throw error;
+    if (!data || !data.client_id) throw new Error('Session code client non reconnue pour l’import.');
+
+    state.clientId = data.client_id;
+    state.profile = Object.assign({}, state.profile || {}, data.profile || {});
+    state.company = data.company || null;
+    state.activeProfile = data.import_profile || null;
+    state.tariffRules = data.tariff_rules || [];
+    if (state.activeProfile) {
+      state.mapping = state.activeProfile.column_mapping || {};
+      fillDefaultValues(state.activeProfile.default_values || {});
+      if ($('profileName')) $('profileName').value = state.activeProfile.profile_name || 'Profil import actif';
+      if ($('profileHint')) $('profileHint').textContent = `Profil actif chargé: ${state.activeProfile.profile_name}`;
+    }
+    if ($('tariffInfo')) {
+      $('tariffInfo').textContent = state.tariffRules.length
+        ? `${state.tariffRules.length} règle(s) tarifaire(s) active(s) chargée(s).`
+        : 'Aucune règle tarifaire active: les prix seront marqués à valider.';
+    }
   }
 
   function renderAuthRequired() {
@@ -231,6 +271,7 @@
 
   async function loadActiveImportProfile() {
     if (!state.clientId) return null;
+    if (state.isLegacySession) return state.activeProfile || null;
     const db = getDb();
     const { data, error } = await db
       .from('client_import_profiles')
@@ -260,6 +301,7 @@
   }
 
   async function loadClientTariffRules(clientId) {
+    if (state.isLegacySession) return state.tariffRules || [];
     if (!PRICING || typeof PRICING.loadClientTariffRules !== 'function') return [];
     try {
       const rules = await PRICING.loadClientTariffRules(clientId);
@@ -484,6 +526,21 @@
 
     setBusy(true, 'Sauvegarde du profil...');
     try {
+      if (state.isLegacySession) {
+        const { data, error } = await db.rpc('client_import_save_profile', getLegacyRpcPayload({
+          p_profile_name: profileName,
+          p_file_type: state.fileType,
+          p_delimiter: state.delimiter,
+          p_column_mapping: state.mapping,
+          p_default_values: defaultValues
+        }));
+        if (error) throw error;
+        state.activeProfile = data;
+        if ($('profileHint')) $('profileHint').textContent = `Profil actif sauvegardé: ${profileName}`;
+        setStatus('Profil d’importation sauvegardé.', 'success');
+        return data;
+      }
+
       await db.from('client_import_profiles').update({ is_active: false }).eq('client_id', state.clientId).eq('is_active', true);
       const { data, error } = await db
         .from('client_import_profiles')
@@ -646,6 +703,15 @@
     const duplicates = new Set();
     if (!cleanRefs.length) return duplicates;
 
+    if (state.isLegacySession) {
+      const { data, error } = await db.rpc('client_import_check_duplicates', getLegacyRpcPayload({
+        p_refs: cleanRefs
+      }));
+      if (error) throw error;
+      (data || []).forEach((ref) => duplicates.add(ref));
+      return duplicates;
+    }
+
     const chunkSize = 100;
     for (let i = 0; i < cleanRefs.length; i += chunkSize) {
       const chunk = cleanRefs.slice(i, i + chunkSize);
@@ -697,6 +763,19 @@
 
   async function createImportBatch(summary) {
     const db = getDb();
+    if (state.isLegacySession) {
+      const { data, error } = await db.rpc('client_import_create_batch', getLegacyRpcPayload({
+        p_import_profile_id: state.activeProfile?.id || null,
+        p_file_name: state.file?.name || null,
+        p_file_type: state.fileType,
+        p_summary: summary,
+        p_errors: state.errors
+      }));
+      if (error) throw error;
+      state.batchId = data;
+      return { id: data };
+    }
+
     const { data, error } = await db
       .from('import_batches')
       .insert([{
@@ -754,6 +833,16 @@
     }));
 
     if (!payload.length) return [];
+    if (state.isLegacySession) {
+      const { data, error } = await db.rpc('client_import_insert_orders', getLegacyRpcPayload({
+        p_batch_id: importBatchId,
+        p_orders: payload
+      }));
+      if (error) throw error;
+      const count = Number(data?.imported_rows || 0);
+      return Array.from({ length: count }, (_, index) => ({ id: `${importBatchId}-${index + 1}` }));
+    }
+
     const { data, error } = await db.from('orders').insert(payload).select('id,external_reference,total_price_chf,pricing_status');
     if (error) throw error;
     return data || [];
@@ -775,15 +864,17 @@
       const batch = await createImportBatch(state.summary);
       const inserted = await insertOrders(rowsToImport, batch.id);
       const db = getDb();
-      await db
-        .from('import_batches')
-        .update({
-          imported_rows: inserted.length,
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', batch.id)
-        .eq('client_id', state.clientId);
+      if (!state.isLegacySession) {
+        await db
+          .from('import_batches')
+          .update({
+            imported_rows: inserted.length,
+            status: 'completed',
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', batch.id)
+          .eq('client_id', state.clientId);
+      }
 
       setStep(7);
       setStatus(`${inserted.length} transport(s) importé(s) avec succès.`, 'success');
