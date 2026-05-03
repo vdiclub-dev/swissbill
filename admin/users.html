@@ -120,8 +120,9 @@
         .modal-close:hover{color:var(--white);}
         .field{margin-bottom:14px;}
         .field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
-        .field input,.field select{width:100%;padding:11px 14px;background:var(--night);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);}
-        .field input:focus,.field select:focus{outline:none;border-color:var(--red);}
+        .field input,.field select,.field textarea{width:100%;padding:11px 14px;background:var(--night);border:1.5px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;font-size:14px;color:var(--white);}
+        .field textarea{min-height:92px;resize:vertical;}
+        .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--red);}
         .field select option{background:var(--night2);}
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
         .modal-actions{display:flex;gap:10px;margin-top:20px;}
@@ -183,7 +184,7 @@
         </div>
     </div>
 
-    <div id="debugBar" style="background:#1a0a00;border:1px solid #e8311a;border-radius:8px;margin:16px 32px 0;padding:10px 16px;font-size:12px;color:#f97316;">
+    <div id="debugBar" style="display:none;background:#1a0a00;border:1px solid #e8311a;border-radius:8px;margin:16px 32px 0;padding:10px 16px;font-size:12px;color:#f97316;">
         <strong>Debug :</strong> <span id="debugMsg">JS non démarré — vide page ou erreur script</span>
     </div>
 
@@ -234,10 +235,11 @@
                             <th>Entreprise</th>
                             <th>Message</th>
                             <th>Statut</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="demandesTableBody">
-                        <tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
+                        <tr><td colspan="8" style="text-align:center;padding:28px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -360,6 +362,59 @@
     </div>
 </div>
 
+<!-- ═══ MODAL EDIT DEMANDE ═══ -->
+<div class="modal" id="modalDemande">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">MODIFIER DEMANDE D'ACCES</div>
+            <button class="modal-close" onclick="closeModal('modalDemande')">✕</button>
+        </div>
+        <input type="hidden" id="demandeEditId">
+        <div class="field-row">
+            <div class="field">
+                <label>Prénom *</label>
+                <input type="text" id="demandePrenom" placeholder="Jean">
+            </div>
+            <div class="field">
+                <label>Nom *</label>
+                <input type="text" id="demandeNom" placeholder="Dupont">
+            </div>
+        </div>
+        <div class="field">
+            <label>Email *</label>
+            <input type="email" id="demandeEmail" placeholder="jean.dupont@exemple.ch">
+        </div>
+        <div class="field">
+            <label>Téléphone</label>
+            <input type="tel" id="demandeTelephone" placeholder="+41 79 000 00 00">
+        </div>
+        <div class="field">
+            <label>Entreprise</label>
+            <input type="text" id="demandeEntreprise" placeholder="Nom de l'entreprise">
+        </div>
+        <div class="field">
+            <label>Adresse</label>
+            <input type="text" id="demandeAdresse" placeholder="Adresse">
+        </div>
+        <div class="field">
+            <label>Message</label>
+            <textarea id="demandeMessage" placeholder="Message de la demande"></textarea>
+        </div>
+        <div class="field">
+            <label>Statut</label>
+            <select id="demandeStatut">
+                <option value="en_attente">En attente</option>
+                <option value="valide">Validée</option>
+                <option value="refuse">Refusée</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" style="flex:1;" onclick="saveDemandeEdit()"><i class="fas fa-save"></i> Enregistrer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalDemande')">Annuler</button>
+        </div>
+    </div>
+</div>
+
 <!-- ═══ MODAL CONFIRM DELETE ═══ -->
 <div class="modal" id="modalConfirmDelete">
     <div class="modal-box" style="max-width:400px;">
@@ -402,6 +457,8 @@
     if (_dm) _dm.textContent = 'Script démarré…';
 
     if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
+        const _db = document.getElementById('debugBar');
+        if (_db) _db.style.display = 'block';
         if (_dm) _dm.textContent = '❌ config.js manquant ou non chargé!';
         return;
     }
@@ -517,6 +574,7 @@
 
     /* ── State ── */
     let allUsers = [];
+    let demandesRows = [];
     let currentRole = 'all';
     let adminAuthContext = null;
 
@@ -587,15 +645,40 @@
         return rpc.error ? { data: null, error: rpc.error } : { data: rpc.data || [], error: null };
     }
 
+    async function updateDemandeSecure(id, payload) {
+        const direct = await db.from('demandes_inscription').update(payload).eq('id', id).select('id').maybeSingle();
+        if (!direct.error && direct.data?.id) return direct;
+        const rpcPayload = getAdminRpcPayload({
+            p_demande_id: id,
+            p_prenom: payload.prenom || '',
+            p_nom: payload.nom || '',
+            p_email: payload.email || '',
+            p_telephone: payload.telephone || null,
+            p_entreprise_nom: payload.entreprise_nom || null,
+            p_adresse: payload.adresse || null,
+            p_message: payload.message || null,
+            p_statut: payload.statut || 'en_attente'
+        });
+        const rpc = await db.rpc('admin_edit_demande_inscription', rpcPayload);
+        return rpc.error ? { data: null, error: rpc.error } : { data: rpc.data, error: null };
+    }
+
+    async function deleteDemandeSecure(id) {
+        const direct = await db.from('demandes_inscription').delete({ count: 'exact' }).eq('id', id);
+        if (!direct.error && direct.count > 0) return direct;
+        const rpc = await db.rpc('admin_delete_demande_inscription', getAdminRpcPayload({ p_demande_id: id }));
+        return rpc.error ? { data: null, error: rpc.error } : { data: rpc.data, error: null };
+    }
+
     /** Demandes depuis login (table demandes_inscription). Lecture directe Auth ou RPC sécurisée pour session code admin. */
     window.loadDemandes = async function() {
         const tbody = document.getElementById('demandesTableBody');
         const hint = document.getElementById('demandesHint');
         if (hint) { hint.style.display = 'none'; hint.textContent = ''; }
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>';
         const { data, error } = await listDemandesSecure();
         if (error) {
-            tbody.innerHTML = "<tr><td colspan=\"7\" style=\"text-align:center;padding:32px;color:var(--muted);\">Impossible de charger la liste depuis l'app.</td></tr>";
+            tbody.innerHTML = "<tr><td colspan=\"8\" style=\"text-align:center;padding:32px;color:var(--muted);\">Impossible de charger la liste depuis l'app.</td></tr>";
             if (hint) {
                 hint.style.display = 'block';
                 hint.innerHTML =
@@ -606,12 +689,12 @@
             }
             return;
         }
-        const rows = data || [];
-        if (!rows.length) {
-            tbody.innerHTML = "<tr><td colspan=\"7\" style=\"text-align:center;padding:40px;color:var(--muted);\">Aucune demande pour l'instant.</td></tr>";
+        demandesRows = data || [];
+        if (!demandesRows.length) {
+            tbody.innerHTML = "<tr><td colspan=\"8\" style=\"text-align:center;padding:40px;color:var(--muted);\">Aucune demande pour l'instant.</td></tr>";
             return;
         }
-        tbody.innerHTML = rows.map(function (d) {
+        tbody.innerHTML = demandesRows.map(function (d) {
             var dt = d.created_at ? new Date(d.created_at).toLocaleString('fr-CH') : '—';
             var contact = escapeHtml([d.prenom, d.nom].filter(Boolean).join(' ') || '—');
             var msg = (d.message || '').trim();
@@ -624,8 +707,75 @@
                 '<td>' + escapeHtml(d.entreprise_nom || '—') + '</td>' +
                 '<td style="max-width:220px;font-size:12px;" title="' + escapeHtml((d.message || '').replace(/"/g, '&quot;')) + '">' + escapeHtml(msg || '—') + '</td>' +
                 '<td><span style="font-size:11px;padding:3px 8px;border-radius:100px;background:rgba(59,130,246,0.12);color:var(--blue);">' + escapeHtml(d.statut || '—') + '</span></td>' +
+                '<td><div style="display:flex;gap:6px;">' +
+                    '<button class="btn btn-ghost btn-sm" title="Modifier" onclick="openDemandeEdit(\'' + escapeHtml(d.id) + '\')"><i class="fas fa-edit"></i></button>' +
+                    '<button class="btn btn-sm" style="background:rgba(232,49,26,0.1);color:var(--red);border:1px solid rgba(232,49,26,0.2);" title="Supprimer" onclick="deleteDemande(\'' + escapeHtml(d.id) + '\')"><i class="fas fa-trash"></i></button>' +
+                '</div></td>' +
                 '</tr>';
         }).join('');
+    };
+
+    window.openDemandeEdit = function(id) {
+        const d = demandesRows.find(row => row.id === id);
+        if (!d) { toast('error', 'Demande introuvable'); return; }
+        document.getElementById('demandeEditId').value = d.id;
+        document.getElementById('demandePrenom').value = d.prenom || '';
+        document.getElementById('demandeNom').value = d.nom || '';
+        document.getElementById('demandeEmail').value = d.email || '';
+        document.getElementById('demandeTelephone').value = d.telephone || '';
+        document.getElementById('demandeEntreprise').value = d.entreprise_nom || '';
+        document.getElementById('demandeAdresse').value = d.adresse || '';
+        document.getElementById('demandeMessage').value = d.message || '';
+        document.getElementById('demandeStatut').value = d.statut || 'en_attente';
+        openModal('modalDemande');
+    };
+
+    window.saveDemandeEdit = async function() {
+        const id = document.getElementById('demandeEditId').value;
+        const payload = {
+            prenom: document.getElementById('demandePrenom').value.trim(),
+            nom: document.getElementById('demandeNom').value.trim(),
+            email: document.getElementById('demandeEmail').value.trim(),
+            telephone: document.getElementById('demandeTelephone').value.trim() || null,
+            entreprise_nom: document.getElementById('demandeEntreprise').value.trim() || null,
+            adresse: document.getElementById('demandeAdresse').value.trim() || null,
+            message: document.getElementById('demandeMessage').value.trim() || null,
+            statut: document.getElementById('demandeStatut').value || 'en_attente'
+        };
+        if (!id) { toast('error', 'Demande introuvable'); return; }
+        if (!payload.prenom || !payload.nom || !payload.email) {
+            toast('error', 'Prénom, nom et email sont obligatoires');
+            return;
+        }
+        showLoad();
+        try {
+            const { error } = await updateDemandeSecure(id, payload);
+            if (error) throw error;
+            window.closeModal('modalDemande');
+            toast('success', 'Demande mise à jour');
+            await loadDemandes();
+        } catch (err) {
+            toast('error', '❌ ' + err.message);
+        } finally {
+            hideLoad();
+        }
+    };
+
+    window.deleteDemande = async function(id) {
+        const d = demandesRows.find(row => row.id === id);
+        const label = d ? ([d.prenom, d.nom].filter(Boolean).join(' ') || d.email || 'cette demande') : 'cette demande';
+        if (!confirm('Supprimer définitivement la demande de ' + label + ' ?')) return;
+        showLoad();
+        try {
+            const { error } = await deleteDemandeSecure(id);
+            if (error) throw error;
+            toast('success', 'Demande supprimée');
+            await loadDemandes();
+        } catch (err) {
+            toast('error', '❌ ' + err.message);
+        } finally {
+            hideLoad();
+        }
     };
 
     function updateStats() {
@@ -900,14 +1050,14 @@
     }
 
     function dbg(msg) {
+        console.log('[users.html]', msg);
+    }
+    function showInitError(msg) {
         const bar = document.getElementById('debugBar');
         const txt = document.getElementById('debugMsg');
         if (bar) bar.style.display = 'block';
         if (txt) txt.textContent = msg;
-        console.log('[users.html]', msg);
-    }
-    function showInitError(msg) {
-        dbg(msg);
+        console.error('[users.html]', msg);
         const tbody = document.getElementById('usersTableBody');
         if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:#ef4444;font-size:13px;">${msg}</td></tr>`;
     }
