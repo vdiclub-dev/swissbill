@@ -24,6 +24,7 @@
     legacyCode: null,
     profile: null,
     clientId: null,
+    orderClientId: null,
     company: null,
     activeProfile: null,
     tariffRules: [],
@@ -195,6 +196,7 @@
     const db = getDb();
     const profile = auth.profile;
     const clientId = profile.entreprise_id || profile.client_id || profile.id || auth.userId;
+    const orderClientId = profile.id || auth.userId || clientId;
     let company = null;
 
     if (profile.entreprise_id) {
@@ -212,6 +214,7 @@
     state.legacyCode = auth.legacyCode || profile.code || profile.code_usr || (typeof window.colixoGetStoredCode === 'function' ? window.colixoGetStoredCode() : null);
     state.profile = profile;
     state.clientId = clientId;
+    state.orderClientId = orderClientId;
     state.company = company;
 
     if (state.isLegacySession) {
@@ -247,6 +250,7 @@
     if (!data || !data.client_id) throw new Error('Session code client non reconnue pour l’import.');
 
     state.clientId = data.client_id;
+    state.orderClientId = data.order_client_id || data.client_id;
     state.profile = Object.assign({}, state.profile || {}, data.profile || {});
     state.company = data.company || null;
     state.activeProfile = data.import_profile || null;
@@ -608,7 +612,7 @@
       });
 
       const references = state.mappedRows.map((item) => item.external_reference).filter(Boolean);
-      state.duplicateReferences = await checkDuplicates(state.clientId, references);
+      state.duplicateReferences = await checkDuplicates(state.orderClientId || state.clientId, references);
       validateRows(state.mappedRows);
       await calculatePrices(state.mappedRows);
       const summary = buildSummary();
@@ -831,7 +835,7 @@
   async function insertOrders(validRows, importBatchId) {
     const db = getDb();
     const payload = validRows.map((order) => ({
-      client_id: state.clientId,
+      client_id: state.orderClientId || state.clientId,
       external_reference: order.external_reference,
       delivery_name: order.delivery_name,
       delivery_address: order.delivery_address,
@@ -1028,6 +1032,7 @@
     state.summary = null;
     state.batchId = null;
     state.importInProgress = false;
+    state.orderClientId = state.profile?.id || state.authContext?.userId || state.clientId || null;
 
     if (!keepFileInput && $('fileInput')) $('fileInput').value = '';
     ['mappingSection', 'previewSection', 'summarySection', 'validatedPreviewSection', 'importResult', 'importNextAction'].forEach((id) => showSection(id, false));
