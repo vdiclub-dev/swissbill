@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <style>
@@ -411,6 +412,10 @@
         document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
         return;
     }
+    if (!window.SUPABASE_CLIENT) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ Connexion Supabase indisponible sur cette page</div>';
+        return;
+    }
     const db = window.SUPABASE_CLIENT;
 
     /* ── State ── */
@@ -472,14 +477,22 @@
     /* ── Load data ── */
     async function loadData() {
         showLoad();
-        const { data } = await db
-            .from('transport_orders_simple')
-            .select('*')
-            .order('created_at', { ascending: false });
-        allOrders = data || [];
-        hideLoad();
-        renderAll();
-        setupRevealObserver();
+        try {
+            const { data, error } = await db
+                .from('transport_orders_simple')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            allOrders = data || [];
+            renderAll();
+            setupRevealObserver();
+        } catch (error) {
+            console.error('[Analytics] loadData failed', error);
+            document.getElementById('recentTable').innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:30px;">Impossible de charger les données analytics</td></tr>';
+            document.getElementById('statusList').innerHTML = '<div style="color:var(--red);font-size:12px;">Erreur de chargement</div>';
+        } finally {
+            hideLoad();
+        }
     }
 
     /* ── Filter by period ── */
