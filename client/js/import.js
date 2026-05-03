@@ -39,7 +39,8 @@
     warnings: [],
     pricedRows: [],
     summary: null,
-    batchId: null
+    batchId: null,
+    importInProgress: false
   };
 
   const $ = (id) => document.getElementById(id);
@@ -80,6 +81,23 @@
     box.textContent = message || '';
     box.className = `import-status ${type || 'info'}`;
     box.hidden = !message;
+  }
+
+  function setDecisionFeedback(message, type) {
+    const box = $('decisionFeedback');
+    if (!box) return;
+    box.textContent = message || '';
+    box.className = `decision-feedback ${type || 'info'}`;
+    box.hidden = !message;
+  }
+
+  function setImportButtonBusy(isBusy) {
+    const button = $('btnImportValidBottom');
+    if (!button) return;
+    button.disabled = Boolean(isBusy) || !(state.summary && state.summary.validRows > 0);
+    button.innerHTML = isBusy
+      ? '<i class="fas fa-spinner fa-spin"></i> Import en cours...'
+      : '<i class="fas fa-cloud-upload-alt"></i> Étape 7 · Importer maintenant';
   }
 
   function setStep(step) {
@@ -602,6 +620,7 @@
       $('validatedPreviewSection')?.classList.add('is-collapsed');
       setStep(6);
       renderNextAction(summary);
+      setDecisionFeedback('', 'info');
       $('importNextAction')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setStatus('Étape 6 prête: vérifiez le résumé puis cliquez sur “Étape 7 · Importer maintenant”.', 'success');
     } catch (error) {
@@ -859,17 +878,24 @@
   }
 
   async function importValidRows() {
+    if (state.importInProgress) return;
     if (!state.summary) {
       setStatus('Validez d’abord le fichier avant importation.', 'error');
+      setDecisionFeedback('Étape 7 bloquée: il faut d’abord finir la prévisualisation à l’étape 6.', 'error');
       return;
     }
     const rowsToImport = state.mappedRows.filter((order) => !order.validation_errors.length);
     if (!rowsToImport.length) {
       setStatus('Aucune ligne valide à importer.', 'error');
+      setDecisionFeedback('Aucune ligne ne peut être importée pour le moment. Corrigez les erreurs puis cliquez sur “Recalculer / Revalider”.', 'error');
       return;
     }
 
+    state.importInProgress = true;
+    setImportButtonBusy(true);
+    setDecisionFeedback('Import en cours: création du lot et des transports dans Supabase...', 'info');
     setBusy(true, 'Création des transports...');
+    let success = false;
     try {
       const batch = await createImportBatch(state.summary);
       const inserted = await insertOrders(rowsToImport, batch.id);
@@ -888,15 +914,21 @@
 
       setStep(7);
       setStatus(`${inserted.length} transport(s) importé(s) avec succès.`, 'success');
-      if ($('btnImportValid')) $('btnImportValid').disabled = true;
+      setDecisionFeedback(`${inserted.length} transport(s) importé(s). L’étape 7 est terminée.`, 'success');
+      setImportButtonBusy(false);
+      if ($('btnImportValidBottom')) $('btnImportValidBottom').disabled = true;
       if ($('importResult')) {
         $('importResult').hidden = false;
         $('importResult').innerHTML = `<strong>Import terminé.</strong> Lot ${escapeHtml(batch.id)} créé avec ${inserted.length} ligne(s).`;
       }
+      success = true;
     } catch (error) {
       setStatus(`Import impossible: ${error.message}`, 'error');
+      setDecisionFeedback(`Import impossible: ${error.message}`, 'error');
     } finally {
+      state.importInProgress = false;
       setBusy(false);
+      if (!success) setImportButtonBusy(false);
     }
   }
 
@@ -945,6 +977,7 @@
         : 'Corrigez le mapping ou le fichier, puis relancez la prévisualisation.';
     }
     if (bottomButton) bottomButton.disabled = !canImport;
+    setImportButtonBusy(false);
   }
 
   function renderValidatedRows() {
@@ -994,6 +1027,7 @@
     state.pricedRows = [];
     state.summary = null;
     state.batchId = null;
+    state.importInProgress = false;
 
     if (!keepFileInput && $('fileInput')) $('fileInput').value = '';
     ['mappingSection', 'previewSection', 'summarySection', 'validatedPreviewSection', 'importResult', 'importNextAction'].forEach((id) => showSection(id, false));
@@ -1003,7 +1037,8 @@
     if ($('mappingBody')) $('mappingBody').innerHTML = '';
     if ($('validatedRowsBody')) $('validatedRowsBody').innerHTML = '';
     if ($('summaryGrid')) $('summaryGrid').innerHTML = '';
-    if ($('btnImportValid')) $('btnImportValid').disabled = false;
+    setDecisionFeedback('', 'info');
+    setImportButtonBusy(false);
     setStep(1);
   }
 
@@ -1063,7 +1098,6 @@
     $('btnSaveProfile')?.addEventListener('click', saveImportProfile);
     $('btnValidateRows')?.addEventListener('click', validateAndPreviewImport);
     $('btnRecalculate')?.addEventListener('click', validateAndPreviewImport);
-    $('btnImportValidBottom')?.addEventListener('click', importValidRows);
     $('btnTogglePreview')?.addEventListener('click', () => {
       const section = $('validatedPreviewSection');
       if (!section) return;
@@ -1095,6 +1129,7 @@
     calculatePrices,
     createImportBatch,
     insertOrders,
+    importValidRows,
     renderImportSummary,
     resetImportState
   };
