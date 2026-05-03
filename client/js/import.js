@@ -600,6 +600,8 @@
       showSection('summarySection', true);
       showSection('validatedPreviewSection', true);
       setStep(5);
+      renderNextAction(summary);
+      $('importNextAction')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setStatus('Prévisualisation prête. Importez uniquement quand le résumé est correct.', 'success');
     } catch (error) {
       setStatus(`Erreur de validation: ${error.message}`, 'error');
@@ -927,6 +929,24 @@
     `).join('');
   }
 
+  function renderNextAction(summary) {
+    const box = $('importNextAction');
+    if (!box) return;
+    box.hidden = false;
+    const title = $('importNextTitle');
+    const text = $('importNextText');
+    const bottomButton = $('btnImportValidBottom');
+    const canImport = summary.validRows > 0;
+    if (title) title.textContent = canImport ? `${summary.validRows} ligne(s) prête(s) à importer` : 'Aucune ligne valide à importer';
+    if (text) {
+      text.textContent = canImport
+        ? `${summary.errorRows} ligne(s) resteront bloquées. Total estimé: ${formatMoney(summary.totalEstimatedPrice)}.`
+        : 'Corrigez le mapping ou le fichier, puis relancez la prévisualisation.';
+    }
+    if (bottomButton) bottomButton.disabled = !canImport;
+    if ($('btnImportValid')) $('btnImportValid').disabled = !canImport;
+  }
+
   function renderValidatedRows() {
     const body = $('validatedRowsBody');
     if (!body) return;
@@ -976,7 +996,7 @@
     state.batchId = null;
 
     if (!keepFileInput && $('fileInput')) $('fileInput').value = '';
-    ['mappingSection', 'previewSection', 'summarySection', 'validatedPreviewSection', 'importResult'].forEach((id) => showSection(id, false));
+    ['mappingSection', 'previewSection', 'summarySection', 'validatedPreviewSection', 'importResult', 'importNextAction'].forEach((id) => showSection(id, false));
     if ($('rawPreviewHead')) $('rawPreviewHead').innerHTML = '';
     if ($('rawPreviewBody')) $('rawPreviewBody').innerHTML = '';
     if ($('mappingBody')) $('mappingBody').innerHTML = '';
@@ -1043,6 +1063,7 @@
     $('btnValidateRows')?.addEventListener('click', validateAndPreviewImport);
     $('btnRecalculate')?.addEventListener('click', validateAndPreviewImport);
     $('btnImportValid')?.addEventListener('click', importValidRows);
+    $('btnImportValidBottom')?.addEventListener('click', importValidRows);
     $('btnDownloadErrors')?.addEventListener('click', downloadErrorReport);
     $('btnReset')?.addEventListener('click', () => {
       resetImportState();
