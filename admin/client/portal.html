@@ -57,9 +57,14 @@
         .portal-header{margin-bottom:28px;}
         .portal-title{font-family:'Bebas Neue',cursive;font-size:28px;}
         .portal-sub{font-size:14px;color:var(--muted);}
+        .import-banner{display:flex;align-items:center;justify-content:space-between;gap:18px;background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(255,255,255,.035));border:1px solid rgba(249,115,22,.34);border-radius:18px;padding:18px 20px;margin:-10px 0 24px;}
+        .import-banner strong{display:block;font-size:17px;margin-bottom:4px;}
+        .import-banner span{display:block;color:var(--muted2);font-size:13px;line-height:1.45;}
+        .import-banner .btn-import{display:inline-flex;align-items:center;gap:8px;background:var(--orange);color:#111;border:none;border-radius:12px;padding:12px 16px;font-weight:800;text-decoration:none;white-space:nowrap;}
 
         .ptabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:28px;flex-wrap:wrap;}
         .ptab{padding:12px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;}
+        a.ptab{text-decoration:none;}
         .ptab.active{color:var(--white);border-bottom-color:var(--red);}
         .ptab-badge{background:var(--red);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:8px;}
         .pane{display:none;}
@@ -305,14 +310,23 @@
 
     <!-- Boutons flottants -->
     <div class="floating-actions">
+        <button class="float-btn" onclick="window.location.href=(typeof window.colixoHref==='function'?window.colixoHref('/client/import.html'):'/client/import.html')" title="Importer des livraisons"><i class="fas fa-file-import"></i></button>
         <button class="float-btn home" id="btnAccueil" onclick="window.location.href=(typeof window.colixoHref==='function'?window.colixoHref('/magasinier/dashboard.html'):'/magasinier/dashboard.html')" style="display:none;" title="Accueil"><i class="fas fa-home"></i></button>
         <button class="float-btn" onclick="doLogout()" title="Déconnexion"><i class="fas fa-sign-out-alt"></i></button>
     </div>
 
     <div class="portal">
         <div class="portal-header"><div class="portal-title">MON ESPACE EXPÉDITEUR</div><div class="portal-sub" id="portalSub">Bienvenue</div></div>
+        <div class="import-banner">
+            <div>
+                <strong><i class="fas fa-file-import"></i> Importer des livraisons Excel / CSV</strong>
+                <span>Import en masse avec mapping intelligent, contrôle des doublons et calcul tarifaire client.</span>
+            </div>
+            <a class="btn-import" href="import.html"><i class="fas fa-arrow-up-from-bracket"></i> Ouvrir l’import</a>
+        </div>
         <div class="ptabs">
             <div class="ptab active" data-pane="new">📦 Nouvelle expédition</div>
+            <a class="ptab" href="import.html">📥 Import Excel/CSV</a>
             <div class="ptab" data-pane="orders">🚚 Mes expéditions <span class="ptab-badge" id="badgeOrders">0</span></div>
             <div class="ptab" data-pane="tracking">📍 Suivi en direct</div>
             <div class="ptab" data-pane="history">📜 Historique</div>
@@ -667,6 +681,7 @@
     let saveAddressEnabled = false;
     let savedAddresses = [];
     let currentUserRole = null;
+    let hasAuthenticatedPortalSession = false;
     let distanceKm = null;
     let _distTimer = null;
     let colisExpediesMonth = 0;
@@ -1542,8 +1557,7 @@
     };
 
     window.doLogout = async function() {
-        await db.auth.signOut();
-        try { localStorage.removeItem('colixo_user'); } catch (e) {}
+        await window.colixoLogout({ redirectTo: false });
         client = null;
         window.location.href = CLIENT_LOGIN_URL;
     };
@@ -1561,6 +1575,11 @@
 
     async function loadTeam() {
         if(!client || !client.entreprise_id) return;
+        if (!hasAuthenticatedPortalSession) {
+            teamMembers = client ? [client] : [];
+            renderTeam(true);
+            return;
+        }
         const { data } = await db.from('utilisateurs').select('*')
             .eq('entreprise_id', client.entreprise_id)
             .order('created_at', { ascending: true });
@@ -1568,15 +1587,19 @@
         renderTeam();
     }
 
-    function renderTeam() {
+    function renderTeam(readOnlyCompat) {
         const el = document.getElementById('teamList');
         if(!teamMembers.length) { el.innerHTML = '<div class="empty">Aucun membre dans votre équipe</div>'; return; }
+        const compatNotice = readOnlyCompat
+            ? '<div class="empty" style="margin-bottom:12px;">Gestion d’équipe limitée en mode code d’accès. Connectez-vous avec une session complète pour modifier les membres.</div>'
+            : '';
 
         const roleColors = { client:'green', gestionnaire:'gestionnaire', comptable:'comptable', sous_utilisateur:'sous_utilisateur' };
         const roleLabels = { client:'Administrateur', gestionnaire:'Gestionnaire', comptable:'Comptable', sous_utilisateur:'Sous-utilisateur' };
         const roleIcons  = { client:'⭐', gestionnaire:'👔', comptable:'📊', sous_utilisateur:'👤' };
+        const canManageTeam = hasAuthenticatedPortalSession && client.role === 'client';
 
-        el.innerHTML = teamMembers.map(m => {
+        el.innerHTML = compatNotice + teamMembers.map(m => {
             const name = [m.prenom, m.nom].filter(Boolean).join(' ') || m.email;
             const isMe = m.id === client.id;
             const roleClass = roleColors[m.role] || 'sous_utilisateur';
@@ -1594,7 +1617,7 @@
                     <div class="membre-email">${m.email}</div>
                     <span class="role-badge ${roleClass}">${roleIcon} ${roleLabel}</span>
                 </div>
-                ${!isMe && client.role === 'client' ? `
+                ${!isMe && canManageTeam ? `
                 <div style="display:flex;gap:6px;">
                     <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;" onclick="changeMemberRole('${m.id}','${m.role}','${name}')"><i class="fas fa-pen"></i></button>
                     <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;color:var(--red);border-color:rgba(232,49,26,0.2);" onclick="removeMember('${m.id}','${name}')"><i class="fas fa-trash"></i></button>
@@ -1611,6 +1634,7 @@
     }
 
     window.addMembre = async function() {
+        if (!hasAuthenticatedPortalSession) { toast('Gestion d’équipe indisponible en mode code d’accès'); return; }
         const prenom   = document.getElementById('mPrenom').value.trim();
         const nom      = document.getElementById('mNom').value.trim();
         const email    = document.getElementById('mEmail').value.trim();
@@ -1654,6 +1678,7 @@
     };
 
     window.removeMember = async function(userId, name) {
+        if (!hasAuthenticatedPortalSession) { toast('Gestion d’équipe indisponible en mode code d’accès'); return; }
         if(!confirm(`Retirer ${name} de votre équipe ?`)) return;
         showLoad();
         await db.from('utilisateurs').delete().eq('id', userId).eq('entreprise_id', client.entreprise_id);
@@ -1663,6 +1688,7 @@
     };
 
     window.changeMemberRole = async function(userId, currentRole, name) {
+        if (!hasAuthenticatedPortalSession) { toast('Gestion d’équipe indisponible en mode code d’accès'); return; }
         const roles = ['gestionnaire','comptable','sous_utilisateur','client'];
         const labels = { gestionnaire:'Gestionnaire', comptable:'Comptable', sous_utilisateur:'Sous-utilisateur', client:'Administrateur' };
         const newRole = prompt(`Changer le rôle de ${name}\nActuel: ${labels[currentRole]}\n\nEntrez le nouveau rôle:\n- gestionnaire\n- comptable\n- sous_utilisateur\n- client`);
@@ -2622,46 +2648,30 @@
                 var fromLogin = /\/login(?:\/index\.html)?$/i.test(ref.pathname || '');
                 var wantsSwitch = ref.searchParams.get('switch') === '1';
                 if (fromLogin && wantsSwitch) {
-                    try { await db.auth.signOut(); } catch (e) {}
-                    try { localStorage.removeItem('colixo_user'); } catch (e) {}
+                    await window.colixoLogout({ redirectTo: false });
                     window.location.replace(h('/login/index.html?switched=1'));
                     return;
                 }
             }
         } catch (e) {}
 
-        const { data: { session } } = await db.auth.getSession();
+        const auth = await window.colixoRequireRoute({
+            roles: ['client', 'magasinier', 'gestionnaire', 'comptable', 'sous_utilisateur'],
+            legacyRoles: ['client', 'magasinier', 'gestionnaire', 'comptable', 'sous_utilisateur'],
+            redirectTo: CLIENT_LOGIN_URL
+        });
         const wantRegister = new URLSearchParams(window.location.search).get('register') === '1';
-
-        var uid = session?.user?.id || null;
-        if (!uid) {
-            try {
-                var raw = localStorage.getItem('colixo_user');
-                if (raw) {
-                    var cu = JSON.parse(raw);
-                    if (cu.id && ['client', 'magasinier', 'gestionnaire', 'comptable', 'sous_utilisateur'].indexOf(cu.role) !== -1) {
-                        uid = cu.id;
-                    }
-                }
-            } catch (e) {}
-        }
-
-        if (!uid) {
+        if (!auth) {
             if (wantRegister) {
                 window.location.replace(h('/login/index.html?register=1'));
                 return;
             }
-            window.location.replace(CLIENT_LOGIN_URL);
             return;
         }
 
-        const { data: user } = await db.from('utilisateurs').select('*').eq('id', uid).maybeSingle();
-        const portalRoles = ['client', 'magasinier', 'gestionnaire', 'comptable', 'sous_utilisateur'];
-        if (!user || portalRoles.indexOf(user.role) === -1) {
-            window.location.href = h('/login/index.html');
-            return;
-        }
-
+        const session = auth.session;
+        hasAuthenticatedPortalSession = !!session;
+        const user = auth.profile;
         client = user;
         currentUserRole = user.role;
 

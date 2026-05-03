@@ -18,6 +18,7 @@
     <!-- Supabase et Config -->
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1187,6 +1188,17 @@
                         <i class="fas fa-arrow-right"></i>
                     </div>
                 </a>
+
+                <a href="import.html" class="action-card">
+                    <div class="action-icon">
+                        <i class="fas fa-file-import"></i>
+                    </div>
+                    <h3 class="action-title">Importer des livraisons</h3>
+                    <p class="action-description">Chargez un fichier Excel ou CSV avec mapping intelligent et contrôle des doublons</p>
+                    <div class="action-arrow">
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                </a>
                 
                 <a href="#" class="action-card" onclick="showHistorique(); return false;">
                     <div class="action-icon">
@@ -1459,50 +1471,24 @@
         const db = window.SUPABASE_CLIENT;
         var currentClientId = null;
 
-        async function resolveClientUid() {
-            const { data: { session } } = await db.auth.getSession();
-            var uid = session && session.user ? session.user.id : null;
-            if (!uid) {
-                try {
-                    var raw = localStorage.getItem('colixo_user');
-                    if (raw) {
-                        var cu = JSON.parse(raw);
-                        if (cu && cu.id && ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].indexOf(cu.role) !== -1) uid = cu.id;
-                    }
-                } catch (e) {}
-            }
-            return { session: session || null, uid: uid };
-        }
-
         async function checkAuth() {
-            const { session, uid } = await resolveClientUid();
-            if (!uid) {
+            const auth = await window.colixoGetAuthContext({
+                roles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'],
+                legacyRoles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur']
+            });
+            if (!auth || !auth.profile) {
                 currentClientId = null;
                 document.getElementById('loginSection').style.display = 'flex';
                 document.getElementById('dashboardSection').style.display = 'none';
                 return;
             }
-
-            const { data: utilisateur } = await db.from('utilisateurs')
-                .select('role, prenom, nom, email, entreprise_id')
-                .eq('id', uid)
-                .maybeSingle();
-
-            if (!utilisateur || ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].indexOf(utilisateur.role) === -1) {
-                try { await db.auth.signOut(); } catch (e) {}
-                try { localStorage.removeItem('colixo_user'); } catch (e) {}
-                currentClientId = null;
-                document.getElementById('loginSection').style.display = 'flex';
-                document.getElementById('dashboardSection').style.display = 'none';
-                return;
-            }
-
-            currentClientId = utilisateur.entreprise_id || uid;
+            var utilisateur = auth.profile;
+            currentClientId = utilisateur.entreprise_id || auth.userId;
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('dashboardSection').style.display = 'block';
 
             const userName = [utilisateur.prenom, utilisateur.nom].filter(Boolean).join(' ') || 'Client';
-            var emailDisp = (session && session.user && session.user.email) || utilisateur.email || '—';
+            var emailDisp = (auth.session && auth.session.user && auth.session.user.email) || utilisateur.email || '—';
             document.getElementById('userEmail').textContent = emailDisp;
             document.getElementById('userName').textContent = userName;
             document.getElementById('welcomeName').textContent = userName;
@@ -1528,8 +1514,7 @@
         }
 
         window.logout = async function() {
-            try { await db.auth.signOut(); } catch (e) {}
-            try { localStorage.removeItem('colixo_user'); } catch (e) {}
+            await window.colixoLogout({ redirectTo: false });
             currentClientId = null;
             window.location.reload();
         };
