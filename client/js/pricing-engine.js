@@ -10,6 +10,10 @@
     return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   }
 
+  function normalizeCode(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, "").trim();
+  }
+
   async function loadClientTariffRules(clientId) {
     if (!clientId) return [];
     var db = window.SUPABASE_CLIENT;
@@ -35,10 +39,14 @@
 
   function selectTariffRule(order, rules) {
     var service = normalizeService(order.service_level || "eco_48h");
+    var tariffCode = normalizeCode(order.tariff_code || "");
     var parcelCount = Number(order.parcel_count || 1);
     var weight = order.weight_kg == null || order.weight_kg === "" ? null : Number(order.weight_kg);
 
     return (rules || []).find(function (rule) {
+      var ruleCode = normalizeCode(rule.tariff_code || "");
+      if (tariffCode && ruleCode && ruleCode !== tariffCode) return false;
+      if (tariffCode && !ruleCode) return false;
       var ruleService = normalizeService(rule.service_level || "");
       if (ruleService && ruleService !== service) return false;
       if (!rangeMatches(weight, rule.min_weight_kg, rule.max_weight_kg)) return false;
@@ -103,6 +111,7 @@
       return {
         pricing_status: "needs_review",
         reason: "Aucune règle tarifaire active ne correspond à cette ligne.",
+        tariff_code: order.tariff_code || null,
         service_level: order.service_level || null,
         parcel_count: order.parcel_count || null,
         weight_kg: order.weight_kg || null
@@ -111,6 +120,8 @@
 
     return {
       rule_name: rule.name,
+      tariff_code: order.tariff_code || null,
+      rule_tariff_code: rule.tariff_code || null,
       base_price: numberOrZero(rule.base_price_chf),
       parcel_count: Number(order.parcel_count || 1),
       price_per_parcel: numberOrZero(rule.price_per_parcel_chf),

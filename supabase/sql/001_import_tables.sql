@@ -50,6 +50,7 @@ create table if not exists public.orders (
   parcel_count integer not null default 1,
   weight_kg numeric,
   service_level text,
+  tariff_code text,
   status text default 'pending',
   source_system text default 'client_import',
   import_batch_id uuid references public.import_batches(id) on delete set null,
@@ -81,6 +82,7 @@ alter table public.orders add column if not exists pickup_city text;
 alter table public.orders add column if not exists parcel_count integer not null default 1;
 alter table public.orders add column if not exists weight_kg numeric;
 alter table public.orders add column if not exists service_level text;
+alter table public.orders add column if not exists tariff_code text;
 alter table public.orders add column if not exists status text default 'pending';
 alter table public.orders add column if not exists source_system text default 'client_import';
 alter table public.orders add column if not exists import_batch_id uuid references public.import_batches(id) on delete set null;

@@ -4,6 +4,7 @@ create table if not exists public.client_tariff_rules (
   id uuid primary key default gen_random_uuid(),
   client_id uuid not null,
   name text not null,
+  tariff_code text,
   service_level text,
   min_weight_kg numeric,
   max_weight_kg numeric,
@@ -28,6 +29,12 @@ create table if not exists public.client_tariff_rules (
 
 create index if not exists idx_client_tariff_rules_client_active
   on public.client_tariff_rules(client_id, is_active, priority);
+
+alter table public.client_tariff_rules add column if not exists tariff_code text;
+
+create index if not exists idx_client_tariff_rules_code
+  on public.client_tariff_rules(client_id, tariff_code)
+  where is_active = true and tariff_code is not null;
 
 drop trigger if exists trg_client_tariff_rules_updated_at on public.client_tariff_rules;
 create trigger trg_client_tariff_rules_updated_at

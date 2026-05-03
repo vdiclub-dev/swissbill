@@ -488,6 +488,7 @@
       ['delivery_instructions', 'Instructions'],
       ['requested_delivery_date', 'Date souhaitée'],
       ['service_level', 'Niveau de service'],
+      ['tariff_code', 'Code tarif'],
       ['pickup_name', 'Nom enlèvement'],
       ['pickup_address', 'Adresse enlèvement'],
       ['pickup_zip', 'NPA enlèvement'],
@@ -617,6 +618,7 @@
     normalized.delivery_phone = normalizeValue(normalized.delivery_phone);
     normalized.delivery_email = normalizeValue(normalized.delivery_email);
     normalized.delivery_instructions = normalizeValue(normalized.delivery_instructions);
+    normalized.tariff_code = normalizeValue(normalized.tariff_code).toUpperCase();
     normalized.pickup_name = normalizeValue(normalized.pickup_name);
     normalized.pickup_address = normalizeValue(normalized.pickup_address);
     normalized.pickup_zip = normalizeValue(normalized.pickup_zip);
@@ -823,6 +825,7 @@
       parcel_count: order.parcel_count || 1,
       weight_kg: order.weight_kg,
       service_level: order.service_level || null,
+      tariff_code: order.tariff_code || null,
       status: 'pending',
       source_system: 'client_import',
       import_batch_id: importBatchId,
@@ -939,7 +942,7 @@
           <td>${escapeHtml(row.delivery_city)}</td>
           <td>${escapeHtml(row.parcel_count)}</td>
           <td>${escapeHtml(row.weight_kg ?? '-')}</td>
-          <td>${escapeHtml(row.service_level || '-')}</td>
+          <td>${escapeHtml(row.tariff_code || row.service_level || '-')}</td>
           <td><span class="badge ${row.pricing_status === 'calculated' ? 'badge-success' : 'badge-warning'}">${pricing}</span><br>${escapeHtml(formatMoney(row.total_price_chf))}</td>
           <td>${escapeHtml(message || 'OK')}</td>
         </tr>

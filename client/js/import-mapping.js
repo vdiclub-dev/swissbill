@@ -14,6 +14,7 @@
     delivery_instructions: "Instructions",
     requested_delivery_date: "Date souhaitée",
     service_level: "Niveau de service",
+    tariff_code: "Code tarif",
     pickup_name: "Nom enlèvement",
     pickup_address: "Adresse enlèvement",
     pickup_zip: "NPA enlèvement",
@@ -86,6 +87,11 @@
       service_level: [
         "service", "type livraison", "mode", "priorité", "eco", "express",
         "priority", "speed", "type de service"
+      ],
+      tariff_code: [
+        "code tarif", "tarif", "code prix", "code prestation", "prestation",
+        "article", "code article", "produit", "code produit", "sku",
+        "tariff code", "price code", "product code", "item code"
       ],
       pickup_name: [
         "expéditeur", "site départ", "dépôt", "pickup name", "sender", "nom expéditeur"
