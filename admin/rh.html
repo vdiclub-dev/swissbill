@@ -1771,7 +1771,8 @@
             const hn  = parseFloat(p.heures_nuit)||0;
             const hd  = parseFloat(p.heures_dimanche)||0;
             const hf  = parseFloat(p.heures_feries)||0;
-            const statut = p.statut==='termine'?'<span class="chip green">Terminé</span>':p.statut==='en_cours'?'<span class="chip blue">En cours</span>':p.statut==='pause'?'<span class="chip yellow">Pause</span>':'<span class="chip muted">—</span>';
+            const statutEff = p.fin_travail ? 'termine' : (p.statut || '');
+            const statut = statutEff==='termine'?'<span class="chip green">Terminé</span>':statutEff==='en_cours'?'<span class="chip blue">En cours</span>':statutEff==='pause'?'<span class="chip yellow">Pause</span>':'<span class="chip muted">—</span>';
             const supplements = [
                 hn>0?`<span title="Nuit 23h-6h (+10%)" style="color:var(--blue);font-size:11px;">🌙${hn.toFixed(1)}h</span>`:'',
                 hd>0?`<span title="Dimanche (+50%)" style="color:var(--orange);font-size:11px;">☀️${hd.toFixed(1)}h</span>`:'',
@@ -1789,7 +1790,10 @@
                 <td><strong>${h.toFixed(2)}h</strong>${p.pause_minutes?`<br><span style="font-size:10px;color:var(--muted)">pause: ${p.pause_minutes}min</span>`:''}</td>
                 <td style="font-size:12px;">${supplements||'—'}</td>
                 <td>${statut}</td>
-                <td><button class="btn btn-ghost btn-sm" title="Modifier" onclick="editPointage('${p.id}')"><i class="fas fa-pencil-alt"></i></button></td>
+                <td style="white-space:nowrap;">
+                    <button class="btn btn-ghost btn-sm" title="Modifier" onclick="editPointage('${p.id}')"><i class="fas fa-pencil-alt"></i></button>
+                    <button class="btn btn-sm" title="Supprimer" style="background:rgba(232,49,26,0.12);color:var(--red);border:1px solid rgba(232,49,26,0.25);" onclick="deletePointage('${p.id}')"><i class="fas fa-trash"></i></button>
+                </td>
             </tr>`;
         }).join('');
     };
@@ -1915,6 +1919,16 @@
         closeModal('modalEditPointage');
         loadPointages();
         toast('ok','Pointage mis à jour');
+    };
+
+    window.deletePointage = async function(id) {
+        if(!confirm('Supprimer ce pointage ? Cette action est irréversible.')) return;
+        const {error} = await db.from('pointages').delete().eq('id', id);
+        if(error){ toast('error','Erreur: '+error.message); return; }
+        const idx = pointages.findIndex(x=>x.id===id);
+        if(idx!==-1) pointages.splice(idx,1);
+        loadPointages();
+        toast('ok','Pointage supprimé');
     };
 
     /* ── CONGÉS ── */
