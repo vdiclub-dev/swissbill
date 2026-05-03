@@ -139,8 +139,14 @@
         .oc-addr{font-size:13px;color:var(--muted2);}
         .oc-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
         .oc-tag{font-size:11px;background:var(--surface);padding:3px 9px;border-radius:6px;}
+        .refusal-box{margin:12px 0;padding:14px 16px;border-radius:12px;background:rgba(232,49,26,0.10);border:1px solid rgba(232,49,26,0.28);color:#fecaca;font-size:13px;line-height:1.45;}
+        .refusal-box strong{display:block;color:#fff;margin-bottom:5px;}
+        .refusal-box span{color:#fca5a5;}
+        .edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .edit-grid .wide{grid-column:1/-1;}
         .btn{font-size:12px;padding:7px 14px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
         .btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border2);}
+        .btn-red-soft{background:rgba(232,49,26,0.12);color:#fecaca;border:1px solid rgba(232,49,26,0.28);}
 
         .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:500;align-items:center;justify-content:center;padding:20px;}
         .modal.open{display:flex;}
@@ -232,6 +238,7 @@
         .role-badge.client{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.2);}
 
         @media(max-width:600px){.field-row,.service-grid{grid-template-columns:1fr;}.tracking-addresses{grid-template-columns:1fr;}.role-grid{grid-template-columns:1fr;}}
+        @media(max-width:600px){.edit-grid{grid-template-columns:1fr;}.edit-grid .wide{grid-column:auto;}}
 
         /* ─── WIZARD ─────────────────────────────────────────────── */
         .wizard-steps{display:flex;align-items:center;margin:0 0 32px;gap:0;}
@@ -647,6 +654,43 @@
     </div>
 </div>
 
+<!-- MODAL CORRECTION TRANSPORT REFUSÉ -->
+<div id="modalEditRefused" class="modal">
+    <div class="modal-box" style="max-width:720px;">
+        <div class="modal-head">
+            <div class="modal-title">✏️ CORRIGER LE TRANSPORT REFUSÉ</div>
+            <button class="modal-close" onclick="closeModal('modalEditRefused')">✕</button>
+        </div>
+        <input type="hidden" id="editRefusedId">
+        <div class="refusal-box" id="editRefusedReason" style="margin-bottom:16px;"></div>
+        <div class="edit-grid">
+            <div class="field wide"><label>Adresse enlèvement *</label><input type="text" id="editPickupAddress"></div>
+            <div class="field wide"><label>Adresse livraison *</label><input type="text" id="editDeliveryAddress"></div>
+            <div class="field"><label>Destinataire *</label><input type="text" id="editDestName"></div>
+            <div class="field"><label>Téléphone destinataire</label><input type="text" id="editDestPhone"></div>
+            <div class="field"><label>Nombre de colis *</label><input type="number" min="1" step="1" id="editQuantity"></div>
+            <div class="field"><label>Poids total kg</label><input type="number" min="0" step="0.1" id="editWeight"></div>
+            <div class="field"><label>Service</label>
+                <select id="editServiceType">
+                    <option value="normal">Normal</option>
+                    <option value="standard">Standard</option>
+                    <option value="eco_48h">Eco 48h</option>
+                    <option value="priority_24h">Priority 24h</option>
+                    <option value="express">Express</option>
+                    <option value="urgent">Urgent</option>
+                </select>
+            </div>
+            <div class="field"><label>Prix CHF</label><input type="number" min="0" step="0.05" id="editPriceChf"></div>
+            <div class="field wide"><label>Instructions</label><textarea id="editInstructions" rows="2"></textarea></div>
+            <div class="field wide"><label>Message pour Colixo</label><textarea id="editClientCorrectionNote" rows="2" placeholder="Expliquez brièvement ce que vous avez corrigé."></textarea></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('modalEditRefused')">Annuler</button>
+            <button class="btn btn-red-soft" onclick="resubmitRefusedOrder()"><i class="fas fa-paper-plane"></i> Renvoyer en validation</button>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL AJOUT MEMBRE -->
 <div id="modalAddMembre" class="modal">
     <div class="modal-box" style="max-width:480px;">
@@ -718,6 +762,15 @@
     function showLoad(){document.getElementById('loader').classList.add('on');}
     function hideLoad(){document.getElementById('loader').classList.remove('on');}
     function showScreen(name){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('screen'+name).classList.add('active');}
+    function escHtml(value){
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&':'&amp;',
+            '<':'&lt;',
+            '>':'&gt;',
+            '"':'&quot;',
+            "'":'&#039;'
+        }[ch]));
+    }
 
     function openModal(id){const m=document.getElementById(id);if(m){m.style.display='flex';m.classList.add('open');}}
     window.openModal=openModal;
@@ -2234,7 +2287,8 @@
         const stLabel = stMap[effectiveStatus] || effectiveStatus;
         const stClass = 'st-' + effectiveStatus.replace(/_/g,'');
         const isDelivered = st === 'delivered';
-        const canDelete = ['pending_validation','pending'].includes(adm) && !isDelivered;
+        const isRefused = adm === 'refused' || st === 'refused';
+        const canDelete = (['pending_validation','pending'].includes(adm) || isRefused) && !isDelivered;
 
         // Preuve : on a déjà chargé les données en amont dans loadHistory
         const hasProof = isDelivered && delivery && (delivery.photo_data || delivery.signature_data);
@@ -2245,7 +2299,16 @@
             ? `<button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>`
             : '';
         const deleteBtn = canDelete
-            ? `<button class="btn btn-ghost" style="color:var(--red);border-color:rgba(232,49,26,0.2);" onclick="deleteOrder('${o.id}','${o.order_number||''}')"><i class="fas fa-trash"></i> Annuler</button>`
+            ? `<button class="btn btn-ghost" style="color:var(--red);border-color:rgba(232,49,26,0.2);" onclick="deleteOrder('${o.id}','${escHtml(o.order_number||'')}')"><i class="fas fa-trash"></i> ${isRefused?'Mettre à la poubelle':'Annuler'}</button>`
+            : '';
+        const refusedHtml = isRefused
+            ? `<div class="refusal-box">
+                <strong><i class="fas fa-circle-exclamation"></i> Raison du refus Colixo</strong>
+                <span>${escHtml(o.admin_note || 'Aucune raison détaillée fournie. Contactez Colixo si nécessaire.')}</span>
+            </div>`
+            : '';
+        const editRefusedBtn = isRefused
+            ? `<button class="btn btn-red-soft" onclick="openRefusedEdit('${o.id}')"><i class="fas fa-pen"></i> Corriger et renvoyer</button>`
             : '';
 
         const deliveredFmt = isDelivered && o.delivered_at
@@ -2269,16 +2332,122 @@
                 ${o.night_delivery?'<span class="oc-tag">🌙 Nuit</span>':''}
                 ${deliveredFmt?`<span class="oc-tag" style="color:var(--green)">✓ ${deliveredFmt}</span>`:''}
             </div>
+            ${refusedHtml}
             <div class="oc-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-ghost" onclick="showPDF('${o.id}')"><i class="fas fa-tag"></i> Étiquette</button>
-                ${preuveBtn}${blBtn}${deleteBtn}
+                ${preuveBtn}${blBtn}${editRefusedBtn}${deleteBtn}
             </div>
         </div>`;
     }
 
+    window.openRefusedEdit = async function(orderId) {
+        showLoad();
+        try {
+            const { data:o, error } = await db.from('transport_orders_simple').select('*')
+                .eq('id', orderId)
+                .eq('entreprise_id', getClientScopeId())
+                .single();
+            if(error || !o) throw error || new Error('Transport introuvable');
+            if((o.admin_status || o.status) !== 'refused' && o.status !== 'refused') {
+                throw new Error('Ce transport n’est pas refusé.');
+            }
+
+            document.getElementById('editRefusedId').value = o.id;
+            document.getElementById('editRefusedReason').innerHTML = `<strong><i class="fas fa-circle-exclamation"></i> Raison du refus Colixo</strong><span>${escHtml(o.admin_note || 'Aucune raison détaillée fournie.')}</span>`;
+            document.getElementById('editPickupAddress').value = o.pickup_address || '';
+            document.getElementById('editDeliveryAddress').value = o.delivery_address || '';
+            document.getElementById('editDestName').value = o.destinataire_nom || o.receiver_name || '';
+            document.getElementById('editDestPhone').value = o.destinataire_tel || '';
+            document.getElementById('editQuantity').value = Math.max(1, Number(o.quantity || 1));
+            document.getElementById('editWeight').value = o.weight || '';
+            document.getElementById('editServiceType').value = o.service_type || o.speed || 'normal';
+            document.getElementById('editPriceChf').value = o.price_chf || '';
+            document.getElementById('editInstructions').value = o.instructions || '';
+            document.getElementById('editClientCorrectionNote').value = '';
+            openModal('modalEditRefused');
+        } catch(e) {
+            console.error(e);
+            toast('❌ ' + (e.message || e));
+        } finally {
+            hideLoad();
+        }
+    };
+
+    window.resubmitRefusedOrder = async function() {
+        const orderId = document.getElementById('editRefusedId').value;
+        const pickupAddress = document.getElementById('editPickupAddress').value.trim();
+        const deliveryAddress = document.getElementById('editDeliveryAddress').value.trim();
+        const destName = document.getElementById('editDestName').value.trim();
+        const quantity = Math.max(1, parseInt(document.getElementById('editQuantity').value, 10) || 1);
+        if(!orderId) { toast('Transport introuvable'); return; }
+        if(!pickupAddress || !deliveryAddress || !destName) {
+            toast('Adresse enlèvement, adresse livraison et destinataire sont obligatoires.');
+            return;
+        }
+
+        const correctionNote = document.getElementById('editClientCorrectionNote').value.trim();
+        const payload = {
+            pickup_address: pickupAddress,
+            delivery_address: deliveryAddress,
+            destinataire_nom: destName,
+            receiver_name: destName,
+            destinataire_tel: document.getElementById('editDestPhone').value.trim() || null,
+            quantity,
+            weight: Number(document.getElementById('editWeight').value || 0) || null,
+            service_type: document.getElementById('editServiceType').value || 'normal',
+            speed: document.getElementById('editServiceType').value || 'normal',
+            price_chf: document.getElementById('editPriceChf').value ? Number(document.getElementById('editPriceChf').value) : null,
+            instructions: document.getElementById('editInstructions').value.trim() || null,
+            status: 'pending',
+            admin_status: 'pending_validation',
+            admin_note: correctionNote ? `Correction client: ${correctionNote}` : null,
+            validated_at: null,
+            driver_id: null,
+            assigned_at: null,
+            tournee_id: null,
+            tournee_position: 0
+        };
+
+        showLoad();
+        try {
+            const { error } = await db.from('transport_orders_simple')
+                .update(payload)
+                .eq('id', orderId)
+                .eq('entreprise_id', getClientScopeId());
+            if(error) throw error;
+
+            try {
+                const { data: admins } = await db.from('utilisateurs').select('id').in('role', ['admin', 'super_admin']);
+                if(admins && admins.length) {
+                    await db.from('notifications').insert(admins.map(a => ({
+                        user_id: a.id,
+                        title: '🔁 Transport corrigé',
+                        body: `${payload.destinataire_nom} a corrigé un transport refusé et l’a renvoyé en validation.`,
+                        data: JSON.stringify({ order_id: orderId, type: 'transport_resubmitted' }),
+                        read: false,
+                        created_at: new Date().toISOString()
+                    })));
+                }
+            } catch(notifErr) {
+                console.warn('Notif correction refus:', notifErr);
+            }
+
+            closeModal('modalEditRefused');
+            toast('✅ Transport corrigé et renvoyé en validation');
+            await loadOrders();
+            await loadHistory();
+            document.querySelector('.ptab[data-pane="orders"]')?.click();
+        } catch(e) {
+            console.error(e);
+            toast('❌ Erreur: ' + (e.message || e));
+        } finally {
+            hideLoad();
+        }
+    };
+
     window.deleteOrder = async function(orderId, orderNum) {
         const label = orderNum || orderId.slice(0,8);
-        if(!confirm(`Annuler la commande ${label} ?\n\nCette action supprimera aussi les lignes de facturation liées.`)) return;
+        if(!confirm(`Mettre la commande ${label} à la poubelle ?\n\nCette action supprimera aussi les lignes de facturation liées.`)) return;
         showLoad();
         try {
             // 1. Supprimer les lignes de facturation liées
