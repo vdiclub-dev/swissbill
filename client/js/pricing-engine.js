@@ -37,7 +37,7 @@
 
     var pricesRes = await db
       .from("prix_speciaux")
-      .select("produit_id,valeur,type_remise")
+      .select("produit_id,valeur,type_remise,contrainte")
       .eq("client_id", clientId);
     if (pricesRes.error) throw pricesRes.error;
 
@@ -50,8 +50,10 @@
       var base = Number(p.prix || 0);
       var ov = overrideMap[String(p.id)];
       if (ov) {
-        base = ov.type_remise === "pourcentage"
+        base = ov.type_remise === "pct" || ov.type_remise === "pourcentage"
           ? base * (1 - Number(ov.valeur || 0) / 100)
+          : ov.type_remise === "supp"
+            ? base + Number(ov.valeur || 0)
           : Number(ov.valeur || base);
       }
       return {

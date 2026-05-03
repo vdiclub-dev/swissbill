@@ -827,12 +827,12 @@
         if(!clientScopeId) return;
         const [{ data: tarifData }, { data: prixData }, { data: produitsData }] = await Promise.all([
             db.from('tarifs_clients').select('*').eq('entreprise_id', clientScopeId).single(),
-            db.from('prix_speciaux').select('produit_id,valeur,type_remise').eq('client_id', clientScopeId),
+            db.from('prix_speciaux').select('produit_id,valeur,type_remise,contrainte').eq('client_id', clientScopeId),
             db.from('produits_tarif').select('*').eq('actif', true).order('ordre').order('nom')
         ]);
         clientTarif = tarifData || { prix_inf_2kg:8.5, prix_inf_10kg:11.5, prix_inf_30kg:20.5, prix_eco:7.5, suppl_express:5, suppl_urgent:10, suppl_nuit_chf:25 };
         clientProduits = produitsData||[];
-        clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), Number(r.valeur)]));
+        clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), r]));
         updateServicePrices();
         renderColis();
         updateTotalPrice();
@@ -896,7 +896,7 @@
             const unitPrice=getProduitPrice(best);
             const incr=Number(best.increment_par_kg||0);
             const calcPrice= incr>0 ? unitPrice+poids*incr : best.prix_par_kg ? unitPrice*poids : unitPrice;
-            const negocie=clientPrixMap[String(best.id)]!=null && Number(clientPrixMap[String(best.id)])!==Number(best.prix);
+            const negocie=clientPrixMap[String(best.id)]!=null && Number(getProduitPrice(best))!==Number(best.prix);
             const suffix= incr>0
                 ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)}+${incr.toFixed(2)}/kg</span>`
                 : best.prix_par_kg ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)} CHF/kg</span>` : '';
@@ -930,7 +930,7 @@
                 type,
                 details,
                 weightMin: Number(p.poids_min || 0),
-                negotiated: clientPrixMap[String(p.id)] != null && Number(clientPrixMap[String(p.id)]) !== Number(p.prix)
+                negotiated: clientPrixMap[String(p.id)] != null && Number(getProduitPrice(p)) !== Number(p.prix)
             };
         }).sort((a,b)=>a.type.localeCompare(b.type)||a.code.localeCompare(b.code)||a.weightMin-b.weightMin);
     }
@@ -1086,7 +1086,12 @@
     function getProduitPrice(produit){
         if(!produit) return null;
         const ov=clientPrixMap[String(produit.id)];
-        return ov!=null?ov:Number(produit.prix);
+        const base = Number(produit.prix || 0);
+        if(!ov) return base;
+        const val = Number(ov.valeur || 0);
+        if(ov.type_remise === 'pct' || ov.type_remise === 'pourcentage') return base * (1 - val / 100);
+        if(ov.type_remise === 'supp') return base + val;
+        return val;
     }
 
     function getAssignedProduits(){
