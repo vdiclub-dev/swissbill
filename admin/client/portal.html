@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../../config.js?v=20260462"></script>
-    <script src="../../js/auth.js?v=20260503-code-storage"></script>
+    <script src="../../js/auth.js?v=20260503-tariff-pdf"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -159,6 +159,17 @@
         .spin{width:40px;height:40px;border:2px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:spin 0.8s linear infinite;}
         @keyframes spin{to{transform:rotate(360deg)}}
         .empty{padding:60px 20px;text-align:center;color:var(--muted);}
+
+        .tariff-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+        .tariff-note{color:var(--muted2);font-size:13px;line-height:1.5;max-width:680px;}
+        .tariff-table-wrap{overflow:auto;border:1px solid var(--border2);border-radius:16px;background:var(--night3);}
+        .tariff-table{width:100%;border-collapse:collapse;min-width:760px;}
+        .tariff-table th,.tariff-table td{padding:12px 14px;border-bottom:1px solid var(--border);text-align:left;font-size:13px;}
+        .tariff-table th{color:var(--muted2);font-size:11px;text-transform:uppercase;letter-spacing:.08em;background:var(--surface);}
+        .tariff-code{display:inline-flex;align-items:center;padding:5px 9px;border-radius:8px;background:rgba(249,115,22,.14);color:#fed7aa;border:1px solid rgba(249,115,22,.28);font-weight:800;letter-spacing:.04em;}
+        .tariff-price-cell{font-family:'Bebas Neue',cursive;font-size:20px;color:var(--green);white-space:nowrap;}
+        .tariff-kind{display:inline-flex;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted2);font-size:11px;font-weight:700;}
+        .btn-orange{background:var(--orange);color:#111;font-weight:800;}
 
         /* SUIVI COLIS */
         .tracking-card{background:var(--night2);border:1.5px solid var(--border2);border-radius:16px;padding:20px;margin-bottom:12px;}
@@ -331,6 +342,7 @@
             <div class="ptab" data-pane="tracking">📍 Suivi en direct</div>
             <div class="ptab" data-pane="history">📜 Historique</div>
             <div class="ptab" data-pane="addresses">📒 Mes adresses</div>
+            <div class="ptab" data-pane="tariffs">💰 Mes tarifs</div>
             <div class="ptab" data-pane="team" id="tabTeam" style="display:none;">👥 Mon équipe</div>
             <div class="ptab" id="tabTarifs" style="display:none;">💰 Tarifs</div>
         </div>
@@ -521,6 +533,18 @@
         <div class="pane" id="pane-tracking"><div id="trackingList"></div></div>
         <div class="pane" id="pane-history"><div id="historyList"></div></div>
         <div class="pane" id="pane-addresses"><div id="savedAddressesList"></div></div>
+        <div class="pane" id="pane-tariffs">
+            <div class="form-card">
+                <div class="tariff-toolbar">
+                    <div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:20px;">MA GRILLE TARIFAIRE</div>
+                        <div class="tariff-note">Utilisez la colonne <strong>Code tarif</strong> dans vos fichiers Excel/CSV pour appliquer le bon prix pendant l’import.</div>
+                    </div>
+                    <button class="btn btn-orange" onclick="downloadTariffPdf()"><i class="fas fa-file-pdf"></i> PDF grille tarifaire</button>
+                </div>
+                <div id="clientTariffList"><div class="empty">⏳ Chargement des tarifs...</div></div>
+            </div>
+        </div>
         <div class="pane" id="pane-team">
             <div class="form-card">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -807,6 +831,7 @@
         const pool = getAssignedProduits().filter(p=>!isOptionProduct(p));
         if(!pool.length){
             grid.innerHTML='<div class="tarif-box"><div class="tarif-label">Tarif standard</div><div class="tarif-price">—</div></div>';
+            renderClientTariffPane();
             return;
         }
         // One box per unique ref — price adapts to current poids
@@ -829,7 +854,99 @@
             <div class="tarif-label">${it.label}</div>
             <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
         </div>`).join('');
+        renderClientTariffPane();
     }
+
+    function tariffCodeForProduit(p){
+        return String(p?.ref || p?.code || p?.sku || p?.nom || '').trim().toUpperCase().replace(/\s+/g, '-');
+    }
+
+    function tariffRowsForClient(){
+        return getAssignedProduits().map(p=>{
+            const price = getProduitPrice(p);
+            const code = tariffCodeForProduit(p);
+            const type = isOptionProduct(p) ? 'Option' : 'Service';
+            const details = Number(p.increment_par_kg||0) > 0
+                ? `${Number(price).toFixed(2)} CHF + ${Number(p.increment_par_kg).toFixed(2)} CHF/kg`
+                : p.prix_par_kg
+                    ? `${Number(price).toFixed(2)} CHF/kg`
+                    : `${Number(price).toFixed(2)} CHF`;
+            return {
+                code,
+                name: p.nom || code,
+                type,
+                details,
+                weightMin: Number(p.poids_min || 0),
+                negotiated: clientPrixMap[String(p.id)] != null && Number(clientPrixMap[String(p.id)]) !== Number(p.prix)
+            };
+        }).sort((a,b)=>a.type.localeCompare(b.type)||a.code.localeCompare(b.code)||a.weightMin-b.weightMin);
+    }
+
+    function renderClientTariffPane(){
+        const el = document.getElementById('clientTariffList');
+        if(!el) return;
+        const rows = tariffRowsForClient();
+        if(!rows.length){
+            el.innerHTML = '<div class="empty">Aucune grille tarifaire disponible. Contactez Colixo.</div>';
+            return;
+        }
+        el.innerHTML = `<div class="tariff-table-wrap"><table class="tariff-table">
+            <thead><tr><th>Code tarif</th><th>Produit</th><th>Type</th><th>Poids min.</th><th>Prix client</th><th>Note</th></tr></thead>
+            <tbody>${rows.map(r=>`<tr>
+                <td><span class="tariff-code">${r.code}</span></td>
+                <td>${r.name}</td>
+                <td><span class="tariff-kind">${r.type}</span></td>
+                <td>${r.weightMin ? r.weightMin + ' kg' : '—'}</td>
+                <td class="tariff-price-cell">${r.details}</td>
+                <td>${r.negotiated ? '<span style="color:var(--green);font-weight:700;">Prix négocié</span>' : 'Tarif catalogue'}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>`;
+    }
+
+    window.downloadTariffPdf=function(){
+        const rows = tariffRowsForClient();
+        if(!rows.length){ toast('Aucune grille tarifaire à exporter'); return; }
+        const name = clientEntreprise?.nom || [client?.prenom, client?.nom].filter(Boolean).join(' ') || 'Client';
+        const date = new Date().toLocaleDateString('fr-CH');
+        const htmlRows = rows.map(r=>`<tr>
+            <td><strong>${r.code}</strong></td>
+            <td>${r.name}</td>
+            <td>${r.type}</td>
+            <td>${r.weightMin ? r.weightMin + ' kg' : '—'}</td>
+            <td class="price">${r.details}</td>
+            <td>${r.negotiated ? 'Prix négocié' : 'Catalogue'}</td>
+        </tr>`).join('');
+        const win = window.open('', '_blank', 'width=900,height=1100');
+        win.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Grille tarifaire Colixo</title>
+        <style>
+            body{font-family:Arial,sans-serif;background:#f4f4f5;color:#111827;margin:0;padding:28px;}
+            .sheet{background:#fff;max-width:860px;margin:0 auto;padding:34px;border-radius:18px;box-shadow:0 14px 45px rgba(0,0,0,.12);}
+            .head{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #f97316;padding-bottom:18px;margin-bottom:22px;}
+            .brand{font-size:34px;font-weight:900;letter-spacing:.08em;color:#111827;}
+            .brand span{color:#f97316;}
+            .meta{text-align:right;color:#6b7280;font-size:13px;line-height:1.5;}
+            h1{font-size:24px;margin:0 0 4px;}
+            .sub{color:#6b7280;margin-bottom:20px;}
+            table{width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;}
+            th,td{padding:11px 12px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:12px;}
+            th{background:#111827;color:#fff;text-transform:uppercase;letter-spacing:.06em;font-size:10px;}
+            td:first-child{color:#c2410c;}
+            .price{font-weight:800;color:#15803d;white-space:nowrap;}
+            .note{margin-top:18px;padding:14px;border-radius:12px;background:#fff7ed;color:#9a3412;font-size:12px;line-height:1.5;}
+            .foot{margin-top:24px;color:#9ca3af;font-size:11px;text-align:center;}
+            @media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0}.no-print{display:none}}
+        </style></head><body>
+        <div class="sheet">
+            <div class="head"><div><div class="brand">COLI<span>XO</span></div><h1>Grille tarifaire client</h1><div class="sub">${name}</div></div><div class="meta">Date: ${date}<br>Devise: CHF<br>Prix hors TVA sauf indication contraire</div></div>
+            <table><thead><tr><th>Code tarif</th><th>Produit</th><th>Type</th><th>Poids min.</th><th>Prix</th><th>Note</th></tr></thead><tbody>${htmlRows}</tbody></table>
+            <div class="note"><strong>Import Excel/CSV :</strong> utilisez la colonne “Code tarif” avec les codes ci-dessus. Si le code est présent, il est prioritaire pour choisir le prix, même si deux colis ont le même poids.</div>
+            <div class="foot">Colixo · Grille tarifaire générée depuis le portail client</div>
+        </div>
+        <div class="no-print" style="text-align:center;margin-top:18px;"><button onclick="window.print()" style="background:#f97316;border:0;border-radius:10px;padding:12px 22px;font-weight:800;cursor:pointer;">Imprimer / Enregistrer PDF</button></div>
+        </body></html>`);
+        win.document.close();
+        setTimeout(()=>win.print(), 350);
+    };
 
     const SVC_ICON_MAP = [
         {refs:['ECO','ECONO'],           icon:'🐢'},
@@ -1528,6 +1645,7 @@
             if(t.dataset.pane==='tracking') { loadTracking(); startAutoRefresh('tracking'); }
             if(t.dataset.pane==='history') loadHistory();
             if(t.dataset.pane==='addresses') loadSavedAddresses();
+            if(t.dataset.pane==='tariffs') renderClientTariffPane();
             if(t.dataset.pane==='team') loadTeam();
         });
     });
@@ -2690,6 +2808,7 @@
         }
         await loadSavedAddresses();
         showScreen('Portal');
+        renderClientTariffPane();
         renderWizardColis();
         loadOrders();
         initPickupToggle();

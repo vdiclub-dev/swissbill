@@ -76,6 +76,31 @@ begin
   where r.client_id = v_client_id
     and r.is_active = true;
 
+  if jsonb_array_length(coalesce(v_tariffs, '[]'::jsonb)) = 0 then
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'id', p.id,
+      'client_id', v_client_id,
+      'name', coalesce(p.nom, p.ref, 'Tarif'),
+      'tariff_code', coalesce(p.ref, p.nom, ''),
+      'service_level', null,
+      'min_weight_kg', coalesce(p.poids_min, 0),
+      'max_weight_kg', null,
+      'min_parcel_count', null,
+      'max_parcel_count', null,
+      'base_price_chf', case when coalesce(p.prix_par_kg, false) then 0 else round(coalesce(case when ps.type_remise = 'pct' then p.prix * (1 - ps.valeur / 100) else ps.valeur end, p.prix, 0)::numeric, 2) end,
+      'price_per_parcel_chf', 0,
+      'price_per_kg_chf', case when coalesce(p.prix_par_kg, false) then round(coalesce(case when ps.type_remise = 'pct' then p.prix * (1 - ps.valeur / 100) else ps.valeur end, p.prix, 0)::numeric, 2) else 0 end,
+      'priority', coalesce(p.ordre, 100)
+    ) order by p.ordre asc, p.nom asc), '[]'::jsonb)
+      into v_tariffs
+    from public.produits_tarif p
+    left join public.prix_speciaux ps
+      on ps.produit_id = p.id
+     and ps.client_id = v_client_id
+     and coalesce(ps.actif, true) = true
+    where coalesce(p.actif, true) = true;
+  end if;
+
   return jsonb_build_object(
     'client_id', v_client_id,
     'profile', coalesce(v_profile, '{}'::jsonb),

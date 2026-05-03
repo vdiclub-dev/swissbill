@@ -25,7 +25,51 @@
       .order("priority", { ascending: true })
       .order("created_at", { ascending: true });
     if (res.error) throw res.error;
-    return res.data || [];
+    if (res.data && res.data.length) return res.data;
+
+    var productsRes = await db
+      .from("produits_tarif")
+      .select("*")
+      .eq("actif", true)
+      .order("ordre", { ascending: true })
+      .order("nom", { ascending: true });
+    if (productsRes.error) throw productsRes.error;
+
+    var pricesRes = await db
+      .from("prix_speciaux")
+      .select("produit_id,valeur,type_remise")
+      .eq("client_id", clientId);
+    if (pricesRes.error) throw pricesRes.error;
+
+    var overrideMap = {};
+    (pricesRes.data || []).forEach(function (row) {
+      overrideMap[String(row.produit_id)] = row;
+    });
+
+    return (productsRes.data || []).map(function (p, index) {
+      var base = Number(p.prix || 0);
+      var ov = overrideMap[String(p.id)];
+      if (ov) {
+        base = ov.type_remise === "pourcentage"
+          ? base * (1 - Number(ov.valeur || 0) / 100)
+          : Number(ov.valeur || base);
+      }
+      return {
+        id: p.id,
+        client_id: clientId,
+        name: p.nom || p.ref || "Tarif",
+        tariff_code: p.ref || p.nom || "",
+        service_level: null,
+        min_weight_kg: Number(p.poids_min || 0),
+        max_weight_kg: null,
+        min_parcel_count: null,
+        max_parcel_count: null,
+        base_price_chf: p.prix_par_kg ? 0 : Math.round(base * 100) / 100,
+        price_per_parcel_chf: 0,
+        price_per_kg_chf: p.prix_par_kg ? Math.round(base * 100) / 100 : 0,
+        priority: Number(p.ordre || index + 100)
+      };
+    });
   }
 
   function rangeMatches(value, min, max) {
