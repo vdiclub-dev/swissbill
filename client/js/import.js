@@ -599,6 +599,7 @@
       renderValidatedRows();
       showSection('summarySection', true);
       showSection('validatedPreviewSection', true);
+      $('validatedPreviewSection')?.classList.add('is-collapsed');
       setStep(5);
       renderNextAction(summary);
       $('importNextAction')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -944,7 +945,6 @@
         : 'Corrigez le mapping ou le fichier, puis relancez la prévisualisation.';
     }
     if (bottomButton) bottomButton.disabled = !canImport;
-    if ($('btnImportValid')) $('btnImportValid').disabled = !canImport;
   }
 
   function renderValidatedRows() {
@@ -997,6 +997,7 @@
 
     if (!keepFileInput && $('fileInput')) $('fileInput').value = '';
     ['mappingSection', 'previewSection', 'summarySection', 'validatedPreviewSection', 'importResult', 'importNextAction'].forEach((id) => showSection(id, false));
+    $('validatedPreviewSection')?.classList.remove('is-collapsed');
     if ($('rawPreviewHead')) $('rawPreviewHead').innerHTML = '';
     if ($('rawPreviewBody')) $('rawPreviewBody').innerHTML = '';
     if ($('mappingBody')) $('mappingBody').innerHTML = '';
@@ -1062,8 +1063,16 @@
     $('btnSaveProfile')?.addEventListener('click', saveImportProfile);
     $('btnValidateRows')?.addEventListener('click', validateAndPreviewImport);
     $('btnRecalculate')?.addEventListener('click', validateAndPreviewImport);
-    $('btnImportValid')?.addEventListener('click', importValidRows);
     $('btnImportValidBottom')?.addEventListener('click', importValidRows);
+    $('btnTogglePreview')?.addEventListener('click', () => {
+      const section = $('validatedPreviewSection');
+      if (!section) return;
+      section.hidden = false;
+      section.classList.toggle('is-collapsed');
+      if (!section.classList.contains('is-collapsed')) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
     $('btnDownloadErrors')?.addEventListener('click', downloadErrorReport);
     $('btnReset')?.addEventListener('click', () => {
       resetImportState();
