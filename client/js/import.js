@@ -41,6 +41,7 @@
     warnings: [],
     pricedRows: [],
     manualPriceOverrides: {},
+    ignoreDuplicates: false,
     summary: null,
     batchId: null,
     importInProgress: false
@@ -97,7 +98,7 @@
   function setImportButtonBusy(isBusy) {
     const button = $('btnImportValidBottom');
     if (!button) return;
-    button.disabled = Boolean(isBusy) || !(state.summary && state.summary.validRows > 0);
+    button.disabled = Boolean(isBusy) || !(state.summary && state.summary.importableRows > 0);
     button.innerHTML = isBusy
       ? '<i class="fas fa-spinner fa-spin"></i> Import en cours...'
       : '<i class="fas fa-cloud-upload-alt"></i> Étape 7 · Importer maintenant';
@@ -746,7 +747,11 @@
       if (refKey) seen.add(refKey);
 
       if (order.external_reference && state.duplicateReferences.has(order.external_reference)) {
-        addRowError(order, 'external_reference', 'Référence déjà importée pour ce client', order.external_reference);
+        if (state.ignoreDuplicates) {
+          addRowWarning(order, 'external_reference', 'Référence déjà importée (ignorée)', order.external_reference);
+        } else {
+          addRowError(order, 'external_reference', 'Référence déjà importée pour ce client', order.external_reference);
+        }
       }
 
       if (!order.delivery_phone) addRowWarning(order, 'delivery_phone', 'Téléphone absent', '');
@@ -959,7 +964,11 @@
       setDecisionFeedback('Étape 7 bloquée: il faut d’abord finir la prévisualisation à l’étape 6.', 'error');
       return;
     }
-    const rowsToImport = state.mappedRows.filter((order) => !order.validation_errors.length);
+    const rowsToImport = state.mappedRows.filter((order) => {
+      if (order.validation_errors.length) return false;
+      if (state.ignoreDuplicates && state.duplicateReferences.has(order.external_reference || '')) return false;
+      return true;
+    });
     if (!rowsToImport.length) {
       setStatus('Aucune ligne valide à importer.', 'error');
       setDecisionFeedback('Aucune ligne ne peut être importée pour le moment. Corrigez les erreurs puis cliquez sur “Recalculer / Revalider”.', 'error');
@@ -1015,7 +1024,12 @@
     const pricedRows = state.mappedRows.filter((row) => row.pricing_status === 'calculated' || row.pricing_status === 'manual').length;
     const priceReviewRows = state.mappedRows.filter((row) => row.pricing_status === 'needs_review').length;
     const totalEstimatedPrice = state.mappedRows.reduce((sum, row) => sum + (Number(row.total_price_chf) || 0), 0);
-    return { totalRows, validRows, errorRows, duplicateRows, pricedRows, priceReviewRows, totalEstimatedPrice };
+    const importableRows = state.mappedRows.filter((row) => {
+      if (row.validation_errors.length) return false;
+      if (state.ignoreDuplicates && state.duplicateReferences.has(row.external_reference || '')) return false;
+      return true;
+    }).length;
+    return { totalRows, validRows, errorRows, duplicateRows, pricedRows, priceReviewRows, totalEstimatedPrice, importableRows };
   }
 
   function renderImportSummary(summary) {
@@ -1044,15 +1058,41 @@
     const title = $('importNextTitle');
     const text = $('importNextText');
     const bottomButton = $('btnImportValidBottom');
-    const canImport = summary.validRows > 0;
-    if (title) title.textContent = canImport ? `${summary.validRows} ligne(s) prête(s) pour l’étape 7` : 'Aucune ligne valide à importer';
+    const canImport = summary.importableRows > 0;
+    const skippedDuplicates = summary.validRows - summary.importableRows;
+    if (title) title.textContent = canImport
+      ? `${summary.importableRows} ligne(s) prête(s) pour l’étape 7`
+      : ‘Aucune ligne valide à importer’;
     if (text) {
-      text.textContent = canImport
-        ? `${summary.errorRows} ligne(s) resteront bloquées. Total estimé: ${formatMoney(summary.totalEstimatedPrice)}.`
-        : 'Corrigez le mapping ou le fichier, puis relancez la prévisualisation.';
+      if (canImport) {
+        const parts = [];
+        if (summary.errorRows) parts.push(`${summary.errorRows} erreur(s)`);
+        if (skippedDuplicates > 0) parts.push(`${skippedDuplicates} doublon(s) ignoré(s)`);
+        text.textContent = (parts.length ? parts.join(‘, ‘) + ‘. ‘ : ‘’) + `Total estimé: ${formatMoney(summary.totalEstimatedPrice)}.`;
+      } else {
+        text.textContent = state.ignoreDuplicates
+          ? ‘Toutes les lignes sont déjà importées ou invalides.’
+          : ‘Corrigez le mapping ou le fichier, puis relancez la prévisualisation.’;
+      }
     }
     if (bottomButton) bottomButton.disabled = !canImport;
     setImportButtonBusy(false);
+  }
+
+  function buildPriceTooltip(row) {
+    const d = row.pricing_details || {};
+    if (d.manual_override) return `Prix manuel: ${formatMoney(row.total_price_chf)}`;
+    if (d.reason) return d.reason;
+    const parts = [];
+    if (d.rule_name) parts.push(`Règle: ${d.rule_name}`);
+    if (Number(d.base_price)) parts.push(`Base: ${formatMoney(d.base_price)}`);
+    if (Number(d.price_per_parcel) && Number(d.parcel_count) > 1) parts.push(`${d.parcel_count} colis × ${formatMoney(d.price_per_parcel)}`);
+    if (d.weight_kg != null && Number(d.price_per_kg)) parts.push(`${d.weight_kg} kg × ${formatMoney(d.price_per_kg)}/kg`);
+    if (Number(d.fuel_surcharge_percent)) parts.push(`Surcharge: ${d.fuel_surcharge_percent}%`);
+    if (Number(d.discount_percent)) parts.push(`Remise: ${d.discount_percent}%`);
+    if (d.special_option_label) parts.push(`Option: ${d.special_option_label} (+${formatMoney(d.special_option_amount)})`);
+    if (d.final_total != null) parts.push(`Total: ${formatMoney(d.final_total)}`);
+    return parts.join(' · ') || '';
   }
 
   function renderValidatedRows() {
@@ -1063,21 +1103,27 @@
       const message = row.validation_errors.concat(row.validation_warnings).map((item) => item.message).join(' • ');
 
       let priceCell;
-      if (!row.validation_errors.length && row.pricing_status === 'needs_review') {
-        const override = state.manualPriceOverrides[row.line_number];
-        priceCell = `<span class="badge badge-warning">Prix à valider</span><br>
-          <input type="number" class="price-override-input"
-            data-line="${row.line_number}"
-            value="${override !== undefined ? override : ''}"
-            placeholder="CHF" min="0" step="0.05">`;
+      if (row.validation_errors.length) {
+        priceCell = `<span class="badge badge-muted">Prix incomplet</span>`;
       } else {
+        const override = state.manualPriceOverrides[row.line_number];
         const badgeClass = row.pricing_status === 'calculated' ? 'badge-success'
           : row.pricing_status === 'manual' ? 'badge-info'
           : 'badge-warning';
         const label = row.pricing_status === 'calculated' ? 'Prix calculé'
           : row.pricing_status === 'manual' ? 'Prix manuel'
-          : 'Prix incomplet';
-        priceCell = `<span class="badge ${badgeClass}">${escapeHtml(label)}</span><br>${escapeHtml(formatMoney(row.total_price_chf))}`;
+          : 'Prix à valider';
+        const tooltip = escapeAttribute(buildPriceTooltip(row));
+        const displayPrice = row.total_price_chf !== null ? escapeHtml(formatMoney(row.total_price_chf)) : '-';
+        const inputPlaceholder = row.pricing_status === 'calculated' && row.total_price_chf !== null
+          ? String(row.total_price_chf) : 'CHF';
+        priceCell = `<span class="badge ${badgeClass}" title="${tooltip}">${escapeHtml(label)}</span>
+          <span class="price-display" title="${tooltip}">${displayPrice}</span>
+          <input type="number" class="price-override-input"
+            data-line="${row.line_number}"
+            value="${override !== undefined ? override : ''}"
+            placeholder="${escapeAttribute(inputPlaceholder)}"
+            min="0" step="0.05">`;
       }
 
       return `
@@ -1149,6 +1195,7 @@
     state.warnings = [];
     state.pricedRows = [];
     state.manualPriceOverrides = {};
+    state.ignoreDuplicates = false;
     state.summary = null;
     state.batchId = null;
     state.importInProgress = false;
@@ -1246,6 +1293,11 @@
         }
       });
     }
+
+    $('ignoreDuplicates')?.addEventListener('change', async (e) => {
+      state.ignoreDuplicates = Boolean(e.target.checked);
+      if (state.summary) await validateAndPreviewImport();
+    });
   }
 
   window.ColixoClientImport = {
