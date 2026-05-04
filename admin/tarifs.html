@@ -502,8 +502,8 @@
         : '<span style="color:var(--muted);font-size:12px">—</span>';
 
       html += '<tr id="cr-' + p.id + '">' +
-        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasRule ? 'checked' : '') + ' onchange="toggleClientTariff(\'' + clientId + '\',\'' + p.id + '\',this.checked)"></td>' +
-        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasOption ? 'checked' : '') + ' onchange="toggleClientOption(\'' + clientId + '\',\'' + p.id + '\',this.checked)"></td>' +
+        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasRule ? 'checked' : '') + ' onchange="toggleClientTariff(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
+        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasOption ? 'checked' : '') + ' onchange="toggleClientOption(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
         '<td><span class="cell cell-nom">'  + esc(p.nom) + '</span></td>' +
         '<td><span class="cell cell-ref">'  + esc(p.ref || '—') + '</span></td>' +
         '<td><span class="cell cell-prix">' + Number(p.prix).toFixed(2) + '</span></td>' +
@@ -547,9 +547,22 @@
     renderClientTable(clientId, overrides, rules);
   }
 
-  window.toggleClientTariff = async function(clientId, prodId, enabled) {
+  function explainTariffToggleError(error, fallbackError) {
+    const msg = String((fallbackError || error)?.message || error || '');
+    if (msg.includes('admin_set_client_tariff_rule') || msg.includes('function') || msg.includes('schema cache')) {
+      return 'Fonction Supabase admin_set_client_tariff_rule absente. Appliquez le SQL 009_admin_demandes_inscription_rpc.sql dans Supabase.';
+    }
+    if (msg.includes('permission denied') || msg.includes('row-level security') || msg.includes('violates row-level security')) {
+      return 'Droit Supabase refusé sur client_tariff_rules. La fonction RPC admin doit être appliquée.';
+    }
+    return msg || 'Impossible de modifier ce tarif.';
+  }
+
+  window.toggleClientTariff = async function(clientId, prodId, enabled, checkbox) {
     const p = produits.find(x => x.id === prodId);
     if (!p) return;
+    if (checkbox) checkbox.disabled = true;
+    let directError = null;
     try {
       const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
       const existing = await fetchClientTariffRules(clientId);
@@ -564,20 +577,28 @@
         if (res.error) throw res.error;
       }
     } catch (error) {
+      directError = error;
       const rpc = await db.rpc('admin_set_client_tariff_rule', getAdminRpcPayload({
         p_client_id: clientId,
         p_product_id: prodId,
         p_enabled: enabled
       }));
-      if (rpc.error) { toast('Erreur: ' + rpc.error.message, 'err'); await refreshClientTable(clientId); return; }
+      if (rpc.error) {
+        toast('Erreur: ' + explainTariffToggleError(directError, rpc.error), 'err');
+        await refreshClientTable(clientId);
+        return;
+      }
+    } finally {
+      if (checkbox) checkbox.disabled = false;
     }
     toast(enabled ? 'Tarif appliqué au client.' : 'Tarif retiré du client.', 'info');
     await refreshClientTable(clientId);
   };
 
-  window.toggleClientOption = async function(clientId, prodId, enabled) {
+  window.toggleClientOption = async function(clientId, prodId, enabled, checkbox) {
     const p = produits.find(x => x.id === prodId);
     if (!p) return;
+    if (checkbox) checkbox.disabled = true;
     const existing = (await fetchOverrides(clientId)).find(o => o.produit_id === prodId);
     const type_remise = existing?.type_remise || 'supp';
     const valeur = Number(existing?.valeur ?? p.prix ?? 0);
@@ -597,7 +618,9 @@
         p_valeur: valeur,
         p_contrainte: contrainte
       }));
-      if (rpc.error) { toast('Erreur: ' + rpc.error.message, 'err'); await refreshClientTable(clientId); return; }
+      if (rpc.error) { toast('Erreur: ' + explainTariffToggleError(error, rpc.error), 'err'); await refreshClientTable(clientId); return; }
+    } finally {
+      if (checkbox) checkbox.disabled = false;
     }
     toast(enabled ? 'Option proposée au client.' : 'Option retirée du portail client.', 'info');
     await refreshClientTable(clientId);
