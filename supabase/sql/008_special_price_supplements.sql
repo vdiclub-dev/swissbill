@@ -30,6 +30,7 @@ declare
   v_company jsonb;
   v_import_profile jsonb;
   v_tariffs jsonb;
+  v_special_options jsonb;
 begin
   v_client_id := public.client_import_code_client_id(p_user_id, p_code);
 
@@ -68,15 +69,9 @@ begin
       'max_weight_kg', null,
       'min_parcel_count', null,
       'max_parcel_count', null,
-      'base_price_chf', case
-        when coalesce(p.prix_par_kg, false) then 0
-        else round(public.colixo_apply_prix_special(p.prix, ps.type_remise, ps.valeur)::numeric, 2)
-      end,
+      'base_price_chf', case when coalesce(p.prix_par_kg, false) then 0 else round(coalesce(p.prix, 0)::numeric, 2) end,
       'price_per_parcel_chf', 0,
-      'price_per_kg_chf', case
-        when coalesce(p.prix_par_kg, false) then round(public.colixo_apply_prix_special(p.prix, ps.type_remise, ps.valeur)::numeric, 2)
-        else 0
-      end,
+      'price_per_kg_chf', round(coalesce(p.increment_par_kg, 0)::numeric, 2),
       'priority', coalesce(p.ordre, 100),
       'pricing_details', jsonb_build_object(
         'contrainte', ps.contrainte,
@@ -93,13 +88,30 @@ begin
     where coalesce(p.actif, true) = true;
   end if;
 
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'code', upper(regexp_replace(translate(coalesce(ps.contrainte, p.nom, p.ref, 'OPTION'), 'àâäéèêëïîôöùûüç', 'aaaeeeeiioouuuc'), '[^A-Za-z0-9]+', '_', 'g')),
+    'label', coalesce(ps.contrainte, p.nom, p.ref, 'Option'),
+    'product_name', coalesce(p.nom, ''),
+    'product_code', coalesce(p.ref, ''),
+    'amount_chf', round(coalesce(ps.valeur, 0)::numeric, 2),
+    'type_remise', coalesce(ps.type_remise, 'supp')
+  ) order by ps.contrainte asc, p.nom asc), '[]'::jsonb)
+    into v_special_options
+  from public.prix_speciaux ps
+  left join public.produits_tarif p on p.id = ps.produit_id
+  where ps.client_id = v_client_id
+    and coalesce(ps.actif, true) = true
+    and nullif(trim(coalesce(ps.contrainte, '')), '') is not null
+    and coalesce(ps.valeur, 0) > 0;
+
   return jsonb_build_object(
     'client_id', v_client_id,
     'order_client_id', v_client_id,
     'profile', coalesce(v_profile, '{}'::jsonb),
     'company', v_company,
     'import_profile', v_import_profile,
-    'tariff_rules', coalesce(v_tariffs, '[]'::jsonb)
+    'tariff_rules', coalesce(v_tariffs, '[]'::jsonb),
+    'special_options', coalesce(v_special_options, '[]'::jsonb)
   );
 end;
 $$;

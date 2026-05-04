@@ -98,6 +98,32 @@
     ];
   }
 
+  async function loadClientSpecialOptions(clientId) {
+    if (!clientId) return [];
+    var db = window.SUPABASE_CLIENT;
+    var res = await db
+      .from("prix_speciaux")
+      .select("produit_id,valeur,type_remise,contrainte,actif,produits_tarif(id,nom,ref)")
+      .eq("client_id", clientId)
+      .eq("actif", true);
+    if (res.error) throw res.error;
+
+    return (res.data || [])
+      .filter(function (row) { return row.contrainte && Number(row.valeur || 0) > 0; })
+      .map(function (row) {
+        var product = row.produits_tarif || {};
+        var label = row.contrainte || product.nom || "Option";
+        return {
+          code: normalizeCode(label),
+          label: label,
+          product_name: product.nom || "",
+          product_code: product.ref || "",
+          amount_chf: Math.round(Number(row.valeur || 0) * 100) / 100,
+          type_remise: row.type_remise || "supp"
+        };
+      });
+  }
+
   function rangeMatches(value, min, max) {
     if (value == null || value === "") return min == null && max == null;
     var n = Number(value);
@@ -162,7 +188,15 @@
       surcharges += numberOrZero(rule.night_surcharge_chf);
     }
 
-    var subtotal = base + parcelAmount + weightAmount + kmExtra + surcharges + numberOrZero(rule.floor_surcharge_chf);
+    var option = null;
+    var optionAmount = 0;
+    var optionCode = normalizeCode(order.special_option_code || "");
+    if (optionCode && Array.isArray(order.special_options)) {
+      option = order.special_options.find(function (item) { return normalizeCode(item.code || item.label) === optionCode; }) || null;
+      optionAmount = option ? numberOrZero(option.amount_chf) : 0;
+    }
+
+    var subtotal = base + parcelAmount + weightAmount + kmExtra + surcharges + numberOrZero(rule.floor_surcharge_chf) + optionAmount;
     var fuel = calculateFuelSurcharge(subtotal, rule.fuel_surcharge_percent);
     var discount = (subtotal + fuel) * numberOrZero(rule.discount_percent) / 100;
     var total = Math.max(0, subtotal + fuel - discount);
@@ -173,7 +207,7 @@
       total_price_chf: total,
       pricing_status: "calculated",
       tariff_rule_id: rule.id,
-      parts: { base: base, parcelAmount: parcelAmount, weightAmount: weightAmount, kmExtra: kmExtra, surcharges: surcharges, fuel: fuel, discount: discount }
+      parts: { base: base, parcelAmount: parcelAmount, weightAmount: weightAmount, kmExtra: kmExtra, surcharges: surcharges, specialOption: optionAmount, fuel: fuel, discount: discount, option: option }
     };
   }
 
@@ -198,6 +232,9 @@
       price_per_parcel: numberOrZero(rule.price_per_parcel_chf),
       weight_kg: order.weight_kg == null ? null : Number(order.weight_kg),
       price_per_kg: numberOrZero(rule.price_per_kg_chf),
+      special_option_code: order.special_option_code || null,
+      special_option_label: result.parts?.option?.label || null,
+      special_option_amount: numberOrZero(result.parts?.specialOption),
       distance_km: order.distance_km == null ? null : Number(order.distance_km),
       included_km: numberOrZero(rule.included_km),
       extra_km_price_chf: numberOrZero(rule.extra_km_price_chf || rule.price_per_km_chf),
@@ -209,6 +246,7 @@
 
   window.ColixoPricingEngine = {
     loadClientTariffRules: loadClientTariffRules,
+    loadClientSpecialOptions: loadClientSpecialOptions,
     selectTariffRule: selectTariffRule,
     calculateOrderPrice: calculateOrderPrice,
     calculateFuelSurcharge: calculateFuelSurcharge,

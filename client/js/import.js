@@ -28,6 +28,7 @@
     company: null,
     activeProfile: null,
     tariffRules: [],
+    specialOptions: [],
     file: null,
     fileType: null,
     delimiter: null,
@@ -136,6 +137,7 @@
       pickup_city: normalizeValue($('defaultPickupCity')?.value),
       service_level: normalizeValue($('defaultServiceLevel')?.value) || 'eco_48h',
       tariff_code: normalizeValue($('defaultTariffCode')?.value).toUpperCase(),
+      special_option_code: normalizeValue($('defaultSpecialOption')?.value).toUpperCase(),
       status: 'pending',
       billing_client_id: state.clientId || ''
     };
@@ -149,6 +151,7 @@
     if ($('defaultPickupCity')) $('defaultPickupCity').value = values.pickup_city || state.company?.ville || '';
     if ($('defaultServiceLevel')) $('defaultServiceLevel').value = values.service_level || 'eco_48h';
     if ($('defaultTariffCode')) $('defaultTariffCode').value = values.tariff_code || '';
+    if ($('defaultSpecialOption')) $('defaultSpecialOption').value = values.special_option_code || '';
   }
 
   function getStoredPortalClient() {
@@ -257,6 +260,7 @@
     state.company = data.company || null;
     state.activeProfile = data.import_profile || null;
     state.tariffRules = data.tariff_rules || [];
+    state.specialOptions = data.special_options || [];
     if (state.activeProfile) {
       state.mapping = state.activeProfile.column_mapping || {};
       fillDefaultValues(state.activeProfile.default_values || {});
@@ -335,6 +339,9 @@
     try {
       const rules = await PRICING.loadClientTariffRules(clientId);
       state.tariffRules = rules || [];
+      state.specialOptions = typeof PRICING.loadClientSpecialOptions === 'function'
+        ? await PRICING.loadClientSpecialOptions(clientId)
+        : [];
       if ($('tariffInfo')) {
         $('tariffInfo').textContent = state.tariffRules.length
           ? `${state.tariffRules.length} règle(s) tarifaire(s) active(s) chargée(s).`
@@ -344,6 +351,7 @@
       return state.tariffRules;
     } catch (error) {
       state.tariffRules = [];
+      state.specialOptions = [];
       if ($('tariffInfo')) $('tariffInfo').textContent = `Tarifs indisponibles: ${error.message}`;
       renderTariffOptions();
       return [];
@@ -352,21 +360,29 @@
 
   function renderTariffOptions() {
     const select = $('defaultTariffCode');
+    const optionSelect = $('defaultSpecialOption');
     const panel = $('tariffOptionsPanel');
     const list = $('tariffOptionsList');
-    if (!select || !panel || !list) return;
+    if (!select || !optionSelect || !panel || !list) return;
 
     const current = select.value || (state.activeProfile?.default_values?.tariff_code || '');
+    const currentOption = optionSelect.value || (state.activeProfile?.default_values?.special_option_code || '');
     const rules = (state.tariffRules || []).filter((rule) => rule.tariff_code);
+    const specialOptions = state.specialOptions || [];
     select.innerHTML = '<option value="">Grille standard automatique</option>' + rules.map((rule) => {
       const code = String(rule.tariff_code || '').toUpperCase();
       const label = `${code} · ${rule.name || 'Tarif'}`;
       return `<option value="${escapeHtml(code)}">${escapeHtml(label)}</option>`;
     }).join('');
     select.value = current && rules.some((rule) => String(rule.tariff_code || '').toUpperCase() === current) ? current : '';
+    optionSelect.innerHTML = '<option value="">Aucune option</option>' + specialOptions.map((option) => {
+      const code = String(option.code || '').toUpperCase();
+      return `<option value="${escapeHtml(code)}">${escapeHtml(option.label)} · +${escapeHtml(formatMoney(option.amount_chf))}</option>`;
+    }).join('');
+    optionSelect.value = currentOption && specialOptions.some((option) => String(option.code || '').toUpperCase() === currentOption) ? currentOption : '';
 
-    panel.hidden = !rules.length;
-    list.innerHTML = rules.map((rule) => {
+    panel.hidden = !rules.length && !specialOptions.length;
+    const ruleCards = rules.map((rule) => {
       const base = formatMoney(rule.base_price_chf);
       const kg = Number(rule.price_per_kg_chf || 0) > 0 ? ` + ${Number(rule.price_per_kg_chf).toFixed(2)} CHF/kg` : '';
       const min = rule.min_weight_kg != null ? `Dès ${Number(rule.min_weight_kg).toFixed(1)} kg` : 'Tous poids';
@@ -376,7 +392,14 @@
           <span>${escapeHtml(min)} · ${escapeHtml(base)}${escapeHtml(kg)}</span>
         </div>
       `;
-    }).join('');
+    });
+    const optionCards = specialOptions.map((option) => `
+      <div class="tariff-option-card">
+        <strong>Option · ${escapeHtml(option.label)}</strong>
+        <span>Supplément ajouté au forfait livraison: +${escapeHtml(formatMoney(option.amount_chf))}</span>
+      </div>
+    `);
+    list.innerHTML = ruleCards.concat(optionCards).join('');
   }
 
   async function handleFileUpload(file) {
@@ -679,6 +702,7 @@
     normalized.delivery_email = normalizeValue(normalized.delivery_email);
     normalized.delivery_instructions = normalizeValue(normalized.delivery_instructions);
     normalized.tariff_code = normalizeValue(normalized.tariff_code).toUpperCase() || normalizeValue($('defaultTariffCode')?.value).toUpperCase();
+    normalized.special_option_code = normalizeValue(normalized.special_option_code).toUpperCase() || normalizeValue($('defaultSpecialOption')?.value).toUpperCase();
     normalized.pickup_name = normalizeValue(normalized.pickup_name);
     normalized.pickup_address = normalizeValue(normalized.pickup_address);
     normalized.pickup_zip = normalizeValue(normalized.pickup_zip);
@@ -815,6 +839,7 @@
         return;
       }
 
+      order.special_options = state.specialOptions || [];
       const result = PRICING.calculateOrderPrice(order, rule);
       order.pricing_status = 'calculated';
       order.tariff_rule_id = rule.id;
@@ -1033,7 +1058,7 @@
           <td>${escapeHtml(row.delivery_city)}</td>
           <td>${escapeHtml(row.parcel_count)}</td>
           <td>${escapeHtml(row.weight_kg ?? '-')}</td>
-          <td>${escapeHtml(row.tariff_code || row.service_level || '-')}</td>
+          <td>${escapeHtml(row.tariff_code || row.service_level || '-')}${row.special_option_code ? '<br><span class="badge badge-info">Option: ' + escapeHtml(row.special_option_code) + '</span>' : ''}</td>
           <td><span class="badge ${row.pricing_status === 'calculated' ? 'badge-success' : 'badge-warning'}">${pricing}</span><br>${escapeHtml(formatMoney(row.total_price_chf))}</td>
           <td>${escapeHtml(message || 'OK')}</td>
         </tr>
