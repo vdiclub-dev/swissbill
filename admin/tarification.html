@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260504-role-isolation"></script>
     <style>
         :root {
             --red:#e8311a; --red-dark:#c0280f; --red-glow:rgba(232,49,26,0.2);
@@ -509,6 +510,22 @@ const db=window.SUPABASE_CLIENT;
 let entreprises=[], tarifsClients=[], tarifsSpeciaux=[], produitsTarif=[];
 let selectedTarifType='standard', pecEnabled=false, actifEnabled=true;
 let abonnements=[];
+let adminAuthContext=null;
+
+function getAdminRpcPayload(extra){
+    const profile=adminAuthContext&&adminAuthContext.profile;
+    const code=(profile?.code||profile?.code_usr||window.colixoGetStoredCode?.()||'').trim().toUpperCase();
+    if(!profile?.id||!code) throw new Error('Session admin incomplete. Reconnectez-vous avec votre code admin.');
+    return Object.assign({p_admin_id:profile.id,p_code:code},extra||{});
+}
+
+function tariffKey(v){return String(v||'').trim().toUpperCase();}
+function isOptionProduct(p){
+    const ref=tariffKey(p?.ref);
+    const name=String(p?.nom||'').toLowerCase();
+    if(ref.startsWith('OPT')) return true;
+    return /(montage|assurance|cave|étage|etage|fragile|appel|retrait|nuit)/i.test(name);
+}
 
 function renderAbonnements(){
     const c=document.getElementById('abonnementsContainer'); if(!c) return;
@@ -752,10 +769,11 @@ function renderTarifsSpeciaux(){
 
 // ── PRODUITS GRILLE MODAL (checkboxes) ──
 function renderProduitsGrilleModal(overrides){
-    // overrides = { produit_id: valeur } — only products assigned to this client
+    // overrides = { produit_id: valeur } — tarifs de base assignés via client_tariff_rules
     const el=document.getElementById('produitsGrilleModal');
     if(!el)return;
-    if(!produitsTarif.length){
+    const baseProducts=produitsTarif.filter(p=>!isOptionProduct(p));
+    if(!baseProducts.length){
         el.innerHTML='<div style="padding:12px;color:var(--muted);font-style:italic;">Aucun produit — <a href="tarifs.html" style="color:var(--red);">Configurer les tarifs</a></div>';
         return;
     }
@@ -765,7 +783,7 @@ function renderProduitsGrilleModal(overrides){
             <th style="width:40px;text-align:center;">✓</th>
             <th>Produit</th><th>Réf</th><th>Standard</th><th>Prix négocié (CHF)</th>
         </tr></thead>
-        <tbody>${produitsTarif.map(p=>{
+        <tbody>${baseProducts.map(p=>{
             const pid=String(p.id);
             const on=checkedIds.has(pid);
             const val=overrides[p.id]!=null?parseFloat(overrides[p.id]).toFixed(2):'';
@@ -797,32 +815,30 @@ window.toggleProduitRow=function(chk){
 
 async function loadPrixSpeciauxClient(entreprise_id){
     if(!entreprise_id)return{};
-    const {data}=await db.from('prix_speciaux').select('produit_id,valeur').eq('client_id',entreprise_id);
+    const rpc=await db.rpc('admin_list_client_tariff_rules',getAdminRpcPayload({p_client_id:entreprise_id}));
+    const data=rpc.error?[]:(rpc.data||[]);
     const map={};
-    (data||[]).forEach(r=>{map[r.produit_id]=r.valeur;});
+    data.forEach(r=>{if(r.produit_id)map[r.produit_id]=r.base_price_chf;});
     return map;
 }
 
 async function savePrixSpeciaux(entreprise_id){
     const checkboxes=document.querySelectorAll('.prix-neg-chk');
     if(!checkboxes.length)return;
-    const toUpsert=[],toDelete=[];
-    checkboxes.forEach(chk=>{
+    for(const chk of checkboxes){
         const pid=chk.dataset.produitId;
         const inp=document.querySelector(`.prix-neg-inp[data-produit-id="${pid}"]`);
-        if(chk.checked){
-            const produit=produitsTarif.find(p=>String(p.id)===pid);
-            const custom=inp&&inp.value.trim()!==''?parseFloat(inp.value):null;
-            const valeur=custom!==null?custom:(produit?Number(produit.prix):null);
-            toUpsert.push({client_id:entreprise_id,produit_id:pid,type_remise:custom!==null?'fixe':'standard',valeur});
-        } else {
-            toDelete.push(pid);
+        const custom=inp&&inp.value.trim()!==''?parseFloat(inp.value):null;
+        const rpc=await db.rpc('admin_set_client_tariff_rule_price',getAdminRpcPayload({
+            p_client_id:entreprise_id,
+            p_product_id:pid,
+            p_enabled:chk.checked,
+            p_base_price_chf:Number.isFinite(custom)?custom:null
+        }));
+        if(rpc.error){
+            throw new Error(rpc.error.message||'Impossible de sauvegarder un tarif client.');
         }
-    });
-    const ops=[];
-    if(toUpsert.length) ops.push(db.from('prix_speciaux').upsert(toUpsert,{onConflict:'client_id,produit_id'}));
-    if(toDelete.length) ops.push(db.from('prix_speciaux').delete().eq('client_id',entreprise_id).in('produit_id',toDelete));
-    await Promise.all(ops);
+    }
 }
 
 // ── TYPE SELECTOR ──
@@ -1028,7 +1044,17 @@ window.saveTarif=async function(){
             usedColumnFallback=true;
         }
 
-        if(error)throw error;
+        if(error || (id && affectedRows === 0)){
+            const rpc=await db.rpc('admin_upsert_tarif_client',getAdminRpcPayload({
+                p_tarif_id:id||null,
+                p_payload:payload
+            }));
+            if(rpc.error) throw rpc.error;
+            savedId=rpc.data||savedId;
+            affectedRows=1;
+            error=null;
+            usedColumnFallback=true;
+        }
 
         // Si abonnements a été retiré par le fallback, le sauvegarder séparément (nouveau ou existant)
         if(!('abonnements' in workPayload) && abonnementsBackup !== undefined && savedId){
@@ -1036,9 +1062,6 @@ window.saveTarif=async function(){
             if(abnRes.error){
                 toast('⚠️ Abonnements non sauvegardés : colonne manquante. Exécutez ce SQL dans Supabase :\nalter table public.tarifs_clients add column if not exists abonnements jsonb default \'[]\';');
             }
-        }
-        if(id && affectedRows === 0){
-            throw new Error('Aucune ligne mise a jour dans Supabase (verifiez les droits RLS ou l identifiant du tarif).');
         }
         if(selectedTarifType==='standard') await savePrixSpeciaux(entId);
         toast((usedColumnFallback ? '⚠️ Tarif enregistre avec compatibilite schema ' : '✅ Tarif ') + (id?'modifie':'cree') + (usedColumnFallback ? '' : ' avec succes !'));
@@ -1180,7 +1203,17 @@ document.getElementById('modalSpecial').addEventListener('click',function(e){if(
 document.getElementById('modalTarif').addEventListener('click',function(e){if(e.target===this)closeModal('modalTarif');});
 updateSpecialFields();
 selectTarifType('standard');
-loadAll();
+(async function initTarification(){
+    if(window.colixoRequireRoute){
+        adminAuthContext=await window.colixoRequireRoute({
+            roles:['admin','super_admin'],
+            legacyRoles:['admin','super_admin'],
+            redirectTo:'../login/index.html'
+        });
+        if(!adminAuthContext)return;
+    }
+    await loadAll();
+})();
 })();
 </script>
 </body>
