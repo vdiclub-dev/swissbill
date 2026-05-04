@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Colixo Campaign Agent | Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="css/campaign-agent.css?v=20260505">
+  <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script data-cfasync="false" src="../config.js?v=20260462"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
+  <script data-cfasync="false" src="js/campaign-agent.js?v=20260505" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="portail-prospection.html">
+      <span class="brand-mark"><i class="fas fa-bullhorn"></i></span>
+      <span>Colixo Campaign Agent</span>
+    </a>
+    <span class="top-chip">Meta Ads · CRM · Scoring B2B</span>
+    <span class="admin-name" id="adminName">Admin</span>
+    <button class="btn btn-ghost" id="btnLogout" type="button"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
+    <a class="back" href="portail-prospection.html"><i class="fas fa-arrow-left"></i> Prospection</a>
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      <div class="card hero-card">
+        <div class="eyebrow">Agent IA marketing Colixo</div>
+        <h1>Créer, scorer et suivre les campagnes B2B</h1>
+        <p>
+          Module CRM utilisable pour générer des campagnes Facebook / Instagram, créer les variantes d'annonces,
+          sauvegarder les formulaires prospects, scorer les leads et préparer les relances commerciales.
+        </p>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Règle opérationnelle</div>
+        <p>
+          Cible prioritaire : PME, e-commerçants, garages, grossistes et fournisseurs B2B en Suisse romande,
+          avec un volume idéal de 5 à 50 colis par jour.
+        </p>
+      </div>
+    </section>
+
+    <section class="kpis" aria-label="Indicateurs Campaign Agent">
+      <div class="kpi"><span>Campagnes</span><strong id="statCampaigns">0</strong></div>
+      <div class="kpi"><span>Leads reçus</span><strong id="statLeads">0</strong></div>
+      <div class="kpi"><span>Score moyen</span><strong id="statAvgScore">0/100</strong></div>
+      <div class="kpi"><span>Prospects chauds</span><strong id="statHotLeads">0</strong></div>
+      <div class="kpi"><span>Coût / lead</span><strong id="statCpl">0 CHF</strong></div>
+      <div class="kpi"><span>CA potentiel</span><strong id="statPotential">0 CHF</strong></div>
+    </section>
+
+    <div id="agentStatus" class="status info" hidden></div>
+
+    <section class="layout">
+      <aside class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Générateur de campagne</div>
+          <div class="panel-sub">Crée un brief Meta Ads complet et sauvegarde la campagne dans Supabase.</div>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="campaignSector">Cible principale</label>
+            <select id="campaignSector">
+              <option>PME</option>
+              <option>E-commerce</option>
+              <option>Garages</option>
+              <option>Grossistes</option>
+              <option>Fournisseurs B2B</option>
+              <option>Magasins spécialisés</option>
+              <option>Succursales régionales</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="campaignAngle">Angle marketing</label>
+            <select id="campaignAngle">
+              <option value="alternative_locale">Alternative locale</option>
+              <option value="import_excel">Import Excel / CSV</option>
+              <option value="dix_colis">10 colis par jour</option>
+              <option value="premium">Service premium</option>
+              <option value="rapidite">Réactivité romande</option>
+              <option value="reduction_double_saisie">Réduire la double saisie</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="campaignRegion">Région</label>
+            <input id="campaignRegion" type="text" value="Suisse romande">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="campaignBudget">Budget / jour CHF</label>
+              <input id="campaignBudget" type="number" min="5" step="5" value="25">
+            </div>
+            <div class="field">
+              <label for="campaignDays">Durée test</label>
+              <input id="campaignDays" type="number" min="3" step="1" value="10">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full" id="btnGenerateCampaign" type="button"><i class="fas fa-magic"></i> Générer la campagne</button>
+          <button class="btn btn-green btn-full mt-10" id="btnSaveCampaign" type="button"><i class="fas fa-database"></i> Sauvegarder dans Supabase</button>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Brief campagne & variantes</div>
+          <div class="panel-sub">Contenu prêt à recopier dans Meta Ads ou à connecter plus tard via Make/Zapier.</div>
+        </div>
+        <div class="panel-body">
+          <div class="tabs">
+            <button class="tab active" data-tab="campaign" type="button">Campagne</button>
+            <button class="tab" data-tab="variants" type="button">Annonces</button>
+            <button class="tab" data-tab="form" type="button">Formulaire</button>
+          </div>
+          <div class="output-grid" id="campaignOutput" data-tab-panel="campaign"></div>
+          <div class="output-grid" id="variantsOutput" data-tab-panel="variants" hidden></div>
+          <div class="output-grid" id="formOutput" data-tab-panel="form" hidden></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="layout mt-18">
+      <aside class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Scoring prospect</div>
+          <div class="panel-sub">Saisie manuelle pour tester ou enregistrer un lead reçu hors Meta.</div>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="leadCampaign">Campagne liée</label>
+            <select id="leadCampaign"><option value="">Sans campagne liée</option></select>
+          </div>
+          <div class="field"><label>Entreprise *</label><input id="lead_company_name" type="text" placeholder="Ex : Garage du Lac SA"></div>
+          <div class="field"><label>Contact</label><input id="lead_contact_name" type="text" placeholder="Nom du décideur"></div>
+          <div class="field-row">
+            <div class="field"><label>Téléphone</label><input id="lead_phone" type="tel" placeholder="+41 ..."></div>
+            <div class="field"><label>Email</label><input id="lead_email" type="email" placeholder="contact@entreprise.ch"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Ville</label><input id="lead_city" type="text" placeholder="Lausanne"></div>
+            <div class="field"><label>Canton</label><input id="lead_canton" type="text" placeholder="VD"></div>
+          </div>
+          <div class="field"><label>Secteur</label><input id="lead_sector" type="text" placeholder="E-commerce, garage, grossiste..."></div>
+          <div class="field-row">
+            <div class="field"><label>Colis / jour</label><input id="lead_daily_parcels" type="number" min="0" value="10"></div>
+            <div class="field"><label>Transporteur actuel</label><input id="lead_current_carrier" type="text" placeholder="Poste, DPD, DHL..."></div>
+          </div>
+          <div class="field"><label>Zones de livraison</label><input id="lead_delivery_zones" type="text" placeholder="Vaud, Genève, Neuchâtel..."></div>
+          <div class="field"><label>Logiciel utilisé</label><input id="lead_software_used" type="text" placeholder="Shopify, Excel, ERP..."></div>
+          <div class="check-row">
+            <label><input id="lead_regular_need" type="checkbox" checked> Besoin régulier</label>
+            <label><input id="lead_urgent_need" type="checkbox"> Besoin urgent</label>
+          </div>
+          <div class="field"><label>Message</label><textarea id="lead_message" rows="3" placeholder="Notes commerciales"></textarea></div>
+          <button class="btn btn-primary btn-full" id="btnScoreLead" type="button">Scorer le prospect</button>
+          <button class="btn btn-green btn-full mt-10" id="btnSaveLead" type="button">Enregistrer le lead</button>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Relances générées</div>
+          <div class="panel-sub">Email, SMS, appel, LinkedIn et proposition courte selon le score.</div>
+        </div>
+        <div class="panel-body">
+          <div id="leadScoreOutput" class="score-box empty">Aucun prospect scoré.</div>
+          <div id="leadFollowupsOutput" class="output-grid mt-14"></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="grid-2 mt-18">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Campagnes créées</div>
+          <div class="panel-sub">Historique sauvegardé en base.</div>
+        </div>
+        <div class="panel-body"><div class="list" id="campaignList"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Relances à faire</div>
+          <div class="panel-sub">Actions commerciales prioritaires.</div>
+        </div>
+        <div class="panel-body"><div class="list" id="followupList"></div></div>
+      </div>
+    </section>
+
+    <section class="panel mt-18">
+      <div class="panel-head">
+        <div class="panel-title">CRM Leads Campaign Agent</div>
+        <div class="panel-sub">Statuts : new, contacted, qualified, quote_sent, negotiation, won, lost, no_response.</div>
+      </div>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Entreprise</th>
+                <th>Ville</th>
+                <th>Secteur</th>
+                <th>Colis/jour</th>
+                <th>Score</th>
+                <th>CA potentiel</th>
+                <th>Statut</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="leadsTableBody">
+              <tr><td colspan="8">Chargement...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
