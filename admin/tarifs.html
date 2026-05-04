@@ -395,8 +395,8 @@
     const body = document.getElementById('clientBody');
     if (!clientId) { body.className = 'client-body'; body.innerHTML = 'Selectionnez un client pour voir et modifier ses tarifs personnalises.'; return; }
     body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;">Chargement...</p>';
-    const overrides = await fetchOverrides(clientId);
-    renderClientTable(clientId, overrides);
+    const [overrides, rules] = await Promise.all([fetchOverrides(clientId), fetchClientTariffRules(clientId)]);
+    renderClientTable(clientId, overrides, rules);
   }
 
   async function fetchOverrides(clientId) {
@@ -465,25 +465,31 @@
       if (rpc.error) { toast('Erreur: ' + rpc.error.message, 'err'); return; }
       toast(Number(rpc.data || activeProducts.length) + ' tarif(s) standard appliqué(s).');
     }
-    renderClientTable(clientId, await fetchOverrides(clientId));
+    const [overrides, rules] = await Promise.all([fetchOverrides(clientId), fetchClientTariffRules(clientId)]);
+    renderClientTable(clientId, overrides, rules);
   }
 
-  function renderClientTable(clientId, overrides) {
+  function renderClientTable(clientId, overrides, rules) {
     const body = document.getElementById('clientBody');
     if (!produits.length) { body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;font-style:italic;">Aucun produit defini.</p>'; return; }
     const ovMap = Object.fromEntries(overrides.map(o => [o.produit_id, o]));
+    const ruleMap = new Map((rules || []).map(r => [String(r.tariff_code || '').toUpperCase(), r]));
     const CTRS = ['', '2e colis meme client', 'Montage de pendule', 'Montage de meuble', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
 
     let html = '<div class="client-body" style="font-style:normal;margin-bottom:12px;">' +
-      'La grille standard s’applique au client via le bouton <strong>Appliquer grille standard</strong>. Les lignes ci-dessous servent uniquement aux prix spéciaux et options proposées au client.' +
+      'Cochez les tarifs que vous voulez appliquer au client. Cochez les options que le client peut sélectionner dans son portail.' +
     '</div><div style="overflow-x:auto"><table class="xls"><thead><tr>' +
-      '<th style="width:24%">Produit</th><th style="width:10%">Ref.</th>' +
-      '<th style="width:14%">Standard</th><th style="width:18%">Option / prix special</th>' +
+      '<th style="width:8%">Tarif</th><th style="width:8%">Option</th>' +
+      '<th style="width:22%">Produit</th><th style="width:10%">Ref.</th>' +
+      '<th style="width:12%">Standard</th><th style="width:18%">Option / prix special</th>' +
       '<th style="width:14%">Contrainte</th><th>Actions</th>' +
     '</tr></thead><tbody>';
 
     produits.forEach(p => {
       const ov = ovMap[p.id];
+      const rule = ruleMap.get(String(p.ref || p.nom || '').toUpperCase());
+      const hasRule = !!rule;
+      const hasOption = !!(ov && ov.actif !== false && ov.contrainte);
       const remiseHtml = ov
         ? (ov.type_remise === 'pct'
             ? '<span class="remise-pct"><i class="fas fa-percent"></i> -' + Number(ov.valeur).toFixed(1) + '% → CHF ' + (p.prix * (1 - ov.valeur / 100)).toFixed(2) + '</span>'
@@ -496,6 +502,8 @@
         : '<span style="color:var(--muted);font-size:12px">—</span>';
 
       html += '<tr id="cr-' + p.id + '">' +
+        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasRule ? 'checked' : '') + ' onchange="toggleClientTariff(\'' + clientId + '\',\'' + p.id + '\',this.checked)"></td>' +
+        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasOption ? 'checked' : '') + ' onchange="toggleClientOption(\'' + clientId + '\',\'' + p.id + '\',this.checked)"></td>' +
         '<td><span class="cell cell-nom">'  + esc(p.nom) + '</span></td>' +
         '<td><span class="cell cell-ref">'  + esc(p.ref || '—') + '</span></td>' +
         '<td><span class="cell cell-prix">' + Number(p.prix).toFixed(2) + '</span></td>' +
@@ -506,7 +514,7 @@
           (ov ? '<button class="btn btn-del" onclick="removeOv(\'' + clientId + '\',\'' + p.id + '\')"><i class="fas fa-times"></i></button>' : '') +
         '</div></td>' +
       '</tr>' +
-      '<tr id="ovtr-' + p.id + '" style="display:none"><td colspan="6" style="padding:0">' +
+      '<tr id="ovtr-' + p.id + '" style="display:none"><td colspan="8" style="padding:0">' +
         '<div id="ovform-' + p.id + '" class="override-inline">' +
           '<div class="fl"><label>Type</label><select id="ov-type-' + p.id + '" onchange="updatePreview(\'' + p.id + '\',' + p.prix + ')">' +
             '<option value="fixe">Prix fixe (CHF)</option>' +
@@ -533,6 +541,67 @@
     body.className = '';
     body.innerHTML = html;
   }
+
+  async function refreshClientTable(clientId) {
+    const [overrides, rules] = await Promise.all([fetchOverrides(clientId), fetchClientTariffRules(clientId)]);
+    renderClientTable(clientId, overrides, rules);
+  }
+
+  window.toggleClientTariff = async function(clientId, prodId, enabled) {
+    const p = produits.find(x => x.id === prodId);
+    if (!p) return;
+    try {
+      const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
+      const existing = await fetchClientTariffRules(clientId);
+      const current = existing.find(r => String(r.tariff_code || '').toUpperCase() === String(rule.tariff_code || '').toUpperCase());
+      if (enabled) {
+        const res = current?.id
+          ? await db.from('client_tariff_rules').update(rule).eq('id', current.id)
+          : await db.from('client_tariff_rules').insert(rule);
+        if (res.error) throw res.error;
+      } else if (current?.id) {
+        const res = await db.from('client_tariff_rules').update({ is_active: false }).eq('id', current.id);
+        if (res.error) throw res.error;
+      }
+    } catch (error) {
+      const rpc = await db.rpc('admin_set_client_tariff_rule', getAdminRpcPayload({
+        p_client_id: clientId,
+        p_product_id: prodId,
+        p_enabled: enabled
+      }));
+      if (rpc.error) { toast('Erreur: ' + rpc.error.message, 'err'); await refreshClientTable(clientId); return; }
+    }
+    toast(enabled ? 'Tarif appliqué au client.' : 'Tarif retiré du client.', 'info');
+    await refreshClientTable(clientId);
+  };
+
+  window.toggleClientOption = async function(clientId, prodId, enabled) {
+    const p = produits.find(x => x.id === prodId);
+    if (!p) return;
+    const existing = (await fetchOverrides(clientId)).find(o => o.produit_id === prodId);
+    const type_remise = existing?.type_remise || 'supp';
+    const valeur = Number(existing?.valeur ?? p.prix ?? 0);
+    const contrainte = existing?.contrainte || 'Option client';
+    try {
+      const { error } = await db.from('prix_speciaux').upsert(
+        { client_id: clientId, produit_id: prodId, type_remise, valeur, contrainte, actif: enabled },
+        { onConflict: 'client_id,produit_id' }
+      );
+      if (error) throw error;
+    } catch (error) {
+      const rpc = await db.rpc('admin_set_client_price_option', getAdminRpcPayload({
+        p_client_id: clientId,
+        p_product_id: prodId,
+        p_enabled: enabled,
+        p_type_remise: type_remise,
+        p_valeur: valeur,
+        p_contrainte: contrainte
+      }));
+      if (rpc.error) { toast('Erreur: ' + rpc.error.message, 'err'); await refreshClientTable(clientId); return; }
+    }
+    toast(enabled ? 'Option proposée au client.' : 'Option retirée du portail client.', 'info');
+    await refreshClientTable(clientId);
+  };
 
   function openOv(clientId, prodId, prixCat) {
     document.querySelectorAll('.override-inline.open').forEach(f => {
@@ -581,14 +650,14 @@
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     toast('Prix special applique.');
     closeOv(prodId);
-    renderClientTable(clientId, await fetchOverrides(clientId));
+    await refreshClientTable(clientId);
   }
   async function removeOv(clientId, prodId) {
     if (!confirm('Retirer ce prix special ?')) return;
     const { error } = await db.from('prix_speciaux').delete().eq('client_id', clientId).eq('produit_id', prodId);
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     toast('Prix special retire.', 'info');
-    renderClientTable(clientId, await fetchOverrides(clientId));
+    await refreshClientTable(clientId);
   }
 
   // ── Init ──

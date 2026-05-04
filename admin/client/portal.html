@@ -742,7 +742,7 @@
     const CLIENT_LOGIN_URL = h('/login/index.html');
 
     let client=null, clientEntreprise=null, clientTarif=null;
-    let clientPrixMap={}, clientProduits=[];
+    let clientPrixMap={}, clientProduits=[], clientTariffRules=[];
     let selectedService='normal', nightDelivery=false;
     let colisList = [{id:Date.now(), poids:1, qty:1, type:'colis'}];
     let currentOrderId=null;
@@ -825,13 +825,15 @@
     async function loadClientTarif() {
         const clientScopeId = getClientScopeId();
         if(!clientScopeId) return;
-        const [{ data: tarifData }, { data: prixData }, { data: produitsData }] = await Promise.all([
+        const [{ data: tarifData }, { data: prixData }, { data: produitsData }, { data: rulesData }] = await Promise.all([
             db.from('tarifs_clients').select('*').eq('entreprise_id', clientScopeId).single(),
-            db.from('prix_speciaux').select('produit_id,valeur,type_remise,contrainte').eq('client_id', clientScopeId),
-            db.from('produits_tarif').select('*').eq('actif', true).order('ordre').order('nom')
+            db.from('prix_speciaux').select('produit_id,valeur,type_remise,contrainte,actif').eq('client_id', clientScopeId).eq('actif', true),
+            db.from('produits_tarif').select('*').eq('actif', true).order('ordre').order('nom'),
+            db.from('client_tariff_rules').select('*').eq('client_id', clientScopeId).eq('is_active', true).order('priority')
         ]);
         clientTarif = tarifData || { prix_inf_2kg:8.5, prix_inf_10kg:11.5, prix_inf_30kg:20.5, prix_eco:7.5, suppl_express:5, suppl_urgent:10, suppl_nuit_chf:25 };
         clientProduits = produitsData||[];
+        clientTariffRules = rulesData || [];
         clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), r]));
         updateServicePrices();
         renderColis();
@@ -1085,6 +1087,7 @@
 
     function getProduitPrice(produit){
         if(!produit) return null;
+        if(produit._tariffRule) return Number(produit.prix || 0);
         const ov=clientPrixMap[String(produit.id)];
         const base = Number(produit.prix || 0);
         if(!ov) return base;
@@ -1095,10 +1098,23 @@
     }
 
     function getAssignedProduits(){
-        const hasAssigned=Object.keys(clientPrixMap).length>0;
-        return hasAssigned
-            ? clientProduits.filter(p=>clientPrixMap[String(p.id)]!=null)
-            : clientProduits;
+        const serviceRules = (clientTariffRules || []).map(r => ({
+            id: r.id,
+            nom: r.name || r.tariff_code || 'Tarif client',
+            ref: r.tariff_code || r.name || '',
+            poids_min: Number(r.min_weight_kg || 0),
+            prix: Number(r.base_price_chf || 0),
+            increment_par_kg: Number(r.price_per_kg_chf || 0),
+            prix_par_kg: false,
+            ordre: Number(r.priority || 100),
+            _tariffRule: true
+        }));
+        const optionProducts = clientProduits.filter(p => {
+            const ov = clientPrixMap[String(p.id)];
+            return ov && ov.contrainte;
+        });
+        if (serviceRules.length) return serviceRules.concat(optionProducts);
+        return clientProduits;
     }
 
     // helpers: get normalized ref and best product for a given poids
