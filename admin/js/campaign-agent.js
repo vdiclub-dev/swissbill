@@ -59,6 +59,11 @@
     box.hidden = !message;
   }
 
+  function getWebhookUrl() {
+    var base = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url) || "";
+    return base.replace(/\/+$/, "") + "/functions/v1/campaign-agent-webhook";
+  }
+
   function rpcPayload(extra) {
     return Object.assign(
       {
@@ -703,6 +708,14 @@
     $("btnSaveCampaign").addEventListener("click", saveGeneratedCampaign);
     $("btnScoreLead").addEventListener("click", scoreCurrentLead);
     $("btnSaveLead").addEventListener("click", saveLead);
+    $("webhookUrl").textContent = getWebhookUrl();
+    $("btnCopyWebhook").addEventListener("click", function () {
+      navigator.clipboard.writeText(getWebhookUrl()).then(function () {
+        setStatus("URL webhook copiée.", "ok");
+      }).catch(function () {
+        setStatus("Copie impossible : sélectionnez l'URL manuellement.", "err");
+      });
+    });
     $("btnLogout").addEventListener("click", function () {
       window.colixoLogout({ redirectTo: "../login/index.html?logout=1" });
     });
