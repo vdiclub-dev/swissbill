@@ -425,10 +425,22 @@
     return data || [];
   }
 
+  function tariffKey(value) {
+    return String(value || '').trim().toUpperCase();
+  }
+
+  function isDefaultOptionProduct(p) {
+    const ref = tariffKey(p?.ref);
+    const name = String(p?.nom || '').toLowerCase();
+    if (ref.startsWith('OPT')) return true;
+    return /(montage|assurance|cave|étage|etage|fragile|appel|retrait|nuit)/i.test(name);
+  }
+
   function standardRuleFromProduct(clientId, p, index) {
     const increment = Number(p.increment_par_kg || 0);
     return {
       client_id: clientId,
+      produit_id: p.id,
       name: p.nom || p.ref || 'Tarif standard',
       tariff_code: p.ref || p.nom || null,
       service_level: null,
@@ -452,17 +464,18 @@
   async function applyStandardGridToClient() {
     const clientId = selectedClientId || document.getElementById('clientSelect').value;
     if (!clientId) { toast('Sélectionnez d’abord un client.', 'err'); return; }
-    const activeProducts = produits.filter(p => p.actif !== false);
+    const activeProducts = produits.filter(p => p.actif !== false && !isDefaultOptionProduct(p));
     if (!activeProducts.length) { toast('Aucun produit actif dans la grille standard.', 'err'); return; }
     if (!confirm('Appliquer la grille standard Colixo au client sélectionné ? Les codes existants seront mis à jour, les options/prix spéciaux restent séparés.')) return;
 
     try {
       const existing = await fetchClientTariffRules(clientId);
-      const byCode = new Map(existing.map(r => [String(r.tariff_code || '').toUpperCase(), r]));
+      const byProduct = new Map(existing.filter(r => r.produit_id).map(r => [String(r.produit_id), r]));
+      const byCode = new Map(existing.map(r => [tariffKey(r.tariff_code), r]));
       for (let i = 0; i < activeProducts.length; i++) {
         const rule = standardRuleFromProduct(clientId, activeProducts[i], i);
-        const key = String(rule.tariff_code || '').toUpperCase();
-        const current = byCode.get(key);
+        const key = tariffKey(rule.tariff_code);
+        const current = byProduct.get(String(activeProducts[i].id)) || byCode.get(key);
         if (current?.id) {
           const { error } = await db.from('client_tariff_rules').update(rule).eq('id', current.id);
           if (error) throw error;
@@ -485,7 +498,8 @@
     const body = document.getElementById('clientBody');
     if (!produits.length) { body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;font-style:italic;">Aucun produit defini.</p>'; return; }
     const ovMap = Object.fromEntries(overrides.map(o => [o.produit_id, o]));
-    const ruleMap = new Map((rules || []).map(r => [String(r.tariff_code || '').toUpperCase(), r]));
+    const ruleByProduct = new Map((rules || []).filter(r => r.produit_id).map(r => [String(r.produit_id), r]));
+    const ruleMap = new Map((rules || []).map(r => [tariffKey(r.tariff_code), r]));
     const CTRS = ['', '2e colis meme client', 'Montage de pendule', 'Montage de meuble', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
 
     let html = '<div class="client-body" style="font-style:normal;margin-bottom:12px;">' +
@@ -499,7 +513,7 @@
 
     produits.forEach(p => {
       const ov = ovMap[p.id];
-      const rule = ruleMap.get(String(p.ref || p.nom || '').toUpperCase());
+      const rule = ruleByProduct.get(String(p.id)) || ruleMap.get(tariffKey(p.ref || p.nom));
       const hasRule = !!rule;
       const hasOption = !!(ov && ov.actif !== false && ov.contrainte);
       const remiseHtml = ov
@@ -578,7 +592,8 @@
     try {
       const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
       const existing = await fetchClientTariffRules(clientId);
-      const current = existing.find(r => String(r.tariff_code || '').toUpperCase() === String(rule.tariff_code || '').toUpperCase());
+      const current = existing.find(r => String(r.produit_id || '') === String(prodId))
+        || existing.find(r => tariffKey(r.tariff_code) === tariffKey(rule.tariff_code));
       if (enabled) {
         const res = current?.id
           ? await db.from('client_tariff_rules').update(rule).eq('id', current.id)
