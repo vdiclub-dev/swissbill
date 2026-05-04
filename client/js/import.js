@@ -964,11 +964,7 @@
       setDecisionFeedback('Étape 7 bloquée: il faut d’abord finir la prévisualisation à l’étape 6.', 'error');
       return;
     }
-    const rowsToImport = state.mappedRows.filter((order) => {
-      if (order.validation_errors.length) return false;
-      if (state.ignoreDuplicates && state.duplicateReferences.has(order.external_reference || '')) return false;
-      return true;
-    });
+    const rowsToImport = state.mappedRows.filter((order) => !order.validation_errors.length);
     if (!rowsToImport.length) {
       setStatus('Aucune ligne valide à importer.', 'error');
       setDecisionFeedback('Aucune ligne ne peut être importée pour le moment. Corrigez les erreurs puis cliquez sur “Recalculer / Revalider”.', 'error');
@@ -1024,11 +1020,7 @@
     const pricedRows = state.mappedRows.filter((row) => row.pricing_status === 'calculated' || row.pricing_status === 'manual').length;
     const priceReviewRows = state.mappedRows.filter((row) => row.pricing_status === 'needs_review').length;
     const totalEstimatedPrice = state.mappedRows.reduce((sum, row) => sum + (Number(row.total_price_chf) || 0), 0);
-    const importableRows = state.mappedRows.filter((row) => {
-      if (row.validation_errors.length) return false;
-      if (state.ignoreDuplicates && state.duplicateReferences.has(row.external_reference || '')) return false;
-      return true;
-    }).length;
+    const importableRows = state.mappedRows.filter((row) => !row.validation_errors.length).length;
     return { totalRows, validRows, errorRows, duplicateRows, pricedRows, priceReviewRows, totalEstimatedPrice, importableRows };
   }
 
