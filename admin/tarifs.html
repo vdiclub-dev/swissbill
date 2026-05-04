@@ -6,6 +6,7 @@
   <title>Colixo — Tarifs</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script data-cfasync="false" src="../config.js?v=20260462"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -347,15 +348,34 @@
   // ── Clients ──
   async function loadClients() {
     if (!db) return;
-    const { data, error } = await db.from('utilisateurs').select('*').order('code_acces').limit(200);
+    const [{ data, error }, entreprisesRes] = await Promise.all([
+      db.from('utilisateurs').select('*').order('code_acces').limit(500),
+      db.from('entreprises').select('id,nom,numero_client,email').limit(1000)
+    ]);
     if (error) { console.warn('Clients:', error.message); return; }
-    clients = data || [];
+    const entreprisesById = new Map((entreprisesRes.data || []).map(e => [e.id, e]));
+    const rows = (data || []).filter(c => {
+      const role = String(c.role || '').toLowerCase();
+      return !role || ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].includes(role);
+    });
+    const byClientId = new Map();
+    rows.forEach(c => {
+      const clientId = c.entreprise_id || c.id;
+      if (!clientId || byClientId.has(clientId)) return;
+      byClientId.set(clientId, c);
+    });
+    clients = Array.from(byClientId.values());
     const sel = document.getElementById('clientSelect');
+    sel.innerHTML = '<option value="">— Sélectionner un client —</option>';
     clients.forEach(c => {
       const opt = document.createElement('option');
-      opt.value = c.id;
-      const name = [c.entreprise, c.raison_sociale, c.nom, c.prenom, c.name].filter(Boolean).join(' ');
-      opt.textContent = (name || ('ID:' + String(c.id).slice(0, 8))) + (c.code_acces ? '  [' + c.code_acces + ']' : '');
+      const clientId = c.entreprise_id || c.id;
+      const entreprise = entreprisesById.get(clientId);
+      opt.value = clientId;
+      const name = entreprise?.nom || [c.entreprise_nom, c.entreprise, c.raison_sociale, c.nom, c.prenom, c.name].filter(Boolean).join(' ');
+      const code = c.code_acces || c.code_usr || c.code_connexion || c.code;
+      const clientCode = entreprise?.numero_client || code;
+      opt.textContent = (name || ('ID:' + String(clientId).slice(0, 8))) + (clientCode ? '  [' + clientCode + ']' : '');
       sel.appendChild(opt);
     });
   }
@@ -498,8 +518,12 @@
   // ── Init ──
   (async function() {
     if (!db) { setStatus(false, 'Supabase non initialise — verifiez config.js'); return; }
-    const u = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-    if (!u) { window.location.replace('../login/index.html'); return; }
+    const auth = await window.colixoRequireRoute({
+      roles: ['admin','super_admin'],
+      legacyRoles: ['admin','super_admin'],
+      redirectTo: '../login/index.html'
+    });
+    if (!auth) return;
     setStatus(false, 'Chargement...');
     await Promise.all([loadProduits(), loadClients()]);
   })();
