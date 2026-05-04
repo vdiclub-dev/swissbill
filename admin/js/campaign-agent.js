@@ -168,6 +168,69 @@
     ];
   }
 
+  function buildLaunchPackage(campaign, variants, form) {
+    var questions = (form && form.questions) || campaign.form_questions || getFormQuestions();
+    var ads = (variants || campaign.ad_variants || []).map(function (variant, index) {
+      return {
+        name: (campaign.name || "Colixo") + " - " + (variant.variant_type || "variante") + " #" + (index + 1),
+        status: "PAUSED_UNTIL_COLIXO_APPROVAL",
+        creative: {
+          primary_text: variant.primary_text,
+          headline: variant.headline,
+          description: variant.description,
+          call_to_action: variant.call_to_action || campaign.call_to_action,
+          visual_brief: variant.visual_idea || campaign.visual_idea
+        }
+      };
+    });
+
+    return {
+      automation_mode: "semi_auto_human_approval",
+      safety_note: "Ne jamais publier sans validation Colixo. Créer les objets Meta en pause si l'API est connectée.",
+      generated_at: new Date().toISOString(),
+      campaign: {
+        name: campaign.name,
+        channel: campaign.channel || "meta_ads",
+        objective: campaign.meta_objective || "lead_generation",
+        status: "PAUSED_UNTIL_APPROVED",
+        daily_budget_chf: Number(campaign.budget_daily_chf || 0),
+        total_test_budget_chf: Number(campaign.budget_total_chf || 0),
+        test_duration_days: Number(campaign.test_duration_days || 0),
+        target_region: campaign.target_region || "Suisse romande",
+        marketing_angle: campaign.marketing_angle,
+        audience_target: campaign.audience_target
+      },
+      ad_set: {
+        name: "Ad set - " + (campaign.target_region || "Suisse romande") + " - B2B 5-50 colis",
+        optimization_goal: "LEAD_GENERATION",
+        billing_event: "IMPRESSIONS",
+        geo_locations: ["VD", "GE", "NE", "FR", "VS", "JU", "BE"],
+        target_profiles: ["PME", "e-commerce", "garages", "grossistes", "fournisseurs B2B", "magasins spécialisés"],
+        exclusions: ["Particuliers", "emplois transport", "audience non Suisse romande"]
+      },
+      ads: ads,
+      lead_form: {
+        name: (form && form.name) || "Formulaire prospect Colixo",
+        source: (form && form.source) || "meta_lead_ads",
+        questions: questions,
+        privacy_notice: "Les données sont utilisées uniquement pour recontacter l'entreprise dans un cadre professionnel."
+      },
+      webhook_target: {
+        recommended_first_step: "Make ou Zapier",
+        future_step: "Supabase Edge Function recevant les Meta Lead Ads webhooks",
+        destination_table: "leads"
+      },
+      approval_checklist: [
+        "Budget test validé par Colixo",
+        "Texte et promesse commerciale relus",
+        "Visuel conforme à la marque Colixo",
+        "Formulaire Lead Ads vérifié",
+        "Campagne créée en pause dans Meta avant activation",
+        "Webhook Make/Zapier testé avec un lead factice"
+      ]
+    };
+  }
+
   function generateCampaign() {
     var sector = $("campaignSector").value;
     var angle = $("campaignAngle").value;
@@ -206,6 +269,7 @@
         questions: questions
       }
     };
+    state.generated.launchPackage = buildLaunchPackage(state.generated.campaign, state.generated.variants, state.generated.form);
 
     renderGenerated();
     setStatus("Campagne générée. Vous pouvez la sauvegarder dans Supabase.", "ok");
@@ -235,10 +299,21 @@
       state.generated.form.name,
       state.generated.form.questions.map(function (q, i) { return i + 1 + ". " + q; }).join("\n")
     );
+
+    $("launchOutput").innerHTML = renderLaunchCards(state.generated.launchPackage);
   }
 
   function outputCard(title, text) {
     return '<div class="output-card"><h3>' + escapeHtml(title) + '</h3><div class="copy">' + escapeHtml(text) + "</div></div>";
+  }
+
+  function renderLaunchCards(pkg) {
+    return [
+      outputCard("Mode sécurisé", pkg.automation_mode + "\n" + pkg.safety_note),
+      outputCard("Audience / Ad set", pkg.ad_set.name + "\n" + pkg.ad_set.target_profiles.join(", ") + "\nZones : " + pkg.ad_set.geo_locations.join(", ")),
+      outputCard("Webhook recommandé", pkg.webhook_target.recommended_first_step + "\nDestination : table " + pkg.webhook_target.destination_table + "\nFuture étape : " + pkg.webhook_target.future_step),
+      outputCard("Checklist avant lancement", pkg.approval_checklist.map(function (item, i) { return i + 1 + ". " + item; }).join("\n"))
+    ].join("");
   }
 
   async function saveGeneratedCampaign() {
@@ -260,7 +335,8 @@
       setStatus("Erreur Supabase : " + res.error.message, "err");
       return;
     }
-    setStatus("Campagne sauvegardée avec ses annonces et son formulaire.", "ok");
+    state.generated.campaign.id = res.data;
+    setStatus("Campagne sauvegardée avec ses annonces et son formulaire. Elle peut maintenant être validée avant export.", "ok");
     await loadDashboard();
   }
 
@@ -427,10 +503,110 @@
       return;
     }
     box.innerHTML = state.campaigns.map(function (c) {
-      return '<div class="row"><div><div class="row-title">' + escapeHtml(c.name) + '</div><div class="row-meta">' +
+      var launchStatus = c.launch_status || "draft";
+      return '<div class="row campaign-row"><div><div class="row-title">' + escapeHtml(c.name) + '</div><div class="row-meta">' +
         escapeHtml(c.marketing_angle || "Angle non défini") + " · " + money(c.budget_total_chf || 0) +
-        '</div></div><span class="badge froid">' + escapeHtml(c.status || "draft") + "</span></div>";
+        ' · ' + escapeHtml(c.test_duration_days || 0) + ' jours</div><div class="campaign-actions">' +
+        '<button class="btn btn-yellow btn-mini" type="button" onclick="window.campaignAgentApproveCampaign(\'' + escapeHtml(c.id) + '\')">Valider pack</button>' +
+        '<button class="btn btn-blue btn-mini" type="button" onclick="window.campaignAgentExportCampaign(\'' + escapeHtml(c.id) + '\')">Exporter JSON</button>' +
+        '<button class="btn btn-green btn-mini" type="button" onclick="window.campaignAgentMarkLaunched(\'' + escapeHtml(c.id) + '\')">Marquer lancé</button>' +
+        '</div></div><span class="badge ' + escapeHtml(launchStatus) + '">' + escapeHtml(labelLaunchStatus(launchStatus)) + "</span></div>";
     }).join("");
+  }
+
+  function findCampaign(campaignId) {
+    return state.campaigns.find(function (campaign) { return campaign.id === campaignId; });
+  }
+
+  function campaignPackage(campaign) {
+    var form = campaign.lead_forms && campaign.lead_forms[0] ? campaign.lead_forms[0] : {
+      name: "Formulaire prospect Colixo",
+      source: "meta_lead_ads",
+      questions: campaign.form_questions || getFormQuestions()
+    };
+    var variants = campaign.ad_variants || [];
+    return buildLaunchPackage(campaign, variants, form);
+  }
+
+  async function approveCampaign(campaignId) {
+    var campaign = findCampaign(campaignId);
+    if (!campaign) {
+      setStatus("Campagne introuvable dans la liste chargée.", "err");
+      return;
+    }
+    var pkg = campaignPackage(campaign);
+    var res = await state.db.rpc("admin_campaign_agent_approve_campaign", rpcPayload({
+      p_campaign_id: campaignId,
+      p_launch_package: pkg,
+      p_notes: "Validation Colixo depuis Campaign Agent"
+    }));
+    if (res.error) {
+      setStatus("Validation impossible : " + res.error.message, "err");
+      return;
+    }
+    setStatus("Pack validé. La campagne est prête à être exportée ou connectée à Make/Zapier.", "ok");
+    await loadDashboard();
+  }
+
+  async function exportCampaign(campaignId) {
+    var campaign = findCampaign(campaignId);
+    if (!campaign) {
+      setStatus("Campagne introuvable dans la liste chargée.", "err");
+      return;
+    }
+    var pkg = campaign.launch_package && Object.keys(campaign.launch_package).length ? campaign.launch_package : campaignPackage(campaign);
+    downloadJson(pkg, safeFileName(campaign.name || "colixo-campaign") + ".json");
+    var res = await state.db.rpc("admin_campaign_agent_mark_campaign_exported", rpcPayload({ p_campaign_id: campaignId }));
+    if (res.error) {
+      setStatus("JSON téléchargé, mais statut Supabase non mis à jour : " + res.error.message, "err");
+      return;
+    }
+    setStatus("JSON exporté. Il peut être utilisé dans Make/Zapier ou par une future Edge Function Meta.", "ok");
+    await loadDashboard();
+  }
+
+  async function markCampaignLaunched(campaignId) {
+    var res = await state.db.rpc("admin_campaign_agent_mark_campaign_launched", rpcPayload({ p_campaign_id: campaignId }));
+    if (res.error) {
+      setStatus("Impossible de marquer la campagne comme lancée : " + res.error.message, "err");
+      return;
+    }
+    setStatus("Campagne marquée comme lancée. Les leads entrants pourront être rattachés au CRM.", "ok");
+    await loadDashboard();
+  }
+
+  function downloadJson(data, fileName) {
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function safeFileName(value) {
+    return String(value || "campaign")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+  }
+
+  function labelLaunchStatus(value) {
+    return {
+      draft: "Brouillon",
+      pending_review: "À valider",
+      approved: "Validée",
+      exported: "Exportée",
+      launched: "Lancée",
+      paused: "Pause",
+      rejected: "Refusée"
+    }[value] || value;
   }
 
   function renderLeadCampaignSelect() {
@@ -536,5 +712,8 @@
   }
 
   window.campaignAgentUpdateLeadStatus = updateLeadStatus;
+  window.campaignAgentApproveCampaign = approveCampaign;
+  window.campaignAgentExportCampaign = exportCampaign;
+  window.campaignAgentMarkLaunched = markCampaignLaunched;
   window.addEventListener("DOMContentLoaded", initCampaignAgent);
 })();
