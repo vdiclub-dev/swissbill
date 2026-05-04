@@ -254,6 +254,18 @@
 
     if (opts.redirectOnFail === false) return null;
 
+    if (ctx && ctx.roleMismatch && opts.signOutOnRoleMismatch) {
+      var db = getDb();
+      if (db) {
+        try {
+          await db.auth.signOut();
+        } catch (e) {}
+      }
+      clearLegacyUser();
+      window.location.replace(opts.redirectTo || loginUrl());
+      return null;
+    }
+
     var target = ctx && ctx.roleMismatch && ctx.role ? roleHome(ctx.role) : (opts.redirectTo || loginUrl());
     window.location.replace(target);
     return null;
