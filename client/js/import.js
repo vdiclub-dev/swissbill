@@ -135,6 +135,7 @@
       pickup_zip: normalizeValue($('defaultPickupZip')?.value),
       pickup_city: normalizeValue($('defaultPickupCity')?.value),
       service_level: normalizeValue($('defaultServiceLevel')?.value) || 'eco_48h',
+      tariff_code: normalizeValue($('defaultTariffCode')?.value).toUpperCase(),
       status: 'pending',
       billing_client_id: state.clientId || ''
     };
@@ -147,6 +148,7 @@
     if ($('defaultPickupZip')) $('defaultPickupZip').value = values.pickup_zip || state.company?.npa || '';
     if ($('defaultPickupCity')) $('defaultPickupCity').value = values.pickup_city || state.company?.ville || '';
     if ($('defaultServiceLevel')) $('defaultServiceLevel').value = values.service_level || 'eco_48h';
+    if ($('defaultTariffCode')) $('defaultTariffCode').value = values.tariff_code || '';
   }
 
   function getStoredPortalClient() {
@@ -266,6 +268,7 @@
         ? `${state.tariffRules.length} règle(s) tarifaire(s) active(s) chargée(s).`
         : 'Aucune règle tarifaire active: les prix seront marqués à valider.';
     }
+    renderTariffOptions();
   }
 
   function renderAuthRequired() {
@@ -337,12 +340,43 @@
           ? `${state.tariffRules.length} règle(s) tarifaire(s) active(s) chargée(s).`
           : 'Aucune règle tarifaire active: les prix seront marqués à valider.';
       }
+      renderTariffOptions();
       return state.tariffRules;
     } catch (error) {
       state.tariffRules = [];
       if ($('tariffInfo')) $('tariffInfo').textContent = `Tarifs indisponibles: ${error.message}`;
+      renderTariffOptions();
       return [];
     }
+  }
+
+  function renderTariffOptions() {
+    const select = $('defaultTariffCode');
+    const panel = $('tariffOptionsPanel');
+    const list = $('tariffOptionsList');
+    if (!select || !panel || !list) return;
+
+    const current = select.value || (state.activeProfile?.default_values?.tariff_code || '');
+    const rules = (state.tariffRules || []).filter((rule) => rule.tariff_code);
+    select.innerHTML = '<option value="">Grille standard automatique</option>' + rules.map((rule) => {
+      const code = String(rule.tariff_code || '').toUpperCase();
+      const label = `${code} · ${rule.name || 'Tarif'}`;
+      return `<option value="${escapeHtml(code)}">${escapeHtml(label)}</option>`;
+    }).join('');
+    select.value = current && rules.some((rule) => String(rule.tariff_code || '').toUpperCase() === current) ? current : '';
+
+    panel.hidden = !rules.length;
+    list.innerHTML = rules.map((rule) => {
+      const base = formatMoney(rule.base_price_chf);
+      const kg = Number(rule.price_per_kg_chf || 0) > 0 ? ` + ${Number(rule.price_per_kg_chf).toFixed(2)} CHF/kg` : '';
+      const min = rule.min_weight_kg != null ? `Dès ${Number(rule.min_weight_kg).toFixed(1)} kg` : 'Tous poids';
+      return `
+        <div class="tariff-option-card">
+          <strong>${escapeHtml(String(rule.tariff_code || '').toUpperCase())} · ${escapeHtml(rule.name || 'Tarif')}</strong>
+          <span>${escapeHtml(min)} · ${escapeHtml(base)}${escapeHtml(kg)}</span>
+        </div>
+      `;
+    }).join('');
   }
 
   async function handleFileUpload(file) {
@@ -644,7 +678,7 @@
     normalized.delivery_phone = normalizeValue(normalized.delivery_phone);
     normalized.delivery_email = normalizeValue(normalized.delivery_email);
     normalized.delivery_instructions = normalizeValue(normalized.delivery_instructions);
-    normalized.tariff_code = normalizeValue(normalized.tariff_code).toUpperCase();
+    normalized.tariff_code = normalizeValue(normalized.tariff_code).toUpperCase() || normalizeValue($('defaultTariffCode')?.value).toUpperCase();
     normalized.pickup_name = normalizeValue(normalized.pickup_name);
     normalized.pickup_address = normalizeValue(normalized.pickup_address);
     normalized.pickup_zip = normalizeValue(normalized.pickup_zip);

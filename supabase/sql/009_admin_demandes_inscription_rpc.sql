@@ -311,3 +311,83 @@ $$;
 
 revoke all on function public.admin_upsert_utilisateur_profile(uuid, text, uuid, text, text, text, text, text, text, boolean, text, integer) from public;
 grant execute on function public.admin_upsert_utilisateur_profile(uuid, text, uuid, text, text, text, text, text, text, boolean, text, integer) to anon, authenticated;
+
+create or replace function public.admin_apply_standard_tariffs_to_client(
+  p_admin_id uuid,
+  p_code text,
+  p_client_id uuid
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count integer := 0;
+begin
+  perform public.colixo_assert_code_admin(p_admin_id, p_code);
+
+  if p_client_id is null then
+    raise exception 'Client obligatoire';
+  end if;
+
+  update public.client_tariff_rules r
+  set is_active = false,
+      updated_at = now()
+  where r.client_id = p_client_id
+    and exists (
+      select 1
+      from public.produits_tarif p
+      where p.actif = true
+        and upper(trim(coalesce(p.ref, p.nom, ''))) = upper(trim(coalesce(r.tariff_code, '')))
+    );
+
+  insert into public.client_tariff_rules (
+    client_id,
+    name,
+    tariff_code,
+    service_level,
+    min_weight_kg,
+    max_weight_kg,
+    min_parcel_count,
+    max_parcel_count,
+    base_price_chf,
+    price_per_parcel_chf,
+    price_per_kg_chf,
+    price_per_km_chf,
+    included_km,
+    extra_km_price_chf,
+    fuel_surcharge_percent,
+    discount_percent,
+    is_active,
+    priority
+  )
+  select
+    p_client_id,
+    coalesce(p.nom, p.ref, 'Tarif standard'),
+    nullif(coalesce(p.ref, p.nom), ''),
+    null,
+    coalesce(p.poids_min, 0),
+    null,
+    1,
+    null,
+    coalesce(p.prix, 0),
+    0,
+    coalesce(p.increment_par_kg, 0),
+    0,
+    0,
+    0,
+    0,
+    0,
+    true,
+    coalesce(p.ordre, 100)
+  from public.produits_tarif p
+  where p.actif = true;
+
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+revoke all on function public.admin_apply_standard_tariffs_to_client(uuid, text, uuid) from public;
+grant execute on function public.admin_apply_standard_tariffs_to_client(uuid, text, uuid) to anon, authenticated;

@@ -146,7 +146,7 @@
 
 <div class="page">
   <div class="page-title">Gestion des tarifs</div>
-  <div class="page-sub">Cliquez sur <strong>Modifier</strong> pour éditer une ligne directement dans le tableau.</div>
+  <div class="page-sub">La <strong>grille standard</strong> est le catalogue Colixo. Ensuite, sélectionnez un client pour lui appliquer cette grille et ajouter des options/prix spéciaux si nécessaire.</div>
   <div class="status-bar">
     <span class="status-dot" id="statusDot"></span>
     <span id="statusText">Connexion en cours...</span>
@@ -156,8 +156,8 @@
   <div class="excel-card">
     <div class="excel-head">
       <div>
-        <h2>Produits &amp; tarifs</h2>
-        <p>Nom · Référence · Poids minimum · Prix de base</p>
+        <h2>Grille standard Colixo</h2>
+        <p>Nom · Code produit · Poids minimum · Prix standard appliqué aux clients</p>
       </div>
       <span class="count-badge" id="prodCount">0 produit(s)</span>
     </div>
@@ -184,13 +184,16 @@
   <!-- ── PRIX CLIENTS ── -->
   <div class="client-section">
     <div class="client-head">
-      <h2>Prix spéciaux clients</h2>
+      <h2>Tarif client &amp; options</h2>
       <select id="clientSelect" onchange="onClientChange(this.value)" title="Sélectionner un client">
         <option value="">— Sélectionner un client —</option>
       </select>
+      <button class="btn btn-save" type="button" onclick="applyStandardGridToClient()" title="Copier la grille standard active dans la grille tarifaire du client sélectionné">
+        <i class="fas fa-layer-group"></i> Appliquer grille standard
+      </button>
     </div>
     <div id="clientBody" class="client-body">
-      Sélectionnez un client pour voir et modifier ses tarifs personnalisés.
+      Sélectionnez un client, appliquez la grille standard, puis ajoutez seulement les options/prix spéciaux nécessaires.
     </div>
   </div>
 </div>
@@ -199,7 +202,7 @@
 
 <script>
   const db = window.SUPABASE_CLIENT;
-  let produits = [], clients = [], selectedClientId = '';
+  let produits = [], clients = [], selectedClientId = '', adminAuthContext = null;
 
   function setStatus(ok, msg) {
     document.getElementById('statusDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
@@ -215,6 +218,13 @@
 
   function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function getAdminRpcPayload(extra) {
+    const profile = adminAuthContext?.profile;
+    const adminCode = (profile?.code || profile?.code_usr || window.colixoGetStoredCode?.() || '').trim().toUpperCase();
+    if (!profile?.id || !adminCode) throw new Error('Session admin incomplète. Reconnectez-vous avec votre code admin.');
+    return Object.assign({ p_admin_id: profile.id, p_code: adminCode }, extra || {});
   }
 
   // ── Produits ──
@@ -313,7 +323,7 @@
     const { error } = await db.from('produits_tarif').update({ nom, ref, poids_min, prix, increment_par_kg, actif, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     const p = produits.find(x => x.id === id);
-    Object.assign(p, { nom, ref, poids_min, prix, actif });
+    Object.assign(p, { nom, ref, poids_min, prix, increment_par_kg, actif });
     const row = document.getElementById('pr-' + id);
     if (row) row.outerHTML = rowDisplay(p);
     toast('Produit mis a jour.');
@@ -394,15 +404,81 @@
     return data || [];
   }
 
+  async function fetchClientTariffRules(clientId) {
+    const { data } = await db.from('client_tariff_rules')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('is_active', true)
+      .order('priority', { ascending: true });
+    return data || [];
+  }
+
+  function standardRuleFromProduct(clientId, p, index) {
+    const increment = Number(p.increment_par_kg || 0);
+    return {
+      client_id: clientId,
+      name: p.nom || p.ref || 'Tarif standard',
+      tariff_code: p.ref || p.nom || null,
+      service_level: null,
+      min_weight_kg: Number(p.poids_min || 0),
+      max_weight_kg: null,
+      min_parcel_count: 1,
+      max_parcel_count: null,
+      base_price_chf: Number(p.prix || 0),
+      price_per_parcel_chf: 0,
+      price_per_kg_chf: increment,
+      price_per_km_chf: 0,
+      included_km: 0,
+      extra_km_price_chf: 0,
+      fuel_surcharge_percent: 0,
+      discount_percent: 0,
+      is_active: true,
+      priority: Number(p.ordre || index + 1)
+    };
+  }
+
+  async function applyStandardGridToClient() {
+    const clientId = selectedClientId || document.getElementById('clientSelect').value;
+    if (!clientId) { toast('Sélectionnez d’abord un client.', 'err'); return; }
+    const activeProducts = produits.filter(p => p.actif !== false);
+    if (!activeProducts.length) { toast('Aucun produit actif dans la grille standard.', 'err'); return; }
+    if (!confirm('Appliquer la grille standard Colixo au client sélectionné ? Les codes existants seront mis à jour, les options/prix spéciaux restent séparés.')) return;
+
+    try {
+      const existing = await fetchClientTariffRules(clientId);
+      const byCode = new Map(existing.map(r => [String(r.tariff_code || '').toUpperCase(), r]));
+      for (let i = 0; i < activeProducts.length; i++) {
+        const rule = standardRuleFromProduct(clientId, activeProducts[i], i);
+        const key = String(rule.tariff_code || '').toUpperCase();
+        const current = byCode.get(key);
+        if (current?.id) {
+          const { error } = await db.from('client_tariff_rules').update(rule).eq('id', current.id);
+          if (error) throw error;
+        } else {
+          const { error } = await db.from('client_tariff_rules').insert(rule);
+          if (error) throw error;
+        }
+      }
+      toast(activeProducts.length + ' tarif(s) standard appliqué(s).');
+    } catch (error) {
+      const rpc = await db.rpc('admin_apply_standard_tariffs_to_client', getAdminRpcPayload({ p_client_id: clientId }));
+      if (rpc.error) { toast('Erreur: ' + rpc.error.message, 'err'); return; }
+      toast(Number(rpc.data || activeProducts.length) + ' tarif(s) standard appliqué(s).');
+    }
+    renderClientTable(clientId, await fetchOverrides(clientId));
+  }
+
   function renderClientTable(clientId, overrides) {
     const body = document.getElementById('clientBody');
     if (!produits.length) { body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;font-style:italic;">Aucun produit defini.</p>'; return; }
     const ovMap = Object.fromEntries(overrides.map(o => [o.produit_id, o]));
     const CTRS = ['', '2e colis meme client', 'Montage de pendule', 'Montage de meuble', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
 
-    let html = '<div style="overflow-x:auto"><table class="xls"><thead><tr>' +
+    let html = '<div class="client-body" style="font-style:normal;margin-bottom:12px;">' +
+      'La grille standard s’applique au client via le bouton <strong>Appliquer grille standard</strong>. Les lignes ci-dessous servent uniquement aux prix spéciaux et options proposées au client.' +
+    '</div><div style="overflow-x:auto"><table class="xls"><thead><tr>' +
       '<th style="width:24%">Produit</th><th style="width:10%">Ref.</th>' +
-      '<th style="width:14%">Prix cat.</th><th style="width:18%">Prix special</th>' +
+      '<th style="width:14%">Standard</th><th style="width:18%">Option / prix special</th>' +
       '<th style="width:14%">Contrainte</th><th>Actions</th>' +
     '</tr></thead><tbody>';
 
@@ -524,6 +600,7 @@
       redirectTo: '../login/index.html'
     });
     if (!auth) return;
+    adminAuthContext = auth;
     setStatus(false, 'Chargement...');
     await Promise.all([loadProduits(), loadClients()]);
   })();

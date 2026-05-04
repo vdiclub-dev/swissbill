@@ -46,7 +46,7 @@
       overrideMap[String(row.produit_id)] = row;
     });
 
-    return (productsRes.data || []).map(function (p, index) {
+    var productRules = (productsRes.data || []).map(function (p, index) {
       var base = Number(p.prix || 0);
       var ov = overrideMap[String(p.id)];
       if (ov) {
@@ -66,12 +66,36 @@
         max_weight_kg: null,
         min_parcel_count: null,
         max_parcel_count: null,
-        base_price_chf: p.prix_par_kg ? 0 : Math.round(base * 100) / 100,
+        base_price_chf: Math.round(base * 100) / 100,
         price_per_parcel_chf: 0,
-        price_per_kg_chf: p.prix_par_kg ? Math.round(base * 100) / 100 : 0,
+        price_per_kg_chf: Math.round(Number(p.increment_par_kg || 0) * 100) / 100,
         priority: Number(p.ordre || index + 100)
       };
     });
+    if (productRules.length) return productRules;
+
+    // Last-resort fallback only if the standard grid is empty.
+    return [
+      {
+        id: 'fallback_standard',
+        client_id: clientId,
+        name: 'Standard Colixo',
+        tariff_code: '',
+        service_level: 'eco_48h',
+        min_weight_kg: 0,
+        max_weight_kg: null,
+        min_parcel_count: 1,
+        max_parcel_count: null,
+        base_price_chf: 5.00,
+        price_per_parcel_chf: 4.50,
+        price_per_kg_chf: 0.80,
+        included_km: 20,
+        extra_km_price_chf: 1.20,
+        fuel_surcharge_percent: 8.5,
+        discount_percent: 0,
+        priority: 999
+      }
+    ];
   }
 
   function rangeMatches(value, min, max) {
@@ -91,10 +115,11 @@
 
     return (rules || []).find(function (rule) {
       var ruleCode = normalizeCode(rule.tariff_code || "");
+      // Looser code match: allow empty tariff_code
       if (tariffCode && ruleCode && ruleCode !== tariffCode) return false;
-      if (tariffCode && !ruleCode) return false;
       var ruleService = normalizeService(rule.service_level || "");
-      if (ruleService && ruleService !== service) return false;
+      // Allow default service if unspecified
+      if (ruleService && service && ruleService !== service) return false;
       if (!rangeMatches(weight, rule.min_weight_kg, rule.max_weight_kg)) return false;
       if (!rangeMatches(parcelCount, rule.min_parcel_count, rule.max_parcel_count)) return false;
       return true;
