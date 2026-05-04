@@ -40,6 +40,7 @@
     errors: [],
     warnings: [],
     pricedRows: [],
+    manualPriceOverrides: {},
     summary: null,
     batchId: null,
     importInProgress: false
@@ -848,6 +849,17 @@
       order.pricing_details = PRICING.buildPricingDetails(order, rule, result);
     });
 
+    // Apply stored manual price overrides (survive recalculate)
+    mappedRows.forEach((order) => {
+      const override = state.manualPriceOverrides[order.line_number];
+      if (override !== undefined && !order.validation_errors.length) {
+        order.total_price_chf = override;
+        order.unit_price_chf = Math.round((override / Math.max(1, order.parcel_count || 1)) * 100) / 100;
+        order.pricing_status = 'manual';
+        order.pricing_details = Object.assign({}, order.pricing_details || {}, { manual_override: true, final_total: override });
+      }
+    });
+
     state.pricedRows = mappedRows;
     return mappedRows;
   }
@@ -1000,7 +1012,7 @@
     const errorRows = state.mappedRows.filter((row) => row.validation_errors.length).length;
     const validRows = totalRows - errorRows;
     const duplicateRows = state.mappedRows.filter((row) => row.validation_errors.some((e) => /doublon|déjà importée/i.test(e.message))).length;
-    const pricedRows = state.mappedRows.filter((row) => row.pricing_status === 'calculated').length;
+    const pricedRows = state.mappedRows.filter((row) => row.pricing_status === 'calculated' || row.pricing_status === 'manual').length;
     const priceReviewRows = state.mappedRows.filter((row) => row.pricing_status === 'needs_review').length;
     const totalEstimatedPrice = state.mappedRows.reduce((sum, row) => sum + (Number(row.total_price_chf) || 0), 0);
     return { totalRows, validRows, errorRows, duplicateRows, pricedRows, priceReviewRows, totalEstimatedPrice };
@@ -1048,8 +1060,26 @@
     if (!body) return;
     body.innerHTML = state.mappedRows.map((row) => {
       const status = row.validation_errors.length ? 'Erreur' : 'Valide';
-      const pricing = row.pricing_status === 'calculated' ? 'Prix calculé' : row.pricing_status === 'needs_review' ? 'Prix à valider' : 'Prix incomplet';
       const message = row.validation_errors.concat(row.validation_warnings).map((item) => item.message).join(' • ');
+
+      let priceCell;
+      if (!row.validation_errors.length && row.pricing_status === 'needs_review') {
+        const override = state.manualPriceOverrides[row.line_number];
+        priceCell = `<span class="badge badge-warning">Prix à valider</span><br>
+          <input type="number" class="price-override-input"
+            data-line="${row.line_number}"
+            value="${override !== undefined ? override : ''}"
+            placeholder="CHF" min="0" step="0.05">`;
+      } else {
+        const badgeClass = row.pricing_status === 'calculated' ? 'badge-success'
+          : row.pricing_status === 'manual' ? 'badge-info'
+          : 'badge-warning';
+        const label = row.pricing_status === 'calculated' ? 'Prix calculé'
+          : row.pricing_status === 'manual' ? 'Prix manuel'
+          : 'Prix incomplet';
+        priceCell = `<span class="badge ${badgeClass}">${escapeHtml(label)}</span><br>${escapeHtml(formatMoney(row.total_price_chf))}`;
+      }
+
       return `
         <tr class="${row.validation_errors.length ? 'row-error' : ''}">
           <td><span class="badge ${row.validation_errors.length ? 'badge-error' : 'badge-success'}">${status}</span></td>
@@ -1059,11 +1089,41 @@
           <td>${escapeHtml(row.parcel_count)}</td>
           <td>${escapeHtml(row.weight_kg ?? '-')}</td>
           <td>${escapeHtml(row.tariff_code || row.service_level || '-')}${row.special_option_code ? '<br><span class="badge badge-info">Option: ' + escapeHtml(row.special_option_code) + '</span>' : ''}</td>
-          <td><span class="badge ${row.pricing_status === 'calculated' ? 'badge-success' : 'badge-warning'}">${pricing}</span><br>${escapeHtml(formatMoney(row.total_price_chf))}</td>
+          <td>${priceCell}</td>
           <td>${escapeHtml(message || 'OK')}</td>
         </tr>
       `;
     }).join('');
+  }
+
+  function handlePriceOverride(lineNumber, rawValue) {
+    const row = state.mappedRows.find((r) => r.line_number === lineNumber);
+    if (!row || row.validation_errors.length) return;
+    const val = rawValue === '' ? undefined : Math.round(Number(String(rawValue).replace(',', '.')) * 100) / 100;
+
+    if (val === undefined || !Number.isFinite(val) || val < 0) {
+      delete state.manualPriceOverrides[lineNumber];
+      if (PRICING) {
+        const rule = PRICING.selectTariffRule(row, state.tariffRules);
+        const result = PRICING.calculateOrderPrice(row, rule);
+        row.pricing_status = result.pricing_status || (rule ? 'calculated' : 'needs_review');
+        row.total_price_chf = result.total_price_chf;
+        row.unit_price_chf = result.unit_price_chf;
+        row.tariff_rule_id = result.tariff_rule_id;
+        row.pricing_details = PRICING.buildPricingDetails(row, rule, result);
+      }
+    } else {
+      state.manualPriceOverrides[lineNumber] = val;
+      row.total_price_chf = val;
+      row.unit_price_chf = Math.round((val / Math.max(1, row.parcel_count || 1)) * 100) / 100;
+      row.pricing_status = 'manual';
+      row.pricing_details = Object.assign({}, row.pricing_details || {}, { manual_override: true, final_total: val });
+    }
+
+    const summary = buildSummary();
+    state.summary = summary;
+    renderImportSummary(summary);
+    renderNextAction(summary);
   }
 
   function downloadErrorReport() {
@@ -1088,6 +1148,7 @@
     state.errors = [];
     state.warnings = [];
     state.pricedRows = [];
+    state.manualPriceOverrides = {};
     state.summary = null;
     state.batchId = null;
     state.importInProgress = false;
@@ -1176,6 +1237,15 @@
       resetImportState();
       setStatus('Import annulé. Vous pouvez déposer un nouveau fichier.', 'info');
     });
+
+    const tbody = $('validatedRowsBody');
+    if (tbody) {
+      tbody.addEventListener('change', (e) => {
+        if (e.target.classList.contains('price-override-input')) {
+          handlePriceOverride(Number(e.target.dataset.line), e.target.value);
+        }
+      });
+    }
   }
 
   window.ColixoClientImport = {
