@@ -670,6 +670,24 @@
         return rpc.error ? { data: null, error: rpc.error } : { data: rpc.data, error: null };
     }
 
+    async function saveUserProfileSecure(profile) {
+        const direct = await db.from('utilisateurs').upsert([profile]).select('id').maybeSingle();
+        if (!direct.error && direct.data?.id) return direct;
+        const rpc = await db.rpc('admin_upsert_utilisateur_profile', getAdminRpcPayload({
+            p_user_id: profile.id,
+            p_email: profile.email,
+            p_nom: profile.nom || null,
+            p_prenom: profile.prenom || null,
+            p_telephone: profile.telephone || null,
+            p_user_code: profile.code_usr || profile.code || null,
+            p_role: profile.role || 'client',
+            p_actif: profile.actif !== false,
+            p_type_contrat: profile.type_contrat || 'fixe',
+            p_taux_travail: profile.taux_travail || 100
+        }));
+        return rpc.error ? { data: null, error: rpc.error } : { data: rpc.data, error: null };
+    }
+
     /** Demandes depuis login (table demandes_inscription). Lecture directe Auth ou RPC sécurisée pour session code admin. */
     window.loadDemandes = async function() {
         const tbody = document.getElementById('demandesTableBody');
@@ -922,23 +940,24 @@
             if (!id) {
                 // Créer ou récupérer le compte Auth (gère "already registered")
                 const { userId, isNew } = await getOrCreateAuthUser(email, pwd);
-                const { error: dbErr } = await db.from('utilisateurs').upsert([{
+                const { error: dbErr } = await saveUserProfileSecure({
                     id: userId, email,
                     nom: nom || null, prenom: prenom || null,
                     telephone: tel || null, code, code_usr: code, role, actif: true,
                     type_contrat: typeContrat, taux_travail: tauxTravail
-                }]);
+                });
                 if (dbErr) throw dbErr;
                 var msgCreate = isNew ? '✅ Utilisateur créé !' : '✅ Profil mis à jour (compte existant).';
                 if (code) msgCreate += " Code d'acces (connexion) : " + code;
                 toast('success', msgCreate);
             } else {
                 // Update existing
-                const { error } = await db.from('utilisateurs').update({
+                const { error } = await saveUserProfileSecure({
+                    id, email,
                     nom: nom || null, prenom: prenom || null,
                     telephone: tel || null, code, code_usr: code, role, actif,
                     type_contrat: typeContrat, taux_travail: tauxTravail
-                }).eq('id', id);
+                });
                 if (error) throw error;
                 toast('success', '✅ Utilisateur mis à jour !');
             }
@@ -962,7 +981,10 @@
         const id = document.getElementById('deleteUserId').value;
         if (!id) return;
         showLoad();
-        const { error } = await db.from('utilisateurs').update({ actif: false }).eq('id', id);
+        const user = allUsers.find(u => u.id === id);
+        const { error } = user
+            ? await saveUserProfileSecure(Object.assign({}, user, { actif: false }))
+            : await db.from('utilisateurs').update({ actif: false }).eq('id', id);
         hideLoad();
         if (error) { toast('error', '❌ ' + error.message); return; }
         toast('success', '✅ Compte désactivé — l\'utilisateur ne peut plus se connecter');
@@ -1008,7 +1030,10 @@
 
     window.activateUser = async function(id) {
         showLoad();
-        const { error } = await db.from('utilisateurs').update({ actif: true }).eq('id', id);
+        const user = allUsers.find(u => u.id === id);
+        const { error } = user
+            ? await saveUserProfileSecure(Object.assign({}, user, { actif: true }))
+            : await db.from('utilisateurs').update({ actif: true }).eq('id', id);
         hideLoad();
         if (error) { toast('error', error.message); return; }
         toast('success', '✅ Utilisateur réactivé');

@@ -220,3 +220,94 @@ $$;
 
 revoke all on function public.admin_delete_demande_inscription(uuid, text, uuid) from public;
 grant execute on function public.admin_delete_demande_inscription(uuid, text, uuid) to anon, authenticated;
+
+create or replace function public.admin_upsert_utilisateur_profile(
+  p_admin_id uuid,
+  p_code text,
+  p_user_id uuid,
+  p_email text,
+  p_nom text default null,
+  p_prenom text default null,
+  p_telephone text default null,
+  p_user_code text default null,
+  p_role text default 'client',
+  p_actif boolean default true,
+  p_type_contrat text default 'fixe',
+  p_taux_travail integer default 100
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_admin public.utilisateurs;
+  v_row public.utilisateurs;
+begin
+  v_admin := public.colixo_assert_code_admin(p_admin_id, p_code);
+
+  if p_user_id is null then
+    raise exception 'ID utilisateur obligatoire';
+  end if;
+
+  if nullif(trim(coalesce(p_email, '')), '') is null then
+    raise exception 'Email obligatoire';
+  end if;
+
+  if p_role not in ('client', 'chauffeur', 'magasinier', 'admin', 'super_admin') then
+    raise exception 'Rôle utilisateur invalide';
+  end if;
+
+  if p_role in ('admin', 'super_admin') and v_admin.role <> 'super_admin' then
+    raise exception 'Seul un super admin peut créer ou modifier un administrateur';
+  end if;
+
+  if p_taux_travail is not null and (p_taux_travail < 0 or p_taux_travail > 100) then
+    raise exception 'Taux de travail invalide';
+  end if;
+
+  insert into public.utilisateurs (
+    id,
+    email,
+    nom,
+    prenom,
+    telephone,
+    code,
+    code_usr,
+    role,
+    actif,
+    type_contrat,
+    taux_travail
+  )
+  values (
+    p_user_id,
+    trim(p_email),
+    nullif(trim(coalesce(p_nom, '')), ''),
+    nullif(trim(coalesce(p_prenom, '')), ''),
+    nullif(trim(coalesce(p_telephone, '')), ''),
+    nullif(trim(coalesce(p_user_code, '')), ''),
+    nullif(trim(coalesce(p_user_code, '')), ''),
+    p_role,
+    coalesce(p_actif, true),
+    coalesce(nullif(trim(coalesce(p_type_contrat, '')), ''), 'fixe'),
+    coalesce(p_taux_travail, 100)
+  )
+  on conflict (id) do update
+  set email = excluded.email,
+      nom = excluded.nom,
+      prenom = excluded.prenom,
+      telephone = excluded.telephone,
+      code = excluded.code,
+      code_usr = excluded.code_usr,
+      role = excluded.role,
+      actif = excluded.actif,
+      type_contrat = excluded.type_contrat,
+      taux_travail = excluded.taux_travail
+  returning * into v_row;
+
+  return to_jsonb(v_row);
+end;
+$$;
+
+revoke all on function public.admin_upsert_utilisateur_profile(uuid, text, uuid, text, text, text, text, text, text, boolean, text, integer) from public;
+grant execute on function public.admin_upsert_utilisateur_profile(uuid, text, uuid, text, text, text, text, text, text, boolean, text, integer) to anon, authenticated;
