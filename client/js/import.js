@@ -1061,18 +1061,18 @@
     const canImport = summary.importableRows > 0;
     const skippedDuplicates = summary.validRows - summary.importableRows;
     if (title) title.textContent = canImport
-      ? `${summary.importableRows} ligne(s) prête(s) pour l’étape 7`
-      : ‘Aucune ligne valide à importer’;
+      ? (summary.importableRows + " ligne(s) prete(s) pour l’etape 7")
+      : "Aucune ligne valide a importer";
     if (text) {
       if (canImport) {
         const parts = [];
-        if (summary.errorRows) parts.push(`${summary.errorRows} erreur(s)`);
-        if (skippedDuplicates > 0) parts.push(`${skippedDuplicates} doublon(s) ignoré(s)`);
-        text.textContent = (parts.length ? parts.join(‘, ‘) + ‘. ‘ : ‘’) + `Total estimé: ${formatMoney(summary.totalEstimatedPrice)}.`;
+        if (summary.errorRows) parts.push(summary.errorRows + " erreur(s)");
+        if (skippedDuplicates > 0) parts.push(skippedDuplicates + " doublon(s) ignore(s)");
+        text.textContent = (parts.length ? parts.join(", ") + ". " : "") + "Total estime: " + formatMoney(summary.totalEstimatedPrice) + ".";
       } else {
         text.textContent = state.ignoreDuplicates
-          ? ‘Toutes les lignes sont déjà importées ou invalides.’
-          : ‘Corrigez le mapping ou le fichier, puis relancez la prévisualisation.’;
+          ? "Toutes les lignes sont deja importees ou invalides."
+          : "Corrigez le mapping ou le fichier, puis relancez la previsualisation.";
       }
     }
     if (bottomButton) bottomButton.disabled = !canImport;
