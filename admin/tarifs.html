@@ -108,6 +108,16 @@
       outline: none; min-width: 240px; cursor: pointer; }
     .client-head select:focus { border-color: rgba(232,49,26,.5); }
     .client-body { padding: 20px; color: var(--muted); font-size: 13px; font-style: italic; }
+    .client-tariff-layout { padding: 18px; display: grid; gap: 18px; }
+    .client-help { padding: 12px 14px; border: 1px solid rgba(245,158,11,.18); border-radius: 12px;
+      background: rgba(245,158,11,.07); color: #fcd34d; font-size: 13px; line-height: 1.45; }
+    .client-list-card { border: 1px solid var(--border2); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.02); }
+    .client-list-head { padding: 14px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: center;
+      border-bottom: 1px solid var(--border); background: rgba(255,255,255,.03); }
+    .client-list-title { font-weight: 800; color: var(--white); display: flex; align-items: center; gap: 8px; }
+    .client-list-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .client-list-badge { color: var(--muted2); border: 1px solid var(--border2); border-radius: 999px; padding: 4px 9px; font-size: 12px; white-space: nowrap; }
+    .client-empty { padding: 18px; color: var(--muted); font-size: 13px; font-style: italic; }
 
     .remise-pct  { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 5px;
       font-size: 12px; font-weight: 700; background: rgba(245,158,11,.12); color: #fcd34d; border: 1px solid rgba(245,158,11,.2); }
@@ -502,19 +512,36 @@
     const ruleMap = new Map((rules || []).map(r => [tariffKey(r.tariff_code), r]));
     const CTRS = ['', '2e colis meme client', 'Montage de pendule', 'Montage de meuble', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
 
-    let html = '<div class="client-body" style="font-style:normal;margin-bottom:12px;">' +
-      'Cochez les tarifs que vous voulez appliquer au client. Cochez les options que le client peut sélectionner dans son portail.' +
-    '</div><div style="overflow-x:auto"><table class="xls"><thead><tr>' +
-      '<th style="width:8%">Tarif</th><th style="width:8%">Option</th>' +
-      '<th style="width:22%">Produit</th><th style="width:10%">Ref.</th>' +
-      '<th style="width:12%">Standard</th><th style="width:18%">Option / prix special</th>' +
-      '<th style="width:14%">Contrainte</th><th>Actions</th>' +
-    '</tr></thead><tbody>';
-
-    produits.forEach(p => {
+    const serviceProducts = produits.filter(p => !isDefaultOptionProduct(p));
+    const optionProducts = produits.filter(p => isDefaultOptionProduct(p));
+    const appliedCount = serviceProducts.filter(p => ruleByProduct.get(String(p.id)) || ruleMap.get(tariffKey(p.ref || p.nom))).length;
+    const activeOptionCount = optionProducts.filter(p => {
       const ov = ovMap[p.id];
-      const rule = ruleByProduct.get(String(p.id)) || ruleMap.get(tariffKey(p.ref || p.nom));
-      const hasRule = !!rule;
+      return ov && ov.actif !== false && ov.contrainte;
+    }).length;
+
+    function renderServiceRows(items) {
+      if (!items.length) return '<tr><td colspan="6" class="empty-cell">Aucun tarif de livraison dans la grille standard.</td></tr>';
+      return items.map(p => {
+        const rule = ruleByProduct.get(String(p.id)) || ruleMap.get(tariffKey(p.ref || p.nom));
+        const hasRule = !!rule;
+        const price = rule ? Number(rule.base_price_chf || 0) : Number(p.prix || 0);
+        const increment = rule ? Number(rule.price_per_kg_chf || 0) : Number(p.increment_par_kg || 0);
+        return '<tr id="cr-' + p.id + '">' +
+          '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasRule ? 'checked' : '') + ' onchange="toggleClientTariff(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
+          '<td><span class="cell cell-nom">' + esc(p.nom) + '</span></td>' +
+          '<td><span class="cell cell-ref">' + esc(p.ref || '—') + '</span></td>' +
+          '<td><span class="cell cell-prix">CHF ' + price.toFixed(2) + '</span></td>' +
+          '<td><span class="cell cell-poids">' + (increment ? '+ CHF ' + increment.toFixed(2) + ' / kg' : '—') + '</span></td>' +
+          '<td><span class="cell">' + (hasRule ? '<span class="remise-fixe">Actif portail</span>' : '<span style="color:var(--muted);font-size:12px">Non appliqué</span>') + '</span></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function renderOptionRows(items) {
+      if (!items.length) return '<tr><td colspan="7" class="empty-cell">Aucune option dans la grille standard.</td></tr>';
+      return items.map(p => {
+      const ov = ovMap[p.id];
       const hasOption = !!(ov && ov.actif !== false && ov.contrainte);
       const remiseHtml = ov
         ? (ov.type_remise === 'pct'
@@ -527,12 +554,11 @@
         ? '<span class="ctr-badge">' + esc(ov.contrainte) + '</span>'
         : '<span style="color:var(--muted);font-size:12px">—</span>';
 
-      html += '<tr id="cr-' + p.id + '">' +
-        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasRule ? 'checked' : '') + ' onchange="toggleClientTariff(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
+      return '<tr id="cr-' + p.id + '">' +
         '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasOption ? 'checked' : '') + ' onchange="toggleClientOption(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
         '<td><span class="cell cell-nom">'  + esc(p.nom) + '</span></td>' +
         '<td><span class="cell cell-ref">'  + esc(p.ref || '—') + '</span></td>' +
-        '<td><span class="cell cell-prix">' + Number(p.prix).toFixed(2) + '</span></td>' +
+        '<td><span class="cell cell-prix">CHF ' + Number(p.prix).toFixed(2) + '</span></td>' +
         '<td><span class="cell">' + remiseHtml + '</span></td>' +
         '<td><span class="cell">' + ctrHtml + '</span></td>' +
         '<td class="td-actions"><div class="btn-group">' +
@@ -540,7 +566,7 @@
           (ov ? '<button class="btn btn-del" onclick="removeOv(\'' + clientId + '\',\'' + p.id + '\')"><i class="fas fa-times"></i></button>' : '') +
         '</div></td>' +
       '</tr>' +
-      '<tr id="ovtr-' + p.id + '" style="display:none"><td colspan="8" style="padding:0">' +
+      '<tr id="ovtr-' + p.id + '" style="display:none"><td colspan="7" style="padding:0">' +
         '<div id="ovform-' + p.id + '" class="override-inline">' +
           '<div class="fl"><label>Type</label><select id="ov-type-' + p.id + '" onchange="updatePreview(\'' + p.id + '\',' + p.prix + ')">' +
             '<option value="fixe">Prix fixe (CHF)</option>' +
@@ -561,9 +587,24 @@
           '</div>' +
         '</div>' +
       '</td></tr>';
-    });
+      }).join('');
+    }
 
-    html += '</tbody></table></div>';
+    let html = '<div class="client-tariff-layout">' +
+      '<div class="client-help"><strong>Mode d’emploi :</strong> cochez un tarif de livraison pour l’appliquer au client. Cochez une option uniquement si elle doit apparaître comme supplément sélectionnable dans le portail client.</div>' +
+      '<div class="client-list-card">' +
+        '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-truck"></i> Tarifs de livraison du client</div><div class="client-list-sub">Prix de base visibles dans le portail client.</div></div><span class="client-list-badge">' + appliedCount + ' actif(s)</span></div>' +
+        '<div style="overflow-x:auto"><table class="xls"><thead><tr>' +
+          '<th style="width:8%">Appliquer</th><th style="width:28%">Tarif</th><th style="width:12%">Code</th><th style="width:15%">Prix portail</th><th style="width:15%">Variable</th><th>Statut</th>' +
+        '</tr></thead><tbody>' + renderServiceRows(serviceProducts) + '</tbody></table></div>' +
+      '</div>' +
+      '<div class="client-list-card">' +
+        '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-plus-circle"></i> Options proposées au client</div><div class="client-list-sub">Suppléments ou prix spéciaux séparés du tarif de base.</div></div><span class="client-list-badge">' + activeOptionCount + ' proposée(s)</span></div>' +
+        '<div style="overflow-x:auto"><table class="xls"><thead><tr>' +
+          '<th style="width:8%">Proposer</th><th style="width:24%">Option</th><th style="width:12%">Code</th><th style="width:13%">Prix grille</th><th style="width:19%">Prix option</th><th style="width:14%">Contrainte</th><th>Actions</th>' +
+        '</tr></thead><tbody>' + renderOptionRows(optionProducts) + '</tbody></table></div>' +
+      '</div>' +
+    '</div>';
     body.className = '';
     body.innerHTML = html;
   }
