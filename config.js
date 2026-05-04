@@ -286,7 +286,7 @@ window.colixoLogout = async function () {
             console.warn('[Colixo] logout:', e && e.message ? e.message : e);
         }
     }
-    try { localStorage.removeItem('colixo_user'); } catch (e) {}
+    try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
     try { sessionStorage.removeItem('colixo_login_bust'); } catch (e) {}
     var to = (typeof window.colixoHref === 'function')
         ? window.colixoHref('/login/index.html?logout=1')

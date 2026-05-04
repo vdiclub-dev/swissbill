@@ -36,6 +36,9 @@
     try {
       localStorage.removeItem("colixo_user");
     } catch (e) {}
+    try {
+      localStorage.removeItem("colixo_access_code");
+    } catch (e) {}
   }
 
   function syncLegacyUser(profile) {
@@ -227,6 +230,18 @@
           profileLookup: profileCtx.lookup
         };
       }
+
+      return {
+        session: sessionCtx.session,
+        authUser: sessionCtx.authUser,
+        profile: null,
+        userId: profile.id,
+        role: profile.role,
+        isLegacy: false,
+        mismatch: profileCtx.mismatch,
+        profileLookup: profileCtx.lookup,
+        roleMismatch: true
+      };
     }
 
     return loadLegacyProfile(legacyRoles);
@@ -239,7 +254,7 @@
 
     if (opts.redirectOnFail === false) return null;
 
-    var target = opts.redirectTo || loginUrl();
+    var target = ctx && ctx.roleMismatch && ctx.role ? roleHome(ctx.role) : (opts.redirectTo || loginUrl());
     window.location.replace(target);
     return null;
   }
