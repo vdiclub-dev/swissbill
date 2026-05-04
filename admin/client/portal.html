@@ -822,14 +822,29 @@
         }
     }
 
+    async function loadPortalTariffRules(clientScopeId) {
+        const rpc = await db.rpc('client_list_my_tariff_rules', { p_client_id: clientScopeId });
+        if (!rpc.error) return rpc.data || [];
+
+        const direct = await db.from('client_tariff_rules')
+            .select('*')
+            .eq('client_id', clientScopeId)
+            .eq('is_active', true)
+            .order('priority');
+        if (!direct.error) return direct.data || [];
+
+        console.warn('[Colixo] tarifs client indisponibles', rpc.error, direct.error);
+        return [];
+    }
+
     async function loadClientTarif() {
         const clientScopeId = getClientScopeId();
         if(!clientScopeId) return;
-        const [{ data: tarifData }, { data: prixData }, { data: produitsData }, { data: rulesData }] = await Promise.all([
+        const [{ data: tarifData }, { data: prixData }, { data: produitsData }, rulesData] = await Promise.all([
             db.from('tarifs_clients').select('*').eq('entreprise_id', clientScopeId).single(),
             db.from('prix_speciaux').select('produit_id,valeur,type_remise,contrainte,actif').eq('client_id', clientScopeId).eq('actif', true),
             db.from('produits_tarif').select('*').eq('actif', true).order('ordre').order('nom'),
-            db.from('client_tariff_rules').select('*').eq('client_id', clientScopeId).eq('is_active', true).order('priority')
+            loadPortalTariffRules(clientScopeId)
         ]);
         clientTarif = tarifData || { prix_inf_2kg:8.5, prix_inf_10kg:11.5, prix_inf_30kg:20.5, prix_eco:7.5, suppl_express:5, suppl_urgent:10, suppl_nuit_chf:25 };
         clientProduits = produitsData||[];
