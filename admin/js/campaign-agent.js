@@ -504,7 +504,7 @@
 
   function isFacebookLead(lead) {
     var source = String(lead.source || "").toLowerCase();
-    return source.indexOf("facebook") !== -1 || source.indexOf("meta") !== -1 || source.indexOf("zapier") !== -1;
+    return source.indexOf("facebook") !== -1 || source.indexOf("meta") !== -1 || source.indexOf("zapier") !== -1 || source.indexOf("public_site") !== -1;
   }
 
   function isTodayLead(lead) {
@@ -541,7 +541,7 @@
     ].join("");
 
     if (!leads.length) {
-      list.innerHTML = '<div class="empty">Aucun lead Facebook reçu dans les dernières 24h.</div>';
+      list.innerHTML = '<div class="empty">Aucun lead reçu dans les dernières 24h.</div>';
       return;
     }
 
