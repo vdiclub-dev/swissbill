@@ -61,7 +61,7 @@
 
   function getWebhookUrl() {
     var base = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url) || "";
-    return base.replace(/\/+$/, "") + "/functions/v1/campaign-agent-webhook";
+    return base.replace(/\/+$/, "") + "/rest/v1/rpc/campaign_agent_ingest_zapier_lead";
   }
 
   function rpcPayload(extra) {
