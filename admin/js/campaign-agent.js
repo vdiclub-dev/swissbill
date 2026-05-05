@@ -488,6 +488,7 @@
     renderStats(data.stats || {});
     renderCampaigns();
     renderLeadCampaignSelect();
+    renderTodayLeads();
     renderLeads();
     renderFollowups();
   }
@@ -499,6 +500,70 @@
     $("statHotLeads").textContent = stats.hot_leads || 0;
     $("statCpl").textContent = money(stats.cpl_chf || 0);
     $("statPotential").textContent = money(stats.potential_revenue_chf || 0);
+  }
+
+  function isFacebookLead(lead) {
+    var source = String(lead.source || "").toLowerCase();
+    return source.indexOf("facebook") !== -1 || source.indexOf("meta") !== -1 || source.indexOf("zapier") !== -1;
+  }
+
+  function isTodayLead(lead) {
+    var created = new Date(lead.created_at || 0).getTime();
+    return !!created && Date.now() - created <= 24 * 60 * 60 * 1000;
+  }
+
+  function leadPriority(lead) {
+    var classRank = { chaud: 4, tiede: 3, froid: 2, non_prioritaire: 1 };
+    return (classRank[lead.classification] || 0) * 1000 + Number(lead.score || 0);
+  }
+
+  function leadCreatedAt(lead) {
+    return new Date(lead.created_at || 0).getTime() || 0;
+  }
+
+  function renderTodayLeads() {
+    var list = $("todayLeadList");
+    var summary = $("todayLeadSummary");
+    if (!list || !summary) return;
+
+    var leads = state.leads
+      .filter(function (lead) { return isFacebookLead(lead) && isTodayLead(lead); })
+      .sort(function (a, b) {
+        return (leadPriority(b) - leadPriority(a)) || (leadCreatedAt(b) - leadCreatedAt(a));
+      });
+    var hot = leads.filter(function (lead) { return lead.classification === "chaud"; }).length;
+    var todo = leads.filter(function (lead) { return lead.status === "new"; }).length;
+
+    summary.innerHTML = [
+      "<span>" + leads.length + " lead" + (leads.length > 1 ? "s" : "") + " aujourd'hui</span>",
+      "<span>" + hot + " chaud" + (hot > 1 ? "s" : "") + "</span>",
+      "<span>" + todo + " à contacter</span>"
+    ].join("");
+
+    if (!leads.length) {
+      list.innerHTML = '<div class="empty">Aucun lead Facebook reçu dans les dernières 24h.</div>';
+      return;
+    }
+
+    list.innerHTML = leads.map(function (lead) {
+      var city = [lead.city, lead.canton].filter(Boolean).join(", ");
+      var tel = lead.phone ? '<a href="tel:' + escapeHtml(lead.phone) + '">' + escapeHtml(lead.phone) + "</a>" : "<span>Téléphone manquant</span>";
+      var mail = lead.email ? '<a href="mailto:' + escapeHtml(lead.email) + '">' + escapeHtml(lead.email) + "</a>" : "<span>Email manquant</span>";
+      var isContacted = lead.status && lead.status !== "new";
+      var contactButton = isContacted
+        ? '<button class="btn btn-ghost btn-mini" type="button" disabled>' + escapeHtml(labelStatus(lead.status)) + '</button>'
+        : '<button class="btn btn-green btn-mini" type="button" onclick="window.campaignAgentUpdateLeadStatus(\'' + escapeHtml(lead.id) + '\', \'contacted\')">Marquer contacté</button>';
+      return '<article class="today-card ' + (lead.classification === "chaud" ? "hot" : "") + '">' +
+        '<div class="today-top"><div><div class="today-name">' + escapeHtml(lead.company_name || "Entreprise à qualifier") + '</div>' +
+        '<div class="row-meta">' + escapeHtml(lead.contact_name || "Contact non renseigné") + '</div></div>' +
+        '<span class="badge ' + escapeHtml(lead.classification || "non_prioritaire") + '">' + escapeHtml(labelClassification(lead.classification || "non_prioritaire")) + " · " + escapeHtml(lead.score || 0) + '</span></div>' +
+        '<div class="today-contact">' + tel + mail + '</div>' +
+        '<div class="today-meta"><span>' + escapeHtml(city || "Ville à qualifier") + '</span><span>' + escapeHtml(lead.daily_parcels || 0) + ' colis/jour</span><span>' + money(lead.potential_revenue_chf || 0) + '/mois</span></div>' +
+        '<div class="today-actions">' +
+        contactButton +
+        '<button class="btn btn-blue btn-mini" type="button" onclick="window.campaignAgentUpdateLeadStatus(\'' + escapeHtml(lead.id) + '\', \'qualified\')">Qualifier</button>' +
+        '</div></article>';
+    }).join("");
   }
 
   function renderCampaigns() {
@@ -708,6 +773,7 @@
     $("btnSaveCampaign").addEventListener("click", saveGeneratedCampaign);
     $("btnScoreLead").addEventListener("click", scoreCurrentLead);
     $("btnSaveLead").addEventListener("click", saveLead);
+    $("btnRefreshTodayLeads").addEventListener("click", loadDashboard);
     $("webhookUrl").textContent = getWebhookUrl();
     $("btnCopyWebhook").addEventListener("click", function () {
       navigator.clipboard.writeText(getWebhookUrl()).then(function () {
