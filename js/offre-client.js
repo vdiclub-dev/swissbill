@@ -497,6 +497,20 @@ function genererOffre() {
     </ul>
   </div>
 
+  <div class="offre-parrainage">
+    <div class="offre-parrainage-icon">🎁</div>
+    <div class="offre-parrainage-body">
+      <div class="offre-parrainage-titre">Programme de parrainage Colixo</div>
+      <div class="offre-parrainage-texte">
+        Vous connaissez une entreprise qui cherche un partenaire logistique fiable ?
+        <strong>Recommandez Colixo</strong> — si votre filleul signe un contrat et atteint
+        <strong>CHF 500 de facturation</strong>, nous créditons <strong>CHF 100</strong>
+        sur votre prochaine facture. Simple, sans démarche : un email à
+        <a href="mailto:info@colixo.ch" style="color:#cc5500;">info@colixo.ch</a> suffit.
+      </div>
+    </div>
+  </div>
+
   <div class="offre-signatures">
     <div class="offre-sig-block">
       <div class="offre-sig-lbl">Pour Colixo Sàrl</div>
