@@ -201,9 +201,9 @@ function calculer() {
 /* ── Tranches tarifaires ─────────────────────────────────── */
 function _defaultSpeeds() {
   return [
-    { id: ++_sid, label: 'Standard 48h',    supplement: 0    },
-    { id: ++_sid, label: 'Prioritaire 24h', supplement: 2.00 },
-    { id: ++_sid, label: 'Express',          supplement: 5.00 },
+    { id: ++_sid, label: 'Standard 48h',    supplement: 0,    prixDirect: 0 },
+    { id: ++_sid, label: 'Prioritaire 24h', supplement: 2.00, prixDirect: 0 },
+    { id: ++_sid, label: 'Express',          supplement: 5.00, prixDirect: 0 },
   ];
 }
 
@@ -223,7 +223,7 @@ function ajouterSpeed(tid) {
   _syncAllTranchesFromDOM();
   const t = tranches.find(x => x.id === tid);
   if (!t) return;
-  t.speeds.push({ id: ++_sid, label: '', supplement: 0 });
+  t.speeds.push({ id: ++_sid, label: '', supplement: 0, prixDirect: 0 });
   renderTranches(lireParams());
 }
 window.ajouterSpeed = ajouterSpeed;
@@ -251,6 +251,7 @@ function _syncAllTranchesFromDOM() {
       if (!s) return;
       s.label      = row.querySelector('.si-label')?.value || '';
       s.supplement = parseFloat(row.querySelector('.si-supp')?.value) || 0;
+      s.prixDirect = parseFloat(row.querySelector('.si-prix-direct')?.value) || 0;
     });
   });
 }
@@ -272,7 +273,8 @@ function renderTranches(p) {
     const discountedBase = basePrice * (1 - (t.rabais || 0) / 100);
 
     const speedsHTML = t.speeds.map(s => {
-      const pv     = discountedBase + s.supplement;
+      const pvCalc = discountedBase + s.supplement;
+      const pv     = s.prixDirect > 0 ? s.prixDirect : pvCalc;
       const margeP = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
       const mc     = margeP >= 15 ? 'marge-ok' : margeP >= 0 ? 'marge-warn' : 'marge-loss';
       return `
@@ -283,7 +285,11 @@ function renderTranches(p) {
             <input class="si-supp" type="number" value="${s.supplement.toFixed(2)}" min="0" step="0.50" title="Supplément CHF/colis" oninput="recalcTranches()"/>
             <span class="speed-supp-unit">CHF</span>
           </div>
-          <span class="tranche-val">${fCHF(pv)}</span>
+          <div class="speed-direct-wrap">
+            <input class="si-prix-direct" type="number" value="${s.prixDirect > 0 ? s.prixDirect.toFixed(2) : ''}" min="0" step="0.50" placeholder="auto" title="Prix direct CHF (remplace le calcul)" oninput="recalcTranches()"/>
+            <span class="speed-direct-unit">CHF</span>
+          </div>
+          <span class="tranche-val${s.prixDirect > 0 ? ' speed-direct-active' : ''}">${fCHF(pv)}</span>
           <span class="tranche-val ${mc}">${fNum(margeP, 1)}%</span>
           <button type="button" class="tranche-del" onclick="supprimerSpeed(${t.id}, ${s.id})" title="Supprimer">✕</button>
         </div>`;
@@ -309,6 +315,7 @@ function renderTranches(p) {
         <div class="speed-header-row">
           <span>Délai de livraison</span>
           <span>Supplément</span>
+          <span>Prix direct</span>
           <span>Prix/colis</span>
           <span>Marge</span>
           <span></span>
@@ -414,7 +421,7 @@ function _buildTarifHTML() {
     const rabaisNote = src.rabais > 0 ? ' <span style="color:#cc5500;font-size:.78rem;">(rabais volume −' + fNum(src.rabais, 1) + '%)</span>' : '';
     const subtitle = src.label ? '<div class="offre-tarif-sous-titre">' + esc(src.label) + rabaisNote + '</div>' : '';
     const rows = src.speeds.map(function(s) {
-      const pStd = discountedBase + s.supplement;
+      const pStd = (s.prixDirect > 0) ? s.prixDirect : (discountedBase + s.supplement);
       const pLrd = pStd * 1.20;
       return '<tr><td><strong>' + (esc(s.label) || '—') + '</strong></td><td>0 – 15 kg</td><td class="tranche-price">' + fCHF(pStd) + '</td></tr>'
            + '<tr class="offre-row-lourd"><td></td><td>15 – 30 kg</td><td class="tranche-price">' + fCHF(pLrd) + '</td></tr>';
