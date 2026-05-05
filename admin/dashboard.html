@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260504-role-isolation"></script>
     <script data-cfasync="false" src="../push-manager.js?v=20260420"></script>
 
     <style>
@@ -911,6 +912,8 @@ window.saveEntreprise = async function(){
     const numeroClient=document.getElementById('eNumeroClient').value.trim();
     const email=document.getElementById('eEmail').value.trim();
     if(!nom||!email){toast('error','Nom et email requis');return;}
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) { toast('error', 'Session email requise. Reconnectez-vous avec votre adresse e-mail et mot de passe pour modifier les entreprises.'); return; }
     showLoad();
     const id=document.getElementById('entrepriseId').value;
     const payload={nom,numero_client:numeroClient,email,telephone:document.getElementById('eTel').value.trim()||null,contact_nom:document.getElementById('eContactNom').value.trim()||null,adresse:document.getElementById('eAdresse').value.trim()||null,npa:document.getElementById('eNpa').value.trim()||null,ville:document.getElementById('eVille').value.trim()||null};
@@ -1136,6 +1139,10 @@ window.askDelete = function(type, id, label, table){
         : `Supprimer "${label}" ? Cette action est irréversible.`;
     document.getElementById('confirmYes').textContent   = 'Supprimer';
     document.getElementById('confirmYes').onclick=async()=>{
+        if(table === 'entreprises'){
+            const { data: { session } } = await db.auth.getSession();
+            if (!session) { toast('error', 'Session email requise. Reconnectez-vous avec e-mail et mot de passe pour supprimer une entreprise.'); closeModal('modalConfirm'); return; }
+        }
         showLoad();
         try{
             if(table === 'entreprises'){
@@ -1218,9 +1225,12 @@ window.askDelete = function(type, id, label, table){
 //  INIT ✅
 // ══════════════════════════════════════
 async function init(){
-   const {data:{session}}=await db.auth.getSession();
-const codeUser = localStorage.getItem('colixo_user');
-if(!session && !codeUser){window.location.href='../login/index.html';return;}
+    const auth = await window.colixoRequireRoute({
+        roles: ['admin', 'super_admin'],
+        legacyRoles: ['admin', 'super_admin'],
+        redirectTo: '../login/index.html'
+    });
+    if (!auth) return;
     showLoad();
     await loadEntreprises();
     await loadUtilisateurs();
@@ -1234,12 +1244,11 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
     renderTransports();
     // Nom admin (maybeSingle évite 406 si 0 ligne — ex. session code sans JWT ou RLS)
     let parsedCodeUser = null;
-    try { if (codeUser) parsedCodeUser = JSON.parse(codeUser); } catch (e) {}
-    const userId = session?.user?.id || parsedCodeUser?.id || null;
+    try { parsedCodeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null'); } catch (e) {}
+    const userId = auth.userId || auth.profile?.id || parsedCodeUser?.id || null;
     if (userId) {
-        const { data: me } = await db.from('utilisateurs').select('prenom,nom').eq('id', userId).maybeSingle();
-        let prenom = me?.prenom, nom = me?.nom;
-        if (!me && parsedCodeUser) {
+        let prenom = auth.profile?.prenom, nom = auth.profile?.nom;
+        if (!prenom && !nom && parsedCodeUser) {
             prenom = parsedCodeUser.prenom; nom = parsedCodeUser.nom;
         }
         const name = [prenom, nom].filter(Boolean).join(' ') || 'Admin';
@@ -1316,9 +1325,7 @@ if(!session && !codeUser){window.location.href='../login/index.html';return;}
     ).subscribe();
 
     // ── Notifications temps réel ──
-    const _notifUserId = (function(){
-        try { const u = JSON.parse(localStorage.getItem('colixo_user')||'null'); return u?.id||null; } catch(e){ return null; }
-    })();
+    const _notifUserId = auth.userId || auth.profile?.id || parsedCodeUser?.id || null;
     if(_notifUserId) {
         db.channel('notif-'+_notifUserId).on(
             'postgres_changes',

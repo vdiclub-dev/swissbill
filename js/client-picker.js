@@ -354,6 +354,12 @@
     const db = getDB();
     if (!db) return;
 
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) {
+      alert('Session email requise. Reconnectez-vous avec votre adresse e-mail et mot de passe pour créer ou modifier un client.');
+      return;
+    }
+
     const payload = {
       nom,
       numero_client:    gf('cpfNumero')     || null,
