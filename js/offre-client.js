@@ -114,6 +114,10 @@ let tranches = [];
 let _tid = 0;
 let _sid = 0;
 
+/* ── État options supplémentaires ────────────────────────── */
+let options = [];
+let _oid = 0;
+
 /* ── Paramètres de base (partagés par tous les calculs) ──── */
 function lireParams() {
   const nbVehicules   = num('cNbVehicules')      || 1;
@@ -321,6 +325,78 @@ function recalcTranches() {
 window.ajouterTranche = ajouterTranche;
 window.recalcTranches = recalcTranches;
 
+/* ── Options supplémentaires ─────────────────────────────── */
+function ajouterOption() {
+  options.push({ id: ++_oid, label: '', prix: 0, unite: 'CHF/livraison' });
+  renderOptions();
+}
+window.ajouterOption = ajouterOption;
+
+function supprimerOption(id) {
+  options = options.filter(o => o.id !== id);
+  renderOptions();
+}
+window.supprimerOption = supprimerOption;
+
+function _syncOptionsFromDOM() {
+  document.querySelectorAll('.option-row').forEach(row => {
+    const oid = +row.dataset.oid;
+    const o   = options.find(x => x.id === oid);
+    if (!o) return;
+    o.label = row.querySelector('.oi-label')?.value || '';
+    o.prix  = parseFloat(row.querySelector('.oi-prix')?.value) || 0;
+    o.unite = row.querySelector('.oi-unite')?.value || 'CHF/livraison';
+  });
+}
+
+function renderOptions() {
+  const body = $('optionsBody');
+  if (!body) return;
+  if (!options.length) {
+    body.innerHTML = '<div class="tranches-empty">Aucune option — cliquez "+ Ajouter" pour en créer une.</div>';
+    return;
+  }
+  _syncOptionsFromDOM();
+  body.innerHTML = `
+    <div class="option-header-row">
+      <span>Prestation</span><span>Prix</span><span>Unité</span><span></span>
+    </div>
+    ${options.map(o => `
+    <div class="option-row" data-oid="${o.id}">
+      <input class="oi-label" type="text" list="dlOptions" value="${esc(o.label)}" placeholder="Ex : Descente en cave" oninput=""/>
+      <div class="option-prix-wrap">
+        <input class="oi-prix" type="number" value="${o.prix.toFixed(2)}" min="0" step="0.50"/>
+        <span class="option-prix-unit">CHF</span>
+      </div>
+      <select class="oi-unite">
+        <option value="CHF/livraison"${o.unite==='CHF/livraison'?' selected':''}>/ livraison</option>
+        <option value="CHF/colis"${o.unite==='CHF/colis'?' selected':''}>/ colis</option>
+        <option value="CHF/jour"${o.unite==='CHF/jour'?' selected':''}>/ jour</option>
+        <option value="forfait"${o.unite==='forfait'?' selected':''}>forfait</option>
+      </select>
+      <button type="button" class="tranche-del" onclick="supprimerOption(${o.id})" title="Supprimer">✕</button>
+    </div>`).join('')}`;
+}
+window.renderOptions = renderOptions;
+
+/* ── Helper options pour l'offre ────────────────────────── */
+function _buildOptionsHTML() {
+  _syncOptionsFromDOM();
+  if (!options.length) return '';
+  const rows = options.map(function(o) {
+    return '<tr><td>' + (esc(o.label) || '—') + '</td>'
+      + '<td class="tranche-price">' + fCHF(o.prix) + '</td>'
+      + '<td>' + esc(o.unite) + '</td></tr>';
+  }).join('');
+  return '<div class="offre-section">'
+    + '<div class="offre-section-title">6. OPTIONS SUPPLÉMENTAIRES</div>'
+    + '<table class="offre-tranche-table">'
+    + '<thead><tr><th>Prestation</th><th>Prix unitaire</th><th>Unité</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table>'
+    + '<p class="offre-tarif-note">Options facturées en sus du tarif de livraison de base, sur demande explicite lors de la commande.</p>'
+    + '</div>';
+}
+
 /* ── Helper tarification pour l'offre ───────────────────── */
 function _buildTarifHTML() {
   const marge = calcResult.marge || num('cMarge') || 20;
@@ -486,8 +562,10 @@ function genererOffre() {
     <p class="offre-tarif-note">Prix au colis, hors TVA. Colis 15–30 kg majorés de 20%. Sous réserve de validation opérationnelle.</p>
   </div>
 
+  ${_buildOptionsHTML()}
+
   <div class="offre-section">
-    <div class="offre-section-title">6. CONDITIONS COMMERCIALES</div>
+    <div class="offre-section-title">${options.length ? '7.' : '6.'} CONDITIONS COMMERCIALES</div>
     <ul class="offre-list">
       <li>Offre valable <strong>30 jours</strong> à compter de la date d'émission</li>
       <li>Paiement : facturation hebdomadaire (tous les 7 jours), payable à 10 jours net</li>
@@ -609,8 +687,9 @@ document.addEventListener('DOMContentLoaded', () => {
   goSection(1);
 
   // Recalcul en temps réel sur les champs de la section calcul
-  // Init tranches vide
+  // Init tranches et options vides
   renderTranches(lireParams());
+  renderOptions();
 
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
     'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
