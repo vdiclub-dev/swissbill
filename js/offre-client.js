@@ -167,7 +167,7 @@ function _defaultSpeeds() {
 
 function ajouterTranche() {
   const colisDefaut = num('cColisJour') || 30;
-  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, speeds: _defaultSpeeds() });
+  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, rabais: 0, speeds: _defaultSpeeds() });
   renderTranches(lireParams());
 }
 
@@ -202,6 +202,7 @@ function _syncAllTranchesFromDOM() {
     if (!t) return;
     t.label = block.querySelector('.ti-label')?.value || '';
     t.colis = parseFloat(block.querySelector('.ti-colis')?.value) || t.colis;
+    t.rabais = parseFloat(block.querySelector('.ti-rabais')?.value) || 0;
     block.querySelectorAll('.speed-row').forEach(row => {
       const sid = +row.dataset.sid;
       const s   = t.speeds.find(x => x.id === sid);
@@ -224,11 +225,12 @@ function renderTranches(p) {
   const marge = num('cMarge') || 20;
 
   body.innerHTML = tranches.map(t => {
-    const coutBase  = prixColisFor(t.colis, 0, p);
-    const basePrice = prixColisFor(t.colis, marge, p);
+    const coutBase      = prixColisFor(t.colis, 0, p);
+    const basePrice     = prixColisFor(t.colis, marge, p);
+    const discountedBase = basePrice * (1 - (t.rabais || 0) / 100);
 
     const speedsHTML = t.speeds.map(s => {
-      const pv     = basePrice + s.supplement;
+      const pv     = discountedBase + s.supplement;
       const margeP = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
       const mc     = margeP >= 15 ? 'marge-ok' : margeP >= 0 ? 'marge-warn' : 'marge-loss';
       return `
@@ -252,6 +254,10 @@ function renderTranches(p) {
         <div class="tranche-colis-wrap">
           <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
           <span class="tranche-colis-unit">col/j</span>
+        </div>
+        <div class="tranche-rabais-wrap">
+          <input class="ti-rabais" type="number" value="${(t.rabais || 0).toFixed(1)}" min="0" max="100" step="0.5" title="Rabais volume %" oninput="recalcTranches()"/>
+          <span class="tranche-rabais-unit">% rabais</span>
         </div>
         <span class="tranche-val tranche-cout" title="Coût de revient">${fCHF(coutBase)}</span>
         <button type="button" class="btn-ghost btn-sm tranche-add-speed" onclick="ajouterSpeed(${t.id})">+ Délai</button>
@@ -415,16 +421,21 @@ function genererOffre() {
         ? tranches.map(t => ({
             label: t.label || (tranches.length > 1 ? `${t.colis} colis/jour` : ''),
             speeds: t.speeds,
+            rabais: t.rabais || 0,
             basePrice: prixColisFor(t.colis, calcResult.marge, calcResult),
           }))
         : [{
             label: '',
             speeds: [{ label: 'Standard', supplement: 0 }],
+            rabais: 0,
             basePrice: calcResult.prixParColis,
           }];
 
-      return sources.map(src => `
-        ${src.label ? `<div class="offre-tarif-sous-titre">${esc(src.label)}</div>` : ''}
+      return sources.map(src => {
+        const discountedBase = src.basePrice * (1 - src.rabais / 100);
+        const rabaisLabel = src.rabais > 0 ? ` <span style="color:#cc5500;font-size:.78rem;">(rabais volume −${fNum(src.rabais, 1)}%)</span>` : '';
+        return `
+        ${src.label ? `<div class="offre-tarif-sous-titre">${esc(src.label)}${rabaisLabel}</div>` : ''}
         <table class="offre-tranche-table offre-tarif-simple">
           <thead>
             <tr>
@@ -435,7 +446,7 @@ function genererOffre() {
           </thead>
           <tbody>
             ${src.speeds.map(s => {
-              const pStd = src.basePrice + s.supplement;
+              const pStd = discountedBase + s.supplement;
               const pLrd = pStd * 1.20;
               return `
               <tr>
@@ -451,7 +462,8 @@ function genererOffre() {
             }).join('')}
           </tbody>
         </table>
-      `).join('<div style="height:14px;"></div>');
+      `;
+      }).join('<div style="height:14px;"></div>');
     })()}
     <p class="offre-tarif-note">Prix au colis, hors TVA. Colis 15–30 kg majorés de 20%. Sous réserve de validation opérationnelle.</p>
   </div>
