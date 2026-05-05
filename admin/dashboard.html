@@ -912,12 +912,22 @@ window.saveEntreprise = async function(){
     const numeroClient=document.getElementById('eNumeroClient').value.trim();
     const email=document.getElementById('eEmail').value.trim();
     if(!nom||!email){toast('error','Nom et email requis');return;}
-    const { data: { session } } = await db.auth.getSession();
-    if (!session) { toast('error', 'Session email requise. Reconnectez-vous avec votre adresse e-mail et mot de passe pour modifier les entreprises.'); return; }
+    const code = localStorage.getItem('colixo_access_code') || '';
+    if (!code) { toast('error', 'Code d\'accès introuvable. Reconnectez-vous.'); return; }
     showLoad();
     const id=document.getElementById('entrepriseId').value;
-    const payload={nom,numero_client:numeroClient,email,telephone:document.getElementById('eTel').value.trim()||null,contact_nom:document.getElementById('eContactNom').value.trim()||null,adresse:document.getElementById('eAdresse').value.trim()||null,npa:document.getElementById('eNpa').value.trim()||null,ville:document.getElementById('eVille').value.trim()||null};
-    const {error}=id ? await db.from('entreprises').update(payload).eq('id',id) : await db.from('entreprises').insert([payload]);
+    const {data,error}=await db.rpc('admin_upsert_entreprise',{
+        p_code: code,
+        p_id: id || null,
+        p_nom: nom,
+        p_numero_client: numeroClient || null,
+        p_email: email,
+        p_telephone: document.getElementById('eTel').value.trim()||null,
+        p_contact_nom: document.getElementById('eContactNom').value.trim()||null,
+        p_adresse: document.getElementById('eAdresse').value.trim()||null,
+        p_npa: document.getElementById('eNpa').value.trim()||null,
+        p_ville: document.getElementById('eVille').value.trim()||null
+    });
     hideLoad();
     if(error){toast('error','Erreur: '+error.message);return;}
     toast('success',id?'Entreprise modifiée ✓':'Entreprise créée ✓');
@@ -1139,50 +1149,12 @@ window.askDelete = function(type, id, label, table){
         : `Supprimer "${label}" ? Cette action est irréversible.`;
     document.getElementById('confirmYes').textContent   = 'Supprimer';
     document.getElementById('confirmYes').onclick=async()=>{
-        if(table === 'entreprises'){
-            const { data: { session } } = await db.auth.getSession();
-            if (!session) { toast('error', 'Session email requise. Reconnectez-vous avec e-mail et mot de passe pour supprimer une entreprise.'); closeModal('modalConfirm'); return; }
-        }
         showLoad();
         try{
             if(table === 'entreprises'){
-                // 1. Commandes et données liées
-                const {data:orders}=await db.from('transport_orders_simple').select('id').eq('entreprise_id',id);
-                if(orders&&orders.length){
-                    const oIds=orders.map(o=>o.id);
-                    await db.from('facture_lignes').delete().in('order_id',oIds);
-                    await db.from('tracking_events').delete().in('order_id',oIds);
-                    await db.from('preuves_livraison').delete().in('stop_id',oIds);
-                    await db.from('tournee_arrets').delete().in('transport_id',oIds);
-                }
-                await db.from('transport_orders_simple').delete().eq('entreprise_id',id);
-
-                // 2. Factures
-                await db.from('factures').delete().eq('entreprise_id',id);
-
-                // 3. Tarifs
-                await db.from('tarifs_clients').delete().eq('entreprise_id',id);
-                await db.from('tarifs_speciaux').delete().eq('entreprise_id',id);
-
-                // 4. Chauffeurs liés
-                const {data:chaufs}=await db.from('chauffeurs').select('id').eq('entreprise_id',id);
-                if(chaufs&&chaufs.length){
-                    const cIds=chaufs.map(c=>c.id);
-                    await db.from('vehicule_km').delete().in('chauffeur_id',cIds);
-                }
-                await db.from('chauffeurs').delete().eq('entreprise_id',id);
-
-                // 5. Employés
-                await db.from('employees').delete().eq('entreprise_id',id);
-
-                // 6. Utilisateurs liés (toutes leurs données)
-                const {data:users}=await db.from('utilisateurs').select('id').eq('entreprise_id',id);
-                if(users&&users.length){
-                    for(const u of users){ await deleteUserData(u.id); }
-                }
-
-                // 7. Supprimer l'entreprise
-                const {error}=await db.from('entreprises').delete().eq('id',id);
+                const code = localStorage.getItem('colixo_access_code') || '';
+                if (!code) throw new Error('Code d\'accès introuvable. Reconnectez-vous.');
+                const {error}=await db.rpc('admin_delete_entreprise',{p_code:code, p_entreprise_id:id});
                 if(error) throw error;
 
                 await loadEntreprises();
