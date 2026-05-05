@@ -7,7 +7,8 @@ let calcResult = {};
 
 /* ── Callback client-picker ─────────────────────────────── */
 function remplirClientOffre(c) {
-  const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  set('cEntrepriseId',     c.id);
   set('cEntreprise',       c.nom);
   set('cContactNom',       c.contact_nom);
   set('cContactFonction',  c.contact_fonction);
@@ -18,6 +19,43 @@ function remplirClientOffre(c) {
   set('cCanton',           c.canton);
   set('cSiteWeb',          c.site_web);
   set('cSecteur',          c.secteur);
+}
+
+async function sauvegarderClientInfo() {
+  const nom = val('cEntreprise');
+  if (!nom) return;
+  const db = window.SUPABASE_CLIENT;
+  if (!db) return;
+  const code = localStorage.getItem('colixo_access_code') || '';
+  if (!code) return;
+  const id = val('cEntrepriseId') || null;
+  try {
+    const { data, error } = await db.rpc('admin_upsert_entreprise', {
+      p_code:        code,
+      p_id:          id || null,
+      p_nom:         nom,
+      p_email:       val('cEmail')      || null,
+      p_telephone:   val('cTelephone')  || null,
+      p_contact_nom: val('cContactNom') || null,
+      p_adresse:     val('cAdresse')    || null,
+      p_ville:       val('cVille')      || null,
+      p_npa:         null,
+      p_numero_client: null,
+    });
+    if (!error && data) {
+      const newId = (typeof data === 'object' && data.id) ? data.id : (typeof data === 'string' ? data : null);
+      if (newId) { const el = $('cEntrepriseId'); if (el) el.value = newId; }
+      toast('Client enregistré ✓', 'ok');
+    }
+  } catch (_) { /* silencieux */ }
+}
+
+async function avancerSection1() {
+  const btn = $('btnSection1Next');
+  if (btn) btn.disabled = true;
+  await sauvegarderClientInfo();
+  if (btn) btn.disabled = false;
+  nextSection();
 }
 
 /* ── Utilitaires ─────────────────────────────────────────── */
@@ -581,9 +619,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Exposer globalement
-window.goSection      = goSection;
-window.prevSection    = prevSection;
-window.nextSection    = nextSection;
+window.goSection          = goSection;
+window.prevSection        = prevSection;
+window.nextSection        = nextSection;
+window.avancerSection1    = avancerSection1;
+window.sauvegarderClientInfo = sauvegarderClientInfo;
 window.calculer       = calculer;
 window.genererOffre   = genererOffre;
 window.imprimerOffre  = imprimerOffre;
