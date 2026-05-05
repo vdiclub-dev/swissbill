@@ -283,6 +283,35 @@ function recalcTranches() {
 window.ajouterTranche = ajouterTranche;
 window.recalcTranches = recalcTranches;
 
+/* ── Helper tarification pour l'offre ───────────────────── */
+function _buildTarifHTML() {
+  const marge = calcResult.marge || num('cMarge') || 20;
+  const sources = tranches.length
+    ? tranches.map(t => ({
+        label: t.label || (tranches.length > 1 ? (t.colis + ' colis/jour') : ''),
+        speeds: t.speeds,
+        rabais: t.rabais || 0,
+        basePrice: prixColisFor(t.colis, marge, calcResult),
+      }))
+    : [{ label: '', speeds: [{ label: 'Standard', supplement: 0 }], rabais: 0, basePrice: calcResult.prixParColis || 0 }];
+
+  return sources.map(function(src) {
+    const discountedBase = src.basePrice * (1 - src.rabais / 100);
+    const rabaisNote = src.rabais > 0 ? ' <span style="color:#cc5500;font-size:.78rem;">(rabais volume −' + fNum(src.rabais, 1) + '%)</span>' : '';
+    const subtitle = src.label ? '<div class="offre-tarif-sous-titre">' + esc(src.label) + rabaisNote + '</div>' : '';
+    const rows = src.speeds.map(function(s) {
+      const pStd = discountedBase + s.supplement;
+      const pLrd = pStd * 1.20;
+      return '<tr><td><strong>' + (esc(s.label) || '—') + '</strong></td><td>0 – 15 kg</td><td class="tranche-price">' + fCHF(pStd) + '</td></tr>'
+           + '<tr class="offre-row-lourd"><td></td><td>15 – 30 kg</td><td class="tranche-price">' + fCHF(pLrd) + '</td></tr>';
+    }).join('');
+    return subtitle
+      + '<table class="offre-tranche-table offre-tarif-simple">'
+      + '<thead><tr><th>Catégorie</th><th>Poids du colis</th><th>Prix du colis</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>';
+  }).join('<div style="height:14px;"></div>');
+}
+
 /* ── Génération offre ────────────────────────────────────── */
 function genererOffre() {
   calculer();
@@ -415,56 +444,7 @@ function genererOffre() {
 
   <div class="offre-section offre-tarif-section">
     <div class="offre-section-title">5. TARIFICATION PAR CATÉGORIE DE POIDS</div>
-    ${(() => {
-      // Construire les lignes : une source de prix par tranche ou prix de base
-      const sources = tranches.length
-        ? tranches.map(t => ({
-            label: t.label || (tranches.length > 1 ? `${t.colis} colis/jour` : ''),
-            speeds: t.speeds,
-            rabais: t.rabais || 0,
-            basePrice: prixColisFor(t.colis, calcResult.marge, calcResult),
-          }))
-        : [{
-            label: '',
-            speeds: [{ label: 'Standard', supplement: 0 }],
-            rabais: 0,
-            basePrice: calcResult.prixParColis,
-          }];
-
-      return sources.map(src => {
-        const discountedBase = src.basePrice * (1 - src.rabais / 100);
-        const rabaisLabel = src.rabais > 0 ? ` <span style="color:#cc5500;font-size:.78rem;">(rabais volume −${fNum(src.rabais, 1)}%)</span>` : '';
-        return `
-        ${src.label ? `<div class="offre-tarif-sous-titre">${esc(src.label)}${rabaisLabel}</div>` : ''}
-        <table class="offre-tranche-table offre-tarif-simple">
-          <thead>
-            <tr>
-              <th>Catégorie</th>
-              <th>Poids du colis</th>
-              <th>Prix du colis</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${src.speeds.map(s => {
-              const pStd = discountedBase + s.supplement;
-              const pLrd = pStd * 1.20;
-              return `
-              <tr>
-                <td><strong>${esc(s.label) || '—'}</strong></td>
-                <td>0 – 15 kg</td>
-                <td class="tranche-price">${fCHF(pStd)}</td>
-              </tr>
-              <tr class="offre-row-lourd">
-                <td></td>
-                <td>15 – 30 kg</td>
-                <td class="tranche-price">${fCHF(pLrd)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      `;
-      }).join('<div style="height:14px;"></div>');
-    })()}
+    ${_buildTarifHTML()}
     <p class="offre-tarif-note">Prix au colis, hors TVA. Colis 15–30 kg majorés de 20%. Sous réserve de validation opérationnelle.</p>
   </div>
 
