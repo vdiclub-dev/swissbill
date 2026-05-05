@@ -281,7 +281,7 @@ function renderTranches(p) {
       return `
         <div class="speed-row" data-sid="${s.id}">
           <div class="speed-label-col">
-            <input class="si-label" type="text" list="dlVitesses" value="${esc(s.label)}" placeholder="Ex : Standard 48h" oninput="recalcTranches()"/>
+            <input class="si-label" type="text" list="dlVitesses" value="${esc(s.label)}" placeholder="Ex : Standard 48h" oninput="recalcTranches()" onchange="recalcTranches()"/>
             ${spec ? `<div class="speed-dim-note">max ${spec.maxPoids} kg · ${spec.dimLabel}</div>` : ''}
           </div>
           <div class="speed-supp-wrap">
@@ -421,6 +421,7 @@ function _buildOptionsHTML() {
 
 /* ── Helper tarification pour l'offre ───────────────────── */
 function _buildTarifHTML() {
+  _syncAllTranchesFromDOM();
   const marge = calcResult.marge || num('cMarge') || 20;
   const sources = tranches.length
     ? tranches.map(t => ({
