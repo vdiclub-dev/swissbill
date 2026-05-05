@@ -277,9 +277,13 @@ function renderTranches(p) {
       const pv     = s.prixDirect > 0 ? s.prixDirect : pvCalc;
       const margeP = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
       const mc     = margeP >= 15 ? 'marge-ok' : margeP >= 0 ? 'marge-warn' : 'marge-loss';
+      const spec = _getSpeedSpec(s.label);
       return `
         <div class="speed-row" data-sid="${s.id}">
-          <input class="si-label" type="text" list="dlVitesses" value="${esc(s.label)}" placeholder="Ex : Standard 48h" oninput="recalcTranches()"/>
+          <div class="speed-label-col">
+            <input class="si-label" type="text" list="dlVitesses" value="${esc(s.label)}" placeholder="Ex : Standard 48h" oninput="recalcTranches()"/>
+            ${spec ? `<div class="speed-dim-note">max ${spec.maxPoids} kg · ${spec.dimLabel}</div>` : ''}
+          </div>
           <div class="speed-supp-wrap">
             <span>+</span>
             <input class="si-supp" type="number" value="${s.supplement.toFixed(2)}" min="0" step="0.50" title="Supplément CHF/colis" oninput="recalcTranches()"/>
@@ -386,6 +390,17 @@ function renderOptions() {
 }
 window.renderOptions = renderOptions;
 
+/* ── Spécifications connues par service ─────────────────── */
+function _getSpeedSpec(label) {
+  const k = (label || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const S = {
+    'vinolog 48h':          { poidsLabel: '0–30 kg',    dimLabel: '100 × 60 × 60 cm', maxPoids: 30,   singleRow: true },
+    'vinolog priority 24h': { poidsLabel: '0–13,5 kg',  dimLabel: '39 × 26 × 17,5 cm', maxPoids: 13.5, singleRow: true },
+    'vinolog priority':     { poidsLabel: '0–13,5 kg',  dimLabel: '39 × 26 × 17,5 cm', maxPoids: 13.5, singleRow: true },
+  };
+  return S[k] || null;
+}
+
 /* ── Helper options pour l'offre ────────────────────────── */
 function _buildOptionsHTML() {
   _syncOptionsFromDOM();
@@ -423,6 +438,12 @@ function _buildTarifHTML() {
     const rows = src.speeds.map(function(s) {
       const pStd = (s.prixDirect > 0) ? s.prixDirect : (discountedBase + s.supplement);
       const pLrd = pStd * 1.20;
+      const spec = _getSpeedSpec(s.label);
+      if (spec) {
+        return '<tr><td><strong>' + (esc(s.label) || '—') + '</strong></td>'
+          + '<td>' + spec.poidsLabel + '<br><span style="font-size:.75rem;color:#888;">' + spec.dimLabel + '</span></td>'
+          + '<td class="tranche-price">' + fCHF(pStd) + '</td></tr>';
+      }
       return '<tr><td><strong>' + (esc(s.label) || '—') + '</strong></td><td>0 – 15 kg</td><td class="tranche-price">' + fCHF(pStd) + '</td></tr>'
            + '<tr class="offre-row-lourd"><td></td><td>15 – 30 kg</td><td class="tranche-price">' + fCHF(pLrd) + '</td></tr>';
     }).join('');
