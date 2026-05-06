@@ -6,3 +6,8 @@ const supabaseClient = supabase.createClient(
   supabaseUrl,
   supabaseKey
 )
+
+window.supabaseClient = supabaseClient
+if (!window.SUPABASE_CLIENT) {
+  window.SUPABASE_CLIENT = supabaseClient
+}

@@ -14,6 +14,7 @@
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -446,30 +447,24 @@
 
     /* ── Auth ── */
     async function init() {
-        const { data: { session } } = await db.auth.getSession();
-        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        if (!session && !codeUser) { window.location.href = '../login/index.html'; return; }
-        const uid = session?.user?.id || codeUser?.id;
-        const { data: user } = uid ? await db.from('utilisateurs').select('*').eq('id', uid).maybeSingle() : { data: null };
-        const effectiveRole = user?.role || codeUser?.role || '';
+        const auth = await window.colixoGetAuthContext({
+            roles: ['admin','super_admin'],
+            legacyRoles: ['admin','super_admin']
+        });
+        const user = auth ? auth.profile : null;
+        const effectiveRole = user?.role || '';
         if (!['admin','super_admin'].includes(effectiveRole)) {
             window.location.href = '../login/index.html';
             return;
         }
-        const displayUser = user || codeUser;
+        const displayUser = user;
         if (displayUser) {
             const init = ((displayUser.prenom?.[0]||'')+(displayUser.nom?.[0]||'')).toUpperCase()||'SA';
             document.getElementById('sideAvatar').textContent = init;
             document.getElementById('sideName').textContent   = [displayUser.prenom,displayUser.nom].filter(Boolean).join(' ')||'Admin';
         }
         document.getElementById('btnLogout').addEventListener('click', async () => {
-            if (window.colixoLogout) {
-                window.colixoLogout();
-                return;
-            }
-            await db.auth.signOut();
-            localStorage.removeItem('colixo_user');
-            window.location.href = '../login/index.html';
+            await window.colixoLogout();
         });
         await loadData();
     }

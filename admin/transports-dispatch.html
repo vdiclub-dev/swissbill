@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="../vendor/supabase.umd.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <script src="ai-dispatch.js?v=20260422"></script>
     <script src="profit.js?v=20260423"></script>
     <script src="pricing.js?v=20260423"></script>
@@ -1836,12 +1837,13 @@ window.addEventListener('colixo:billing_ready',function(){
         if(view==='inbox'||view==='portal'||portalHighlightId){
             document.getElementById('filtreStatut').value='pending_validation';
         }
-        var _a=await db.auth.getSession();
-        var cu=JSON.parse(localStorage.getItem('colixo_user')||'null');
-        if(!_a.data.session&&!cu){window.location.href='../login/index.html';return;}
-        var uid=(_a.data.session&&_a.data.session.user&&_a.data.session.user.id)||(cu&&cu.id);
-        var u=uid?await db.from('utilisateurs').select('role').eq('id',uid).single():{data:null};
-        var role=(u.data&&u.data.role)||(cu&&cu.role)||'';
+        var auth=await window.colixoRequireRoute({
+            roles:['admin','super_admin'],
+            legacyRoles:['admin','super_admin'],
+            redirectTo:'../login/index.html'
+        });
+        if(!auth)return;
+        var role=(auth&&auth.role)||'';
         if(!['admin','super_admin'].includes(role)){window.location.href='../login/index.html';return;}
         await loadChauffeurs();
         await loadTournees();
