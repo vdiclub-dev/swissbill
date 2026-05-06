@@ -398,8 +398,12 @@ let tarifGrid = [
   { id: 'pri24_h',  label: 'Prioritaire 24h',     poids: '15–30 kg',  dim: null,                   prix: 0, actif: false },
   { id: 'exp_l',    label: 'Express',              poids: '0–15 kg',   dim: null,                   prix: 0, actif: false },
   { id: 'exp_h',    label: 'Express',              poids: '15–30 kg',  dim: null,                   prix: 0, actif: false },
-  { id: 'vino48',   label: 'VinoLog 48h',          poids: '0–30 kg',   dim: '100 × 60 × 60 cm',     prix: 0, actif: false },
-  { id: 'vino24p',  label: 'VinoLog Priority 24h', poids: '0–13,5 kg', dim: '39 × 26 × 17,5 cm',    prix: 0, actif: false },
+  { id: 'vino48_s', label: 'VinoLog 48h',  poids: '0–12 kg',  dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino48_m', label: 'VinoLog 48h',  poids: '12–20 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino48_l', label: 'VinoLog 48h',  poids: '20–30 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino24_s', label: 'VinoLog 24h',  poids: '0–12 kg',  dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino24_m', label: 'VinoLog 24h',  poids: '12–20 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino24_l', label: 'VinoLog 24h',  poids: '20–30 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
 ];
 
 function renderTarifGrid() {
@@ -437,9 +441,10 @@ window.syncTarifRow = syncTarifRow;
 function _getSpeedSpec(label) {
   const k = (label || '').toLowerCase().replace(/\s+/g, ' ').trim();
   const S = {
-    'vinolog 48h':          { poidsLabel: '0–30 kg',    dimLabel: '100 × 60 × 60 cm', maxPoids: 30,   singleRow: true },
-    'vinolog priority 24h': { poidsLabel: '0–13,5 kg',  dimLabel: '39 × 26 × 17,5 cm', maxPoids: 13.5, singleRow: true },
-    'vinolog priority':     { poidsLabel: '0–13,5 kg',  dimLabel: '39 × 26 × 17,5 cm', maxPoids: 13.5, singleRow: true },
+    'vinolog 48h':          { dimLabel: '100 × 60 × 60 cm', singleRow: true },
+    'vinolog 24h':          { dimLabel: '100 × 60 × 60 cm', singleRow: true },
+    'vinolog priority 24h': { dimLabel: '100 × 60 × 60 cm', singleRow: true },
+    'vinolog priority':     { dimLabel: '100 × 60 × 60 cm', singleRow: true },
   };
   return S[k] || null;
 }
