@@ -606,6 +606,7 @@ async function getOrCreateAuthUser(email, pwd) {
 }
 
 let entreprises=[], utilisateurs=[], chauffeurs=[], transports=[];
+let adminAuthContext = null;
 
 // ── TOAST ──
 const toastEl = document.getElementById('toast');
@@ -616,6 +617,15 @@ function toast(type, msg){
     document.getElementById('toastIco').textContent = type==='success'?'✓':'✕';
     document.getElementById('toastTxt').textContent = msg;
     toastTimer = setTimeout(()=>toastEl.classList.remove('show'),4000);
+}
+
+function getAdminAccessCode(){
+    const profile = adminAuthContext && adminAuthContext.profile;
+    const code = profile?.code || profile?.code_usr || profile?.code_acces || profile?.code_connexion
+        || (window.colixoGetStoredCode && window.colixoGetStoredCode())
+        || localStorage.getItem('colixo_access_code')
+        || '';
+    return String(code).trim().toUpperCase();
 }
 
 // ── LOADER ──
@@ -913,7 +923,7 @@ window.saveEntreprise = async function(){
     const numeroClient=document.getElementById('eNumeroClient').value.trim();
     const email=document.getElementById('eEmail').value.trim();
     if(!nom||!email){toast('error','Nom et email requis');return;}
-    const code = localStorage.getItem('colixo_access_code') || '';
+    const code = getAdminAccessCode();
     if (!code) { toast('error', 'Code d\'accès introuvable. Reconnectez-vous.'); return; }
     showLoad();
     const id=document.getElementById('entrepriseId').value;
@@ -1204,6 +1214,7 @@ async function init(){
         redirectTo: '../login/index.html'
     });
     if (!auth) return;
+    adminAuthContext = auth;
     showLoad();
     await loadEntreprises();
     await loadUtilisateurs();
