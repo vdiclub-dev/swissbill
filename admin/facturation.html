@@ -419,20 +419,62 @@
         return 0;
     }
 
+    function calcRemiseCA(caHT){
+        if(caHT>=2000)return 8;
+        if(caHT>=1500)return 6;
+        if(caHT>=1000)return 4;
+        if(caHT>=500) return 2;
+        return 0;
+    }
+
     // ── Remise mensuelle ──
     // Compte TOUS les colis livrés ce mois (facturés + courants)
     // La remise n'est appliquée que si on est en fin de mois (dernière semaine)
-    async function getRemiseMensuelle(entId, tarif, periodeFin, colisFactureCourante) {
+    // Si le client est éligible au rabais progressif CA, ce système prend le dessus
+    async function getRemiseMensuelle(entId, tarif, periodeFin, colisFactureCourante, montantHTCourant) {
+        montantHTCourant = montantHTCourant || 0;
         try {
             const fin = periodeFin || today();
             const moisDebut = fin.slice(0,7) + '-01';
-            // Dernière semaine du mois ?
+
+            // ── Vérifier éligibilité rabais progressif CA ──
+            let hasRabaisCA = false;
+            try {
+                const {data: caRule} = await db.from('client_tariff_rules')
+                    .select('is_active')
+                    .eq('client_id', entId)
+                    .eq('tariff_code', 'RABAIS_CA')
+                    .eq('is_active', true)
+                    .maybeSingle();
+                hasRabaisCA = !!caRule;
+            } catch(_) {}
+
+            if(hasRabaisCA) {
+                // Rabais basé sur le CA mensuel (CHF HT)
+                const {data: factMois} = await db.from('factures')
+                    .select('montant_ht')
+                    .eq('entreprise_id', entId)
+                    .gte('created_at', moisDebut+'T00:00:00')
+                    .lte('created_at', fin+'T23:59:59');
+                const caDejaFacture = (factMois||[]).reduce((s,f)=>s+parseFloat(f.montant_ht||0),0);
+                const caMensuel = caDejaFacture + montantHTCourant;
+                const remisePct = calcRemiseCA(caMensuel);
+                return {
+                    remisePct,
+                    info: remisePct > 0
+                        ? `🏷 Rabais CA ${remisePct}% — CA mois : CHF ${fmt(caMensuel)}`
+                        : `📊 CA mois : CHF ${fmt(caMensuel)} — seuil CHF 500 non atteint`,
+                    estFinMois: true,
+                    totalMois: caMensuel
+                };
+            }
+
+            // ── Système classique par volume colis ──
             const finDate    = new Date(fin);
             const dernierJour = new Date(finDate.getFullYear(), finDate.getMonth()+1, 0);
             const estFinMois  = (dernierJour.getDate() - finDate.getDate()) <= 7;
 
             if(!estFinMois) {
-                // Pas fin de mois → afficher cumul mais sans remise
                 const {data} = await db.from('transport_orders_simple')
                     .select('quantity')
                     .eq('status','delivered')
@@ -695,7 +737,7 @@
         let montantHT=currentFactureLignes.reduce((s,o)=>s+calcPrixColis(o,tarif).total,0);
 
         // Remise mensuelle
-        const remise = entId ? await getRemiseMensuelle(entId, tarif, fin, totalColis) : {remisePct:0,info:'—'};
+        const remise = entId ? await getRemiseMensuelle(entId, tarif, fin, totalColis, montantHT) : {remisePct:0,info:'—'};
         const remisePct = remise.remisePct;
         const remiseMnt = remisePct>0 ? montantHT*remisePct/100 : 0;
         const net=montantHT-remiseMnt;
@@ -726,7 +768,7 @@
             const montantHT=currentFactureLignes.reduce((s,o)=>s+calcPrixColis(o,tarif).total,0);
             const fin=document.getElementById('fFin').value;
             // Remise mensuelle
-            const remise = await getRemiseMensuelle(entId, tarif, fin, totalColis);
+            const remise = await getRemiseMensuelle(entId, tarif, fin, totalColis, montantHT);
             const remisePct = remise.remisePct;
             const remiseMnt=remisePct>0?montantHT*remisePct/100:0;
             const net=montantHT-remiseMnt;
