@@ -390,6 +390,49 @@ function renderOptions() {
 }
 window.renderOptions = renderOptions;
 
+/* ── Grille tarifaire ────────────────────────────────────── */
+let tarifGrid = [
+  { id: 'std48_l',  label: 'Standard 48h',        poids: '0–15 kg',   dim: null,                   prix: 0, actif: true  },
+  { id: 'std48_h',  label: 'Standard 48h',        poids: '15–30 kg',  dim: null,                   prix: 0, actif: true  },
+  { id: 'pri24_l',  label: 'Prioritaire 24h',     poids: '0–15 kg',   dim: null,                   prix: 0, actif: true  },
+  { id: 'pri24_h',  label: 'Prioritaire 24h',     poids: '15–30 kg',  dim: null,                   prix: 0, actif: false },
+  { id: 'exp_l',    label: 'Express',              poids: '0–15 kg',   dim: null,                   prix: 0, actif: false },
+  { id: 'exp_h',    label: 'Express',              poids: '15–30 kg',  dim: null,                   prix: 0, actif: false },
+  { id: 'vino48',   label: 'VinoLog 48h',          poids: '0–30 kg',   dim: '100 × 60 × 60 cm',     prix: 0, actif: false },
+  { id: 'vino24p',  label: 'VinoLog Priority 24h', poids: '0–13,5 kg', dim: '39 × 26 × 17,5 cm',    prix: 0, actif: false },
+];
+
+function renderTarifGrid() {
+  const body = $('tarifGridBody');
+  if (!body) return;
+  body.innerHTML = tarifGrid.map(function(row) {
+    const dimNote = row.dim ? '<div class="gi-dim">' + esc(row.dim) + '</div>' : '';
+    const prixVal = row.prix > 0 ? row.prix.toFixed(2) : '';
+    return '<div class="tarif-grid-row' + (row.actif ? ' tarif-row-active' : '') + '">'
+      + '<input type="checkbox" class="gi-chk"' + (row.actif ? ' checked' : '') + ' onchange="toggleTarifRow(\'' + row.id + '\')">'
+      + '<div class="gi-label">' + esc(row.label) + dimNote + '</div>'
+      + '<span class="gi-poids">' + esc(row.poids) + '</span>'
+      + '<div class="gi-prix-wrap">'
+      + '<input class="gi-prix" type="number" value="' + prixVal + '" min="0" step="0.50" placeholder="—"'
+      + ' oninput="syncTarifRow(\'' + row.id + '\', this.value)">'
+      + '<span class="gi-prix-unit">CHF</span>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function toggleTarifRow(id) {
+  const row = tarifGrid.find(function(r) { return r.id === id; });
+  if (row) { row.actif = !row.actif; renderTarifGrid(); }
+}
+window.toggleTarifRow = toggleTarifRow;
+
+function syncTarifRow(id, v) {
+  const row = tarifGrid.find(function(r) { return r.id === id; });
+  if (row) row.prix = parseFloat(v) || 0;
+}
+window.syncTarifRow = syncTarifRow;
+
 /* ── Spécifications connues par service ─────────────────── */
 function _getSpeedSpec(label) {
   const k = (label || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -421,6 +464,26 @@ function _buildOptionsHTML() {
 
 /* ── Helper tarification pour l'offre ───────────────────── */
 function _buildTarifHTML() {
+  // Grille tarifaire (nouveau système)
+  const activeRows = tarifGrid.filter(function(r) { return r.actif; });
+  if (activeRows.length) {
+    const rows = activeRows.map(function(r) {
+      const prixCell = r.prix > 0 ? fCHF(r.prix) : '<span style="color:#aaa;font-style:italic;">—</span>';
+      if (r.dim) {
+        return '<tr><td><strong>' + esc(r.label) + '</strong></td>'
+          + '<td>' + esc(r.poids) + '<br><span style="font-size:.75rem;color:#888;">' + esc(r.dim) + '</span></td>'
+          + '<td class="tranche-price">' + prixCell + '</td></tr>';
+      }
+      return '<tr><td><strong>' + esc(r.label) + '</strong></td>'
+        + '<td>' + esc(r.poids) + '</td>'
+        + '<td class="tranche-price">' + prixCell + '</td></tr>';
+    }).join('');
+    return '<table class="offre-tranche-table offre-tarif-simple">'
+      + '<thead><tr><th>Service</th><th>Catégorie de poids</th><th>Prix / colis</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>';
+  }
+
+  // Fallback: ancien système tranches
   _syncAllTranchesFromDOM();
   const marge = calcResult.marge || num('cMarge') || 20;
   const sources = tranches.length
@@ -716,7 +779,8 @@ document.addEventListener('DOMContentLoaded', () => {
   goSection(1);
 
   // Recalcul en temps réel sur les champs de la section calcul
-  // Init tranches et options vides
+  // Init grille tarifaire et options
+  renderTarifGrid();
   renderTranches(lireParams());
   renderOptions();
 
