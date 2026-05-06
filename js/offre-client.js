@@ -445,7 +445,7 @@ function _getSpeedSpec(label) {
 }
 
 /* ── Helper options pour l'offre ────────────────────────── */
-function _buildOptionsHTML() {
+function _buildOptionsHTML(n) {
   _syncOptionsFromDOM();
   if (!options.length) return '';
   const rows = options.map(function(o) {
@@ -454,11 +454,37 @@ function _buildOptionsHTML() {
       + '<td>' + esc(o.unite) + '</td></tr>';
   }).join('');
   return '<div class="offre-section">'
-    + '<div class="offre-section-title">6. OPTIONS SUPPLÉMENTAIRES</div>'
+    + '<div class="offre-section-title">' + n + '. OPTIONS SUPPLÉMENTAIRES</div>'
     + '<table class="offre-tranche-table">'
     + '<thead><tr><th>Prestation</th><th>Prix unitaire</th><th>Unité</th></tr></thead>'
     + '<tbody>' + rows + '</tbody></table>'
     + '<p class="offre-tarif-note">Options facturées en sus du tarif de livraison de base, sur demande explicite lors de la commande.</p>'
+    + '</div>';
+}
+
+/* ── Helper rabais progressif ────────────────────────────── */
+function _buildRabaisHTML(n) {
+  if (!chk('inclureRabais')) return '';
+  return '<div class="offre-section">'
+    + '<div class="offre-section-title">' + n + '. PROGRAMME DE RABAIS PROGRESSIF</div>'
+    + '<p style="font-size:.88rem;line-height:1.6;margin-bottom:14px;">'
+    + 'Nous vous accordons un rabais à partir d\'un chiffre d\'affaires mensuel de <strong>CHF 500.00</strong>.'
+    + '</p>'
+    + '<table class="offre-tranche-table">'
+    + '<thead><tr>'
+    + '<th>Chiffre d\'affaires mensuel (CHF HT)</th>'
+    + '<th style="text-align:right;">Rabais</th>'
+    + '</tr></thead>'
+    + '<tbody>'
+    + '<tr><td>À partir de CHF 500.00</td>  <td class="rabais-pct">2 %</td></tr>'
+    + '<tr><td>À partir de CHF 1\'000.00</td><td class="rabais-pct">4 %</td></tr>'
+    + '<tr><td>À partir de CHF 1\'500.00</td><td class="rabais-pct">6 %</td></tr>'
+    + '<tr><td>À partir de CHF 2\'000.00</td><td class="rabais-pct">8 %</td></tr>'
+    + '</tbody></table>'
+    + '<p class="offre-tarif-note" style="margin-top:10px;">'
+    + 'Le rabais s\'applique au chiffre d\'affaires de tous les services de livraison facturés (hors TVA). '
+    + 'Vous expédiez plus de 5\'000 colis par an ? Contactez-nous pour une offre personnalisée adaptée à vos besoins.'
+    + '</p>'
     + '</div>';
 }
 
@@ -562,6 +588,13 @@ function genererOffre() {
   if (!chk('cPrepCommandes')) nonPrest.push('Préparation de commandes');
   if (!chk('cScan'))          nonPrest.push('Scan/inventaire colis');
 
+  // Numérotation dynamique des sections après la tarification
+  _syncOptionsFromDOM();
+  let _sIdx = 6;
+  const _offreOptH = options.length       ? _buildOptionsHTML(_sIdx++) : '';
+  const _offreRabH = chk('inclureRabais') ? _buildRabaisHTML(_sIdx++)  : '';
+  const _condNum   = _sIdx;
+
   const offreHTML = `
 <div class="offre-doc" id="offreDoc">
 
@@ -654,10 +687,11 @@ function genererOffre() {
     <p class="offre-tarif-note">Prix au colis, hors TVA. Colis 15–30 kg majorés de 20%. Sous réserve de validation opérationnelle.</p>
   </div>
 
-  ${_buildOptionsHTML()}
+  ${_offreOptH}
+  ${_offreRabH}
 
   <div class="offre-section">
-    <div class="offre-section-title">${options.length ? '7.' : '6.'} CONDITIONS COMMERCIALES</div>
+    <div class="offre-section-title">${_condNum}. CONDITIONS COMMERCIALES</div>
     <ul class="offre-list">
       <li>Offre valable <strong>30 jours</strong> à compter de la date d'émission</li>
       <li>Paiement : facturation hebdomadaire (tous les 7 jours), payable à 10 jours net</li>
