@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script data-cfasync="false" src="../config.js?v=20260462"></script>
+  <script data-cfasync="false" src="../config.js?v=20260507"></script>
   <script data-cfasync="false" src="../js/auth.js?v=20260504-role-isolation"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -497,16 +497,17 @@
     return data || [];
   }
 
-  async function fetchClientTariffRules(clientId) {
+  async function fetchClientTariffRules(clientId, includeInactive) {
     try {
       const rpc = await db.rpc('admin_list_client_tariff_rules', getAdminRpcPayload({ p_client_id: clientId }));
-      if (!rpc.error) return rpc.data || [];
+      if (!rpc.error && !includeInactive) return rpc.data || [];
     } catch (_) {}
-    const { data } = await db.from('client_tariff_rules')
+    let query = db.from('client_tariff_rules')
       .select('*')
       .eq('client_id', clientId)
-      .eq('is_active', true)
       .order('priority', { ascending: true });
+    if (!includeInactive) query = query.eq('is_active', true);
+    const { data } = await query;
     return data || [];
   }
 
@@ -584,12 +585,14 @@
     if (!produits.length) { body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;font-style:italic;">Aucun produit defini.</p>'; return; }
     const ovMap = Object.fromEntries(overrides.map(o => [o.produit_id, o]));
     const ruleByProduct = new Map((rules || []).filter(r => r.produit_id).map(r => [String(r.produit_id), r]));
-    const ruleMap = new Map((rules || []).map(r => [tariffKey(r.tariff_code), r]));
+    const legacyRuleMap = new Map((rules || [])
+      .filter(r => !r.produit_id)
+      .map(r => [tariffKey(r.tariff_code || r.name), r]));
     const CTRS = ['', '2e colis meme client', 'Montage de pendule', 'Montage de meuble', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
 
     const serviceProducts = produits.filter(p => !isDefaultOptionProduct(p));
     const optionProducts = produits.filter(p => isDefaultOptionProduct(p));
-    const appliedCount = serviceProducts.filter(p => ruleByProduct.get(String(p.id)) || ruleMap.get(tariffKey(p.ref || p.nom))).length;
+    const appliedCount = serviceProducts.filter(p => ruleByProduct.get(String(p.id)) || legacyRuleMap.get(tariffKey(p.ref || p.nom))).length;
     const activeOptionCount = optionProducts.filter(p => {
       const ov = ovMap[p.id];
       return ov && ov.actif !== false && ov.contrainte;
@@ -598,7 +601,7 @@
     function renderServiceRows(items) {
       if (!items.length) return '<tr><td colspan="6" class="empty-cell">Aucun tarif de livraison dans la grille standard.</td></tr>';
       return items.map(p => {
-        const rule = ruleByProduct.get(String(p.id)) || ruleMap.get(tariffKey(p.ref || p.nom));
+        const rule = ruleByProduct.get(String(p.id)) || legacyRuleMap.get(tariffKey(p.ref || p.nom));
         const hasRule = !!rule;
         const price = rule ? Number(rule.base_price_chf || 0) : Number(p.prix || 0);
         const increment = rule ? Number(rule.price_per_kg_chf || 0) : Number(p.increment_par_kg || 0);
@@ -726,8 +729,23 @@
     if (checkbox) checkbox.disabled = true;
     let directError = null;
     try {
+      const rpcName = enabled ? 'admin_set_client_tariff_rule_price' : 'admin_set_client_tariff_rule';
+      const rpcPayload = getAdminRpcPayload({
+        p_client_id: clientId,
+        p_product_id: prodId,
+        p_enabled: enabled
+      });
+      if (enabled) rpcPayload.p_base_price_chf = Number(p.prix || 0);
+      const rpcToggle = await db.rpc(rpcName, rpcPayload);
+      if (!rpcToggle.error) {
+        toast(enabled ? 'Tarif appliqué au client.' : 'Tarif retiré du client.', 'info');
+        await refreshClientTable(clientId);
+        return;
+      }
+      directError = rpcToggle.error;
+
       const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
-      const existing = await fetchClientTariffRules(clientId);
+      const existing = await fetchClientTariffRules(clientId, true);
       const current = existing.find(r => String(r.produit_id || '') === String(prodId))
         || existing.find(r => tariffKey(r.tariff_code) === tariffKey(rule.tariff_code));
       if (enabled) {
@@ -735,9 +753,16 @@
           ? await db.from('client_tariff_rules').update(rule).eq('id', current.id)
           : await db.from('client_tariff_rules').insert(rule);
         if (res.error) throw res.error;
-      } else if (current?.id) {
-        const res = await db.from('client_tariff_rules').update({ is_active: false }).eq('id', current.id);
-        if (res.error) throw res.error;
+      } else {
+        const code = tariffKey(rule.tariff_code);
+        const matches = existing.filter(r =>
+          String(r.produit_id || '') === String(prodId) || tariffKey(r.tariff_code) === code
+        );
+        if (matches.length) {
+          const ids = matches.map(r => r.id).filter(Boolean);
+          const res = await db.from('client_tariff_rules').update({ is_active: false, updated_at: new Date().toISOString() }).in('id', ids);
+          if (res.error) throw res.error;
+        }
       }
     } catch (error) {
       directError = error;
@@ -762,16 +787,23 @@
     const p = produits.find(x => x.id === prodId);
     if (!p) return;
     if (checkbox) checkbox.disabled = true;
-    const existing = (await fetchOverrides(clientId)).find(o => o.produit_id === prodId);
+    const existingRows = (await fetchOverrides(clientId)).filter(o => String(o.produit_id) === String(prodId));
+    const existing = existingRows[0];
     const type_remise = existing?.type_remise || 'supp';
     const valeur = Number(existing?.valeur ?? p.prix ?? 0);
     const contrainte = existing?.contrainte || 'Option client';
     try {
-      const { error } = await db.from('prix_speciaux').upsert(
-        { client_id: clientId, produit_id: prodId, type_remise, valeur, contrainte, actif: enabled },
-        { onConflict: 'client_id,produit_id' }
-      );
-      if (error) throw error;
+      if (existingRows.length) {
+        const ids = existingRows.map(o => o.id).filter(Boolean);
+        const { error } = await db.from('prix_speciaux')
+          .update({ type_remise, valeur, contrainte, actif: enabled })
+          .in('id', ids);
+        if (error) throw error;
+      } else if (enabled) {
+        const { error } = await db.from('prix_speciaux')
+          .insert({ client_id: clientId, produit_id: prodId, type_remise, valeur, contrainte, actif: true });
+        if (error) throw error;
+      }
     } catch (error) {
       const rpc = await db.rpc('admin_set_client_price_option', getAdminRpcPayload({
         p_client_id: clientId,

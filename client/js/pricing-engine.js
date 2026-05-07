@@ -14,9 +14,53 @@
     return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, "").trim();
   }
 
+  function readLegacyUser() {
+    try {
+      var raw = localStorage.getItem("colixo_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getStoredCode() {
+    var legacyUser = readLegacyUser();
+    var code = legacyUser && (legacyUser.code || legacyUser.code_usr || legacyUser.code_acces || legacyUser.code_connexion);
+    if (!code && typeof window.colixoGetStoredCode === "function") code = window.colixoGetStoredCode();
+    if (!code) {
+      try { code = localStorage.getItem("colixo_access_code"); } catch (e) {}
+    }
+    return code ? String(code).trim().toUpperCase() : "";
+  }
+
+  async function loadClientTariffRulesViaRpc(db, clientId) {
+    try {
+      var simpleRpc = await db.rpc("client_list_my_tariff_rules", { p_client_id: clientId });
+      if (!simpleRpc.error) return simpleRpc.data || [];
+    } catch (e) {}
+
+    var user = readLegacyUser();
+    var code = getStoredCode();
+    if (!user || !user.id || !code) return null;
+
+    try {
+      var codeRpc = await db.rpc("client_list_my_tariff_rules_by_code", {
+        p_user_id: user.id,
+        p_code: code,
+        p_client_id: clientId
+      });
+      if (!codeRpc.error) return codeRpc.data || [];
+    } catch (e) {}
+
+    return null;
+  }
+
   async function loadClientTariffRules(clientId) {
     if (!clientId) return [];
     var db = window.SUPABASE_CLIENT;
+    var rpcRules = await loadClientTariffRulesViaRpc(db, clientId);
+    if (rpcRules && rpcRules.length) return rpcRules;
+
     var res = await db
       .from("client_tariff_rules")
       .select("*")
@@ -24,6 +68,7 @@
       .eq("is_active", true)
       .order("priority", { ascending: true })
       .order("created_at", { ascending: true });
+    if (res.error && rpcRules) return rpcRules;
     if (res.error) throw res.error;
     if (res.data && res.data.length) return res.data;
 
