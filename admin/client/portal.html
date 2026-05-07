@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507f"></script>
-    <script src="../../js/auth.js?v=20260507f-fast-code-session"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507g"></script>
+    <script src="../../js/auth.js?v=20260507g-fast-code-session"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -309,11 +309,7 @@
         .wstep{display:none;}
         .wstep.active{display:block;}
 
-        /* Package size */
-        .pkg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0 20px;}
-        .pkg-card{background:var(--night3);border:2px solid var(--border2);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;transition:all .2s;}
-        .pkg-card:hover{border-color:rgba(255,255,255,.3);}
-        .pkg-card.selected{border-color:#f59e0b;background:rgba(245,158,11,.08);}
+        /* Package summary */
         .pkg-icon{font-size:26px;margin-bottom:8px;}
         .pkg-name{font-weight:700;font-size:14px;}
         .pkg-desc{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4;}
@@ -354,7 +350,7 @@
         .summary-total-row .summary-lbl{font-weight:700;font-size:15px;color:var(--white);}
         .summary-total-row .summary-val{font-size:26px;font-weight:900;color:#f59e0b;}
 
-        @media(max-width:600px){.pkg-grid{grid-template-columns:repeat(2,1fr);}.formula-grid{grid-template-columns:1fr !important;}}
+        @media(max-width:600px){.formula-grid{grid-template-columns:1fr !important;}}
     </style>
 </head>
 <body>
@@ -467,24 +463,9 @@
             <!-- ── ÉTAPE 1 : COLIS ── -->
             <div class="wstep active" id="wstep1">
 
-              <!-- Sélecteur taille (pour le colis en cours d'ajout) -->
               <div class="form-section">📦 Ajouter un colis</div>
-              <div class="pkg-grid">
-                <div class="pkg-card selected" id="pkg-petit" onclick="setPkgSize('petit')">
-                  <div class="pkg-icon">📄</div><div class="pkg-name">Petit</div><div class="pkg-desc">Enveloppe, docs<br>&lt; 2 kg</div>
-                </div>
-                <div class="pkg-card" id="pkg-moyen" onclick="setPkgSize('moyen')">
-                  <div class="pkg-icon">📦</div><div class="pkg-name">Moyen</div><div class="pkg-desc">Boite chaussures<br>2–10 kg</div>
-                </div>
-                <div class="pkg-card" id="pkg-grand" onclick="setPkgSize('grand2')">
-                  <div class="pkg-icon">📫</div><div class="pkg-name">Grand</div><div class="pkg-desc">Carton standard<br>10–25 kg</div>
-                </div>
-                <div class="pkg-card" id="pkg-tgrand" onclick="setPkgSize('tgrand')">
-                  <div class="pkg-icon">🏗️</div><div class="pkg-name">Très grand</div><div class="pkg-desc">Meuble, palette<br>&gt; 25 kg</div>
-                </div>
-              </div>
               <div class="field-row">
-                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="2" min="2" max="30" step="0.1" oninput="onPkgPoidsChange(this.value)"></div>
+                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="2" min="0.1" max="30" step="0.1" oninput="onPkgPoidsChange(this.value)"></div>
                 <div class="field"><label>Quantité</label><input type="number" id="pkgQtyInput" value="1" min="1" max="99" step="1"></div>
               </div>
               <div class="field" style="margin-bottom:4px;"><label>Description (optionnel)</label><input type="text" id="pkgDescription" placeholder="ex: Livres, vêtements…"></div>
@@ -1541,18 +1522,15 @@
         document.getElementById('summaryTotalAmt').textContent = `CHF ${fmt(total)}`;
     }
 
-    // Package size selector
-    const PKG_POIDS = {petit:0.5, moyen:5, grand2:15, tgrand:28};
-    const PKG_ICONS = {petit:'📄', moyen:'📦', grand2:'📫', tgrand:'🏗️'};
-    const PKG_NAMES = {petit:'Petit (<2kg)', moyen:'Moyen (2-10kg)', grand2:'Grand (10-25kg)', tgrand:'Très grand (>25kg)'};
-    let currentPkgSize = 'petit';
+    // Package label kept generic; older saved orders can still display legacy sizes.
+    const PKG_POIDS = {colis:2, petit:0.5, moyen:5, grand2:15, tgrand:28};
+    const PKG_ICONS = {colis:'📦', petit:'📄', moyen:'📦', grand2:'📫', tgrand:'🏗️'};
+    const PKG_NAMES = {colis:'Colis', petit:'Petit (<2kg)', moyen:'Moyen (2-10kg)', grand2:'Grand (10-25kg)', tgrand:'Très grand (>25kg)'};
+    let currentPkgSize = 'colis';
 
     window.setPkgSize = function(size) {
         currentPkgSize = size;
-        document.querySelectorAll('.pkg-card').forEach(c => c.classList.remove('selected'));
-        const card = document.getElementById('pkg-'+size);
-        if(card) card.classList.add('selected');
-        const p = PKG_POIDS[size] || 0.5;
+        const p = PKG_POIDS[size] || 2;
         const input = document.getElementById('pkgPoidsInput');
         if(input) input.value = p;
         // Update first colis only if it's the only one (not yet added to list)
@@ -1566,7 +1544,7 @@
     };
 
     window.onPkgPoidsChange = function(v) {
-        const p = Math.min(30, Math.max(2, parseFloat(v) || 2));
+        const p = Math.min(30, Math.max(0.1, parseFloat(v) || 2));
         if(colisList.length === 1) colisList[0].poids = p;
         renderServiceButtons();
         updateTarifDisplay();
@@ -1575,7 +1553,7 @@
     };
 
     window.addWizardColis = function() {
-        const poids = Math.min(30, Math.max(2, parseFloat(document.getElementById('pkgPoidsInput')?.value) || 2));
+        const poids = Math.min(30, Math.max(0.1, parseFloat(document.getElementById('pkgPoidsInput')?.value) || 2));
         const qty   = Math.max(1, parseInt(document.getElementById('pkgQtyInput')?.value) || 1);
         const desc  = document.getElementById('pkgDescription')?.value.trim() || '';
         const size  = currentPkgSize;
@@ -1586,7 +1564,7 @@
             colisList.push({id: Date.now(), poids, qty, type:'colis', size, description: desc});
         }
         // Reset form to default
-        setPkgSize('petit');
+        setPkgSize('colis');
         const qtyEl = document.getElementById('pkgQtyInput'); if(qtyEl) qtyEl.value = 1;
         const descEl = document.getElementById('pkgDescription'); if(descEl) descEl.value = '';
         renderWizardColis();
@@ -1619,9 +1597,9 @@
             </div>
             ${colisList.map((c,idx) => `
                 <div style="background:var(--night3);border:1px solid var(--border2);border-radius:10px;padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                    <span style="font-size:20px;flex-shrink:0;">${PKG_ICONS[c.size||'moyen']||'📦'}</span>
+                    <span style="font-size:20px;flex-shrink:0;">${PKG_ICONS[c.size||'colis']||'📦'}</span>
                     <div style="flex:1;min-width:100px;">
-                        <div style="font-weight:600;font-size:13px;">${PKG_NAMES[c.size||'moyen']||'Colis'} — ${c.poids} kg</div>
+                        <div style="font-weight:600;font-size:13px;">${PKG_NAMES[c.size||'colis']||'Colis'} — ${c.poids} kg</div>
                         ${c.description?`<div style="font-size:11px;color:var(--muted);">${c.description}</div>`:''}
                     </div>
                     <div style="display:flex;align-items:center;gap:6px;">
@@ -2320,7 +2298,7 @@
         selectedOptions = new Set();
         colisList = [{id:Date.now(), poids:2, qty:1, type:'colis'}];
         const qtyEl = document.getElementById('pkgQtyInput'); if(qtyEl) qtyEl.value = 1;
-        setPkgSize('petit');
+        setPkgSize('colis');
         renderWizardColis();
         renderOptions();
         wizardGo(1);
