@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script data-cfasync="false" src="../config.js?v=20260507i"></script>
-  <script data-cfasync="false" src="../js/auth.js?v=20260507i-fast-code-session"></script>
+  <script data-cfasync="false" src="../config.js?v=20260507j"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260507j-fast-code-session"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -257,7 +257,14 @@
   // ── Produits ──
   async function loadProduits() {
     if (!db) { setStatus(false, 'Supabase non disponible'); return; }
-    const { data, error } = await db.from('produits_tarif').select('*').order('ordre').order('nom');
+    let data = null, error = null;
+    try {
+      const res = await db.from('produits_tarif').select('*').order('ordre').order('nom');
+      data = res.data;
+      error = res.error;
+    } catch (e) {
+      error = e;
+    }
     if (error) {
       setStatus(false, 'Erreur produits: ' + error.message);
       document.getElementById('produitsTbody').innerHTML =
@@ -881,15 +888,22 @@
   // ── Init ──
   (async function() {
     if (!db) { setStatus(false, 'Supabase non initialise — verifiez config.js'); return; }
-    const auth = await window.colixoRequireRoute({
-      roles: ['admin','super_admin'],
-      legacyRoles: ['admin','super_admin'],
-      redirectTo: '../login/index.html'
-    });
-    if (!auth) return;
-    adminAuthContext = auth;
-    setStatus(false, 'Chargement...');
-    await Promise.all([loadProduits(), loadClients()]);
+    setStatus(false, 'Chargement des tarifs...');
+    await loadProduits();
+    try {
+      const auth = await window.colixoRequireRoute({
+        roles: ['admin','super_admin'],
+        legacyRoles: ['admin','super_admin'],
+        redirectTo: '../login/index.html'
+      });
+      if (!auth) return;
+      adminAuthContext = auth;
+      await loadClients();
+      setStatus(true, produits.length + ' produit(s) charge(s)');
+    } catch (error) {
+      console.error('[Colixo] tarifs init', error);
+      setStatus(false, 'Tarifs chargés, section client indisponible: ' + (error.message || error));
+    }
   })();
 </script>
 </body>
