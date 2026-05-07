@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507v"></script>
-    <script src="../../js/auth.js?v=20260507v-fast-code-session"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507w"></script>
+    <script src="../../js/auth.js?v=20260507w-fast-code-session"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -140,6 +140,8 @@
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
         .tariff-help{margin:-4px 0 14px;padding:10px 12px;border:1px solid rgba(59,130,246,.22);border-radius:10px;background:rgba(59,130,246,.08);color:var(--muted2);font-size:12px;line-height:1.45;}
         .tariff-help strong{color:var(--white);}
+        .pending-colis-tariff{font-size:11px;color:var(--muted2);margin-top:4px;line-height:1.4;}
+        .pending-colis-tariff strong{color:var(--green);font-weight:800;}
         .address-search{position:relative;}
         .autocomplete-list{position:absolute;top:100%;left:0;right:0;background:var(--night3);border:1px solid var(--border2);border-radius:10px;z-index:100;max-height:250px;overflow-y:auto;display:none;}
         .autocomplete-item{padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border);}
@@ -1616,6 +1618,19 @@
         return 0;
     }
 
+    function getSelectedServiceInfoForPoids(poids){
+        const familyRef = tariffServiceRef(selectedService);
+        const pool = getAssignedProduits().filter(p=>!isOptionProduct(p)&&svcRef(p)===familyRef);
+        if(!pool.length) return { label: selectedService || 'Tarif', range: 'auto' };
+        const tiers = sortedServices(pool);
+        const best = bestProdForPoids(tiers, poids);
+        const idx = Math.max(0, tiers.findIndex(p => String(p.id) === String(best?.id)));
+        const min = Number(best?.poids_min || 0);
+        const next = tiers[idx + 1] ? Number(tiers[idx + 1].poids_min || 0) : null;
+        const range = next != null && next > min ? `${fmt(min)}-${fmt(next)} kg` : `${fmt(min)}+ kg`;
+        return { label: cleanServiceLabel(best?.nom, familyRef), range };
+    }
+
     function getServiceSuppl(produitId){
         // Price already included in product price — no additional supplement
         return 0;
@@ -1783,6 +1798,13 @@
         const container = document.getElementById('wizardColisList');
         if(!container) return;
         const total = colisList.reduce((s,c) => s + c.qty, 0);
+        const tariffLineForColis = (c) => {
+            const info = getSelectedServiceInfoForPoids(c.poids);
+            const unit = getPrixParColis(c.poids, selectedService);
+            const lineTotal = unit * c.qty;
+            const qtyPart = c.qty > 1 ? ` × ${c.qty} = ${fmt(lineTotal)} CHF` : '';
+            return `${escHtml(info.label)} · tranche ${escHtml(info.range)} · <strong>${fmt(unit)} CHF</strong>${qtyPart}`;
+        };
         container.innerHTML = `
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:10px;letter-spacing:.06em;">
                 COLIS EN ATTENTE (${total} pièce${total>1?'s':''} · ${colisList.reduce((s,c)=>s+(c.poids*c.qty),0).toFixed(1)} kg total)
@@ -1792,6 +1814,7 @@
                     <span style="font-size:20px;flex-shrink:0;">${PKG_ICONS[c.size||'colis']||'📦'}</span>
                     <div style="flex:1;min-width:100px;">
                         <div style="font-weight:600;font-size:13px;">${PKG_NAMES[c.size||'colis']||'Colis'} — ${c.poids} kg</div>
+                        <div class="pending-colis-tariff">${tariffLineForColis(c)}</div>
                         ${c.description?`<div style="font-size:11px;color:var(--muted);">${c.description}</div>`:''}
                     </div>
                     <div style="display:flex;align-items:center;gap:6px;">
