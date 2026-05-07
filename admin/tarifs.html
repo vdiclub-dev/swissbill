@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script data-cfasync="false" src="../config.js?v=20260507j"></script>
-  <script data-cfasync="false" src="../js/auth.js?v=20260507j-fast-code-session"></script>
+  <script data-cfasync="false" src="../config.js?v=20260507k"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260507k-fast-code-session"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -255,20 +255,43 @@
   }
 
   // ── Produits ──
+  async function fetchProduitsDirect() {
+    const cfg = window.SUPABASE_CONFIG;
+    if (!cfg?.url || !cfg?.anonKey) return [];
+    const url = cfg.url.replace(/\/$/, '') + '/rest/v1/produits_tarif?select=*&order=ordre.asc.nullslast&order=nom.asc';
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.anonKey,
+        Authorization: 'Bearer ' + cfg.anonKey
+      }
+    });
+    if (!res.ok) throw new Error('REST produits ' + res.status + ' ' + (await res.text()).slice(0, 160));
+    return await res.json();
+  }
+
   async function loadProduits() {
-    if (!db) { setStatus(false, 'Supabase non disponible'); return; }
     let data = null, error = null;
-    try {
-      const res = await db.from('produits_tarif').select('*').order('ordre').order('nom');
-      data = res.data;
-      error = res.error;
-    } catch (e) {
-      error = e;
+    if (db) {
+      try {
+        const res = await db.from('produits_tarif').select('*').order('ordre').order('nom');
+        data = res.data;
+        error = res.error;
+      } catch (e) {
+        error = e;
+      }
+    }
+    if (error || !Array.isArray(data) || !data.length) {
+      try {
+        data = await fetchProduitsDirect();
+        error = null;
+      } catch (fallbackError) {
+        error = error || fallbackError;
+      }
     }
     if (error) {
       setStatus(false, 'Erreur produits: ' + error.message);
       document.getElementById('produitsTbody').innerHTML =
-        '<tr><td colspan="6" class="empty-cell" style="color:#fca5a5">Erreur: ' + esc(error.message) + '</td></tr>';
+        '<tr><td colspan="7" class="empty-cell" style="color:#fca5a5">Erreur: ' + esc(error.message) + '</td></tr>';
       return;
     }
     produits = data || [];
@@ -281,7 +304,7 @@
     const tbody = document.getElementById('produitsTbody');
     let html = '';
     if (!produits.length) {
-      html = '<tr><td colspan="6" class="empty-cell">Aucun produit — ajoutez-en un ci-dessous.</td></tr>';
+      html = '<tr><td colspan="7" class="empty-cell">Aucun produit — ajoutez-en un ci-dessous.</td></tr>';
     } else {
       html = produits.map(p => rowDisplay(p)).join('');
     }
