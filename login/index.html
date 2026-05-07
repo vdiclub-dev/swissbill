@@ -2,12 +2,12 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260507b -->
+    <!-- colixo-build:20260507c -->
     <script>
     (function(){try{
       // Skip cache-busting redirect in native app (Capacitor WebView)
       if(navigator.userAgent.indexOf('ColixoApp')!==-1)return;
-      var BUILD='20260507b';
+      var BUILD='20260507c';
       try{
         if(localStorage.getItem('colixo_deploy')!==BUILD){
           localStorage.setItem('colixo_deploy',BUILD);
@@ -38,7 +38,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260507b"></script>
+    <script data-cfasync="false" src="../config.js?v=20260507c"></script>
     <script data-cfasync="false" src="../js/auth.js?v=20260504-role-isolation"></script>
     
     <style>
@@ -353,6 +353,14 @@
         document.getElementById('errorBox').style.display = 'none';
     }
 
+    function withTimeout(promise, ms, message) {
+        let timer;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(message)), ms);
+        });
+        return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
     /* ── Formatage du code d'accès ── */
     const codeInput = document.getElementById('codeInput');
     const codeInputRaw = document.getElementById('codeInputRaw');
@@ -537,7 +545,11 @@
 
         showLoad();
         try {
-            const { data, error } = await db.rpc('login_with_code', { p_code: code });
+            const { data, error } = await withTimeout(
+                db.rpc('login_with_code', { p_code: code }),
+                15000,
+                'Connexion trop longue. Rechargez la page puis réessayez.'
+            );
             const user = Array.isArray(data) ? (data[0] || null) : (data || null);
 
             if (error) {
@@ -569,14 +581,12 @@
             localStorage.setItem('colixo_access_code', code);
 
             toast('success', 'Bienvenue ! Redirection en cours…');
-            setTimeout(() => {
-                hideLoad();
-                redirectByRole(user.role);
-            }, 800);
+            hideLoad();
+            redirectByRole(user.role);
 
         } catch (err) {
             hideLoad();
-            showError('❌ Erreur : ' + err.message);
+            showError('❌ Erreur : ' + (err && err.message ? err.message : String(err)));
         }
     });
 
