@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507a"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507b"></script>
     <script src="../../js/auth.js?v=20260504-role-isolation"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
@@ -907,8 +907,18 @@
     }
 
     async function loadPortalTariffRules(clientScopeId) {
-        const rpc = await db.rpc('client_list_my_tariff_rules', { p_client_id: clientScopeId });
-        if (!rpc.error) return rpc.data || [];
+        let authRpcError = null;
+        try {
+            const sessionRes = await db.auth.getSession();
+            const session = sessionRes?.data?.session;
+            if (session?.user?.id) {
+                const rpc = await db.rpc('client_list_my_tariff_rules', { p_client_id: clientScopeId });
+                if (!rpc.error) return rpc.data || [];
+                authRpcError = rpc.error;
+            }
+        } catch (error) {
+            authRpcError = error;
+        }
 
         const storedCode = (window.colixoGetStoredCode?.() || '').trim().toUpperCase();
         if (client?.id && storedCode) {
@@ -927,7 +937,7 @@
             .order('priority');
         if (!direct.error) return direct.data || [];
 
-        console.warn('[Colixo] tarifs client indisponibles', rpc.error, direct.error);
+        console.warn('[Colixo] tarifs client indisponibles', authRpcError, direct.error);
         return [];
     }
 
