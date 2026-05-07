@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507t"></script>
-    <script src="../../js/auth.js?v=20260507t-fast-code-session"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507u"></script>
+    <script src="../../js/auth.js?v=20260507u-fast-code-session"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -352,6 +352,10 @@
         .formula-name{font-weight:700;font-size:15px;}
         .formula-price{font-size:22px;font-weight:900;color:var(--white);margin-top:6px;}
         .formula-price-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+        .formula-tier-list{display:grid;gap:5px;margin-top:10px;text-align:left;}
+        .formula-tier-line{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);border-radius:8px;padding:6px 8px;font-size:11px;color:var(--muted2);}
+        .formula-tier-line strong{color:var(--white);font-size:11px;font-weight:800;white-space:nowrap;}
+        .formula-tier-line span{color:var(--green);font-weight:900;white-space:nowrap;}
 
         /* Abonnement banner */
         .abn-banner{display:none;background:linear-gradient(135deg,#1e293b,#0f172a);border:1.5px solid #f59e0b;border-radius:12px;padding:14px 16px;margin-bottom:14px;}
@@ -1185,6 +1189,33 @@
         return cleanServiceLabel(best?.nom, group?.ref);
     }
 
+    function tierPriceLabel(p){
+        const price = getProduitPrice(p);
+        const incr = Number(p?.increment_par_kg || 0);
+        if(incr > 0) return `${fmt(price)} + ${fmt(incr)}/kg`;
+        if(p?.prix_par_kg) return `${fmt(price)}/kg`;
+        return `${fmt(price)} CHF`;
+    }
+
+    function tierRangeLabel(group, index){
+        const tiers = group?.tiers || [];
+        const min = Number(tiers[index]?.poids_min || 0);
+        const next = tiers[index + 1] ? Number(tiers[index + 1].poids_min || 0) : null;
+        if(next != null && next > min) return `${fmt(min)}-${fmt(next)} kg`;
+        return `${fmt(min)}+ kg`;
+    }
+
+    function tierRowsHtml(group){
+        const tiers = group?.tiers || [];
+        if(!tiers.length) return '';
+        return `<div class="formula-tier-list">${tiers.map((p, idx)=>`
+            <div class="formula-tier-line">
+                <strong>${escHtml(tierRangeLabel(group, idx))}</strong>
+                <span>${escHtml(tierPriceLabel(p))}</span>
+            </div>
+        `).join('')}</div>`;
+    }
+
     function getServiceGroups(pool, poids){
         const groups = new Map();
         (pool || []).forEach(p=>{
@@ -1545,6 +1576,7 @@
                 <div class="formula-name">${escHtml(serviceLabelForGroup(group))}</div>
                 <div class="formula-price">CHF ${fmt(price)}</div>
                 <div class="formula-price-sub">tranche automatique</div>
+                ${tierRowsHtml(group)}
             </div>`;
         }).join('');
         renderHomeTariffSummary();
