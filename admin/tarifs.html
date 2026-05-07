@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script data-cfasync="false" src="../config.js?v=20260507m"></script>
-  <script data-cfasync="false" src="../js/auth.js?v=20260507m-fast-code-session"></script>
+  <script data-cfasync="false" src="../config.js?v=20260507n"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260507n-fast-code-session"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -381,10 +381,18 @@
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     const p = produits.find(x => x.id === id);
     Object.assign(p, { nom, ref, poids_min, prix, increment_par_kg, actif });
+    let syncMessage = '';
+    try {
+      const synced = await syncActiveClientRulesForProduct(p);
+      if (synced) syncMessage = ' ' + synced + ' tarif(s) portail synchronisé(s).';
+    } catch (syncError) {
+      toast('Produit mis a jour, mais sync portail impossible: ' + syncError.message, 'err');
+    }
     const row = document.getElementById('pr-' + id);
     if (row) row.outerHTML = rowDisplay(p);
-    toast('Produit mis a jour.');
-    if (selectedClientId) renderClientTable(selectedClientId, await fetchOverrides(selectedClientId));
+    if (syncMessage) toast('Produit mis a jour.' + syncMessage);
+    else toast('Produit mis a jour.');
+    if (selectedClientId) await refreshClientTable(selectedClientId);
   }
   async function delProduit(id) {
     const p = produits.find(x => x.id === id);
@@ -407,9 +415,15 @@
     const { data, error } = await db.from('produits_tarif').insert({ nom, ref, poids_min, prix, increment_par_kg, actif: true, ordre }).select().single();
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     produits.push(data);
+    let autoApplied = 0;
+    try {
+      autoApplied = await applyNewProductToClientsWithSameCode(data);
+    } catch (syncError) {
+      toast('Produit ajoute, mais sync portail impossible: ' + syncError.message, 'err');
+    }
     document.getElementById('prodCount').textContent = produits.length + ' produit(s)';
     renderProduits();
-    toast('Produit ajoute.');
+    toast('Produit ajoute.' + (autoApplied ? ' ' + autoApplied + ' client(s) mis à jour.' : ''));
   }
 
   // ── Seed VinoLog ──
@@ -577,6 +591,47 @@
     };
   }
 
+  async function syncActiveClientRulesForProduct(p) {
+    if (!p?.id) return 0;
+    const payload = standardRuleFromProduct(null, p, produits.indexOf(p));
+    delete payload.client_id;
+    const { data, error } = await db.from('client_tariff_rules')
+      .update(payload)
+      .eq('produit_id', p.id)
+      .eq('is_active', true)
+      .select('id');
+    if (error) throw error;
+    return (data || []).length;
+  }
+
+  async function applyNewProductToClientsWithSameCode(p) {
+    const code = tariffKey(p?.ref || p?.nom);
+    if (!p?.id || !code || isDefaultOptionProduct(p)) return 0;
+    const existing = await db.from('client_tariff_rules')
+      .select('client_id')
+      .eq('is_active', true)
+      .ilike('tariff_code', code);
+    if (existing.error) throw existing.error;
+    const clientIds = Array.from(new Set((existing.data || []).map(r => r.client_id).filter(Boolean)));
+    let applied = 0;
+    for (let i = 0; i < clientIds.length; i++) {
+      const clientId = clientIds[i];
+      const already = await db.from('client_tariff_rules')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('produit_id', p.id)
+        .limit(1);
+      if (already.error) throw already.error;
+      const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
+      const res = already.data && already.data.length
+        ? await db.from('client_tariff_rules').update(rule).eq('id', already.data[0].id)
+        : await db.from('client_tariff_rules').insert(rule);
+      if (res.error) throw res.error;
+      applied++;
+    }
+    return applied;
+  }
+
   async function applyStandardGridToClient() {
     const clientId = selectedClientId || document.getElementById('clientSelect').value;
     if (!clientId) { toast('Sélectionnez d’abord un client.', 'err'); return; }
@@ -585,9 +640,9 @@
     if (!confirm('Appliquer la grille standard Colixo au client sélectionné ? Les codes existants seront mis à jour, les options/prix spéciaux restent séparés.')) return;
 
     try {
-      const existing = await fetchClientTariffRules(clientId);
+      const existing = await fetchClientTariffRules(clientId, true);
       const byProduct = new Map(existing.filter(r => r.produit_id).map(r => [String(r.produit_id), r]));
-      const byCode = new Map(existing.map(r => [tariffKey(r.tariff_code), r]));
+      const byCode = new Map(existing.filter(r => !r.produit_id).map(r => [tariffKey(r.tariff_code), r]));
       for (let i = 0; i < activeProducts.length; i++) {
         const rule = standardRuleFromProduct(clientId, activeProducts[i], i);
         const key = tariffKey(rule.tariff_code);
@@ -777,7 +832,7 @@
       const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
       const existing = await fetchClientTariffRules(clientId, true);
       const current = existing.find(r => String(r.produit_id || '') === String(prodId))
-        || existing.find(r => tariffKey(r.tariff_code) === tariffKey(rule.tariff_code));
+        || existing.find(r => !r.produit_id && tariffKey(r.tariff_code) === tariffKey(rule.tariff_code));
       if (enabled) {
         const res = current?.id
           ? await db.from('client_tariff_rules').update(rule).eq('id', current.id)
