@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507a"></script>
     <script src="../../js/auth.js?v=20260504-role-isolation"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
@@ -1198,6 +1198,8 @@
         const container=document.getElementById('optionsContainer');
         if(!container) return;
         const pool=getAssignedProduits().filter(p=>isOptionProduct(p));
+        const allowedIds = new Set(pool.map(p => String(p.id)));
+        selectedOptions.forEach(id => { if(!allowedIds.has(String(id))) selectedOptions.delete(id); });
         if(!pool.length){ container.innerHTML=''; return; }
         container.innerHTML=`<div class="form-section"><i class="fas fa-plus-circle" style="color:var(--blue)"></i> OPTIONS SUPPLÉMENTAIRES</div>`
             +pool.map(p=>{
@@ -1215,12 +1217,12 @@
 
     window.toggleOption=function(produitId){
         const id=String(produitId);
-        const p=clientProduits.find(x=>String(x.id)===id);
+        const p=getAssignedProductById(id);
         const ref=(p?.ref||'').toUpperCase();
         // Assurances mutuellement exclusives
         if(ref.startsWith('OPT_ASS')){
             const wasOn=selectedOptions.has(id);
-            clientProduits.filter(x=>(x.ref||'').toUpperCase().startsWith('OPT_ASS')).forEach(x=>{
+            getAssignedProduits().filter(x=>isOptionProduct(x)&&(x.ref||'').toUpperCase().startsWith('OPT_ASS')).forEach(x=>{
                 selectedOptions.delete(String(x.id));
                 const sw=document.getElementById('optToggle_'+x.id);
                 if(sw) sw.classList.remove('on');
@@ -1273,6 +1275,16 @@
             return ov && ov.contrainte;
         });
         return serviceRules.concat(optionProducts);
+    }
+
+    function getAssignedProductById(id){
+        const sid = String(id);
+        return getAssignedProduits().find(p=>String(p.id)===sid || String(p.produit_id||'')===sid) || null;
+    }
+
+    function getAssignedServiceByRef(ref){
+        const wanted = String(ref || '').toUpperCase();
+        return getAssignedProduits().find(p=>!isOptionProduct(p) && svcRef(p)===wanted) || null;
     }
 
     // helpers: get normalized ref and best product for a given poids
@@ -1384,7 +1396,7 @@
     function buildSummary() {
         const poids = colisList[0]?.poids || 1;
         const qtyTotal = colisList.reduce((s,c) => s + c.qty, 0);
-        const selProduit = clientProduits.find(p => svcRef(p) === selectedService);
+        const selProduit = getAssignedServiceByRef(selectedService);
         const serviceName = selProduit ? selProduit.nom : selectedService;
         const total = updateTotalPrice();
 
@@ -1655,7 +1667,7 @@
         let optionsTotal=0;
         const optLabels=[];
         selectedOptions.forEach(pid=>{
-            const p=clientProduits.find(x=>String(x.id)===pid);
+            const p=getAssignedProductById(pid);
             if(!p) return;
             const unitPrice=getProduitPrice(p);
             let v=0;
@@ -1668,7 +1680,7 @@
             optLabels.push(p.nom+' +'+fmt(v)+' CHF');
         });
 
-        const hasNuitOpt=clientProduits.some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
+        const hasNuitOpt=getAssignedProduits().some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
         let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
 
         // Overage km cost — active abonnement overrides tarif base settings
@@ -1701,7 +1713,7 @@
 
         document.getElementById('totalPrice').textContent = fmt(total) + ' CHF';
 
-        const selProduit = clientProduits.find(p=>svcRef(p)===selectedService);
+        const selProduit = getAssignedServiceByRef(selectedService);
         let serviceName = selProduit ? selProduit.nom : selectedService;
         const detailParts=[`${serviceName}: ${fmt(baseTotal)} CHF`];
         if(distanceKm != null) detailParts.push(`📍 ${distanceKm} km`);
@@ -2118,8 +2130,8 @@
                 await loadSavedAddresses();
             }
 
-            const hasNuit = nightDelivery || [...selectedOptions].some(pid=>{ const p=clientProduits.find(x=>String(x.id)===pid); return p&&isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'); });
-            const optsStr = [...selectedOptions].map(pid=>clientProduits.find(x=>String(x.id)===pid)?.ref||pid).filter(Boolean).join(',');
+            const hasNuit = nightDelivery || [...selectedOptions].some(pid=>{ const p=getAssignedProductById(pid); return p&&isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'); });
+            const optsStr = [...selectedOptions].map(pid=>getAssignedProductById(pid)?.ref||pid).filter(Boolean).join(',');
 
             // Colonnes de base (toujours présentes)
             const orderData = {
