@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507n"></script>
-    <script src="../../js/auth.js?v=20260507n-fast-code-session"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507o"></script>
+    <script src="../../js/auth.js?v=20260507o-fast-code-session"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -1119,10 +1119,18 @@
         });
     }
 
+    function tariffServiceRef(value){
+        let ref = String(value || '').trim().toUpperCase();
+        ref = ref.replace(/\s+/g, '-');
+        ref = ref.replace(/[_-]\d+$/,'');
+        ref = ref.replace(/^(VINO(?:24|48))[_-]?[SML]$/,'$1');
+        return ref;
+    }
+
     function tariffSpeedClass(ref, label){
         const txt = String((ref || '') + ' ' + (label || '')).toUpperCase();
         if(/\b24\s*H\b|24H|VINO24|EXPRESS|PRIORITY|URGENT|PRI\b|EXP\b/.test(txt)) return 'speed-24';
-        if(/\b48\s*H\b|48H|VINO48|ECO\b/.test(txt)) return 'speed-48';
+        if(/\b48\s*H\b|48H|VINO48|ECO(?:\b|[_-])/.test(txt)) return 'speed-48';
         return 'speed-standard';
     }
 
@@ -1416,12 +1424,12 @@
     }
 
     function getAssignedServiceByRef(ref){
-        const wanted = String(ref || '').toUpperCase();
+        const wanted = tariffServiceRef(ref);
         return getAssignedProduits().find(p=>!isOptionProduct(p) && svcRef(p)===wanted) || null;
     }
 
     // helpers: get normalized ref and best product for a given poids
-    function svcRef(p){ return ((p.ref||p.nom)||'').toUpperCase(); }
+    function svcRef(p){ return tariffServiceRef((p.ref||p.nom)||''); }
     function bestProdForPoids(prods, poids){
         const eligible=prods.filter(p=>poids>=Number(p.poids_min||0));
         const src=eligible.length?eligible:prods;
@@ -1468,7 +1476,7 @@
 
     function getPrixParColis(poids, ref){
         // Find all products matching this ref, pick best tier for poids
-        const pool=getAssignedProduits().filter(p=>!isOptionProduct(p)&&svcRef(p)===String(ref).toUpperCase());
+        const pool=getAssignedProduits().filter(p=>!isOptionProduct(p)&&svcRef(p)===tariffServiceRef(ref));
         if(pool.length){
             const best=bestProdForPoids(pool,poids);
             const unitPrice=getProduitPrice(best);
@@ -2030,7 +2038,7 @@
     }
 
     window.selectService = function(ref) {
-        selectedService = String(ref).toUpperCase();
+        selectedService = tariffServiceRef(ref);
         document.querySelectorAll('[data-svc]').forEach(b => b.classList.toggle('selected', b.dataset.svc === selectedService));
         updateTarifDisplay();
         updateTotalPrice();

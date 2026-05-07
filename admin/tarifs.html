@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script data-cfasync="false" src="../config.js?v=20260507n"></script>
-  <script data-cfasync="false" src="../js/auth.js?v=20260507n-fast-code-session"></script>
+  <script data-cfasync="false" src="../config.js?v=20260507o"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260507o-fast-code-session"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -559,6 +559,13 @@
     return String(value || '').trim().toUpperCase();
   }
 
+  function tariffFamily(value) {
+    let ref = tariffKey(value).replace(/\s+/g, '-');
+    ref = ref.replace(/[_-]\d+$/, '');
+    ref = ref.replace(/^(VINO(?:24|48))[_-]?[SML]$/, '$1');
+    return ref;
+  }
+
   function isDefaultOptionProduct(p) {
     const ref = tariffKey(p?.ref);
     const name = String(p?.nom || '').toLowerCase();
@@ -605,14 +612,16 @@
   }
 
   async function applyNewProductToClientsWithSameCode(p) {
-    const code = tariffKey(p?.ref || p?.nom);
-    if (!p?.id || !code || isDefaultOptionProduct(p)) return 0;
+    const family = tariffFamily(p?.ref || p?.nom);
+    if (!p?.id || !family || isDefaultOptionProduct(p)) return 0;
     const existing = await db.from('client_tariff_rules')
-      .select('client_id')
-      .eq('is_active', true)
-      .ilike('tariff_code', code);
+      .select('client_id,tariff_code,name')
+      .eq('is_active', true);
     if (existing.error) throw existing.error;
-    const clientIds = Array.from(new Set((existing.data || []).map(r => r.client_id).filter(Boolean)));
+    const clientIds = Array.from(new Set((existing.data || [])
+      .filter(r => tariffFamily(r.tariff_code || r.name) === family)
+      .map(r => r.client_id)
+      .filter(Boolean)));
     let applied = 0;
     for (let i = 0; i < clientIds.length; i++) {
       const clientId = clientIds[i];
