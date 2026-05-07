@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507e"></script>
-    <script src="../../js/auth.js?v=20260504-role-isolation"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507f"></script>
+    <script src="../../js/auth.js?v=20260507f-fast-code-session"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -3251,18 +3251,29 @@
         const cgvOk = await checkPortalCgvAcceptance(user);
         if (!cgvOk) return;
 
-        if (user.entreprise_id) {
-            const { data: ent } = await db.from('entreprises').select('*').eq('id', user.entreprise_id).single();
-            clientEntreprise = ent;
-        }
-        await loadClientTarif();
-        hidePricesForMagasinier();
-        await loadSavedAddresses();
+        const name = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client';
+        document.getElementById('clientAv').textContent = name[0].toUpperCase();
+        document.getElementById('clientName').textContent = name;
+        updateWelcomeBanner(name);
+        const roleLabels = { client:'Admin', gestionnaire:'Gestionnaire', comptable:'Comptable', sous_utilisateur:'Utilisateur' };
+        const dashRole = document.getElementById('dashRole');
+        if(dashRole) dashRole.textContent = roleLabels[currentUserRole] || 'Client';
         showScreen('Portal');
-        renderClientTariffPane();
         renderWizardColis();
-        loadOrders();
         initPickupToggle();
+
+        const entPromise = user.entreprise_id
+            ? db.from('entreprises').select('*').eq('id', user.entreprise_id).single()
+            : Promise.resolve({ data: null });
+        const [{ data: ent }] = await Promise.all([entPromise]);
+        clientEntreprise = ent || null;
+
+        await Promise.all([
+            loadClientTarif().catch(e => console.warn('[Colixo] tarifs client', e)),
+            loadSavedAddresses().catch(e => console.warn('[Colixo] adresses client', e))
+        ]);
+        hidePricesForMagasinier();
+        loadOrders();
         // Auto-calc distance when delivery address changes
         ['livAdresse','livNpa','livVille'].forEach(id => {
             const el = document.getElementById(id);
@@ -3273,13 +3284,6 @@
         });
         document.getElementById('tabTeam').style.display = 'block';
         loadTeam();
-        const name = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client';
-        document.getElementById('clientAv').textContent = name[0].toUpperCase();
-        document.getElementById('clientName').textContent = name;
-        updateWelcomeBanner(name);
-        const roleLabels = { client:'Admin', gestionnaire:'Gestionnaire', comptable:'Comptable', sous_utilisateur:'Utilisateur' };
-        const dashRole = document.getElementById('dashRole');
-        if(dashRole) dashRole.textContent = roleLabels[currentUserRole] || 'Client';
         document.getElementById('departAddr').innerHTML = clientEntreprise
             ? `<strong>${clientEntreprise.nom || ''}</strong><br>${clientEntreprise.adresse || ''}, ${clientEntreprise.npa || ''} ${clientEntreprise.ville || ''}`
             : 'Adresse non définie';

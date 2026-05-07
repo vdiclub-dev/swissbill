@@ -187,6 +187,16 @@
     var opts = options || {};
     var routeRoles = normalizeRoles(opts.roles);
     var legacyRoles = normalizeRoles(opts.legacyRoles);
+    var legacyUser = readLegacyUser();
+
+    if (legacyUser && legacyRoles.length && legacyRoles.indexOf(legacyUser.role) !== -1) {
+      try {
+        var legacyCtx = await loadLegacyProfile(legacyRoles);
+        if (legacyCtx && legacyCtx.profile) return legacyCtx;
+      } catch (e) {
+        clearLegacyUser();
+      }
+    }
 
     var sessionCtx = await getVerifiedSession();
     if (sessionCtx.authUser) {
