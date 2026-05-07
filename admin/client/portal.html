@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260507g"></script>
-    <script src="../../js/auth.js?v=20260507g-fast-code-session"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260507h"></script>
+    <script src="../../js/auth.js?v=20260507h-fast-code-session"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -960,7 +960,7 @@
         ]);
         clientTarif = tarifData || { prix_inf_2kg:8.5, prix_inf_10kg:11.5, prix_inf_30kg:20.5, prix_eco:7.5, suppl_express:5, suppl_urgent:10, suppl_nuit_chf:25 };
         clientProduits = produitsData||[];
-        clientTariffRules = rulesData || [];
+        clientTariffRules = filterVisibleTariffRules(rulesData || [], clientProduits);
         clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), r]));
         updateServicePrices();
         renderColis();
@@ -1071,6 +1071,17 @@
 
     function tariffCodeForProduit(p){
         return String(p?.ref || p?.code || p?.sku || p?.nom || '').trim().toUpperCase().replace(/\s+/g, '-');
+    }
+
+    function filterVisibleTariffRules(rules, products){
+        const activeIds = new Set((products || []).filter(p => p?.actif !== false).map(p => String(p.id)));
+        const activeCodes = new Set((products || []).filter(p => p?.actif !== false).map(p => tariffCodeForProduit(p)).filter(Boolean));
+        return (rules || []).filter(r => {
+            if(!r || r.is_active === false) return false;
+            if(r.produit_id) return activeIds.has(String(r.produit_id));
+            const code = String(r.tariff_code || r.name || '').trim().toUpperCase().replace(/\s+/g, '-');
+            return activeCodes.has(code);
+        });
     }
 
     function tariffRowsForClient(){
