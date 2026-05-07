@@ -2,12 +2,12 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260507c -->
+    <!-- colixo-build:20260507d -->
     <script>
     (function(){try{
       // Skip cache-busting redirect in native app (Capacitor WebView)
       if(navigator.userAgent.indexOf('ColixoApp')!==-1)return;
-      var BUILD='20260507c';
+      var BUILD='20260507d';
       try{
         if(localStorage.getItem('colixo_deploy')!==BUILD){
           localStorage.setItem('colixo_deploy',BUILD);
@@ -38,7 +38,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260507c"></script>
+    <script data-cfasync="false" src="../config.js?v=20260507d"></script>
     <script data-cfasync="false" src="../js/auth.js?v=20260504-role-isolation"></script>
     
     <style>
@@ -361,6 +361,40 @@
         return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
     }
 
+    async function loginWithCodeDirect(code) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15000);
+        try {
+            const res = await fetch(window.SUPABASE_CONFIG.url + '/rest/v1/rpc/login_with_code', {
+                method: 'POST',
+                cache: 'no-store',
+                signal: ctrl.signal,
+                headers: {
+                    apikey: window.SUPABASE_CONFIG.anonKey,
+                    Authorization: 'Bearer ' + window.SUPABASE_CONFIG.anonKey,
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json'
+                },
+                body: JSON.stringify({ p_code: code })
+            });
+            const text = await res.text();
+            let body = null;
+            try { body = text ? JSON.parse(text) : null; } catch (e) { body = text; }
+            if (!res.ok) {
+                const msg = body && body.message ? body.message : (text || ('HTTP ' + res.status));
+                throw new Error(msg);
+            }
+            return Array.isArray(body) ? (body[0] || null) : body;
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw new Error('Connexion trop longue: Supabase ne répond pas depuis ce navigateur.');
+            }
+            throw error;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
     /* ── Formatage du code d'accès ── */
     const codeInput = document.getElementById('codeInput');
     const codeInputRaw = document.getElementById('codeInputRaw');
@@ -545,17 +579,18 @@
 
         showLoad();
         try {
-            const { data, error } = await withTimeout(
-                db.rpc('login_with_code', { p_code: code }),
-                15000,
-                'Connexion trop longue. Rechargez la page puis réessayez.'
-            );
-            const user = Array.isArray(data) ? (data[0] || null) : (data || null);
-
-            if (error) {
-                hideLoad();
-                showError('❌ Erreur : ' + error.message);
-                return;
+            let user = null;
+            try {
+                user = await loginWithCodeDirect(code);
+            } catch (directError) {
+                console.warn('[Colixo] login direct échoué, fallback RPC Supabase', directError);
+                const { data, error } = await withTimeout(
+                    db.rpc('login_with_code', { p_code: code }),
+                    15000,
+                    'Connexion trop longue. Supabase ne répond pas depuis ce navigateur.'
+                );
+                if (error) throw error;
+                user = Array.isArray(data) ? (data[0] || null) : (data || null);
             }
             if (!user) {
                 hideLoad();
