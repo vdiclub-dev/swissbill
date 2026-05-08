@@ -15,6 +15,7 @@
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <style>
         :root{
             --red:#e8311a;
@@ -2291,11 +2292,10 @@
         async function logout(){
             try {
                 showLoader('Déconnexion…');
-                await requireDb().auth.signOut();
+                await window.colixoLogout({ redirectTo: false });
             } catch (error) {
                 console.warn('logout:', error.message);
             } finally {
-                try { localStorage.removeItem('colixo_user'); } catch (err) {}
                 hideLoader();
                 $('appShell').classList.add('hidden');
                 $('authScreen').classList.remove('hidden');
@@ -2304,47 +2304,22 @@
 
         async function assertAdminSession(){
             requireDb();
-            const { data: { session }, error: sessionError } = await requireDb().auth.getSession();
-            if (sessionError) throw sessionError;
-            if (!session || !session.user) throw new Error('Aucune session active.');
-
-            const normalizeRole = (value) => String(value || '')
-                .trim()
-                .toLowerCase()
-                .replace(/[\s-]+/g, '_');
-            const isAdminRole = (value) => ['admin', 'super_admin', 'superadmin'].includes(normalizeRole(value));
-
-            const { data: profileById, error } = await requireDb().from('utilisateurs').select('id,nom,prenom,email,role').eq('id', session.user.id).maybeSingle();
-            if (error) throw error;
-
-            let profile = profileById || null;
-            if (!profile && session.user.email) {
-                const { data: profileByEmail, error: emailError } = await requireDb().from('utilisateurs').select('id,nom,prenom,email,role').eq('email', session.user.email).maybeSingle();
-                if (emailError) throw emailError;
-                if (profileByEmail) {
-                    throw new Error('Compte admin detecte par e-mail mais non lie a auth.uid. Dans Supabase, aligne utilisateurs.id avec auth.users.id pour cet e-mail.');
-                }
+            const auth = await window.colixoGetAuthContext({
+                roles: ['admin', 'super_admin'],
+                legacyRoles: []
+            });
+            if (!auth || !auth.session || !auth.authUser) {
+                throw new Error('Aucune session admin active.');
             }
-
-            if (!profile) {
-                const localRaw = localStorage.getItem('colixo_user');
-                let localRole = '';
-                try { localRole = JSON.parse(localRaw || '{}').role || ''; } catch (e) {}
-                if (localRole) {
-                    throw new Error('Session Supabase non admin. Le role local (' + localRole + ') ne suffit pas pour cette page. Connecte-toi avec e-mail + mot de passe admin.');
-                }
+            if (!auth.profile) {
                 throw new Error('Profil utilisateur introuvable dans la table utilisateurs pour cette session Supabase.');
             }
 
-            if (!isAdminRole(profile.role)) {
-                throw new Error('Acces refuse. Role detecte: ' + String(profile.role || 'inconnu') + '. Cette page est reservee aux admins.');
-            }
-
-            state.user = session.user;
-            state.profile = profile;
-            $('userName').textContent = [profile.prenom, profile.nom].filter(Boolean).join(' ') || profile.email || 'Admin';
-            $('userRole').textContent = profile.role;
-            $('userAvatar').textContent = initials([profile.prenom, profile.nom].filter(Boolean).join(' ') || profile.email || 'Admin');
+            state.user = auth.authUser;
+            state.profile = auth.profile;
+            $('userName').textContent = [auth.profile.prenom, auth.profile.nom].filter(Boolean).join(' ') || auth.profile.email || 'Admin';
+            $('userRole').textContent = auth.profile.role;
+            $('userAvatar').textContent = initials([auth.profile.prenom, auth.profile.nom].filter(Boolean).join(' ') || auth.profile.email || 'Admin');
         }
 
         async function refreshData(showVisualLoader){

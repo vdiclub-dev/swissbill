@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <script src="js/colixo-facture-document.js?v=20260423"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -418,20 +419,62 @@
         return 0;
     }
 
+    function calcRemiseCA(caHT){
+        if(caHT>=2000)return 8;
+        if(caHT>=1500)return 6;
+        if(caHT>=1000)return 4;
+        if(caHT>=500) return 2;
+        return 0;
+    }
+
     // ── Remise mensuelle ──
     // Compte TOUS les colis livrés ce mois (facturés + courants)
     // La remise n'est appliquée que si on est en fin de mois (dernière semaine)
-    async function getRemiseMensuelle(entId, tarif, periodeFin, colisFactureCourante) {
+    // Si le client est éligible au rabais progressif CA, ce système prend le dessus
+    async function getRemiseMensuelle(entId, tarif, periodeFin, colisFactureCourante, montantHTCourant) {
+        montantHTCourant = montantHTCourant || 0;
         try {
             const fin = periodeFin || today();
             const moisDebut = fin.slice(0,7) + '-01';
-            // Dernière semaine du mois ?
+
+            // ── Vérifier éligibilité rabais progressif CA ──
+            let hasRabaisCA = false;
+            try {
+                const {data: caRule} = await db.from('client_tariff_rules')
+                    .select('is_active')
+                    .eq('client_id', entId)
+                    .eq('tariff_code', 'RABAIS_CA')
+                    .eq('is_active', true)
+                    .maybeSingle();
+                hasRabaisCA = !!caRule;
+            } catch(_) {}
+
+            if(hasRabaisCA) {
+                // Rabais basé sur le CA mensuel (CHF HT)
+                const {data: factMois} = await db.from('factures')
+                    .select('montant_ht')
+                    .eq('entreprise_id', entId)
+                    .gte('created_at', moisDebut+'T00:00:00')
+                    .lte('created_at', fin+'T23:59:59');
+                const caDejaFacture = (factMois||[]).reduce((s,f)=>s+parseFloat(f.montant_ht||0),0);
+                const caMensuel = caDejaFacture + montantHTCourant;
+                const remisePct = calcRemiseCA(caMensuel);
+                return {
+                    remisePct,
+                    info: remisePct > 0
+                        ? `🏷 Rabais CA ${remisePct}% — CA mois : CHF ${fmt(caMensuel)}`
+                        : `📊 CA mois : CHF ${fmt(caMensuel)} — seuil CHF 500 non atteint`,
+                    estFinMois: true,
+                    totalMois: caMensuel
+                };
+            }
+
+            // ── Système classique par volume colis ──
             const finDate    = new Date(fin);
             const dernierJour = new Date(finDate.getFullYear(), finDate.getMonth()+1, 0);
             const estFinMois  = (dernierJour.getDate() - finDate.getDate()) <= 7;
 
             if(!estFinMois) {
-                // Pas fin de mois → afficher cumul mais sans remise
                 const {data} = await db.from('transport_orders_simple')
                     .select('quantity')
                     .eq('status','delivered')
@@ -694,7 +737,7 @@
         let montantHT=currentFactureLignes.reduce((s,o)=>s+calcPrixColis(o,tarif).total,0);
 
         // Remise mensuelle
-        const remise = entId ? await getRemiseMensuelle(entId, tarif, fin, totalColis) : {remisePct:0,info:'—'};
+        const remise = entId ? await getRemiseMensuelle(entId, tarif, fin, totalColis, montantHT) : {remisePct:0,info:'—'};
         const remisePct = remise.remisePct;
         const remiseMnt = remisePct>0 ? montantHT*remisePct/100 : 0;
         const net=montantHT-remiseMnt;
@@ -725,7 +768,7 @@
             const montantHT=currentFactureLignes.reduce((s,o)=>s+calcPrixColis(o,tarif).total,0);
             const fin=document.getElementById('fFin').value;
             // Remise mensuelle
-            const remise = await getRemiseMensuelle(entId, tarif, fin, totalColis);
+            const remise = await getRemiseMensuelle(entId, tarif, fin, totalColis, montantHT);
             const remisePct = remise.remisePct;
             const remiseMnt=remisePct>0?montantHT*remisePct/100:0;
             const net=montantHT-remiseMnt;
@@ -1099,17 +1142,19 @@
     // ── Auth ──
     async function init(){
         await new Promise(r=>setTimeout(r,400));
-        const{data:{session}}=await db.auth.getSession();
-        const codeUser=JSON.parse(localStorage.getItem('colixo_user')||'null');
-        const userId=(session && session.user && session.user.id) ? session.user.id : codeUser?.id;
-        if(!session && !codeUser){window.location.href='../login/index.html';return;}
-        const{data:user}=await db.from('utilisateurs').select('*').eq('id',userId).single();
-        if(!user||!['admin','super_admin'].includes(user.role)){window.location.href='../index.html';return;}
+        const auth = await window.colixoRequireRoute({
+            roles: ['admin','super_admin'],
+            legacyRoles: ['admin','super_admin'],
+            redirectTo: '../login/index.html'
+        });
+        if (!auth) return;
+        const user = auth.profile;
+        if(!user) return;
         currentUser = user;
         const ini=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
         document.getElementById('sbAv').textContent=ini;
         document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
-        document.getElementById('btnLogout').addEventListener('click',async()=>{try{await db.auth.signOut();}catch(e){} try{localStorage.removeItem('colixo_user');}catch(e){} window.location.href='../index.html';});
+        document.getElementById('btnLogout').addEventListener('click',async()=>{await window.colixoLogout({ redirectTo: '../index.html' });});
         await loadAll();
         if (window.ColixoFactureDoc) void window.ColixoFactureDoc.loadQRLib();
     }

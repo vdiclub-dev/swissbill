@@ -7,7 +7,8 @@ let calcResult = {};
 
 /* ── Callback client-picker ─────────────────────────────── */
 function remplirClientOffre(c) {
-  const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  set('cEntrepriseId',     c.id);
   set('cEntreprise',       c.nom);
   set('cContactNom',       c.contact_nom);
   set('cContactFonction',  c.contact_fonction);
@@ -18,6 +19,43 @@ function remplirClientOffre(c) {
   set('cCanton',           c.canton);
   set('cSiteWeb',          c.site_web);
   set('cSecteur',          c.secteur);
+}
+
+async function sauvegarderClientInfo() {
+  const nom = val('cEntreprise');
+  if (!nom) return;
+  const db = window.SUPABASE_CLIENT;
+  if (!db) return;
+  const code = localStorage.getItem('colixo_access_code') || '';
+  if (!code) return;
+  const id = val('cEntrepriseId') || null;
+  try {
+    const { data, error } = await db.rpc('admin_upsert_entreprise', {
+      p_code:        code,
+      p_id:          id || null,
+      p_nom:         nom,
+      p_email:       val('cEmail')      || null,
+      p_telephone:   val('cTelephone')  || null,
+      p_contact_nom: val('cContactNom') || null,
+      p_adresse:     val('cAdresse')    || null,
+      p_ville:       val('cVille')      || null,
+      p_npa:         null,
+      p_numero_client: null,
+    });
+    if (!error && data) {
+      const newId = (typeof data === 'object' && data.id) ? data.id : (typeof data === 'string' ? data : null);
+      if (newId) { const el = $('cEntrepriseId'); if (el) el.value = newId; }
+      toast('Client enregistré ✓', 'ok');
+    }
+  } catch (_) { /* silencieux */ }
+}
+
+async function avancerSection1() {
+  const btn = $('btnSection1Next');
+  if (btn) btn.disabled = true;
+  await sauvegarderClientInfo();
+  if (btn) btn.disabled = false;
+  nextSection();
 }
 
 /* ── Utilitaires ─────────────────────────────────────────── */
@@ -75,6 +113,10 @@ function activeSectionIdx() {
 let tranches = [];
 let _tid = 0;
 let _sid = 0;
+
+/* ── État options supplémentaires ────────────────────────── */
+let options = [];
+let _oid = 0;
 
 /* ── Paramètres de base (partagés par tous les calculs) ──── */
 function lireParams() {
@@ -159,15 +201,15 @@ function calculer() {
 /* ── Tranches tarifaires ─────────────────────────────────── */
 function _defaultSpeeds() {
   return [
-    { id: ++_sid, label: 'Standard 48h',    supplement: 0    },
-    { id: ++_sid, label: 'Prioritaire 24h', supplement: 2.00 },
-    { id: ++_sid, label: 'Express',          supplement: 5.00 },
+    { id: ++_sid, label: 'Standard 48h',    supplement: 0,    prixDirect: 0 },
+    { id: ++_sid, label: 'Prioritaire 24h', supplement: 2.00, prixDirect: 0 },
+    { id: ++_sid, label: 'Express',          supplement: 5.00, prixDirect: 0 },
   ];
 }
 
 function ajouterTranche() {
   const colisDefaut = num('cColisJour') || 30;
-  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, speeds: _defaultSpeeds() });
+  tranches.push({ id: ++_tid, label: '', colis: colisDefaut, rabais: 0, speeds: _defaultSpeeds() });
   renderTranches(lireParams());
 }
 
@@ -181,7 +223,7 @@ function ajouterSpeed(tid) {
   _syncAllTranchesFromDOM();
   const t = tranches.find(x => x.id === tid);
   if (!t) return;
-  t.speeds.push({ id: ++_sid, label: '', supplement: 0 });
+  t.speeds.push({ id: ++_sid, label: '', supplement: 0, prixDirect: 0 });
   renderTranches(lireParams());
 }
 window.ajouterSpeed = ajouterSpeed;
@@ -202,12 +244,14 @@ function _syncAllTranchesFromDOM() {
     if (!t) return;
     t.label = block.querySelector('.ti-label')?.value || '';
     t.colis = parseFloat(block.querySelector('.ti-colis')?.value) || t.colis;
+    t.rabais = parseFloat(block.querySelector('.ti-rabais')?.value) || 0;
     block.querySelectorAll('.speed-row').forEach(row => {
       const sid = +row.dataset.sid;
       const s   = t.speeds.find(x => x.id === sid);
       if (!s) return;
       s.label      = row.querySelector('.si-label')?.value || '';
       s.supplement = parseFloat(row.querySelector('.si-supp')?.value) || 0;
+      s.prixDirect = parseFloat(row.querySelector('.si-prix-direct')?.value) || 0;
     });
   });
 }
@@ -224,22 +268,32 @@ function renderTranches(p) {
   const marge = num('cMarge') || 20;
 
   body.innerHTML = tranches.map(t => {
-    const coutBase  = prixColisFor(t.colis, 0, p);
-    const basePrice = prixColisFor(t.colis, marge, p);
+    const coutBase      = prixColisFor(t.colis, 0, p);
+    const basePrice     = prixColisFor(t.colis, marge, p);
+    const discountedBase = basePrice * (1 - (t.rabais || 0) / 100);
 
     const speedsHTML = t.speeds.map(s => {
-      const pv     = basePrice + s.supplement;
+      const pvCalc = discountedBase + s.supplement;
+      const pv     = s.prixDirect > 0 ? s.prixDirect : pvCalc;
       const margeP = pv > 0 ? (pv - coutBase) / pv * 100 : -999;
       const mc     = margeP >= 15 ? 'marge-ok' : margeP >= 0 ? 'marge-warn' : 'marge-loss';
+      const spec = _getSpeedSpec(s.label);
       return `
         <div class="speed-row" data-sid="${s.id}">
-          <input class="si-label" type="text" list="dlVitesses" value="${esc(s.label)}" placeholder="Ex : Standard 48h" oninput="recalcTranches()"/>
+          <div class="speed-label-col">
+            <input class="si-label" type="text" list="dlVitesses" value="${esc(s.label)}" placeholder="Ex : Standard 48h" oninput="recalcTranches()" onchange="recalcTranches()"/>
+            ${spec ? `<div class="speed-dim-note">max ${spec.maxPoids} kg · ${spec.dimLabel}</div>` : ''}
+          </div>
           <div class="speed-supp-wrap">
             <span>+</span>
             <input class="si-supp" type="number" value="${s.supplement.toFixed(2)}" min="0" step="0.50" title="Supplément CHF/colis" oninput="recalcTranches()"/>
             <span class="speed-supp-unit">CHF</span>
           </div>
-          <span class="tranche-val">${fCHF(pv)}</span>
+          <div class="speed-direct-wrap">
+            <input class="si-prix-direct" type="number" value="${s.prixDirect > 0 ? s.prixDirect.toFixed(2) : ''}" min="0" step="0.50" placeholder="auto" title="Prix direct CHF (remplace le calcul)" oninput="recalcTranches()"/>
+            <span class="speed-direct-unit">CHF</span>
+          </div>
+          <span class="tranche-val${s.prixDirect > 0 ? ' speed-direct-active' : ''}">${fCHF(pv)}</span>
           <span class="tranche-val ${mc}">${fNum(margeP, 1)}%</span>
           <button type="button" class="tranche-del" onclick="supprimerSpeed(${t.id}, ${s.id})" title="Supprimer">✕</button>
         </div>`;
@@ -253,6 +307,10 @@ function renderTranches(p) {
           <input class="ti-colis" type="number" value="${t.colis}" min="1" title="Colis par jour" oninput="recalcTranches()"/>
           <span class="tranche-colis-unit">col/j</span>
         </div>
+        <div class="tranche-rabais-wrap">
+          <input class="ti-rabais" type="number" value="${(t.rabais || 0).toFixed(1)}" min="0" max="100" step="0.5" title="Rabais volume %" oninput="recalcTranches()"/>
+          <span class="tranche-rabais-unit">% rabais</span>
+        </div>
         <span class="tranche-val tranche-cout" title="Coût de revient">${fCHF(coutBase)}</span>
         <button type="button" class="btn-ghost btn-sm tranche-add-speed" onclick="ajouterSpeed(${t.id})">+ Délai</button>
         <button type="button" class="tranche-del" onclick="supprimerTranche(${t.id})" title="Supprimer la tranche">✕</button>
@@ -261,6 +319,7 @@ function renderTranches(p) {
         <div class="speed-header-row">
           <span>Délai de livraison</span>
           <span>Supplément</span>
+          <span>Prix direct</span>
           <span>Prix/colis</span>
           <span>Marge</span>
           <span></span>
@@ -276,6 +335,219 @@ function recalcTranches() {
 }
 window.ajouterTranche = ajouterTranche;
 window.recalcTranches = recalcTranches;
+
+/* ── Options supplémentaires ─────────────────────────────── */
+function ajouterOption() {
+  options.push({ id: ++_oid, label: '', prix: 0, unite: 'CHF/livraison' });
+  renderOptions();
+}
+window.ajouterOption = ajouterOption;
+
+function supprimerOption(id) {
+  options = options.filter(o => o.id !== id);
+  renderOptions();
+}
+window.supprimerOption = supprimerOption;
+
+function _syncOptionsFromDOM() {
+  document.querySelectorAll('.option-row').forEach(row => {
+    const oid = +row.dataset.oid;
+    const o   = options.find(x => x.id === oid);
+    if (!o) return;
+    o.label = row.querySelector('.oi-label')?.value || '';
+    o.prix  = parseFloat(row.querySelector('.oi-prix')?.value) || 0;
+    o.unite = row.querySelector('.oi-unite')?.value || 'CHF/livraison';
+  });
+}
+
+function renderOptions() {
+  const body = $('optionsBody');
+  if (!body) return;
+  if (!options.length) {
+    body.innerHTML = '<div class="tranches-empty">Aucune option — cliquez "+ Ajouter" pour en créer une.</div>';
+    return;
+  }
+  _syncOptionsFromDOM();
+  body.innerHTML = `
+    <div class="option-header-row">
+      <span>Prestation</span><span>Prix</span><span>Unité</span><span></span>
+    </div>
+    ${options.map(o => `
+    <div class="option-row" data-oid="${o.id}">
+      <input class="oi-label" type="text" list="dlOptions" value="${esc(o.label)}" placeholder="Ex : Descente en cave" oninput=""/>
+      <div class="option-prix-wrap">
+        <input class="oi-prix" type="number" value="${o.prix.toFixed(2)}" min="0" step="0.50"/>
+        <span class="option-prix-unit">CHF</span>
+      </div>
+      <select class="oi-unite">
+        <option value="CHF/livraison"${o.unite==='CHF/livraison'?' selected':''}>/ livraison</option>
+        <option value="CHF/colis"${o.unite==='CHF/colis'?' selected':''}>/ colis</option>
+        <option value="CHF/jour"${o.unite==='CHF/jour'?' selected':''}>/ jour</option>
+        <option value="forfait"${o.unite==='forfait'?' selected':''}>forfait</option>
+      </select>
+      <button type="button" class="tranche-del" onclick="supprimerOption(${o.id})" title="Supprimer">✕</button>
+    </div>`).join('')}`;
+}
+window.renderOptions = renderOptions;
+
+/* ── Grille tarifaire ────────────────────────────────────── */
+let tarifGrid = [
+  { id: 'std48_l',  label: 'Standard 48h',        poids: '0–15 kg',   dim: null,                   prix: 0, actif: true  },
+  { id: 'std48_h',  label: 'Standard 48h',        poids: '15–30 kg',  dim: null,                   prix: 0, actif: true  },
+  { id: 'pri24_l',  label: 'Prioritaire 24h',     poids: '0–15 kg',   dim: null,                   prix: 0, actif: true  },
+  { id: 'pri24_h',  label: 'Prioritaire 24h',     poids: '15–30 kg',  dim: null,                   prix: 0, actif: false },
+  { id: 'exp_l',    label: 'Express',              poids: '0–15 kg',   dim: null,                   prix: 0, actif: false },
+  { id: 'exp_h',    label: 'Express',              poids: '15–30 kg',  dim: null,                   prix: 0, actif: false },
+  { id: 'vino48_s', label: 'VinoLog 48h',  poids: '0–12 kg',  dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino48_m', label: 'VinoLog 48h',  poids: '12–20 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino48_l', label: 'VinoLog 48h',  poids: '20–30 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino24_s', label: 'VinoLog 24h',  poids: '0–12 kg',  dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino24_m', label: 'VinoLog 24h',  poids: '12–20 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+  { id: 'vino24_l', label: 'VinoLog 24h',  poids: '20–30 kg', dim: '100 × 60 × 60 cm', prix: 0, actif: false },
+];
+
+function renderTarifGrid() {
+  const body = $('tarifGridBody');
+  if (!body) return;
+  body.innerHTML = tarifGrid.map(function(row) {
+    const dimNote = row.dim ? '<div class="gi-dim">' + esc(row.dim) + '</div>' : '';
+    const prixVal = row.prix > 0 ? row.prix.toFixed(2) : '';
+    return '<div class="tarif-grid-row' + (row.actif ? ' tarif-row-active' : '') + '">'
+      + '<input type="checkbox" class="gi-chk"' + (row.actif ? ' checked' : '') + ' onchange="toggleTarifRow(\'' + row.id + '\')">'
+      + '<div class="gi-label">' + esc(row.label) + dimNote + '</div>'
+      + '<span class="gi-poids">' + esc(row.poids) + '</span>'
+      + '<div class="gi-prix-wrap">'
+      + '<input class="gi-prix" type="number" value="' + prixVal + '" min="0" step="0.50" placeholder="—"'
+      + ' oninput="syncTarifRow(\'' + row.id + '\', this.value)">'
+      + '<span class="gi-prix-unit">CHF</span>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function toggleTarifRow(id) {
+  const row = tarifGrid.find(function(r) { return r.id === id; });
+  if (row) { row.actif = !row.actif; renderTarifGrid(); }
+}
+window.toggleTarifRow = toggleTarifRow;
+
+function syncTarifRow(id, v) {
+  const row = tarifGrid.find(function(r) { return r.id === id; });
+  if (row) row.prix = parseFloat(v) || 0;
+}
+window.syncTarifRow = syncTarifRow;
+
+/* ── Spécifications connues par service ─────────────────── */
+function _getSpeedSpec(label) {
+  const k = (label || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const S = {
+    'vinolog 48h':          { dimLabel: '100 × 60 × 60 cm', singleRow: true },
+    'vinolog 24h':          { dimLabel: '100 × 60 × 60 cm', singleRow: true },
+    'vinolog priority 24h': { dimLabel: '100 × 60 × 60 cm', singleRow: true },
+    'vinolog priority':     { dimLabel: '100 × 60 × 60 cm', singleRow: true },
+  };
+  return S[k] || null;
+}
+
+/* ── Helper options pour l'offre ────────────────────────── */
+function _buildOptionsHTML(n) {
+  _syncOptionsFromDOM();
+  if (!options.length) return '';
+  const rows = options.map(function(o) {
+    return '<tr><td>' + (esc(o.label) || '—') + '</td>'
+      + '<td class="tranche-price">' + fCHF(o.prix) + '</td>'
+      + '<td>' + esc(o.unite) + '</td></tr>';
+  }).join('');
+  return '<div class="offre-section">'
+    + '<div class="offre-section-title">' + n + '. OPTIONS SUPPLÉMENTAIRES</div>'
+    + '<table class="offre-tranche-table">'
+    + '<thead><tr><th>Prestation</th><th>Prix unitaire</th><th>Unité</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table>'
+    + '<p class="offre-tarif-note">Options facturées en sus du tarif de livraison de base, sur demande explicite lors de la commande.</p>'
+    + '</div>';
+}
+
+/* ── Helper rabais progressif ────────────────────────────── */
+function _buildRabaisHTML(n) {
+  if (!chk('inclureRabais')) return '';
+  return '<div class="offre-section">'
+    + '<div class="offre-section-title">' + n + '. PROGRAMME DE RABAIS PROGRESSIF</div>'
+    + '<p style="font-size:.88rem;line-height:1.6;margin-bottom:14px;">'
+    + 'Nous vous accordons un rabais à partir d\'un chiffre d\'affaires mensuel de <strong>CHF 500.00</strong>.'
+    + '</p>'
+    + '<table class="offre-tranche-table">'
+    + '<thead><tr>'
+    + '<th>Chiffre d\'affaires mensuel (CHF HT)</th>'
+    + '<th style="text-align:right;">Rabais</th>'
+    + '</tr></thead>'
+    + '<tbody>'
+    + '<tr><td>À partir de CHF 500.00</td>  <td class="rabais-pct">2 %</td></tr>'
+    + '<tr><td>À partir de CHF 1\'000.00</td><td class="rabais-pct">4 %</td></tr>'
+    + '<tr><td>À partir de CHF 1\'500.00</td><td class="rabais-pct">6 %</td></tr>'
+    + '<tr><td>À partir de CHF 2\'000.00</td><td class="rabais-pct">8 %</td></tr>'
+    + '</tbody></table>'
+    + '<p class="offre-tarif-note" style="margin-top:10px;">'
+    + 'Le rabais s\'applique au chiffre d\'affaires de tous les services de livraison facturés (hors TVA). '
+    + 'Vous expédiez plus de 5\'000 colis par an ? Contactez-nous pour une offre personnalisée adaptée à vos besoins.'
+    + '</p>'
+    + '</div>';
+}
+
+/* ── Helper tarification pour l'offre ───────────────────── */
+function _buildTarifHTML() {
+  // Grille tarifaire (nouveau système)
+  const activeRows = tarifGrid.filter(function(r) { return r.actif; });
+  if (activeRows.length) {
+    const rows = activeRows.map(function(r) {
+      const prixCell = r.prix > 0 ? fCHF(r.prix) : '<span style="color:#aaa;font-style:italic;">—</span>';
+      if (r.dim) {
+        return '<tr><td><strong>' + esc(r.label) + '</strong></td>'
+          + '<td>' + esc(r.poids) + '<br><span style="font-size:.75rem;color:#888;">' + esc(r.dim) + '</span></td>'
+          + '<td class="tranche-price">' + prixCell + '</td></tr>';
+      }
+      return '<tr><td><strong>' + esc(r.label) + '</strong></td>'
+        + '<td>' + esc(r.poids) + '</td>'
+        + '<td class="tranche-price">' + prixCell + '</td></tr>';
+    }).join('');
+    return '<table class="offre-tranche-table offre-tarif-simple">'
+      + '<thead><tr><th>Service</th><th>Catégorie de poids</th><th>Prix / colis</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>';
+  }
+
+  // Fallback: ancien système tranches
+  _syncAllTranchesFromDOM();
+  const marge = calcResult.marge || num('cMarge') || 20;
+  const sources = tranches.length
+    ? tranches.map(t => ({
+        label: t.label || (tranches.length > 1 ? (t.colis + ' colis/jour') : ''),
+        speeds: t.speeds,
+        rabais: t.rabais || 0,
+        basePrice: prixColisFor(t.colis, marge, calcResult),
+      }))
+    : [{ label: '', speeds: [{ label: 'Standard', supplement: 0 }], rabais: 0, basePrice: calcResult.prixParColis || 0 }];
+
+  return sources.map(function(src) {
+    const discountedBase = src.basePrice * (1 - src.rabais / 100);
+    const rabaisNote = src.rabais > 0 ? ' <span style="color:#cc5500;font-size:.78rem;">(rabais volume −' + fNum(src.rabais, 1) + '%)</span>' : '';
+    const subtitle = src.label ? '<div class="offre-tarif-sous-titre">' + esc(src.label) + rabaisNote + '</div>' : '';
+    const rows = src.speeds.map(function(s) {
+      const pStd = (s.prixDirect > 0) ? s.prixDirect : (discountedBase + s.supplement);
+      const pLrd = pStd * 1.20;
+      const spec = _getSpeedSpec(s.label);
+      if (spec) {
+        return '<tr><td><strong>' + (esc(s.label) || '—') + '</strong></td>'
+          + '<td>' + spec.poidsLabel + '<br><span style="font-size:.75rem;color:#888;">' + spec.dimLabel + '</span></td>'
+          + '<td class="tranche-price">' + fCHF(pStd) + '</td></tr>';
+      }
+      return '<tr><td><strong>' + (esc(s.label) || '—') + '</strong></td><td>0 – 15 kg</td><td class="tranche-price">' + fCHF(pStd) + '</td></tr>'
+           + '<tr class="offre-row-lourd"><td></td><td>15 – 30 kg</td><td class="tranche-price">' + fCHF(pLrd) + '</td></tr>';
+    }).join('');
+    return subtitle
+      + '<table class="offre-tranche-table offre-tarif-simple">'
+      + '<thead><tr><th>Catégorie</th><th>Poids du colis</th><th>Prix du colis</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>';
+  }).join('<div style="height:14px;"></div>');
+}
 
 /* ── Génération offre ────────────────────────────────────── */
 function genererOffre() {
@@ -320,6 +592,13 @@ function genererOffre() {
   const nonPrest = [];
   if (!chk('cPrepCommandes')) nonPrest.push('Préparation de commandes');
   if (!chk('cScan'))          nonPrest.push('Scan/inventaire colis');
+
+  // Numérotation dynamique des sections après la tarification
+  _syncOptionsFromDOM();
+  let _sIdx = 6;
+  const _offreOptH = options.length       ? _buildOptionsHTML(_sIdx++) : '';
+  const _offreRabH = chk('inclureRabais') ? _buildRabaisHTML(_sIdx++)  : '';
+  const _condNum   = _sIdx;
 
   const offreHTML = `
 <div class="offre-doc" id="offreDoc">
@@ -409,55 +688,15 @@ function genererOffre() {
 
   <div class="offre-section offre-tarif-section">
     <div class="offre-section-title">5. TARIFICATION PAR CATÉGORIE DE POIDS</div>
-    ${(() => {
-      // Construire les lignes : une source de prix par tranche ou prix de base
-      const sources = tranches.length
-        ? tranches.map(t => ({
-            label: t.label || (tranches.length > 1 ? `${t.colis} colis/jour` : ''),
-            speeds: t.speeds,
-            basePrice: prixColisFor(t.colis, calcResult.marge, calcResult),
-          }))
-        : [{
-            label: '',
-            speeds: [{ label: 'Standard', supplement: 0 }],
-            basePrice: calcResult.prixParColis,
-          }];
-
-      return sources.map(src => `
-        ${src.label ? `<div class="offre-tarif-sous-titre">${esc(src.label)}</div>` : ''}
-        <table class="offre-tranche-table offre-tarif-simple">
-          <thead>
-            <tr>
-              <th>Catégorie</th>
-              <th>Poids du colis</th>
-              <th>Prix du colis</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${src.speeds.map(s => {
-              const pStd = src.basePrice + s.supplement;
-              const pLrd = pStd * 1.20;
-              return `
-              <tr>
-                <td><strong>${esc(s.label) || '—'}</strong></td>
-                <td>0 – 15 kg</td>
-                <td class="tranche-price">${fCHF(pStd)}</td>
-              </tr>
-              <tr class="offre-row-lourd">
-                <td></td>
-                <td>15 – 30 kg</td>
-                <td class="tranche-price">${fCHF(pLrd)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      `).join('<div style="height:14px;"></div>');
-    })()}
+    ${_buildTarifHTML()}
     <p class="offre-tarif-note">Prix au colis, hors TVA. Colis 15–30 kg majorés de 20%. Sous réserve de validation opérationnelle.</p>
   </div>
 
+  ${_offreOptH}
+  ${_offreRabH}
+
   <div class="offre-section">
-    <div class="offre-section-title">6. CONDITIONS COMMERCIALES</div>
+    <div class="offre-section-title">${_condNum}. CONDITIONS COMMERCIALES</div>
     <ul class="offre-list">
       <li>Offre valable <strong>30 jours</strong> à compter de la date d'émission</li>
       <li>Paiement : facturation hebdomadaire (tous les 7 jours), payable à 10 jours net</li>
@@ -465,6 +704,21 @@ function genererOffre() {
       <li>Reconduction tacite mensuelle — résiliation avec préavis 30 jours</li>
       <li>Prix révisables annuellement selon indice des prix à la consommation</li>
     </ul>
+  </div>
+
+  <div class="offre-parrainage">
+    <div class="offre-parrainage-icon">🎁</div>
+    <div class="offre-parrainage-body">
+      <div class="offre-parrainage-titre">Programme de parrainage Colixo — CHF 100 offerts</div>
+      <div class="offre-parrainage-texte">
+        Vous connaissez une entreprise qui cherche un partenaire logistique fiable ?
+        <strong>Recommandez Colixo</strong> depuis votre portail client — si votre filleul
+        atteint <strong>CHF 500 de prestations facturées</strong>, nous créditons
+        <strong>CHF 100</strong> directement sur votre prochaine facture.
+        Suivez vos recommandations et vos crédits en temps réel sur
+        <a href="https://www.colixo.ch/admin/client/portal.html" style="color:#cc5500;">votre portail client Colixo</a>.
+      </div>
+    </div>
   </div>
 
   <div class="offre-signatures">
@@ -564,8 +818,10 @@ document.addEventListener('DOMContentLoaded', () => {
   goSection(1);
 
   // Recalcul en temps réel sur les champs de la section calcul
-  // Init tranches vide
+  // Init grille tarifaire et options
+  renderTarifGrid();
   renderTranches(lireParams());
+  renderOptions();
 
   const calcFields = ['cKmJour','cLitres100','cPrixCarburant','cHeuresJour','cCoutHoraire',
     'cNbVehicules','cNbChauffeurs','cFraisFixes','cMarge','cColisJour','cJoursParMois',
@@ -589,9 +845,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Exposer globalement
-window.goSection      = goSection;
-window.prevSection    = prevSection;
-window.nextSection    = nextSection;
+window.goSection          = goSection;
+window.prevSection        = prevSection;
+window.nextSection        = nextSection;
+window.avancerSection1    = avancerSection1;
+window.sauvegarderClientInfo = sauvegarderClientInfo;
 window.calculer       = calculer;
 window.genererOffre   = genererOffre;
 window.imprimerOffre  = imprimerOffre;

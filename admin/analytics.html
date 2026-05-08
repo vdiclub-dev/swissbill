@@ -11,8 +11,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -411,6 +413,10 @@
         document.body.innerHTML = '<div style="padding:40px;color:red;">❌ config.js manquant</div>';
         return;
     }
+    if (!window.SUPABASE_CLIENT) {
+        document.body.innerHTML = '<div style="padding:40px;color:red;">❌ Connexion Supabase indisponible sur cette page</div>';
+        return;
+    }
     const db = window.SUPABASE_CLIENT;
 
     /* ── State ── */
@@ -441,30 +447,24 @@
 
     /* ── Auth ── */
     async function init() {
-        const { data: { session } } = await db.auth.getSession();
-        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        if (!session && !codeUser) { window.location.href = '../login/index.html'; return; }
-        const uid = session?.user?.id || codeUser?.id;
-        const { data: user } = uid ? await db.from('utilisateurs').select('*').eq('id', uid).maybeSingle() : { data: null };
-        const effectiveRole = user?.role || codeUser?.role || '';
+        const auth = await window.colixoGetAuthContext({
+            roles: ['admin','super_admin'],
+            legacyRoles: ['admin','super_admin']
+        });
+        const user = auth ? auth.profile : null;
+        const effectiveRole = user?.role || '';
         if (!['admin','super_admin'].includes(effectiveRole)) {
             window.location.href = '../login/index.html';
             return;
         }
-        const displayUser = user || codeUser;
+        const displayUser = user;
         if (displayUser) {
             const init = ((displayUser.prenom?.[0]||'')+(displayUser.nom?.[0]||'')).toUpperCase()||'SA';
             document.getElementById('sideAvatar').textContent = init;
             document.getElementById('sideName').textContent   = [displayUser.prenom,displayUser.nom].filter(Boolean).join(' ')||'Admin';
         }
         document.getElementById('btnLogout').addEventListener('click', async () => {
-            if (window.colixoLogout) {
-                window.colixoLogout();
-                return;
-            }
-            await db.auth.signOut();
-            localStorage.removeItem('colixo_user');
-            window.location.href = '../login/index.html';
+            await window.colixoLogout();
         });
         await loadData();
     }
@@ -472,14 +472,22 @@
     /* ── Load data ── */
     async function loadData() {
         showLoad();
-        const { data } = await db
-            .from('transport_orders_simple')
-            .select('*')
-            .order('created_at', { ascending: false });
-        allOrders = data || [];
-        hideLoad();
-        renderAll();
-        setupRevealObserver();
+        try {
+            const { data, error } = await db
+                .from('transport_orders_simple')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            allOrders = data || [];
+            renderAll();
+            setupRevealObserver();
+        } catch (error) {
+            console.error('[Analytics] loadData failed', error);
+            document.getElementById('recentTable').innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:30px;">Impossible de charger les données analytics</td></tr>';
+            document.getElementById('statusList').innerHTML = '<div style="color:var(--red);font-size:12px;">Erreur de chargement</div>';
+        } finally {
+            hideLoad();
+        }
     }
 
     /* ── Filter by period ── */

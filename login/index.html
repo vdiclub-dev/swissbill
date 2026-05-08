@@ -2,12 +2,12 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260463 -->
+    <!-- colixo-build:20260508b -->
     <script>
     (function(){try{
       // Skip cache-busting redirect in native app (Capacitor WebView)
       if(navigator.userAgent.indexOf('ColixoApp')!==-1)return;
-      var BUILD='20260463';
+      var BUILD='20260508b';
       try{
         if(localStorage.getItem('colixo_deploy')!==BUILD){
           localStorage.setItem('colixo_deploy',BUILD);
@@ -38,7 +38,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260463"></script>
+    <script data-cfasync="false" src="../config.js?v=20260508b"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260508b-fast-code-session"></script>
     
     <style>
         :root {
@@ -261,7 +262,7 @@
 
     if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
         if (new URLSearchParams(location.search).get('logout') === '1') {
-            try { localStorage.removeItem('colixo_user'); } catch (e) {}
+            try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
             var h0 = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
             window.location.replace(h0);
         }
@@ -279,18 +280,33 @@
     if (new URLSearchParams(location.search).get('switch') === '1') {
         (async function () {
             try { await db.auth.signOut(); } catch (e) {}
-            try { localStorage.removeItem('colixo_user'); } catch (e) {}
+            try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
         })();
     }
 
     if (new URLSearchParams(location.search).get('logout') === '1') {
         (async function () {
             try { await db.auth.signOut(); } catch (e) {}
-            try { localStorage.removeItem('colixo_user'); } catch (e) {}
+            try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
             var hOut = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
             window.location.replace(hOut);
         })();
         return;
+    }
+
+    if (new URLSearchParams(location.search).get('switch') !== '1' &&
+        new URLSearchParams(location.search).get('register') !== '1') {
+        (async function () {
+            try {
+                var auth = await window.colixoGetAuthContext({
+                    roles: ['super_admin', 'admin', 'chauffeur', 'magasinier', 'client', 'gestionnaire', 'comptable', 'sous_utilisateur'],
+                    legacyRoles: ['super_admin', 'admin', 'chauffeur', 'magasinier', 'client', 'gestionnaire', 'comptable', 'sous_utilisateur']
+                });
+                if (auth && auth.profile && auth.role) {
+                    redirectByRole(auth.role);
+                }
+            } catch (e) {}
+        })();
     }
 
     function showLoginTab(which) {
@@ -335,6 +351,48 @@
     }
     function clearError() {
         document.getElementById('errorBox').style.display = 'none';
+    }
+
+    function withTimeout(promise, ms, message) {
+        let timer;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(message)), ms);
+        });
+        return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
+    async function loginWithCodeDirect(code) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15000);
+        try {
+            const res = await fetch(window.SUPABASE_CONFIG.url + '/rest/v1/rpc/login_with_code', {
+                method: 'POST',
+                cache: 'no-store',
+                signal: ctrl.signal,
+                headers: {
+                    apikey: window.SUPABASE_CONFIG.anonKey,
+                    Authorization: 'Bearer ' + window.SUPABASE_CONFIG.anonKey,
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json'
+                },
+                body: JSON.stringify({ p_code: code })
+            });
+            const text = await res.text();
+            let body = null;
+            try { body = text ? JSON.parse(text) : null; } catch (e) { body = text; }
+            if (!res.ok) {
+                const msg = body && body.message ? body.message : (text || ('HTTP ' + res.status));
+                throw new Error(msg);
+            }
+            return Array.isArray(body) ? (body[0] || null) : body;
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw new Error('Connexion trop longue: Supabase ne répond pas depuis ce navigateur.');
+            }
+            throw error;
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     /* ── Formatage du code d'accès ── */
@@ -521,16 +579,18 @@
 
         showLoad();
         try {
-            const { data: user, error } = await db
-                .from('utilisateurs')
-                .select('id, role, nom, prenom, code_usr, actif')
-                .eq('code_usr', code)
-                .maybeSingle();
-
-            if (error) {
-                hideLoad();
-                showError('❌ Erreur : ' + error.message);
-                return;
+            let user = null;
+            try {
+                user = await loginWithCodeDirect(code);
+            } catch (directError) {
+                console.warn('[Colixo] login direct échoué, fallback RPC Supabase', directError);
+                const { data, error } = await withTimeout(
+                    db.rpc('login_with_code', { p_code: code }),
+                    15000,
+                    'Connexion trop longue. Supabase ne répond pas depuis ce navigateur.'
+                );
+                if (error) throw error;
+                user = Array.isArray(data) ? (data[0] || null) : (data || null);
             }
             if (!user) {
                 hideLoad();
@@ -550,16 +610,18 @@
                 role:         user.role,
                 nom:          user.nom,
                 prenom:       user.prenom,
-                code:         user.code_usr,
+                code:         user.code_usr || user.code || user.code_acces || user.code_connexion || code,
                 entreprise_id: user.entreprise_id
             }));
+            localStorage.setItem('colixo_access_code', code);
 
             toast('success', 'Bienvenue ! Redirection en cours…');
-            setTimeout(() => redirectByRole(user.role), 800);
+            hideLoad();
+            redirectByRole(user.role);
 
         } catch (err) {
             hideLoad();
-            showError('❌ Erreur : ' + err.message);
+            showError('❌ Erreur : ' + (err && err.message ? err.message : String(err)));
         }
     });
 

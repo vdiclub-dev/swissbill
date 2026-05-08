@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script data-cfasync="false" src="config.js?v=20260462"></script>
+  <script data-cfasync="false" src="js/auth.js?v=20260503"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -402,28 +403,27 @@
     const cgvContent = document.getElementById('cgvContent');
     const cgvMeta   = document.getElementById('cgvMeta');
 
-    // Résolution utilisateur : session Supabase OU code USR (localStorage)
-    let userId = null;
-    try {
-      const { data: { session } } = await db.auth.getSession();
-      if (session?.user?.id) userId = session.user.id;
-    } catch (e) {}
-    if (!userId) {
-      try {
-        const cu = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        if (cu?.id) userId = cu.id;
-      } catch (e) {}
-    }
+    // Résolution utilisateur : session Supabase ou compat code d'accès via helper commun
+    const auth = await window.colixoGetAuthContext({
+      legacyRoles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur', 'admin', 'super_admin', 'magasinier', 'chauffeur']
+    });
+    const utilisateurAuth = auth ? auth.profile : null;
+    const userId = utilisateurAuth?.id || null;
+    const session = auth ? auth.session : null;
+    const accessCode = window.colixoGetStoredCode ? window.colixoGetStoredCode() : null;
     if (!userId) {
       window.location.href = 'login/index.html';
       return;
     }
 
     // Chargement utilisateur + CGV en parallèle
-    const [{ data: utilisateur }, cgv] = await Promise.all([
-      db.from('utilisateurs').select('*').eq('id', userId).maybeSingle(),
+    const [utilisateurRes, cgv] = await Promise.all([
+      session
+        ? db.from('utilisateurs').select('*').eq('id', userId).maybeSingle()
+        : db.rpc('get_code_user_profile', { p_user_id: userId, p_code: accessCode }),
       loadActiveCgv()
     ]);
+    const utilisateur = Array.isArray(utilisateurRes?.data) ? (utilisateurRes.data[0] || null) : (utilisateurRes?.data || null);
 
     if (!utilisateur) {
       window.location.href = 'login/index.html';
@@ -452,9 +452,7 @@
 
     // Déconnexion
     logoutBtn.addEventListener('click', async function () {
-      try { await db.auth.signOut(); } catch (e) {}
-      try { localStorage.removeItem('colixo_user'); } catch (e) {}
-      window.location.href = 'login/index.html';
+      await window.colixoLogout({ redirectTo: 'login/index.html' });
     });
 
     // Acceptation
@@ -491,26 +489,41 @@
 
         setStatus('<span class="spinner"></span> Enregistrement juridique…');
 
-        // Mise à jour utilisateurs
-        const { error: updErr } = await db.from('utilisateurs').update({
-          cgv_version_accepted:  cgv.version_code,
-          cgv_accepted_at:       acceptedAt,
-          cgv_accept_ip:         ip,
-          cgv_accept_user_agent: userAgent
-        }).eq('id', userId);
-        if (updErr) throw updErr;
+        if (session) {
+          const { error: updErr } = await db.from('utilisateurs').update({
+            cgv_version_accepted:  cgv.version_code,
+            cgv_accepted_at:       acceptedAt,
+            cgv_accept_ip:         ip,
+            cgv_accept_user_agent: userAgent
+          }).eq('id', userId);
+          if (updErr) throw updErr;
 
-        // Ligne d'audit dans cgv_acceptations
-        await db.from('cgv_acceptations').insert({
-          user_id:      userId,
-          version_code: cgv.version_code,
-          accepted_at:  acceptedAt,
-          ip,
-          user_agent:   userAgent,
-          content_hash: contentHash,
-          pdf_path:     pdfPath,
-          pdf_url:      pdfUrl
-        });
+          const { error: acceptErr } = await db.from('cgv_acceptations').insert({
+            user_id:      userId,
+            version_code: cgv.version_code,
+            accepted_at:  acceptedAt,
+            ip,
+            user_agent:   userAgent,
+            content_hash: contentHash,
+            pdf_path:     pdfPath,
+            pdf_url:      pdfUrl
+          });
+          if (acceptErr) throw acceptErr;
+        } else {
+          const { data: ok, error: acceptErr } = await db.rpc('accept_cgv_with_code', {
+            p_user_id: userId,
+            p_code: accessCode,
+            p_version_code: cgv.version_code,
+            p_accepted_at: acceptedAt,
+            p_ip: ip,
+            p_user_agent: userAgent,
+            p_content_hash: contentHash,
+            p_pdf_path: pdfPath,
+            p_pdf_url: pdfUrl
+          });
+          if (acceptErr) throw acceptErr;
+          if (!ok) throw new Error('Validation du code d\'accès impossible.');
+        }
 
         // Mise à jour localStorage (USR code)
         try {

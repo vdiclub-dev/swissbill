@@ -6,6 +6,7 @@
 <title>Planning RH — Colixo</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script data-cfasync="false" src="../config.js?v=20260462"></script>
+<script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -411,20 +412,15 @@ let editingShiftKey = null;
 
 // ── INIT ──────────────────────────────────────────────────
 async function init() {
-  const raw = localStorage.getItem('colixo_user');
-  let codeUser = null;
-  try { codeUser = JSON.parse(raw || 'null'); } catch(e){}
-  let session = null;
-  if (db) { try { const r = await db.auth.getSession(); session = r.data?.session; } catch(e){} }
-  if (!session && !codeUser) { window.location.href = '../login/index.html'; return; }
-  const user = session?.user || codeUser;
-  const role = codeUser?.role || 'admin';
-  if (!['admin','super_admin'].includes(role)) { window.location.href = '../login/index.html'; return; }
+  const auth = await window.colixoRequireRoute({
+    roles: ['admin','super_admin'],
+    legacyRoles: ['admin','super_admin'],
+    redirectTo: '../login/index.html'
+  });
+  if (!auth) return;
 
   document.getElementById('btnLogout').addEventListener('click', async () => {
-    if (db) try { await db.auth.signOut(); } catch(e){}
-    localStorage.removeItem('colixo_user');
-    window.location.href = '../login/index.html';
+    await window.colixoLogout();
   });
 
   await loadEmployees();

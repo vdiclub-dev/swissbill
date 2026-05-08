@@ -33,7 +33,7 @@
 // Quand une mise en production importante a lieu, cette valeur doit évoluer
 // en même temps que les autres marqueurs de version pour éviter les mélanges
 // de vieux HTML et de nouveaux assets.
-window.COLIXO_ASSET_VERSION = '20260462';
+window.COLIXO_ASSET_VERSION = '20260508b';
 
 /**
  * Résout le préfixe d'URL sous lequel le site est servi.
@@ -286,7 +286,7 @@ window.colixoLogout = async function () {
             console.warn('[Colixo] logout:', e && e.message ? e.message : e);
         }
     }
-    try { localStorage.removeItem('colixo_user'); } catch (e) {}
+    try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
     try { sessionStorage.removeItem('colixo_login_bust'); } catch (e) {}
     var to = (typeof window.colixoHref === 'function')
         ? window.colixoHref('/login/index.html?logout=1')

@@ -354,31 +354,25 @@
     const db = getDB();
     if (!db) return;
 
-    const payload = {
-      nom,
-      numero_client:    gf('cpfNumero')     || null,
-      contact_nom:      gf('cpfContactNom') || null,
-      contact_fonction: gf('cpfFonction')   || null,
-      email:            gf('cpfEmail')      || null,
-      telephone:        gf('cpfTelephone')  || null,
-      adresse:          gf('cpfAdresse')    || null,
-      npa:              gf('cpfNpa')        || null,
-      ville:            gf('cpfVille')      || null,
-      canton:           gf('cpfCanton')     || null,
-      site_web:         gf('cpfSiteWeb')    || null,
-      secteur:          gf('cpfSecteur')    || null,
-    };
+    const code = localStorage.getItem('colixo_access_code') || '';
+    if (!code) { alert('Code d\'accès introuvable. Reconnectez-vous.'); return; }
 
     const btn = document.getElementById('cpfBtnSave');
     btn.classList.add('cpf-saving');
     btn.textContent = 'Enregistrement…';
 
-    let data, error;
-    if (_editId) {
-      ({ data, error } = await db.from('entreprises').update(payload).eq('id', _editId).select().single());
-    } else {
-      ({ data, error } = await db.from('entreprises').insert([payload]).select().single());
-    }
+    const { data, error } = await db.rpc('admin_upsert_entreprise', {
+      p_code:          code,
+      p_id:            _editId || null,
+      p_nom:           nom,
+      p_numero_client: gf('cpfNumero')     || null,
+      p_email:         gf('cpfEmail')      || null,
+      p_telephone:     gf('cpfTelephone')  || null,
+      p_contact_nom:   gf('cpfContactNom') || null,
+      p_adresse:       gf('cpfAdresse')    || null,
+      p_npa:           gf('cpfNpa')        || null,
+      p_ville:         gf('cpfVille')      || null,
+    });
 
     btn.classList.remove('cpf-saving');
     btn.textContent = 'Enregistrer';

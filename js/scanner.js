@@ -239,8 +239,8 @@ async function loadOrderFromQR(orderId) {
         if (!orderId) throw new Error('ID de commande manquant');
 
         const baseDispatch = (window.colixoHref && typeof window.colixoHref === 'function')
-            ? window.colixoHref('/admin/dispatch.html')
-            : '/admin/dispatch.html';
+            ? window.colixoHref('/admin/transports-dispatch.html')
+            : '/admin/transports-dispatch.html';
 
         const target = `${baseDispatch}?highlight=${encodeURIComponent(orderId)}`;
 

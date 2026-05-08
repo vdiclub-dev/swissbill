@@ -13,6 +13,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         html, body { width:100%; height:100%; overflow:hidden; background:#0a0a0f; }
@@ -361,22 +362,12 @@
     }
 
     (async function init() {
-        const { data: { session } } = await db.auth.getSession();
-        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
-        const uid = session?.user?.id || codeUser?.id;
-        if (codeUser) {
-            if (!['admin', 'super_admin'].includes(codeUser.role)) {
-                window.location.replace('../login/index.html'); return;
-            }
-        } else {
-            const { data: user } = await db.from('utilisateurs').select('role').eq('id', uid).single();
-            if (!user || !['admin', 'super_admin'].includes(user.role)) {
-                localStorage.removeItem('colixo_user');
-                window.location.replace('../login/index.html');
-                return;
-            }
-        }
+        const auth = await window.colixoRequireRoute({
+            roles: ['admin','super_admin'],
+            legacyRoles: ['admin','super_admin'],
+            redirectTo: '../login/index.html'
+        });
+        if (!auth) return;
 
         map = L.map('map', { zoomControl: false, attributionControl: false }).setView(CH_CENTER, 8);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);

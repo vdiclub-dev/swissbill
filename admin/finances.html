@@ -14,6 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <style>
         :root{
             --red:#e8311a;--red-dark:#c0280f;
@@ -655,6 +656,7 @@
     'use strict';
     if(!window.SUPABASE_CONFIG){ document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>'; return; }
     const db = window.SUPABASE_CLIENT;
+    let currentAuthUser = null;
 
     /* ── State ── */
     let vehicules=[], fraisList=[], kmList=[], transports=[], chauffeurs=[], entreprises=[], dispatchSnaps=[], brimotFactures=[], journalFlux=[];
@@ -1192,13 +1194,12 @@
         };
         showLoad('Enregistrement…');
         try{
-            const { data: { session } }=await db.auth.getSession();
             if(id){
                 const { error }=await db.from('compta_journal_flux').update(payload).eq('id',id);
                 if(error) throw error;
                 toast('success','Écriture mise à jour');
             } else {
-                payload.created_by=session?.user?.id??null;
+                payload.created_by=currentAuthUser?.id ?? null;
                 const { error }=await db.from('compta_journal_flux').insert([payload]);
                 if(error) throw error;
                 toast('success','Écriture créée');
@@ -1691,17 +1692,20 @@
 
     /* ── AUTH ── */
     async function init() {
-        const{data:{session}}=await db.auth.getSession();
-        const codeUser=JSON.parse(localStorage.getItem('colixo_user')||'null');
-        if(!session && !codeUser){window.location.href='../login/index.html';return;}
-        const userId=session?.user?.id||codeUser?.id;
-        const{data:user}=await db.from('utilisateurs').select('*').eq('id',userId).single();
-        if(!user||!['admin','super_admin'].includes(user.role)){localStorage.removeItem('colixo_user');window.location.href='../login/index.html';return;}
+        const auth = await window.colixoRequireRoute({
+            roles: ['admin','super_admin'],
+            legacyRoles: ['admin','super_admin'],
+            redirectTo: '../login/index.html'
+        });
+        if (!auth) return;
+        const user = auth.profile;
+        if(!user) return;
+        currentAuthUser = auth.authUser || null;
         if(user){
             document.getElementById('sbAv').textContent=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
             document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
         }
-        document.getElementById('btnLogout').addEventListener('click',async()=>{await db.auth.signOut();localStorage.removeItem('colixo_user');window.location.href='../login/index.html';});
+        document.getElementById('btnLogout').addEventListener('click',async()=>{await window.colixoLogout();});
         // Populate chauffeur select in modal
         const{data:ch}=await db.from('utilisateurs').select('id,nom,prenom').in('role',['chauffeur','admin','super_admin']);
         document.getElementById('mChauffeur').innerHTML='<option value="">— Aucun —</option>'+(ch||[]).map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Importer des livraisons | Colixo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../../client/css/import.css?v=20260503-decision-ui">
+</head>
+<body class="import-page">
+  <div class="import-shell">
+    <header class="import-topbar">
+      <a class="brand" href="portal.html">
+        <span class="brand-mark"><i class="fas fa-route"></i></span>
+        <span>COLIXO IMPORT</span>
+      </a>
+      <div class="topbar-actions">
+        <span class="client-pill" id="clientName">Chargement client...</span>
+        <a class="btn" href="portal.html"><i class="fas fa-arrow-left"></i> Retour portail</a>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-card">
+        <div class="eyebrow">Portail client</div>
+        <h1>Importer des livraisons sans double saisie.</h1>
+        <p class="hero-text">
+          Déposez un fichier Excel ou CSV, vérifiez le mapping intelligent, contrôlez les erreurs et importez uniquement les commandes valides avec prix calculés selon votre grille tarifaire.
+        </p>
+        <div class="hero-metrics">
+          <div class="metric"><strong>XLSX / CSV</strong><span>Formats acceptés</span></div>
+          <div class="metric"><strong>10 MB</strong><span>Taille maximale</span></div>
+          <div class="metric"><strong>RLS</strong><span>Données isolées par client</span></div>
+        </div>
+      </div>
+
+      <aside class="panel steps-card">
+        <h2>Étapes</h2>
+        <ol class="step-list">
+          <li data-step="1"><span>1</span> Déposer le fichier</li>
+          <li data-step="2"><span>2</span> Vérifier les colonnes</li>
+          <li data-step="3"><span>3</span> Mapper les champs</li>
+          <li data-step="4"><span>4</span> Valeurs par défaut</li>
+          <li data-step="5"><span>5</span> Prévisualiser</li>
+          <li data-step="6"><span>6</span> Vérifier les prix</li>
+          <li data-step="7"><span>7</span> Importer</li>
+        </ol>
+      </aside>
+    </section>
+
+    <div id="importStatus" class="import-status info" role="status">Initialisation...</div>
+
+    <section class="panel" id="uploadSection">
+      <div class="panel-head">
+        <div>
+          <h2>1. Fichier de livraisons</h2>
+          <p class="panel-subtitle">Formats acceptés: .xlsx, .xls, .csv. Les fichiers sont lus dans le navigateur; aucune clé privée n’est exposée.</p>
+        </div>
+        <span class="badge badge-info" id="clientScope">Client ID: -</span>
+      </div>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choisir un fichier">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+        <div class="dropzone-content">
+          <span class="dropzone-icon"><i class="fas fa-file-import"></i></span>
+          <strong>Choisir un fichier ou le déposer ici</strong>
+          <p>Le système détecte les colonnes, propose un mapping, puis vous laisse corriger avant toute insertion.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="previewSection" hidden>
+      <div class="panel-head">
+        <div>
+          <h2>2. Aperçu brut</h2>
+          <p class="panel-subtitle" id="fileMeta">Aucun fichier chargé.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead id="rawPreviewHead"></thead>
+          <tbody id="rawPreviewBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="mappingSection" hidden>
+      <div class="panel-head">
+        <div>
+          <h2>3. Mapping des colonnes</h2>
+          <p class="panel-subtitle">Le mapping détecté est une proposition. Corrigez les champs si nécessaire, puis sauvegardez le profil pour les prochains imports.</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="btnSaveProfile" type="button"><i class="fas fa-save"></i> Sauvegarder ce mapping</button>
+          <button class="btn btn-primary" id="btnValidateRows" type="button"><i class="fas fa-check-double"></i> Prévisualiser les transports</button>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="profileName">Nom du profil</label>
+          <input id="profileName" type="text" value="Profil import actif">
+          <span class="hint" id="profileHint">Chargement du profil actif...</span>
+        </div>
+        <div class="field">
+          <label>Tarification</label>
+          <span class="callout" id="tariffInfo">Chargement des règles...</span>
+        </div>
+      </div>
+
+      <div class="callout callout-warning" id="mappingWarnings" style="margin:18px 0;">Vérifiez les champs obligatoires.</div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Colonne fichier client</th>
+              <th>Champ Colixo détecté</th>
+              <th>Modifier</th>
+            </tr>
+          </thead>
+          <tbody id="mappingBody"></tbody>
+        </table>
+      </div>
+
+      <h2 style="margin-top:28px;">4. Valeurs par défaut</h2>
+      <p class="panel-subtitle">Ces valeurs sont utilisées si le fichier ne contient pas la colonne correspondante.</p>
+      <div class="grid-2" style="margin-top:16px;">
+        <div class="field">
+          <label for="defaultPickupName">Nom enlèvement</label>
+          <input id="defaultPickupName" type="text" placeholder="Ex. Colixo / dépôt client">
+        </div>
+        <div class="field">
+          <label for="defaultPickupAddress">Adresse enlèvement</label>
+          <input id="defaultPickupAddress" type="text" placeholder="Rue et numéro">
+        </div>
+        <div class="field">
+          <label for="defaultPickupZip">NPA enlèvement</label>
+          <input id="defaultPickupZip" type="text" placeholder="2000">
+        </div>
+        <div class="field">
+          <label for="defaultPickupCity">Ville enlèvement</label>
+          <input id="defaultPickupCity" type="text" placeholder="Neuchâtel">
+        </div>
+        <div class="field">
+          <label for="defaultServiceLevel">Service par défaut</label>
+          <select id="defaultServiceLevel">
+            <option value="eco_48h">Eco 48h</option>
+            <option value="priority_24h">Priority 24h</option>
+            <option value="express">Express</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="summarySection" hidden>
+      <div class="panel-head">
+        <div>
+          <h2>6. Vérifier les prix et importer</h2>
+          <p class="panel-subtitle">La prévisualisation est terminée. Contrôlez le résumé, puis lancez l’étape 7 avec le gros bouton orange.</p>
+        </div>
+      </div>
+
+      <div class="import-decision" id="importNextAction" hidden>
+        <div class="decision-main">
+          <span class="decision-step">Étape 6 sur 7</span>
+          <strong id="importNextTitle">Prêt à importer</strong>
+          <span id="importNextText">Vérifiez le résumé puis lancez l’import des lignes valides.</span>
+          <button class="btn btn-primary btn-import-now" id="btnImportValidBottom" type="button" onclick="window.ColixoClientImport && window.ColixoClientImport.importValidRows && window.ColixoClientImport.importValidRows()">
+            <i class="fas fa-cloud-upload-alt"></i> Étape 7 · Importer maintenant
+          </button>
+          <div class="decision-feedback" id="decisionFeedback" hidden></div>
+        </div>
+        <div class="decision-summary" id="summaryGrid"></div>
+      </div>
+
+      <div class="decision-secondary">
+        <button class="btn" id="btnTogglePreview" type="button"><i class="fas fa-table"></i> Voir / masquer les lignes</button>
+        <button class="btn" id="btnRecalculate" type="button"><i class="fas fa-calculator"></i> Recalculer</button>
+        <button class="btn" id="btnDownloadErrors" type="button"><i class="fas fa-file-csv"></i> Rapport erreurs</button>
+        <button class="btn btn-danger" id="btnReset" type="button"><i class="fas fa-xmark"></i> Annuler</button>
+      </div>
+      <div id="importResult" class="result-box" hidden style="margin-top:18px;"></div>
+    </section>
+
+    <section class="panel preview-panel" id="validatedPreviewSection" hidden>
+      <h2>Détail des lignes prévisualisées</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Statut</th>
+              <th>Référence</th>
+              <th>Destinataire</th>
+              <th>Ville</th>
+              <th>Colis</th>
+              <th>Poids</th>
+              <th>Code tarif / Service</th>
+              <th>Prix</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="validatedRowsBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="busy-overlay" id="busyOverlay" hidden>
+    <div class="busy-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <strong data-busy-text>Traitement en cours...</strong>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="../../config.js?v=20260462" data-cfasync="false"></script>
+  <script src="../../js/auth.js?v=20260503-code-storage"></script>
+  <script src="../../client/js/import-mapping.js?v=20260503-tariff-code"></script>
+  <script src="../../client/js/pricing-engine.js?v=20260503-tariff-pdf"></script>
+  <script src="../../client/js/csv-error-report.js?v=20260503"></script>
+  <script src="../../client/js/import.js?v=20260503-order-client-fk"></script>
+</body>
+</html>

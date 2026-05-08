@@ -1346,10 +1346,8 @@
         }
         showLoad();
         try {
-            const { data: user, error } = await db.from('utilisateurs')
-                .select('id, role, nom, prenom, code_usr, actif')
-                .eq('code_usr', code)
-                .maybeSingle();
+            const { data, error } = await db.rpc('login_with_code', { p_code: code });
+            const user = Array.isArray(data) ? (data[0] || null) : (data || null);
             if (error) throw error;
             if (!user) { toast('error', 'Code introuvable.'); return; }
             if (user.actif === false) { toast('error', 'Compte désactivé.'); return; }
@@ -1364,7 +1362,9 @@
                 prenom: user.prenom,
                 code: user.code_usr
             }));
-            const { data: full, error: e2 } = await db.from('utilisateurs').select('*').eq('id', user.id).maybeSingle();
+            const { data: fullData, error: e2 } = await db
+                .rpc('get_code_user_profile', { p_user_id: user.id, p_code: code });
+            const full = Array.isArray(fullData) ? (fullData[0] || null) : (fullData || null);
             if (e2) throw e2;
             if (!full) { toast('error', 'Profil introuvable.'); return; }
             driver = full;
@@ -1381,7 +1381,11 @@
         try {
             const { data, error } = await db.auth.signInWithPassword({ email, password:pwd });
             if(error) throw error;
-            const { data:user } = await db.from('utilisateurs').select('*').eq('id',data.user.id).maybeSingle();
+            const auth = await window.colixoGetAuthContext({
+                roles: ['chauffeur','admin','super_admin'],
+                legacyRoles: []
+            });
+            const user = auth ? auth.profile : null;
             if(!user||!['chauffeur','admin','super_admin'].includes(user.role)) {
                 await db.auth.signOut(); throw new Error('Accès réservé aux chauffeurs');
             }
@@ -1397,10 +1401,16 @@
         const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
         if(!session && !codeUser) return;
         if(session) {
-            const { data:user } = await db.from('utilisateurs').select('*').eq('id',session.user.id).maybeSingle();
+            const auth = await window.colixoGetAuthContext({
+                roles: ['chauffeur','admin','super_admin'],
+                legacyRoles: []
+            });
+            const user = auth ? auth.profile : null;
             if(user && ['chauffeur','admin','super_admin'].includes(user.role)) { driver=user; afterLogin(); }
         } else if(codeUser && ['chauffeur','admin','super_admin'].includes(codeUser.role)) {
-            const { data:user } = await db.from('utilisateurs').select('*').eq('id',codeUser.id).maybeSingle();
+            const storedCode = String(codeUser.code || codeUser.code_usr || '').trim().toUpperCase();
+            const { data:userData } = await db.rpc('get_code_user_profile', { p_user_id: codeUser.id, p_code: storedCode });
+            const user = Array.isArray(userData) ? (userData[0] || null) : (userData || null);
             if(user) { driver=user; afterLogin(); }
         }
     }
@@ -1434,37 +1444,50 @@
                     loadMissions();
                 },
                 onMissionUpdate: function(newRow) {
-                    // Silently refresh if status changed externally (e.g. dispatch recall)
                     if(newRow && newRow.status) loadMissions();
                 }
             });
         }
 
-        // ── Vérifier si ouvert depuis un scan QR ──
+        handleIncomingQrLink();
+    }
+
+    async function handleIncomingQrLink() {
         const params = new URLSearchParams(window.location.search);
-        const orderId    = params.get('id');
-        const orderNum   = params.get('order');
-        const colisNum   = params.get('colis');
+        const orderId = params.get('id');
+        const orderNum = params.get('order');
+        const colisNum = params.get('colis');
         const colisTotal = params.get('total');
 
-        if(orderId || orderNum) {
-            // Afficher notification de scan  
-            setTimeout(async () => {
-                toast('info', `📦 QR scanné — chargement du transport…`);
-                // Chercher le transport
-                let query = db.from('transport_orders_simple').select('*');
-                if(orderId)   query = query.eq('id', orderId);
-                else          query = query.eq('order_number', orderNum);
-                const { data:order } = await query.maybeSingle();
-                if(order) {
-                    // Afficher un modal de confirmation de prise en charge
-                    showQRPickup(order, colisNum, colisTotal);
-                } else {
-                    toast('error', `Transport introuvable : ${orderNum||orderId}`);
-                }
-                // Nettoyer l'URL sans recharger la page
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }, 800);
+        if (!orderId && !orderNum) return;
+
+        try {
+            showLoad();
+
+            let query = db.from('transport_orders_simple').select('*');
+
+            if (orderId) {
+                query = query.eq('id', orderId);
+            } else {
+                query = query.eq('order_number', orderNum);
+            }
+
+            const { data: order, error } = await query.maybeSingle();
+            if (error) throw error;
+
+            if (!order) {
+                toast('error', 'Transport introuvable');
+                return;
+            }
+
+            toast('success', `QR ouvert : ${order.order_number || 'transport'}`);
+            showQRPickup(order, colisNum, colisTotal);
+
+        } catch (e) {
+            toast('error', e.message || 'Erreur lors de l’ouverture du QR');
+        } finally {
+            hideLoad();
+            window.history.replaceState({}, document.title, window.location.pathname);
         }
     }
 
@@ -1557,6 +1580,7 @@
     let scanning = false;
     let scanAutoResumeTimer = null;
     const recentScanHits = new Map();
+    let qrDetectorCache = undefined; // undefined = pas testé, null = indisponible
 
     function isBatchScanEnabled() {
         return !!document.getElementById('scanRafale')?.checked;
@@ -1638,7 +1662,7 @@
     }
 
     function clearScanFileInputs() {
-        ['scanInputGallery', 'scanInputCamera'].forEach(function (id) {
+        ['scanInputCamera'].forEach(function (id) {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
@@ -1702,51 +1726,30 @@
         function startDecodeLoop() {
             scanning = false;
             if (scanInterval) clearInterval(scanInterval);
-            scanInterval = setInterval(function () { decodeFrame(); }, 220);
+
+            scanInterval = setInterval(function () {
+                decodeFrame();
+            }, 250);
+
             if (statusEl) {
                 statusEl.style.color = 'var(--green)';
-                statusEl.textContent = '📷 Caméra active — pointez un QR';
+                statusEl.textContent = '📷 Caméra active — pointez un QR dans le cadre';
             }
-            
-            // Vérification spécifique Samsung que la vidéo s'affiche bien
-            setTimeout(function() {
-                console.log('[DEBUG] Video readyState:', video.readyState);
-                console.log('[DEBUG] Video videoWidth:', video.videoWidth);
-                console.log('[DEBUG] Video srcObject:', video.srcObject);
-                
-                if (video.readyState >= 2 && video.videoWidth > 0) {
-                    if (statusEl) {
-                        statusEl.textContent = '✅ Caméra Samsung OK — Scanning actif';
-                    }
-                } else {
-                    if (statusEl) {
-                        statusEl.textContent = '📷 Caméra active — continuez à viser le QR';
-                        statusEl.style.color = 'var(--yellow)';
-                    }
-                    // Forcer le redémarrage de la vidéo pour Samsung
-                    console.log('[DEBUG] Tentative redémarrage vidéo Samsung...');
-                    try {
-                        const stream = video.srcObject;
-                        video.srcObject = null;
-                        setTimeout(() => {
-                            video.srcObject = stream;
-                            video.play().catch(e => console.warn('[DEBUG] Retry play failed:', e));
-                        }, 100);
-                    } catch (e) {
-                        console.warn('[DEBUG] Erreur redémarrage vidéo:', e);
-                    }
-                }
-            }, 2000);
+
+            console.log('[QR] Boucle de scan démarrée', {
+                readyState: video.readyState,
+                width: video.videoWidth,
+                height: video.videoHeight
+            });
         }
-        
+
         video.defaultMuted = true;
         video.muted = true;
         video.setAttribute('muted', '');
         video.setAttribute('playsinline', 'true');
         video.setAttribute('webkit-playsinline', 'true');
         video.playsInline = true;
-        
-        // Forcer l'affichage pour Samsung
+
         video.style.display = 'block';
         video.style.visibility = 'visible';
         video.style.objectFit = 'cover';
@@ -1754,140 +1757,139 @@
         video.style.width = '100%';
         video.style.height = '100%';
 
-        var firstPlay = video.play();
-        if (!firstPlay || typeof firstPlay.then !== 'function') {
-            startDecodeLoop();
-            return Promise.resolve();
-        }
-        return firstPlay
-            .then(function () { startDecodeLoop(); })
-            .catch(function (err) {
-                console.warn('[QR] video.play', err);
-                // Stratégie améliorée pour Samsung
-                if (statusEl) {
-                    statusEl.textContent = '🔄 Tentative démarrage Samsung...';
-                    statusEl.style.color = 'var(--yellow)';
-                }
-                
-                return new Promise(function (resolve) {
-                    var done = false;
-                    function ok() {
-                        if (done) return;
-                        done = true;
-                        resolve();
-                    }
-                    function tryPlay() {
-                        video.play().then(function () {
-                            startDecodeLoop();
-                            ok();
-                        }).catch(function (e) {
-                            console.warn('[QR] Retry play failed:', e);
-                            // Forcer pour Samsung après plusieurs tentatives
-                            if (!done) {
-                                setTimeout(function() {
-                                    video.play().then(function() {
-                                        startDecodeLoop();
-                                        ok();
-                                    }).catch(function() {
-                                        // Dernière tentative: forcer le démarrage
-                                        video.currentTime = 0.1;
-                                        video.play().then(function() {
-                                            startDecodeLoop();
-                                            ok();
-                                        }).catch(function() {
-                                            if (statusEl) {
-                                                statusEl.textContent = '❌ Échec caméra - utilisez "Prendre une photo"';
-                                                statusEl.style.color = 'var(--red)';
-                                            }
-                                            ok();
-                                        });
-                                    });
-                                }, 1000);
-                            }
-                        });
-                    }
-                    video.addEventListener('loadedmetadata', tryPlay, { once: true });
-                    video.addEventListener('canplay', tryPlay, { once: true });
-                    video.addEventListener('loadeddata', tryPlay, { once: true });
-                    requestAnimationFrame(function () { requestAnimationFrame(tryPlay); });
-                    setTimeout(tryPlay, 50);
-                    setTimeout(tryPlay, 200);
-                    setTimeout(function () {
-                        if (!scanInterval) {
-                            toast('error', 'Touchez encore le bouton rouge ou utilisez « Prendre une photo » du QR.');
-                            if (statusEl) {
+        const tryPlay = function () {
+            return video.play()
+                .then(function () {
+                    if (video.videoWidth > 0) {
+                        startDecodeLoop();
+                    } else {
+                        setTimeout(function () {
+                            if (video.videoWidth > 0) {
+                                startDecodeLoop();
+                            } else if (statusEl) {
                                 statusEl.style.color = 'var(--yellow)';
-                                statusEl.textContent = 'Réessayez le bouton rouge ou prenez une photo du QR ci-dessous.';
+                                statusEl.textContent = '📷 Caméra démarrée mais image pas encore prête…';
                             }
-                        }
-                        ok();
-                    }, 900);
+                        }, 300);
+                    }
+                })
+                .catch(function (err) {
+                    console.warn('[QR] video.play() a échoué:', err);
+                    if (statusEl) {
+                        statusEl.style.color = 'var(--yellow)';
+                        statusEl.textContent = '📷 Démarrage caméra… réessayez si besoin';
+                    }
                 });
-            });
+        };
+
+        if (video.readyState >= 2 && video.videoWidth > 0) {
+            return tryPlay();
+        }
+
+        return new Promise(function (resolve) {
+            let started = false;
+
+            function launch() {
+                if (started) return;
+                started = true;
+                tryPlay().finally(resolve);
+            }
+
+            video.addEventListener('loadedmetadata', launch, { once: true });
+            video.addEventListener('loadeddata', launch, { once: true });
+            video.addEventListener('canplay', launch, { once: true });
+
+            setTimeout(launch, 600);
+        });
     }
 
     window.startLiveScan = function (ev) {
         if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
-        var statusEl = document.getElementById('scanStatus');
-        var video = document.getElementById('qrVideo');
+
+        const statusEl = document.getElementById('scanStatus');
+        const video = document.getElementById('qrVideo');
+        const resultEl = document.getElementById('scanResult');
+
         stopLiveScanTracks();
-        var sr = document.getElementById('scanResult');
-        if (sr) sr.style.display = 'none';
+
+        if (resultEl) resultEl.style.display = 'none';
+
         if (!video) {
-            if (statusEl) statusEl.textContent = '❌ Vue caméra indisponible';
-            toast('error', 'Élément vidéo manquant.');
+            if (statusEl) {
+                statusEl.style.color = 'var(--red)';
+                statusEl.textContent = '❌ Élément vidéo introuvable';
+            }
+            toast('error', 'Élément vidéo manquant');
             return;
         }
+
         if (typeof window.isSecureContext !== 'undefined' && !window.isSecureContext) {
             if (statusEl) {
                 statusEl.style.color = 'var(--red)';
-                statusEl.textContent = 'HTTPS requis pour la caméra.';
+                statusEl.textContent = 'HTTPS requis pour utiliser la caméra';
             }
-            toast('error', 'Ouvrez le site en https://');
+            toast('error', 'Ouvrez le site en HTTPS');
             return;
         }
+
         if (statusEl) {
-            statusEl.textContent = '🔄 Initialisation caméra Samsung...';
             statusEl.style.color = 'var(--yellow)';
+            statusEl.textContent = '🔄 Ouverture de la caméra…';
         }
-        
-        // Amélioration pour Samsung: forcer l'affichage vidéo immédiatement
+
         video.style.display = 'block';
         video.style.visibility = 'visible';
         video.style.background = '#000';
-        
+
         getCameraStreamWithFallbacks()
             .then(function (stream) {
                 scanStream = stream;
                 video.srcObject = stream;
-                setTimeout(function () {
-                    if (!scanInterval && (!video.videoWidth || video.readyState < 2) && statusEl) {
-                        statusEl.style.color = 'var(--yellow)';
-                        statusEl.textContent = '📸 Caméra live instable — utilisez le bouton rouge juste au-dessus.';
+
+                return new Promise(function (resolve) {
+                    let done = false;
+
+                    function ready() {
+                        if (done) return;
+                        done = true;
+                        attachVideoPlayThenScan(video, statusEl).finally(resolve);
                     }
-                }, 2500);
-                return attachVideoPlayThenScan(video, statusEl);
+
+                    if (video.readyState >= 2 && video.videoWidth > 0) {
+                        ready();
+                        return;
+                    }
+
+                    video.addEventListener('loadedmetadata', ready, { once: true });
+                    video.addEventListener('loadeddata', ready, { once: true });
+                    video.addEventListener('canplay', ready, { once: true });
+
+                    setTimeout(ready, 700);
+                });
             })
             .catch(function (err) {
-                console.warn('[QR] caméra', err);
-                var msg = 'Caméra indisponible — utilisez galerie ou photo ci-dessous.';
+                console.warn('[QR] caméra erreur:', err);
+
+                let msg = 'Caméra indisponible — utilisez la photo du QR plus bas.';
                 if (err && err.name === 'NotAllowedError') {
-                    msg = '📱 CAMÉRA REFUSÉE - Solution Samsung: Paramètres → Applications → Chrome → Permissions → Caméra → Autoriser. Redémarrez Chrome.';
+                    msg = 'Caméra refusée — autorisez la caméra dans les permissions du navigateur.';
                 } else if (err && err.name === 'NotFoundError') {
                     msg = 'Aucune caméra détectée.';
                 } else if (err && err.name === 'NotReadableError') {
-                    msg = 'Caméra occupée — fermez l\'appareil photo et réessayez.';
+                    msg = 'Caméra occupée par une autre application.';
                 } else if (err && err.name === 'OverconstrainedError') {
-                    msg = 'Contrainte caméra — prenez une photo du QR ci-dessous.';
+                    msg = 'Contrainte caméra non compatible.';
                 } else if (err.message === 'no-api') {
-                    msg = 'Navigateur incompatible (HTTPS requis).';
+                    msg = 'Navigateur incompatible ou caméra non disponible.';
                 }
+
                 if (statusEl) {
                     statusEl.style.color = 'var(--red)';
                     statusEl.textContent = msg;
                 }
+
                 toast('error', msg);
-                triggerNativeCameraFallback('📸 Utilisez le bouton rouge pour ouvrir la caméra du téléphone.');
+                triggerNativeCameraFallback('📸 Utilisez le bouton rouge ou la photo du QR ci-dessous.');
             });
     };
 
@@ -1938,33 +1940,121 @@
         startLiveScan();
     };
 
-    function decodeFrame() {
-        if (scanning) return;
-        const video  = document.getElementById('qrVideo');
-        const canvas = document.getElementById('qrCanvas');
-        if (!video || !canvas || !video.videoWidth || video.readyState < 2) return;
+    async function getQrDetector() {
+        if (qrDetectorCache !== undefined) return qrDetectorCache;
 
-        canvas.width  = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
+        qrDetectorCache = null;
 
-        if ('BarcodeDetector' in window) {
-            scanning = true;
-            var bd = new BarcodeDetector({ formats: ['qr_code'] });
-            bd.detect(canvas).then(function (codes) {
-                if (codes.length > 0) {
-                    handleQRResult(codes[0].rawValue);
-                } else {
-                    scanning = false;
+        if (!('BarcodeDetector' in window)) {
+            console.warn('[QR] BarcodeDetector absent');
+            return null;
+        }
+
+        try {
+            if (typeof BarcodeDetector.getSupportedFormats === 'function') {
+                const formats = await BarcodeDetector.getSupportedFormats();
+                console.log('[QR] Formats supportés:', formats);
+                if (!Array.isArray(formats) || !formats.includes('qr_code')) {
+                    console.warn('[QR] qr_code non supporté par BarcodeDetector');
+                    return null;
                 }
-            }).catch(function () { scanning = false; });
-        } else if (window.jsQR) {
-            var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            var code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
-            if (code && code.data) {
-                handleQRResult(code.data);
             }
+
+            qrDetectorCache = new BarcodeDetector({ formats: ['qr_code'] });
+            console.log('[QR] BarcodeDetector activé');
+            return qrDetectorCache;
+        } catch (e) {
+            console.warn('[QR] Impossible d\'initialiser BarcodeDetector:', e);
+            qrDetectorCache = null;
+            return null;
+        }
+    }
+
+    async function decodeFrame() {
+        if (scanning) return;
+
+        const video = document.getElementById('qrVideo');
+        const canvas = document.getElementById('qrCanvas');
+
+        if (!video || !canvas) return;
+        if (!video.videoWidth || video.readyState < 2) return;
+
+        scanning = true;
+
+        try {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            let rawValue = null;
+
+            // 1) Essai BarcodeDetector si vraiment utilisable
+            const detector = await getQrDetector();
+            if (detector) {
+                try {
+                    const codes = await detector.detect(canvas);
+                    if (codes && codes.length > 0 && codes[0].rawValue) {
+                        rawValue = codes[0].rawValue;
+                        console.log('[QR] Détecté par BarcodeDetector:', rawValue);
+                    }
+                } catch (e) {
+                    console.warn('[QR] detect() natif a échoué:', e);
+                }
+            }
+
+            // 2) Fallback jsQR si le natif n’a rien trouvé
+            if (!rawValue && window.jsQR) {
+                try {
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imgData.data, imgData.width, imgData.height, {
+                        inversionAttempts: 'attemptBoth'
+                    });
+                    if (code && code.data) {
+                        rawValue = code.data;
+                        console.log('[QR] Détecté par jsQR:', rawValue);
+                    }
+                } catch (e) {
+                    console.warn('[QR] jsQR a échoué:', e);
+                }
+            }
+
+            // 3) Variante recadrée au centre si toujours rien
+            if (!rawValue && window.jsQR) {
+                try {
+                    const cropW = Math.round(canvas.width * 0.72);
+                    const cropH = Math.round(canvas.height * 0.52);
+                    const sx = Math.round((canvas.width - cropW) / 2);
+                    const sy = Math.round((canvas.height - cropH) / 2);
+
+                    const cropCanvas = document.createElement('canvas');
+                    cropCanvas.width = cropW;
+                    cropCanvas.height = cropH;
+                    const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+                    cropCtx.drawImage(canvas, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+
+                    const imgData2 = cropCtx.getImageData(0, 0, cropW, cropH);
+                    const code2 = jsQR(imgData2.data, imgData2.width, imgData2.height, {
+                        inversionAttempts: 'attemptBoth'
+                    });
+
+                    if (code2 && code2.data) {
+                        rawValue = code2.data;
+                        console.log('[QR] Détecté par jsQR (crop centre):', rawValue);
+                    }
+                } catch (e) {
+                    console.warn('[QR] jsQR crop a échoué:', e);
+                }
+            }
+
+            if (rawValue) {
+                handleQRResult(rawValue);
+                return;
+            }
+
+        } finally {
+            scanning = false;
         }
     }
 
@@ -2367,10 +2457,18 @@
 
     window.openOrder = function(id) {
         stopScan();
-        // Trouver et ouvrir la mission
-        const mission = missions?.find(m=>m.id===id);
-        if(mission) openMission(mission);
-        else toast('info', 'Allez dans Missions pour voir ce transport');
+        const mission = missions?.find(m => m.id === id);
+        if (mission) {
+            curMission = mission;
+            showScreen('missions');
+            setTimeout(function () {
+                navMission(id);
+            }, 150);
+        } else {
+            toast('info', 'Transport trouvé, mais pas encore chargé dans la liste des missions');
+            showScreen('missions');
+            loadMissions();
+        }
     };
 
     /* ── MODAL SÉLECTION VÉHICULE ── */
@@ -4045,7 +4143,6 @@
     checkSession();
 })();
 </script>
-
 <!-- ═══ MODAL SÉLECTION VÉHICULE ═══ -->
 <div id="vehStartModal" class="veh-modal-overlay" onclick="if(event.target===this && vehModalCanSkip) closeVehModal()">
     <div class="veh-modal-sheet">
@@ -4055,5 +4152,6 @@
         <button type="button" id="vehModalSkip" class="veh-modal-skip hidden" onclick="closeVehModal()">Passer (sans véhicule)</button>
     </div>
 </div>
+<script src="scanner-fix-dropin.js"></script>
 </body>
 </html>

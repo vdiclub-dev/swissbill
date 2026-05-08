@@ -8,7 +8,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="../vendor/supabase.umd.js"></script>
-    <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../config.js?v=20260508b"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260508b-fast-code-session"></script>
     <script src="ai-dispatch.js?v=20260422"></script>
     <script src="profit.js?v=20260423"></script>
     <script src="pricing.js?v=20260423"></script>
@@ -444,6 +445,45 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
         <div class="mactions">
             <button type="button" class="btn btn-ghost" onclick="closeModal('modalNew')">Annuler</button>
             <button type="button" class="btn btn-red" id="btnSaveNew"><i class="fas fa-check"></i> Créer le transport</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CORRIGER TRANSPORT -->
+<div class="overlay" id="modalEditOrder">
+    <div class="mbox">
+        <div class="mhead"><div><div class="mtitle">Corriger le transport</div><div style="font-size:12px;color:var(--muted);margin-top:3px;" id="editOrderNum"></div></div><button type="button" class="mclose" onclick="closeModal('modalEditOrder')">✕</button></div>
+        <input type="hidden" id="editOrderId">
+        <div class="fgrid">
+            <div class="sep">Enlèvement</div>
+            <div class="field s2"><label>Adresse d'enlèvement *</label><textarea id="editPickupAddress" rows="2"></textarea></div>
+            <div class="sep">Livraison</div>
+            <div class="field s2"><label>Adresse de livraison *</label><textarea id="editDeliveryAddress" rows="2"></textarea></div>
+            <div class="field"><label>Nom destinataire</label><input type="text" id="editDestName" placeholder="Prénom Nom"></div>
+            <div class="field"><label>Téléphone destinataire</label><input type="tel" id="editDestPhone" placeholder="+41 …"></div>
+            <div class="sep">Colis & service</div>
+            <div class="field"><label>Type de service</label><select id="editSvcType"><option value="standard">Standard</option><option value="eco">Eco</option><option value="express">Express</option><option value="prio">Prioritaire</option><option value="same_day">Same Day</option><option value="vinologue">Vinologue</option></select></div>
+            <div class="field"><label>Type de colis</label><select id="editPkgType"><option value="colis">Colis</option><option value="document">Document</option><option value="palette">Palette</option><option value="fragile">Fragile</option></select></div>
+            <div class="field"><label>Quantité</label><input type="number" id="editQty" value="1" min="1"></div>
+            <div class="field"><label>Poids (kg)</label><input type="number" id="editWeight" placeholder="0.0" step="0.1" min="0"></div>
+            <div class="field"><label>Priorité</label><select id="editPriority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></div>
+            <div class="field"><label>Prix client (CHF)</label><input type="number" id="editPrice" placeholder="0.00" step="0.01" min="0"></div>
+            <div class="sep">Sous-traitance externe</div>
+            <div class="field s2">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                    <input type="checkbox" id="editExtCarrierToggle" style="width:16px;height:16px;cursor:pointer;" onchange="document.getElementById('editExtCarrierNameField').style.display=this.checked?'block':'none';document.getElementById('editExtCarrierPriceField').style.display=this.checked?'block':'none';">
+                    <span>Confier à un transporteur externe</span>
+                </label>
+            </div>
+            <div class="field" id="editExtCarrierNameField" style="display:none;"><label>Nom du transporteur</label><input type="text" id="editExtCarrierName" placeholder="DHL, FedEx, Chronopost…"></div>
+            <div class="field" id="editExtCarrierPriceField" style="display:none;"><label>Prix au transporteur (CHF)</label><input type="number" id="editExtCarrierPrice" placeholder="0.00" step="0.01" min="0"></div>
+            <div class="sep">Notes</div>
+            <div class="field s2"><label>Instructions client / chauffeur</label><textarea id="editInstructions" placeholder="Instructions spéciales…"></textarea></div>
+            <div class="field s2"><label>Note correction interne</label><textarea id="editAdminNote" placeholder="Ex: adresse corrigée après appel client…"></textarea></div>
+        </div>
+        <div class="mactions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modalEditOrder')">Annuler</button>
+            <button type="button" class="btn btn-red" id="btnSaveEditOrder"><i class="fas fa-save"></i> Enregistrer la correction</button>
         </div>
     </div>
 </div>
@@ -1053,12 +1093,96 @@ function renderTable(list){
                 +(o.external_carrier_name&&o.status!=='delivered'&&o.status!=='completed'?'<button type="button" class="btn btn-xs btn-green" onclick="openExtDeliveryModal(\''+o.id+'\')" title="Confirmer livraison externe"><i class="fas fa-check"></i> Livré</button> ':'')
                 +'<button type="button" class="btn btn-ghost btn-xs" onclick="openBL(\''+o.id+'\')" title="Bon de livraison"><i class="fas fa-file-alt"></i> BL</button> '
                 +'<a class="btn btn-ghost btn-xs" href="'+gmUrl+'" target="_blank" title="Google Maps"><i class="fas fa-map-marked-alt"></i></a> '
+                +'<button type="button" class="btn btn-ghost btn-xs" onclick="openEditOrderModal(\''+o.id+'\')" title="Corriger la saisie"><i class="fas fa-pen"></i></button> '
                 +'<button type="button" class="btn btn-ghost btn-xs" onclick="openAssignModal(\''+o.id+'\')" title="Assigner"><i class="fas fa-user-check"></i></button> '
                 +'<button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="openDeleteModal(\''+o.id+'\',\''+esc(o.order_number||o.id.slice(0,8))+'\')" title="Supprimer"><i class="fas fa-trash"></i></button>'
             +'</td>'
         +'</tr>';
     }).join('');
 }
+
+// ── CORRIGER TRANSPORT ──
+function optionalFloat(id){
+    var raw=document.getElementById(id).value;
+    if(raw===null||raw===undefined||String(raw).trim()==='')return null;
+    var n=parseFloat(raw);
+    return Number.isFinite(n)?n:null;
+}
+function optionalInt(id,fallback){
+    var raw=document.getElementById(id).value;
+    var n=parseInt(raw,10);
+    return Number.isFinite(n)&&n>0?n:fallback;
+}
+function openEditOrderModal(id){
+    var o=rows.find(function(x){return x.id===id;});if(!o)return;
+    document.getElementById('editOrderId').value=id;
+    document.getElementById('editOrderNum').textContent=(o.order_number||o.id.slice(0,8))+' — correction avant dispatch';
+    document.getElementById('editPickupAddress').value=o.pickup_address||'';
+    document.getElementById('editDeliveryAddress').value=o.delivery_address||'';
+    document.getElementById('editDestName').value=o.destinataire_nom||'';
+    document.getElementById('editDestPhone').value=o.destinataire_tel||'';
+    document.getElementById('editSvcType').value=o.service_type||o.speed||'standard';
+    document.getElementById('editPkgType').value=o.package_type||'colis';
+    document.getElementById('editQty').value=o.quantity||1;
+    document.getElementById('editWeight').value=o.weight||'';
+    document.getElementById('editPriority').value=o.priority==='urgent'?'urgent':'normal';
+    document.getElementById('editPrice').value=o.price_chf||'';
+    document.getElementById('editInstructions').value=o.instructions||'';
+    document.getElementById('editAdminNote').value=o.admin_note||'';
+    var hasExt=!!o.external_carrier_name;
+    document.getElementById('editExtCarrierToggle').checked=hasExt;
+    document.getElementById('editExtCarrierName').value=o.external_carrier_name||'';
+    document.getElementById('editExtCarrierPrice').value=o.external_carrier_price||'';
+    document.getElementById('editExtCarrierNameField').style.display=hasExt?'block':'none';
+    document.getElementById('editExtCarrierPriceField').style.display=hasExt?'block':'none';
+    openModal('modalEditOrder');
+}
+window.openEditOrderModal=openEditOrderModal;
+document.getElementById('btnSaveEditOrder').addEventListener('click',async function(){
+    var id=document.getElementById('editOrderId').value;
+    var o=rows.find(function(x){return x.id===id;});if(!o)return;
+    var pickup=document.getElementById('editPickupAddress').value.trim();
+    var delivery=document.getElementById('editDeliveryAddress').value.trim();
+    if(!pickup){toast('Adresse enlèvement obligatoire',false);return;}
+    if(!delivery){toast('Adresse livraison obligatoire',false);return;}
+    var btn=this;btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Enregistrement…';
+    try{
+        var addrChanged=pickup!==(o.pickup_address||'')||delivery!==(o.delivery_address||'');
+        var svc=document.getElementById('editSvcType').value;
+        var extOn=document.getElementById('editExtCarrierToggle').checked;
+        var payload={
+            pickup_address:pickup,
+            delivery_address:delivery,
+            destinataire_nom:document.getElementById('editDestName').value.trim()||null,
+            destinataire_tel:document.getElementById('editDestPhone').value.trim()||null,
+            service_type:svc,
+            speed:svc,
+            package_type:document.getElementById('editPkgType').value,
+            quantity:optionalInt('editQty',1),
+            weight:optionalFloat('editWeight'),
+            priority:document.getElementById('editPriority').value==='urgent'?'urgent':'normal',
+            price_chf:optionalFloat('editPrice'),
+            instructions:document.getElementById('editInstructions').value.trim()||null,
+            admin_note:document.getElementById('editAdminNote').value.trim()||null,
+            external_carrier_name:extOn?(document.getElementById('editExtCarrierName').value.trim()||null):null,
+            external_carrier_price:extOn?optionalFloat('editExtCarrierPrice'):null
+        };
+        if(addrChanged){
+            payload.pickup_lat=null;payload.pickup_lng=null;
+            payload.delivery_lat=null;payload.delivery_lng=null;
+            payload.distance_km=null;payload.duration_min=null;
+            _kmProcessed.delete(id);
+        }
+        var r=await db.from('transport_orders_simple').update(payload).eq('id',id);
+        if(r.error)throw r.error;
+        Object.assign(o,payload);
+        toast('Transport corrigé',true);
+        closeModal('modalEditOrder');
+        applyFilter();
+        renderTourneePanel();
+    }catch(e){toast('Erreur : '+(e.message||e),false);}
+    finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i> Enregistrer la correction';}
+});
 
 // ── STATUT ──
 function openStatusModal(id){
@@ -1836,12 +1960,13 @@ window.addEventListener('colixo:billing_ready',function(){
         if(view==='inbox'||view==='portal'||portalHighlightId){
             document.getElementById('filtreStatut').value='pending_validation';
         }
-        var _a=await db.auth.getSession();
-        var cu=JSON.parse(localStorage.getItem('colixo_user')||'null');
-        if(!_a.data.session&&!cu){window.location.href='../login/index.html';return;}
-        var uid=(_a.data.session&&_a.data.session.user&&_a.data.session.user.id)||(cu&&cu.id);
-        var u=uid?await db.from('utilisateurs').select('role').eq('id',uid).single():{data:null};
-        var role=(u.data&&u.data.role)||(cu&&cu.role)||'';
+        var auth=await window.colixoRequireRoute({
+            roles:['admin','super_admin'],
+            legacyRoles:['admin','super_admin'],
+            redirectTo:'../login/index.html'
+        });
+        if(!auth)return;
+        var role=(auth&&auth.role)||'';
         if(!['admin','super_admin'].includes(role)){window.location.href='../login/index.html';return;}
         await loadChauffeurs();
         await loadTournees();

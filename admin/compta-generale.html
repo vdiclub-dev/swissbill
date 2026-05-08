@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <style>
         :root{--red:#e8311a;--red-dark:#c0280f;--night:#0a0a0f;--night2:#111118;--night3:#18181f;--surface:#1e1e28;
             --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--white:#fff;--muted:rgba(255,255,255,0.38);--muted2:rgba(255,255,255,0.6);
@@ -267,6 +268,7 @@
 if(!window.SUPABASE_CONFIG){ document.body.innerHTML='<div style="padding:40px;color:red;">config.js manquant</div>'; return; }
 const db = window.SUPABASE_CLIENT;
 let comptes=[], ecritures=[], lignes=[], soldesMap=new Map();
+let currentAuthUser = null;
 const toastEl=document.getElementById('toast');
 function toast(msg, err){
     toastEl.textContent=(err?'✕ ':'✓ ')+msg;
@@ -632,10 +634,9 @@ window.saveEcriture=async function(){
     if(Math.abs(sd-sc)>0.01){ toast('Écriture non équilibrée',true); return; }
     showL(true);
     try{
-        const { data: { session } }=await db.auth.getSession();
         const { data: head, error:herr }=await db.from('compta_ecritures').insert([{
             entite:entite(), date_ecriture, libelle, piece_ref,
-            created_by: session?.user?.id??null
+            created_by: currentAuthUser?.id ?? null
         }]).select('id').single();
         if(herr) throw herr;
         const ins=rows.map(r=>({ ecriture_id:head.id, compte_id:r.compte_id, libelle:r.libelle, debit:r.debit, credit:r.credit }));
@@ -747,15 +748,18 @@ document.getElementById('selEntite').addEventListener('change', loadData);
 document.getElementById('selExercice').addEventListener('change', loadData);
 
 async function init(){
-    const { data:{ session } }=await db.auth.getSession();
-    const codeUser=JSON.parse(localStorage.getItem('colixo_user')||'null');
-    if(!session&&!codeUser){ window.location.href='../login/index.html'; return; }
-    const uid=session?.user?.id||codeUser?.id;
-    const { data:user }=await db.from('utilisateurs').select('*').eq('id',uid).single();
-    if(!user||!['admin','super_admin'].includes(user.role)){ localStorage.removeItem('colixo_user'); window.location.href='../login/index.html'; return; }
+    const auth = await window.colixoRequireRoute({
+        roles: ['admin','super_admin'],
+        legacyRoles: ['admin','super_admin'],
+        redirectTo: '../login/index.html'
+    });
+    if (!auth) return;
+    const user = auth.profile;
+    if(!user) return;
+    currentAuthUser = auth.authUser || null;
     document.getElementById('sbAv').textContent=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'A';
     document.getElementById('sbName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
-    document.getElementById('btnLogout').addEventListener('click', async()=>{ await db.auth.signOut(); window.location.href='../login/index.html'; });
+    document.getElementById('btnLogout').addEventListener('click', async()=>{ await window.colixoLogout(); });
     const y=new Date().getFullYear();
     const sel=document.getElementById('selExercice');
     for(let i=0;i<4;i++){ const yy=y-i; const o=document.createElement('option'); o.value=yy; o.textContent=yy; if(i===0) o.selected=true; sel.appendChild(o); }

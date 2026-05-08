@@ -18,6 +18,7 @@
     <!-- Supabase et Config -->
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     
     <style>
         * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
@@ -498,24 +499,22 @@
         }
         const db = window.SUPABASE_CLIENT;
 
+        function showClientLogin() {
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('dashboardSection').style.display = 'none';
+        }
+
         async function checkAuth() {
-            const { data: { session } } = await db.auth.getSession();
-            if (!session) {
-                // Afficher la section login
-                document.getElementById('loginSection').style.display = 'block';
-                document.getElementById('dashboardSection').style.display = 'none';
+            const ctx = await window.colixoGetAuthContext({ legacyRoles: [] });
+            if (!ctx || !ctx.authUser || !ctx.profile) {
+                showClientLogin();
                 console.log('[Client] Session non trouvée - affichage page de login client');
                 return;
             }
 
-            const { data: utilisateur } = await db.from('utilisateurs')
-                .select('role, prenom, nom').eq('id', session.user.id).single();
-
-            if (!utilisateur || utilisateur.role !== 'client') {
+            if (ctx.role !== 'client') {
                 await db.auth.signOut();
-                // Afficher la section login
-                document.getElementById('loginSection').style.display = 'block';
-                document.getElementById('dashboardSection').style.display = 'none';
+                showClientLogin();
                 console.log('[Client] Rôle incorrect - déconnexion');
                 return;
             }
@@ -524,12 +523,12 @@
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('dashboardSection').style.display = 'block';
 
-            document.getElementById('userEmail').textContent = session.user.email;
+            document.getElementById('userEmail').textContent = ctx.authUser.email || '';
             document.getElementById('userName').textContent =
-                utilisateur.prenom || utilisateur.nom || session.user.email.split('@')[0];
+                ctx.profile.prenom || ctx.profile.nom || (ctx.authUser.email || '').split('@')[0];
 
-            loadStats(session.user.id);
-            loadRecentOrders(session.user.id);
+            loadStats(ctx.profile.id);
+            loadRecentOrders(ctx.profile.id);
         }
 
         // Gestionnaire du formulaire de login client
@@ -546,14 +545,11 @@
             }
             
             try {
-                const { data, error } = await db.auth.signInWithPassword({ email, password });
+                const { error } = await db.auth.signInWithPassword({ email, password });
                 if (error) throw error;
                 
-                // Vérifier que c'est bien un client
-                const { data: utilisateur } = await db.from('utilisateurs')
-                    .select('role').eq('id', data.user.id).single();
-                
-                if (!utilisateur || utilisateur.role !== 'client') {
+                const ctx = await window.colixoGetAuthContext({ legacyRoles: [] });
+                if (!ctx || !ctx.authUser || !ctx.profile || ctx.role !== 'client') {
                     await db.auth.signOut();
                     errorDiv.textContent = 'Accès réservé aux clients uniquement';
                     errorDiv.style.display = 'block';

@@ -14,6 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -1406,6 +1407,7 @@
 
     /* ── State ── */
     let chauffeurs = [], employesSalaire = [], pointages = [], conges = [], soldes = [], fichesSalaire = [];
+    let currentAuthUser = null;
     let paramSalaireByEmp = new Map();
     let currentMonth, currentYear;
     let charts = {};
@@ -1479,22 +1481,21 @@
 
     /* ── AUTH ── */
     async function init() {
-        const { data:{session} } = await db.auth.getSession();
-        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        if(!session && !codeUser) { window.location.href='../login/index.html'; return; }
-        const uid = session?.user?.id || codeUser?.id;
-        const { data:user } = await db.from('utilisateurs').select('*').eq('id',uid).single();
-        if(!user || !['admin','super_admin'].includes(user.role)) {
-            localStorage.removeItem('colixo_user');
-            window.location.href='../login/index.html';
-            return;
-        }
+        const auth = await window.colixoRequireRoute({
+            roles: ['admin','super_admin'],
+            legacyRoles: ['admin','super_admin'],
+            redirectTo: '../login/index.html'
+        });
+        if (!auth) return;
+        const user = auth.profile;
+        if(!user) return;
+        currentAuthUser = auth.authUser || null;
         if(user) {
             const initials=((user.prenom?.[0]||'')+(user.nom?.[0]||'')).toUpperCase()||'SA';
             document.getElementById('sideAvatar').textContent=initials;
             document.getElementById('sideName').textContent=[user.prenom,user.nom].filter(Boolean).join(' ')||'Admin';
         }
-        document.getElementById('btnLogout').addEventListener('click', async()=>{ await db.auth.signOut(); localStorage.removeItem('colixo_user'); window.location.href='../login/index.html'; });
+        document.getElementById('btnLogout').addEventListener('click', async()=>{ await window.colixoLogout(); });
         initMonthSelector();
         ['salAvs','salAc','salLpp','salIs','salAutres','salAlloc','salRemb','salPrimes'].forEach(function (id) {
             const el = document.getElementById(id);
@@ -2789,9 +2790,8 @@
         const sid = document.getElementById('salId').value.trim();
         showLoad();
         try {
-            const { data: { session } } = await db.auth.getSession();
             if (!sid) {
-                payload.created_by = session && session.user ? session.user.id : null;
+                payload.created_by = currentAuthUser?.id ?? null;
                 const { error } = await db.from('rh_fiches_salaire').insert([payload]);
                 if (error) {
                     if (String(error.message || '').toLowerCase().includes('duplicate') || error.code === '23505') {

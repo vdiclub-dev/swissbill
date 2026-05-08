@@ -15,6 +15,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
     
     <style>
         :root {
@@ -629,15 +630,14 @@
 
     /* ── Protection session ── */
     (async () => {
-        const { data: { session } } = await db.auth.getSession();
-        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-        if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
-        const uid = session?.user?.id || codeUser?.id;
-        const { data: user } = await db.from('utilisateurs').select('role').eq('id', uid).single();
-        if (!user || !['admin','super_admin','magasinier'].includes(user.role)) {
-            localStorage.removeItem('colixo_user');
-            window.location.replace('../login/index.html');
-        }
+        const auth = await window.colixoRequireRoute({
+            roles: ['admin','super_admin','magasinier'],
+            legacyRoles: ['admin','super_admin','magasinier'],
+            redirectTo: '../login/index.html'
+        });
+        if (!auth) return;
+        const user = auth.profile;
+        if (!user) return;
         
         // Masquer les prix pour les magasiniers
         if (user.role === 'magasinier') {

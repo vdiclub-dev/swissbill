@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script data-cfasync="false" src="../config.js?v=20260462"></script>
+  <script data-cfasync="false" src="../config.js?v=20260508b"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260508b-fast-code-session"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -107,6 +108,16 @@
       outline: none; min-width: 240px; cursor: pointer; }
     .client-head select:focus { border-color: rgba(232,49,26,.5); }
     .client-body { padding: 20px; color: var(--muted); font-size: 13px; font-style: italic; }
+    .client-tariff-layout { padding: 18px; display: grid; gap: 18px; }
+    .client-help { padding: 12px 14px; border: 1px solid rgba(245,158,11,.18); border-radius: 12px;
+      background: rgba(245,158,11,.07); color: #fcd34d; font-size: 13px; line-height: 1.45; }
+    .client-list-card { border: 1px solid var(--border2); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.02); }
+    .client-list-head { padding: 14px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: center;
+      border-bottom: 1px solid var(--border); background: rgba(255,255,255,.03); }
+    .client-list-title { font-weight: 800; color: var(--white); display: flex; align-items: center; gap: 8px; }
+    .client-list-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .client-list-badge { color: var(--muted2); border: 1px solid var(--border2); border-radius: 999px; padding: 4px 9px; font-size: 12px; white-space: nowrap; }
+    .client-empty { padding: 18px; color: var(--muted); font-size: 13px; font-style: italic; }
 
     .remise-pct  { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 5px;
       font-size: 12px; font-weight: 700; background: rgba(245,158,11,.12); color: #fcd34d; border: 1px solid rgba(245,158,11,.2); }
@@ -124,12 +135,13 @@
       border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: 'Outfit', sans-serif; outline: none; width: 100%; }
 
     /* Toast */
-    .toast { position: fixed; bottom: 20px; right: 20px; padding: 11px 16px; border-radius: 10px;
-      font-size: 13px; font-weight: 700; z-index: 9999; display: none; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+    .toast { position: fixed; bottom: 20px; right: 20px; max-width: min(520px, calc(100vw - 32px)); padding: 13px 16px; border-radius: 10px;
+      font-size: 13px; font-weight: 700; line-height: 1.45; z-index: 9999; display: none; box-shadow: 0 8px 32px rgba(0,0,0,.5); cursor: pointer; white-space: pre-line; }
     .toast.show { display: block; }
     .toast.ok  { background: #166534; color: #86efac; border: 1px solid rgba(34,197,94,.3); }
     .toast.err { background: #7f1d1d; color: #fca5a5; border: 1px solid rgba(232,49,26,.3); }
     .toast.info{ background: #1e3a5f; color: #93c5fd; border: 1px solid rgba(59,130,246,.3); }
+    .toast-title { display: block; color: #fff; font-size: 12px; letter-spacing: .05em; margin-bottom: 4px; text-transform: uppercase; }
 
     @media (max-width: 680px) {
       .override-inline.open { grid-template-columns: 1fr 1fr; }
@@ -145,7 +157,7 @@
 
 <div class="page">
   <div class="page-title">Gestion des tarifs</div>
-  <div class="page-sub">Cliquez sur <strong>Modifier</strong> pour éditer une ligne directement dans le tableau.</div>
+  <div class="page-sub">La <strong>grille standard</strong> est le catalogue Colixo. Ensuite, sélectionnez un client pour lui appliquer cette grille et ajouter des options/prix spéciaux si nécessaire.</div>
   <div class="status-bar">
     <span class="status-dot" id="statusDot"></span>
     <span id="statusText">Connexion en cours...</span>
@@ -155,10 +167,15 @@
   <div class="excel-card">
     <div class="excel-head">
       <div>
-        <h2>Produits &amp; tarifs</h2>
-        <p>Nom · Référence · Poids minimum · Prix de base</p>
+        <h2>Grille standard Colixo</h2>
+        <p>Nom · Code produit · Poids minimum · Prix standard appliqué aux clients</p>
       </div>
-      <span class="count-badge" id="prodCount">0 produit(s)</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="count-badge" id="prodCount">0 produit(s)</span>
+        <button class="btn btn-save" type="button" onclick="seedVinoLog()" title="Insérer les 6 tarifs VinoLog standard dans la grille">
+          <i class="fas fa-wine-bottle"></i> Insérer tarifs VinoLog
+        </button>
+      </div>
     </div>
     <div style="overflow-x:auto">
       <table class="xls">
@@ -183,13 +200,16 @@
   <!-- ── PRIX CLIENTS ── -->
   <div class="client-section">
     <div class="client-head">
-      <h2>Prix spéciaux clients</h2>
+      <h2>Tarif client &amp; options</h2>
       <select id="clientSelect" onchange="onClientChange(this.value)" title="Sélectionner un client">
         <option value="">— Sélectionner un client —</option>
       </select>
+      <button class="btn btn-save" type="button" onclick="applyStandardGridToClient()" title="Copier la grille standard active dans la grille tarifaire du client sélectionné">
+        <i class="fas fa-layer-group"></i> Appliquer grille standard
+      </button>
     </div>
     <div id="clientBody" class="client-body">
-      Sélectionnez un client pour voir et modifier ses tarifs personnalisés.
+      Sélectionnez un client, appliquez la grille standard, puis ajoutez seulement les options/prix spéciaux nécessaires.
     </div>
   </div>
 </div>
@@ -198,7 +218,7 @@
 
 <script>
   const db = window.SUPABASE_CLIENT;
-  let produits = [], clients = [], selectedClientId = '';
+  let produits = [], clients = [], selectedClientId = '', adminAuthContext = null;
 
   function setStatus(ok, msg) {
     document.getElementById('statusDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
@@ -208,22 +228,70 @@
   let _tt;
   function toast(msg, type) {
     const el = document.getElementById('toast');
-    el.textContent = msg; el.className = 'toast show ' + (type || 'ok');
-    clearTimeout(_tt); _tt = setTimeout(() => el.classList.remove('show'), 3200);
+    const kind = type || 'ok';
+    el.className = 'toast show ' + kind;
+    el.innerHTML = '';
+    if (kind === 'err') {
+      const title = document.createElement('span');
+      title.className = 'toast-title';
+      title.textContent = 'Erreur - cliquez pour fermer';
+      el.appendChild(title);
+    }
+    el.appendChild(document.createTextNode(msg));
+    el.onclick = () => el.classList.remove('show');
+    clearTimeout(_tt);
+    _tt = setTimeout(() => el.classList.remove('show'), kind === 'err' ? 30000 : 3200);
   }
 
   function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  function getAdminRpcPayload(extra) {
+    const profile = adminAuthContext?.profile;
+    const adminCode = (profile?.code || profile?.code_usr || window.colixoGetStoredCode?.() || '').trim().toUpperCase();
+    if (!profile?.id || !adminCode) throw new Error('Session admin incomplète. Reconnectez-vous avec votre code admin.');
+    return Object.assign({ p_admin_id: profile.id, p_code: adminCode }, extra || {});
+  }
+
   // ── Produits ──
+  async function fetchProduitsDirect() {
+    const cfg = window.SUPABASE_CONFIG;
+    if (!cfg?.url || !cfg?.anonKey) return [];
+    const url = cfg.url.replace(/\/$/, '') + '/rest/v1/produits_tarif?select=*&order=ordre.asc.nullslast&order=nom.asc';
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.anonKey,
+        Authorization: 'Bearer ' + cfg.anonKey
+      }
+    });
+    if (!res.ok) throw new Error('REST produits ' + res.status + ' ' + (await res.text()).slice(0, 160));
+    return await res.json();
+  }
+
   async function loadProduits() {
-    if (!db) { setStatus(false, 'Supabase non disponible'); return; }
-    const { data, error } = await db.from('produits_tarif').select('*').order('ordre').order('nom');
+    let data = null, error = null;
+    if (db) {
+      try {
+        const res = await db.from('produits_tarif').select('*').order('ordre').order('nom');
+        data = res.data;
+        error = res.error;
+      } catch (e) {
+        error = e;
+      }
+    }
+    if (error || !Array.isArray(data) || !data.length) {
+      try {
+        data = await fetchProduitsDirect();
+        error = null;
+      } catch (fallbackError) {
+        error = error || fallbackError;
+      }
+    }
     if (error) {
       setStatus(false, 'Erreur produits: ' + error.message);
       document.getElementById('produitsTbody').innerHTML =
-        '<tr><td colspan="6" class="empty-cell" style="color:#fca5a5">Erreur: ' + esc(error.message) + '</td></tr>';
+        '<tr><td colspan="7" class="empty-cell" style="color:#fca5a5">Erreur: ' + esc(error.message) + '</td></tr>';
       return;
     }
     produits = data || [];
@@ -236,7 +304,7 @@
     const tbody = document.getElementById('produitsTbody');
     let html = '';
     if (!produits.length) {
-      html = '<tr><td colspan="6" class="empty-cell">Aucun produit — ajoutez-en un ci-dessous.</td></tr>';
+      html = '<tr><td colspan="7" class="empty-cell">Aucun produit — ajoutez-en un ci-dessous.</td></tr>';
     } else {
       html = produits.map(p => rowDisplay(p)).join('');
     }
@@ -312,11 +380,19 @@
     const { error } = await db.from('produits_tarif').update({ nom, ref, poids_min, prix, increment_par_kg, actif, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     const p = produits.find(x => x.id === id);
-    Object.assign(p, { nom, ref, poids_min, prix, actif });
+    Object.assign(p, { nom, ref, poids_min, prix, increment_par_kg, actif });
+    let syncMessage = '';
+    try {
+      const synced = await syncActiveClientRulesForProduct(p);
+      if (synced) syncMessage = ' ' + synced + ' tarif(s) portail synchronisé(s).';
+    } catch (syncError) {
+      toast('Produit mis a jour, mais sync portail impossible: ' + syncError.message, 'err');
+    }
     const row = document.getElementById('pr-' + id);
     if (row) row.outerHTML = rowDisplay(p);
-    toast('Produit mis a jour.');
-    if (selectedClientId) renderClientTable(selectedClientId, await fetchOverrides(selectedClientId));
+    if (syncMessage) toast('Produit mis a jour.' + syncMessage);
+    else toast('Produit mis a jour.');
+    if (selectedClientId) await refreshClientTable(selectedClientId);
   }
   async function delProduit(id) {
     const p = produits.find(x => x.id === id);
@@ -339,23 +415,108 @@
     const { data, error } = await db.from('produits_tarif').insert({ nom, ref, poids_min, prix, increment_par_kg, actif: true, ordre }).select().single();
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     produits.push(data);
+    let autoApplied = 0;
+    try {
+      autoApplied = await applyNewProductToClientsWithSameCode(data);
+    } catch (syncError) {
+      toast('Produit ajoute, mais sync portail impossible: ' + syncError.message, 'err');
+    }
     document.getElementById('prodCount').textContent = produits.length + ' produit(s)';
     renderProduits();
-    toast('Produit ajoute.');
+    toast('Produit ajoute.' + (autoApplied ? ' ' + autoApplied + ' client(s) mis à jour.' : ''));
   }
+
+  // ── Seed VinoLog ──
+  async function seedVinoLog() {
+    const VINO = [
+      { nom: 'VinoLog 48h — 0–12 kg',   ref: 'VINO48-S', poids_min: 0,  prix: 0, increment_par_kg: 0, actif: true, ordre: 90 },
+      { nom: 'VinoLog 48h — 12–20 kg',  ref: 'VINO48-M', poids_min: 12, prix: 0, increment_par_kg: 0, actif: true, ordre: 91 },
+      { nom: 'VinoLog 48h — 20–30 kg',  ref: 'VINO48-L', poids_min: 20, prix: 0, increment_par_kg: 0, actif: true, ordre: 92 },
+      { nom: 'VinoLog 24h — 0–12 kg',   ref: 'VINO24-S', poids_min: 0,  prix: 0, increment_par_kg: 0, actif: true, ordre: 93 },
+      { nom: 'VinoLog 24h — 12–20 kg',  ref: 'VINO24-M', poids_min: 12, prix: 0, increment_par_kg: 0, actif: true, ordre: 94 },
+      { nom: 'VinoLog 24h — 20–30 kg',  ref: 'VINO24-L', poids_min: 20, prix: 0, increment_par_kg: 0, actif: true, ordre: 95 },
+    ];
+    const existingRefs = produits.map(p => p.ref);
+    const toInsert = VINO.filter(v => !existingRefs.includes(v.ref));
+    if (!toInsert.length) { toast('Les tarifs VinoLog sont déjà présents.', 'info'); return; }
+    const { data, error } = await db.from('produits_tarif').insert(toInsert).select();
+    if (error) { toast('Erreur: ' + error.message, 'err'); return; }
+    (data || []).forEach(p => produits.push(p));
+    document.getElementById('prodCount').textContent = produits.length + ' produit(s)';
+    renderProduits();
+    toast(toInsert.length + ' tarif(s) VinoLog insérés. Définissez les prix via Modifier.');
+  }
+
+  // ── Rabais progressif CA par client ──
+  async function loadRabaisCA(clientId) {
+    try {
+      const { data } = await db.from('client_tariff_rules')
+        .select('id,is_active')
+        .eq('client_id', clientId)
+        .eq('tariff_code', 'RABAIS_CA')
+        .maybeSingle();
+      return data?.is_active === true;
+    } catch(_) { return false; }
+  }
+
+  window.toggleRabaisCA = async function(clientId, enabled, checkbox) {
+    if (checkbox) checkbox.disabled = true;
+    try {
+      const { data: existing } = await db.from('client_tariff_rules')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('tariff_code', 'RABAIS_CA')
+        .maybeSingle();
+      if (existing?.id) {
+        await db.from('client_tariff_rules').update({ is_active: enabled }).eq('id', existing.id);
+      } else if (enabled) {
+        await db.from('client_tariff_rules').insert({
+          client_id: clientId, name: 'Programme Rabais CA', tariff_code: 'RABAIS_CA',
+          base_price_chf: 0, is_active: true, priority: 999,
+          price_per_parcel_chf: 0, price_per_kg_chf: 0, price_per_km_chf: 0,
+          included_km: 0, extra_km_price_chf: 0, fuel_surcharge_percent: 0,
+          discount_percent: 0, min_weight_kg: 0, min_parcel_count: 1
+        });
+      }
+      toast(enabled ? 'Programme Rabais CA activé pour ce client.' : 'Programme Rabais CA désactivé.', 'info');
+    } catch(e) {
+      toast('Erreur: ' + e.message, 'err');
+    } finally {
+      if (checkbox) checkbox.disabled = false;
+    }
+  };
 
   // ── Clients ──
   async function loadClients() {
     if (!db) return;
-    const { data, error } = await db.from('utilisateurs').select('*').order('code_acces').limit(200);
+    const [{ data, error }, entreprisesRes] = await Promise.all([
+      db.from('utilisateurs').select('*').order('code_acces').limit(500),
+      db.from('entreprises').select('id,nom,numero_client,email').limit(1000)
+    ]);
     if (error) { console.warn('Clients:', error.message); return; }
-    clients = data || [];
+    const entreprisesById = new Map((entreprisesRes.data || []).map(e => [e.id, e]));
+    const rows = (data || []).filter(c => {
+      const role = String(c.role || '').toLowerCase();
+      return !role || ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].includes(role);
+    });
+    const byClientId = new Map();
+    rows.forEach(c => {
+      const clientId = c.entreprise_id || c.id;
+      if (!clientId || byClientId.has(clientId)) return;
+      byClientId.set(clientId, c);
+    });
+    clients = Array.from(byClientId.values());
     const sel = document.getElementById('clientSelect');
+    sel.innerHTML = '<option value="">— Sélectionner un client —</option>';
     clients.forEach(c => {
       const opt = document.createElement('option');
-      opt.value = c.id;
-      const name = [c.entreprise, c.raison_sociale, c.nom, c.prenom, c.name].filter(Boolean).join(' ');
-      opt.textContent = (name || ('ID:' + String(c.id).slice(0, 8))) + (c.code_acces ? '  [' + c.code_acces + ']' : '');
+      const clientId = c.entreprise_id || c.id;
+      const entreprise = entreprisesById.get(clientId);
+      opt.value = clientId;
+      const name = entreprise?.nom || [c.entreprise_nom, c.entreprise, c.raison_sociale, c.nom, c.prenom, c.name].filter(Boolean).join(' ');
+      const code = c.code_acces || c.code_usr || c.code_connexion || c.code;
+      const clientCode = entreprise?.numero_client || code;
+      opt.textContent = (name || ('ID:' + String(clientId).slice(0, 8))) + (clientCode ? '  [' + clientCode + ']' : '');
       sel.appendChild(opt);
     });
   }
@@ -365,42 +526,211 @@
     const body = document.getElementById('clientBody');
     if (!clientId) { body.className = 'client-body'; body.innerHTML = 'Selectionnez un client pour voir et modifier ses tarifs personnalises.'; return; }
     body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;">Chargement...</p>';
-    const overrides = await fetchOverrides(clientId);
-    renderClientTable(clientId, overrides);
+    const [overrides, rules, hasRabaisCA] = await Promise.all([
+      fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId)
+    ]);
+    renderClientTable(clientId, overrides, rules, hasRabaisCA);
   }
 
   async function fetchOverrides(clientId) {
+    try {
+      const rpc = await db.rpc('admin_list_client_price_options', getAdminRpcPayload({ p_client_id: clientId }));
+      if (!rpc.error) return rpc.data || [];
+    } catch (_) {}
     const { data } = await db.from('prix_speciaux').select('*').eq('client_id', clientId);
     return data || [];
   }
 
-  function renderClientTable(clientId, overrides) {
+  async function fetchClientTariffRules(clientId, includeInactive) {
+    try {
+      const rpc = await db.rpc('admin_list_client_tariff_rules', getAdminRpcPayload({ p_client_id: clientId }));
+      if (!rpc.error && !includeInactive) return rpc.data || [];
+    } catch (_) {}
+    let query = db.from('client_tariff_rules')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('priority', { ascending: true });
+    if (!includeInactive) query = query.eq('is_active', true);
+    const { data } = await query;
+    return data || [];
+  }
+
+  function tariffKey(value) {
+    return String(value || '').trim().toUpperCase();
+  }
+
+  function tariffFamily(value) {
+    let ref = tariffKey(value).replace(/\s+/g, '-');
+    ref = ref.replace(/[_-]\d+$/, '');
+    ref = ref.replace(/^(VINO(?:24|48))[_-]?[SML]$/, '$1');
+    return ref;
+  }
+
+  function isDefaultOptionProduct(p) {
+    const ref = tariffKey(p?.ref);
+    const name = String(p?.nom || '').toLowerCase();
+    if (ref.startsWith('OPT')) return true;
+    return /(montage|assurance|cave|étage|etage|fragile|appel|retrait|nuit)/i.test(name);
+  }
+
+  function standardRuleFromProduct(clientId, p, index) {
+    const increment = Number(p.increment_par_kg || 0);
+    return {
+      client_id: clientId,
+      produit_id: p.id,
+      name: p.nom || p.ref || 'Tarif standard',
+      tariff_code: p.ref || p.nom || null,
+      service_level: null,
+      min_weight_kg: Number(p.poids_min || 0),
+      max_weight_kg: null,
+      min_parcel_count: 1,
+      max_parcel_count: null,
+      base_price_chf: Number(p.prix || 0),
+      price_per_parcel_chf: 0,
+      price_per_kg_chf: increment,
+      price_per_km_chf: 0,
+      included_km: 0,
+      extra_km_price_chf: 0,
+      fuel_surcharge_percent: 0,
+      discount_percent: 0,
+      is_active: true,
+      priority: Number(p.ordre || index + 1)
+    };
+  }
+
+  async function syncActiveClientRulesForProduct(p) {
+    if (!p?.id) return 0;
+    const payload = standardRuleFromProduct(null, p, produits.indexOf(p));
+    delete payload.client_id;
+    const { data, error } = await db.from('client_tariff_rules')
+      .update(payload)
+      .eq('produit_id', p.id)
+      .eq('is_active', true)
+      .select('id');
+    if (error) throw error;
+    return (data || []).length;
+  }
+
+  async function applyNewProductToClientsWithSameCode(p) {
+    const family = tariffFamily(p?.ref || p?.nom);
+    if (!p?.id || !family || isDefaultOptionProduct(p)) return 0;
+    const existing = await db.from('client_tariff_rules')
+      .select('client_id,tariff_code,name')
+      .eq('is_active', true);
+    if (existing.error) throw existing.error;
+    const clientIds = Array.from(new Set((existing.data || [])
+      .filter(r => tariffFamily(r.tariff_code || r.name) === family)
+      .map(r => r.client_id)
+      .filter(Boolean)));
+    let applied = 0;
+    for (let i = 0; i < clientIds.length; i++) {
+      const clientId = clientIds[i];
+      const already = await db.from('client_tariff_rules')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('produit_id', p.id)
+        .limit(1);
+      if (already.error) throw already.error;
+      const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
+      const res = already.data && already.data.length
+        ? await db.from('client_tariff_rules').update(rule).eq('id', already.data[0].id)
+        : await db.from('client_tariff_rules').insert(rule);
+      if (res.error) throw res.error;
+      applied++;
+    }
+    return applied;
+  }
+
+  async function applyStandardGridToClient() {
+    const clientId = selectedClientId || document.getElementById('clientSelect').value;
+    if (!clientId) { toast('Sélectionnez d’abord un client.', 'err'); return; }
+    const activeProducts = produits.filter(p => p.actif !== false && !isDefaultOptionProduct(p));
+    if (!activeProducts.length) { toast('Aucun produit actif dans la grille standard.', 'err'); return; }
+    if (!confirm('Appliquer la grille standard Colixo au client sélectionné ? Les codes existants seront mis à jour, les options/prix spéciaux restent séparés.')) return;
+
+    try {
+      const existing = await fetchClientTariffRules(clientId, true);
+      const byProduct = new Map(existing.filter(r => r.produit_id).map(r => [String(r.produit_id), r]));
+      const byCode = new Map(existing.filter(r => !r.produit_id).map(r => [tariffKey(r.tariff_code), r]));
+      for (let i = 0; i < activeProducts.length; i++) {
+        const rule = standardRuleFromProduct(clientId, activeProducts[i], i);
+        const key = tariffKey(rule.tariff_code);
+        const current = byProduct.get(String(activeProducts[i].id)) || byCode.get(key);
+        if (current?.id) {
+          const { error } = await db.from('client_tariff_rules').update(rule).eq('id', current.id);
+          if (error) throw error;
+        } else {
+          const { error } = await db.from('client_tariff_rules').insert(rule);
+          if (error) throw error;
+        }
+      }
+      toast(activeProducts.length + ' tarif(s) standard appliqué(s).');
+    } catch (error) {
+      const rpc = await db.rpc('admin_apply_standard_tariffs_to_client', getAdminRpcPayload({ p_client_id: clientId }));
+      if (rpc.error) { toast('Erreur: ' + rpc.error.message, 'err'); return; }
+      toast(Number(rpc.data || activeProducts.length) + ' tarif(s) standard appliqué(s).');
+    }
+    const [overrides, rules] = await Promise.all([fetchOverrides(clientId), fetchClientTariffRules(clientId)]);
+    renderClientTable(clientId, overrides, rules);
+  }
+
+  function renderClientTable(clientId, overrides, rules, hasRabaisCA) {
     const body = document.getElementById('clientBody');
     if (!produits.length) { body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;font-style:italic;">Aucun produit defini.</p>'; return; }
     const ovMap = Object.fromEntries(overrides.map(o => [o.produit_id, o]));
-    const CTRS = ['', '2e colis meme client', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
+    const ruleByProduct = new Map((rules || []).filter(r => r.produit_id).map(r => [String(r.produit_id), r]));
+    const legacyRuleMap = new Map((rules || [])
+      .filter(r => !r.produit_id)
+      .map(r => [tariffKey(r.tariff_code || r.name), r]));
+    const CTRS = ['', '2e colis meme client', 'Montage de pendule', 'Montage de meuble', 'Volume', 'Client fidele', 'Contrat annuel', 'Autre'];
 
-    let html = '<div style="overflow-x:auto"><table class="xls"><thead><tr>' +
-      '<th style="width:24%">Produit</th><th style="width:10%">Ref.</th>' +
-      '<th style="width:14%">Prix cat.</th><th style="width:18%">Prix special</th>' +
-      '<th style="width:14%">Contrainte</th><th>Actions</th>' +
-    '</tr></thead><tbody>';
-
-    produits.forEach(p => {
+    const serviceProducts = produits.filter(p => !isDefaultOptionProduct(p));
+    const optionProducts = produits.filter(p => isDefaultOptionProduct(p));
+    const appliedCount = serviceProducts.filter(p => ruleByProduct.get(String(p.id)) || legacyRuleMap.get(tariffKey(p.ref || p.nom))).length;
+    const activeOptionCount = optionProducts.filter(p => {
       const ov = ovMap[p.id];
+      return ov && ov.actif !== false && ov.contrainte;
+    }).length;
+
+    function renderServiceRows(items) {
+      if (!items.length) return '<tr><td colspan="6" class="empty-cell">Aucun tarif de livraison dans la grille standard.</td></tr>';
+      return items.map(p => {
+        const rule = ruleByProduct.get(String(p.id)) || legacyRuleMap.get(tariffKey(p.ref || p.nom));
+        const hasRule = !!rule;
+        const price = rule ? Number(rule.base_price_chf || 0) : Number(p.prix || 0);
+        const increment = rule ? Number(rule.price_per_kg_chf || 0) : Number(p.increment_par_kg || 0);
+        return '<tr id="cr-' + p.id + '">' +
+          '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasRule ? 'checked' : '') + ' onchange="toggleClientTariff(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
+          '<td><span class="cell cell-nom">' + esc(p.nom) + '</span></td>' +
+          '<td><span class="cell cell-ref">' + esc(p.ref || '—') + '</span></td>' +
+          '<td><span class="cell cell-prix">CHF ' + price.toFixed(2) + '</span></td>' +
+          '<td><span class="cell cell-poids">' + (increment ? '+ CHF ' + increment.toFixed(2) + ' / kg' : '—') + '</span></td>' +
+          '<td><span class="cell">' + (hasRule ? '<span class="remise-fixe">Actif portail</span>' : '<span style="color:var(--muted);font-size:12px">Non appliqué</span>') + '</span></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function renderOptionRows(items) {
+      if (!items.length) return '<tr><td colspan="7" class="empty-cell">Aucune option dans la grille standard.</td></tr>';
+      return items.map(p => {
+      const ov = ovMap[p.id];
+      const hasOption = !!(ov && ov.actif !== false && ov.contrainte);
       const remiseHtml = ov
         ? (ov.type_remise === 'pct'
             ? '<span class="remise-pct"><i class="fas fa-percent"></i> -' + Number(ov.valeur).toFixed(1) + '% → CHF ' + (p.prix * (1 - ov.valeur / 100)).toFixed(2) + '</span>'
+            : ov.type_remise === 'supp'
+              ? '<span class="remise-fixe"><i class="fas fa-plus"></i> +' + Number(ov.valeur).toFixed(2) + ' CHF → CHF ' + (Number(p.prix || 0) + Number(ov.valeur || 0)).toFixed(2) + '</span>'
             : '<span class="remise-fixe">CHF ' + Number(ov.valeur).toFixed(2) + '</span>')
         : '<span style="color:var(--muted);font-size:12px">—</span>';
       const ctrHtml = ov && ov.contrainte
         ? '<span class="ctr-badge">' + esc(ov.contrainte) + '</span>'
         : '<span style="color:var(--muted);font-size:12px">—</span>';
 
-      html += '<tr id="cr-' + p.id + '">' +
+      return '<tr id="cr-' + p.id + '">' +
+        '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasOption ? 'checked' : '') + ' onchange="toggleClientOption(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
         '<td><span class="cell cell-nom">'  + esc(p.nom) + '</span></td>' +
         '<td><span class="cell cell-ref">'  + esc(p.ref || '—') + '</span></td>' +
-        '<td><span class="cell cell-prix">' + Number(p.prix).toFixed(2) + '</span></td>' +
+        '<td><span class="cell cell-prix">CHF ' + Number(p.prix).toFixed(2) + '</span></td>' +
         '<td><span class="cell">' + remiseHtml + '</span></td>' +
         '<td><span class="cell">' + ctrHtml + '</span></td>' +
         '<td class="td-actions"><div class="btn-group">' +
@@ -408,10 +738,11 @@
           (ov ? '<button class="btn btn-del" onclick="removeOv(\'' + clientId + '\',\'' + p.id + '\')"><i class="fas fa-times"></i></button>' : '') +
         '</div></td>' +
       '</tr>' +
-      '<tr id="ovtr-' + p.id + '" style="display:none"><td colspan="6" style="padding:0">' +
+      '<tr id="ovtr-' + p.id + '" style="display:none"><td colspan="7" style="padding:0">' +
         '<div id="ovform-' + p.id + '" class="override-inline">' +
           '<div class="fl"><label>Type</label><select id="ov-type-' + p.id + '" onchange="updatePreview(\'' + p.id + '\',' + p.prix + ')">' +
             '<option value="fixe">Prix fixe (CHF)</option>' +
+            '<option value="supp">Supplément (CHF)</option>' +
             '<option value="pct">Remise (%)</option>' +
           '</select></div>' +
           '<div class="fl"><label id="ov-lbl-' + p.id + '">Prix (CHF)</label>' +
@@ -428,12 +759,161 @@
           '</div>' +
         '</div>' +
       '</td></tr>';
-    });
+      }).join('');
+    }
 
-    html += '</tbody></table></div>';
+    const rabaisCAHtml = '<div class="client-list-card" style="margin-top:0">'
+      + '<div class="client-list-head" style="cursor:default">'
+      + '<div><div class="client-list-title"><i class="fas fa-percent"></i> Programme de rabais progressif (CA mensuel)</div>'
+      + '<div class="client-list-sub">Si activé, un rabais est automatiquement calculé sur la facture selon le CA mensuel HT du client.</div></div>'
+      + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted2);">'
+      + '<input type="checkbox" ' + (hasRabaisCA ? 'checked' : '') + ' onchange="toggleRabaisCA(\'' + clientId + '\', this.checked, this)" style="width:16px;height:16px;accent-color:#22c55e;cursor:pointer;">'
+      + (hasRabaisCA ? '<span style="color:var(--green);font-weight:700;">Activé</span>' : '<span>Désactivé</span>')
+      + '</label>'
+      + '</div>'
+      + '<div style="padding:10px 16px;font-size:12px;color:var(--muted);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">'
+      + '<div style="padding:8px 10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border);">≥ CHF 500 → <strong style="color:var(--green);">2 %</strong></div>'
+      + '<div style="padding:8px 10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border);">≥ CHF 1\'000 → <strong style="color:var(--green);">4 %</strong></div>'
+      + '<div style="padding:8px 10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border);">≥ CHF 1\'500 → <strong style="color:var(--green);">6 %</strong></div>'
+      + '<div style="padding:8px 10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border);">≥ CHF 2\'000 → <strong style="color:var(--green);">8 %</strong></div>'
+      + '</div>'
+      + '</div>';
+
+    let html = '<div class="client-tariff-layout">' +
+      '<div class="client-help"><strong>Mode d’emploi :</strong> cochez un tarif de livraison pour l’appliquer au client. Cochez une option uniquement si elle doit apparaître comme supplément sélectionnable dans le portail client.</div>'
+      + rabaisCAHtml +
+      '<div class="client-list-card">' +
+        '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-truck"></i> Tarifs de livraison du client</div><div class="client-list-sub">Prix de base visibles dans le portail client.</div></div><span class="client-list-badge">' + appliedCount + ' actif(s)</span></div>' +
+        '<div style="overflow-x:auto"><table class="xls"><thead><tr>' +
+          '<th style="width:8%">Appliquer</th><th style="width:28%">Tarif</th><th style="width:12%">Code</th><th style="width:15%">Prix portail</th><th style="width:15%">Variable</th><th>Statut</th>' +
+        '</tr></thead><tbody>' + renderServiceRows(serviceProducts) + '</tbody></table></div>' +
+      '</div>' +
+      '<div class="client-list-card">' +
+        '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-plus-circle"></i> Options proposées au client</div><div class="client-list-sub">Suppléments ou prix spéciaux séparés du tarif de base.</div></div><span class="client-list-badge">' + activeOptionCount + ' proposée(s)</span></div>' +
+        '<div style="overflow-x:auto"><table class="xls"><thead><tr>' +
+          '<th style="width:8%">Proposer</th><th style="width:24%">Option</th><th style="width:12%">Code</th><th style="width:13%">Prix grille</th><th style="width:19%">Prix option</th><th style="width:14%">Contrainte</th><th>Actions</th>' +
+        '</tr></thead><tbody>' + renderOptionRows(optionProducts) + '</tbody></table></div>' +
+      '</div>' +
+    '</div>';
     body.className = '';
     body.innerHTML = html;
   }
+
+  async function refreshClientTable(clientId) {
+    const [overrides, rules, hasRabaisCA] = await Promise.all([
+      fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId)
+    ]);
+    renderClientTable(clientId, overrides, rules, hasRabaisCA);
+  }
+
+  function explainTariffToggleError(error, fallbackError) {
+    const msg = String((fallbackError || error)?.message || error || '');
+    if (msg.includes('admin_set_client_tariff_rule') || msg.includes('function') || msg.includes('schema cache')) {
+      return 'Fonction Supabase admin_set_client_tariff_rule absente. Appliquez le SQL 009_admin_demandes_inscription_rpc.sql dans Supabase.';
+    }
+    if (msg.includes('permission denied') || msg.includes('row-level security') || msg.includes('violates row-level security')) {
+      return 'Droit Supabase refusé sur client_tariff_rules. La fonction RPC admin doit être appliquée.';
+    }
+    return msg || 'Impossible de modifier ce tarif.';
+  }
+
+  window.toggleClientTariff = async function(clientId, prodId, enabled, checkbox) {
+    const p = produits.find(x => x.id === prodId);
+    if (!p) return;
+    if (checkbox) checkbox.disabled = true;
+    let directError = null;
+    try {
+      const rpcName = enabled ? 'admin_set_client_tariff_rule_price' : 'admin_set_client_tariff_rule';
+      const rpcPayload = getAdminRpcPayload({
+        p_client_id: clientId,
+        p_product_id: prodId,
+        p_enabled: enabled
+      });
+      if (enabled) rpcPayload.p_base_price_chf = Number(p.prix || 0);
+      const rpcToggle = await db.rpc(rpcName, rpcPayload);
+      if (!rpcToggle.error) {
+        toast(enabled ? 'Tarif appliqué au client.' : 'Tarif retiré du client.', 'info');
+        await refreshClientTable(clientId);
+        return;
+      }
+      directError = rpcToggle.error;
+
+      const rule = standardRuleFromProduct(clientId, p, produits.indexOf(p));
+      const existing = await fetchClientTariffRules(clientId, true);
+      const current = existing.find(r => String(r.produit_id || '') === String(prodId))
+        || existing.find(r => !r.produit_id && tariffKey(r.tariff_code) === tariffKey(rule.tariff_code));
+      if (enabled) {
+        const res = current?.id
+          ? await db.from('client_tariff_rules').update(rule).eq('id', current.id)
+          : await db.from('client_tariff_rules').insert(rule);
+        if (res.error) throw res.error;
+      } else {
+        const code = tariffKey(rule.tariff_code);
+        const matches = existing.filter(r =>
+          String(r.produit_id || '') === String(prodId) || tariffKey(r.tariff_code) === code
+        );
+        if (matches.length) {
+          const ids = matches.map(r => r.id).filter(Boolean);
+          const res = await db.from('client_tariff_rules').update({ is_active: false, updated_at: new Date().toISOString() }).in('id', ids);
+          if (res.error) throw res.error;
+        }
+      }
+    } catch (error) {
+      directError = error;
+      const rpc = await db.rpc('admin_set_client_tariff_rule', getAdminRpcPayload({
+        p_client_id: clientId,
+        p_product_id: prodId,
+        p_enabled: enabled
+      }));
+      if (rpc.error) {
+        toast('Erreur: ' + explainTariffToggleError(directError, rpc.error), 'err');
+        await refreshClientTable(clientId);
+        return;
+      }
+    } finally {
+      if (checkbox) checkbox.disabled = false;
+    }
+    toast(enabled ? 'Tarif appliqué au client.' : 'Tarif retiré du client.', 'info');
+    await refreshClientTable(clientId);
+  };
+
+  window.toggleClientOption = async function(clientId, prodId, enabled, checkbox) {
+    const p = produits.find(x => x.id === prodId);
+    if (!p) return;
+    if (checkbox) checkbox.disabled = true;
+    const existingRows = (await fetchOverrides(clientId)).filter(o => String(o.produit_id) === String(prodId));
+    const existing = existingRows[0];
+    const type_remise = existing?.type_remise || 'supp';
+    const valeur = Number(existing?.valeur ?? p.prix ?? 0);
+    const contrainte = existing?.contrainte || 'Option client';
+    try {
+      if (existingRows.length) {
+        const ids = existingRows.map(o => o.id).filter(Boolean);
+        const { error } = await db.from('prix_speciaux')
+          .update({ type_remise, valeur, contrainte, actif: enabled })
+          .in('id', ids);
+        if (error) throw error;
+      } else if (enabled) {
+        const { error } = await db.from('prix_speciaux')
+          .insert({ client_id: clientId, produit_id: prodId, type_remise, valeur, contrainte, actif: true });
+        if (error) throw error;
+      }
+    } catch (error) {
+      const rpc = await db.rpc('admin_set_client_price_option', getAdminRpcPayload({
+        p_client_id: clientId,
+        p_product_id: prodId,
+        p_enabled: enabled,
+        p_type_remise: type_remise,
+        p_valeur: valeur,
+        p_contrainte: contrainte
+      }));
+      if (rpc.error) { toast('Erreur: ' + explainTariffToggleError(error, rpc.error), 'err'); await refreshClientTable(clientId); return; }
+    } finally {
+      if (checkbox) checkbox.disabled = false;
+    }
+    toast(enabled ? 'Option proposée au client.' : 'Option retirée du portail client.', 'info');
+    await refreshClientTable(clientId);
+  };
 
   function openOv(clientId, prodId, prixCat) {
     document.querySelectorAll('.override-inline.open').forEach(f => {
@@ -461,6 +941,9 @@
     if (type === 'pct') {
       lbl.textContent = 'Remise (%)';
       prev.textContent = val > 0 ? 'Resultat : CHF ' + (prixCat * (1 - val / 100)).toFixed(2) : '';
+    } else if (type === 'supp') {
+      lbl.textContent = 'Supplément (CHF)';
+      prev.textContent = val > 0 ? 'Resultat : CHF ' + (prixCat + val).toFixed(2) + ' (prix initial + supplément)' : '';
     } else {
       lbl.textContent = 'Prix special (CHF)';
       prev.textContent = val > 0 ? 'Economie : CHF ' + Math.max(0, prixCat - val).toFixed(2) : '';
@@ -479,23 +962,35 @@
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     toast('Prix special applique.');
     closeOv(prodId);
-    renderClientTable(clientId, await fetchOverrides(clientId));
+    await refreshClientTable(clientId);
   }
   async function removeOv(clientId, prodId) {
     if (!confirm('Retirer ce prix special ?')) return;
     const { error } = await db.from('prix_speciaux').delete().eq('client_id', clientId).eq('produit_id', prodId);
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     toast('Prix special retire.', 'info');
-    renderClientTable(clientId, await fetchOverrides(clientId));
+    await refreshClientTable(clientId);
   }
 
   // ── Init ──
   (async function() {
     if (!db) { setStatus(false, 'Supabase non initialise — verifiez config.js'); return; }
-    const u = JSON.parse(localStorage.getItem('colixo_user') || 'null');
-    if (!u) { window.location.replace('../login/index.html'); return; }
-    setStatus(false, 'Chargement...');
-    await Promise.all([loadProduits(), loadClients()]);
+    setStatus(false, 'Chargement des tarifs...');
+    await loadProduits();
+    try {
+      const auth = await window.colixoRequireRoute({
+        roles: ['admin','super_admin'],
+        legacyRoles: ['admin','super_admin'],
+        redirectTo: '../login/index.html'
+      });
+      if (!auth) return;
+      adminAuthContext = auth;
+      await loadClients();
+      setStatus(true, produits.length + ' produit(s) charge(s)');
+    } catch (error) {
+      console.error('[Colixo] tarifs init', error);
+      setStatus(false, 'Tarifs chargés, section client indisponible: ' + (error.message || error));
+    }
   })();
 </script>
 </body>
