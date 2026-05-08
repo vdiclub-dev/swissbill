@@ -17,8 +17,7 @@
     
     <!-- Supabase et Config -->
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260431"></script>
-    <script data-cfasync="false">if(!window.SUPABASE_CONFIG){document.write('<scr'+'ipt data-cfasync="false" src="/config.js?v=20260431&t='+Date.now()+'"><\/scr'+'ipt>');}</script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1468,7 +1467,7 @@
                     var raw = localStorage.getItem('colixo_user');
                     if (raw) {
                         var cu = JSON.parse(raw);
-                        if (cu && cu.id && cu.role === 'client') uid = cu.id;
+                        if (cu && cu.id && ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].indexOf(cu.role) !== -1) uid = cu.id;
                     }
                 } catch (e) {}
             }
@@ -1485,11 +1484,11 @@
             }
 
             const { data: utilisateur } = await db.from('utilisateurs')
-                .select('role, prenom, nom, email')
+                .select('role, prenom, nom, email, entreprise_id')
                 .eq('id', uid)
                 .maybeSingle();
 
-            if (!utilisateur || utilisateur.role !== 'client') {
+            if (!utilisateur || ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].indexOf(utilisateur.role) === -1) {
                 try { await db.auth.signOut(); } catch (e) {}
                 try { localStorage.removeItem('colixo_user'); } catch (e) {}
                 currentClientId = null;
@@ -1498,7 +1497,7 @@
                 return;
             }
 
-            currentClientId = uid;
+            currentClientId = utilisateur.entreprise_id || uid;
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('dashboardSection').style.display = 'block';
 

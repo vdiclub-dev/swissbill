@@ -1,591 +1,2523 @@
 <!DOCTYPE html>
-<html lang="fr">
+<!-- colixo-build:20260462 — aligner ../version.json + version.txt -->
+<html lang="fr" data-colixo-build="20260462">
 <head>
+    <script>
+    (function () {
+        var dom = document.documentElement.getAttribute('data-colixo-build');
+        if (typeof fetch === 'undefined') return;
+        /* URL unique à chaque chargement : évite le cache CDN/navigateur sur version.json */
+        var vurl = '../version.json?nocache=' + Date.now();
+        fetch(vurl, { cache: 'no-store', credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+                if (!j || !j.build) return;
+                if (!dom || j.build === dom) return;
+                /* version.json déployé plus vieux que le HTML : pas de bandeau ni boucle */
+                if (dom > j.build) return;
+                var u = new URL(location.href);
+                if (u.searchParams.get('_cb') === j.build) {
+                    console.warn('[Colixo] HTML encore en cache malgré version.json à jour. Essayez Cmd+Shift+R ou navigation privée.');
+                    var addBanner = function () {
+                        if (!document.body) return;
+                        var b = document.createElement('div');
+                        b.setAttribute('style', 'position:fixed;top:0;left:0;right:0;z-index:999999;background:#b91c1c;color:#fff;padding:10px 14px;font:13px Outfit,sans-serif;text-align:center;');
+                        b.innerHTML = 'Mise à jour disponible — <strong>rechargement forcé</strong> : Cmd+Shift+R (Mac) ou Ctrl+Shift+R (Windows). ';
+                        var a = document.createElement('a');
+                        a.href = u.pathname + '?force=' + Date.now();
+                        a.setAttribute('style', 'color:#fecaca;font-weight:700;margin-left:8px;');
+                        a.textContent = 'Ouvrir sans cache';
+                        b.appendChild(a);
+                        document.body.insertBefore(b, document.body.firstChild);
+                    };
+                    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addBanner);
+                    else addBanner();
+                    return;
+                }
+                u.searchParams.set('_cb', j.build);
+                location.replace(u.toString());
+            })
+            .catch(function () {});
+    })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>Suivi colis — Colixo</title>
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <title>Colixo Dispatch</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../config.js?v=20260431"></script>
-    <script data-cfasync="false">if(!window.SUPABASE_CONFIG){document.write('<scr'+'ipt data-cfasync="false" src="/config.js?v=20260431&t='+Date.now()+'"><\/scr'+'ipt>');}</script>
+    <script data-cfasync="false" src="../config.js?v=20260462"></script>
     <style>
-:root{
-    --red:#e8311a;--night:#0a0a0f;--night2:#111118;--night3:#18181f;--surface:#1e1e28;
-    --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
-    --white:#fff;--muted:rgba(255,255,255,0.35);--muted2:rgba(255,255,255,0.6);
-    --green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b;--purple:#a855f7;--orange:#f97316;
-    --sidebar:220px;
-}
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-html,body{height:100%;font-family:'Outfit',sans-serif;background:var(--night);color:var(--white);overflow:hidden;}
-/* ── SIDEBAR ── */
-.sidebar{width:var(--sidebar);background:var(--night2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto;}
-.sidebar-logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0;}
-.sidebar-logo .mark{width:32px;height:32px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-size:14px;font-weight:700;flex-shrink:0;}
-.sidebar-logo span{font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:1px;}
-.sidebar-logo em{color:var(--red);font-style:normal;}
-.nav-section{padding:8px 12px 4px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;margin:1px 8px;border-radius:9px;text-decoration:none;color:var(--muted2);font-size:13px;transition:all 0.2s;}
-.nav-item:hover{background:rgba(255,255,255,0.05);color:var(--white);}
-.nav-item.active{background:rgba(232,49,26,0.12);color:var(--white);}
-.nav-item i{width:16px;text-align:center;flex-shrink:0;}
-.sidebar-bottom{margin-top:auto;padding:16px;border-top:1px solid var(--border);}
-.user-chip{display:flex;align-items:center;gap:10px;}
-.user-avatar{width:32px;height:32px;background:var(--red);border-radius:8px;display:grid;place-items:center;font-weight:700;font-size:12px;flex-shrink:0;}
-.user-info{flex:1;min-width:0;}
-.user-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.user-role{font-size:10px;color:var(--muted);}
-.btn-logout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;transition:color 0.2s;}
-.btn-logout:hover{color:var(--red);}
-/* ── MAIN ── */
-.main{margin-left:var(--sidebar);display:flex;flex-direction:column;height:100vh;overflow:hidden;}
-.topbar{height:56px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;padding:0 24px;flex-shrink:0;background:var(--night2);}
-.page-title{font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:2px;}
-.spacer{flex:1;}
-/* ── LAYOUT ── */
-.content{display:flex;flex:1;overflow:hidden;}
-.panel-list{width:420px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.panel-detail{flex:1;overflow-y:auto;padding:24px;}
-/* ── SEARCH ── */
-.search-bar{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;}
-.search-bar input{flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:9px;padding:9px 12px;color:var(--white);font-family:'Outfit',sans-serif;font-size:13px;}
-.search-bar input:focus{outline:none;border-color:var(--red);}
-.search-bar input::placeholder{color:var(--muted);}
-.filter-bar{padding:8px 16px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;}
-.fchip{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:none;color:var(--muted2);transition:all 0.2s;}
-.fchip.active,.fchip:hover{background:rgba(232,49,26,0.15);border-color:rgba(232,49,26,0.4);color:var(--white);}
-/* ── LIST ── */
-.orders-list{flex:1;overflow-y:auto;}
-.order-item{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;}
-.order-item:hover{background:rgba(255,255,255,0.03);}
-.order-item.selected{background:rgba(232,49,26,0.08);border-left:3px solid var(--red);}
-.oi-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.oi-num{font-family:'Bebas Neue',cursive;font-size:16px;letter-spacing:1px;}
-.oi-date{font-size:11px;color:var(--muted);margin-left:auto;}
-.oi-addr{font-size:12px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.oi-bottom{display:flex;align-items:center;gap:8px;margin-top:6px;}
-.oi-client{font-size:11px;color:var(--muted);}
-/* ── STATUS CHIPS ── */
-.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;}
-.chip.pending{background:rgba(245,158,11,0.15);color:var(--yellow);border:1px solid rgba(245,158,11,0.3);}
-.chip.pending_validation{background:rgba(245,158,11,0.1);color:var(--yellow);border:1px solid rgba(245,158,11,0.2);}
-.chip.planned{background:rgba(59,130,246,0.15);color:var(--blue);border:1px solid rgba(59,130,246,0.3);}
-.chip.in_transit{background:rgba(168,85,247,0.15);color:var(--purple);border:1px solid rgba(168,85,247,0.3);}
-.chip.delivered{background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.3);}
-.chip.refused{background:rgba(232,49,26,0.15);color:var(--red);border:1px solid rgba(232,49,26,0.3);}
-/* ── DETAIL ── */
-.empty-detail{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);gap:12px;}
-.empty-detail i{font-size:48px;opacity:0.3;}
-.detail-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:28px;}
-.detail-num{font-family:'Bebas Neue',cursive;font-size:36px;letter-spacing:2px;line-height:1;}
-.detail-meta{flex:1;}
-.detail-meta .sub{font-size:13px;color:var(--muted2);margin-top:4px;}
-/* ── TIMELINE ── */
-.timeline{position:relative;padding-left:28px;margin:24px 0;}
-.timeline::before{content:'';position:absolute;left:9px;top:0;bottom:0;width:2px;background:var(--border2);}
-.tl-step{position:relative;margin-bottom:20px;}
-.tl-step:last-child{margin-bottom:0;}
-.tl-dot{position:absolute;left:-25px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:9px;border:2px solid var(--border2);background:var(--night3);}
-.tl-dot.done{background:var(--green);border-color:var(--green);color:var(--night);}
-.tl-dot.active{background:var(--blue);border-color:var(--blue);color:var(--white);box-shadow:0 0 0 4px rgba(59,130,246,0.2);}
-.tl-dot.pending{background:var(--night3);border-color:var(--border2);color:var(--muted);}
-.tl-label{font-size:13px;font-weight:600;color:var(--white);}
-.tl-label.pending{color:var(--muted);}
-.tl-time{font-size:11px;color:var(--muted);margin-top:2px;}
-/* ── INFO GRID ── */
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
-.info-card{background:var(--night3);border:1px solid var(--border);border-radius:12px;padding:14px;}
-.info-card.full{grid-column:1/-1;}
-.info-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
-.info-val{font-size:14px;font-weight:500;color:var(--white);line-height:1.4;}
-.info-val.muted{color:var(--muted2);}
-/* ── SECTION TITLE ── */
-.sec-title{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
-/* ── DELIVERY RECORD ── */
-.delivery-box{background:var(--night3);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:12px;}
-.delivery-photo{width:100%;max-height:200px;object-fit:contain;border-radius:8px;margin-top:10px;background:var(--night2);}
-.sig-canvas{width:100%;height:80px;background:var(--night2);border-radius:8px;margin-top:8px;}
-/* ── BUTTONS ── */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:none;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;transition:all 0.2s;text-decoration:none;}
-.btn-red{background:var(--red);color:var(--white);}
-.btn-ghost{background:rgba(255,255,255,0.06);color:var(--muted2);border:1px solid var(--border2);}
-.btn-ghost:hover{background:rgba(255,255,255,0.1);color:var(--white);}
-.btn-sm{padding:6px 12px;font-size:12px;}
-/* ── EMPTY ── */
-.empty-list{display:flex;flex-direction:column;align-items:center;padding:40px 20px;color:var(--muted);gap:10px;font-size:13px;}
-.empty-list i{font-size:32px;opacity:0.3;}
-/* ── SIDEBAR GROUPES ── */
-.sidebar::-webkit-scrollbar{width:4px;}.sidebar::-webkit-scrollbar-track{background:transparent;}.sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
-.nav-group-items{overflow:hidden;transition:max-height 0.28s ease;}
-.sidebar-section{padding:14px 12px 4px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;justify-content:space-between;cursor:pointer;-webkit-user-select:none;user-select:none;}
-.sidebar-section:hover{color:var(--muted2);}
-.sidebar-section .sec-arrow{font-size:9px;transition:transform 0.28s;opacity:0.5;}
-.nav-group.collapsed .sidebar-section .sec-arrow{transform:rotate(-90deg);}
-.nav-item-home{margin:10px 8px 2px;background:rgba(232,49,26,0.08);border:1px solid rgba(232,49,26,0.2);color:var(--white);}
-.nav-item-home i{color:var(--red);}
-/* ── LOADER ── */
-.loader{display:none;position:fixed;inset:0;background:rgba(10,10,15,0.8);place-items:center;z-index:2000;}
-.loader.show{display:grid;}
-/* ── MAPS LINK ── */
-.maps-link{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;color:var(--blue);font-size:12px;font-weight:600;text-decoration:none;margin-top:8px;}
-.maps-link:hover{background:rgba(59,130,246,0.2);}
-/* ── DELIVERY TIMER ── */
-.timer-card{background:var(--night3);border:1px solid var(--border);border-radius:12px;padding:14px;grid-column:1/-1;}
-.timer-card.live{border-color:rgba(168,85,247,0.4);background:rgba(168,85,247,0.06);}
-.timer-card.done{border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.05);}
-.timer-display{font-family:'Bebas Neue',cursive;font-size:42px;letter-spacing:4px;margin-top:4px;line-height:1;}
-.timer-card.live .timer-display{color:var(--purple);}
-.timer-card.done .timer-display{color:var(--green);}
-.timer-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-.timer-card.live .timer-badge{color:var(--purple);}
-.timer-card.done .timer-badge{color:var(--green);}
-.pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--purple);animation:tdpulse 1s ease-in-out infinite;}
-@keyframes tdpulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
-@media(max-width:900px){
-    .sidebar{display:none;}
-    .main{margin-left:0;}
-    .panel-list{width:100%;border-right:none;border-bottom:1px solid var(--border);max-height:40vh;}
-    .content{flex-direction:column;}
-}
+        :root {
+            --red:     #e8311a;
+            --red-dark:#c0280f;
+            --night:   #0a0a0f;
+            --night2:  #111118;
+            --night3:  #18181f;
+            --surface: #1e1e28;
+            --border:  rgba(255,255,255,0.07);
+            --border2: rgba(255,255,255,0.13);
+            --white:   #ffffff;
+            --muted:   rgba(255,255,255,0.38);
+            --muted2:  rgba(255,255,255,0.6);
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --yellow:  #f59e0b;
+            --orange:  #f97316;
+            --purple:  #a855f7;
+            --col2:    360px;
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; overflow:hidden; }
+        body { font-family:'Outfit',sans-serif; background:var(--night); color:var(--white); display:flex; flex-direction:column; }
+
+        /* ── TOPBAR ── */
+        .topbar { background:var(--night2); border-bottom:1px solid var(--border); padding:0 16px; height:52px; display:flex; align-items:center; gap:10px; flex-shrink:0; z-index:200; overflow:hidden; }
+        .logo { display:flex; align-items:center; gap:8px; font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; color:var(--white); text-decoration:none; flex-shrink:0; }
+        .logo-mark { width:28px; height:28px; background:var(--red); border-radius:7px; display:grid; place-items:center; font-size:13px; }
+        .logo em { color:var(--red); font-style:normal; }
+        .sep { width:1px; height:20px; background:var(--border2); flex-shrink:0; }
+        .tb-title { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:2px; color:var(--muted2); flex-shrink:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .tb-right { margin-left:auto; display:flex; flex-wrap:nowrap; gap:6px; align-items:center; z-index:300; }
+        /* Menus topbar par catégorie */
+        .tb-dd { position:relative; }
+        .tb-dd-trigger { display:inline-flex; align-items:center; gap:5px; }
+        .tb-dd-trigger .fa-chevron-down { font-size:9px; opacity:0.65; transition:transform 0.2s; }
+        .tb-dd.open .tb-dd-trigger .fa-chevron-down { transform:rotate(180deg); }
+        .tb-dd-panel {
+            display:none;
+            position:absolute;
+            top:calc(100% + 6px);
+            right:0;
+            min-width:228px;
+            background:var(--night3);
+            border:1px solid var(--border2);
+            border-radius:10px;
+            padding:4px 0 6px;
+            box-shadow:0 16px 48px rgba(0,0,0,0.5);
+            z-index:400;
+        }
+        .tb-dd.open .tb-dd-panel { display:block; }
+        .tb-dd-section-label {
+            font-size:9px; font-weight:700; letter-spacing:1.2px;
+            text-transform:uppercase; color:var(--muted);
+            padding:10px 14px 5px;
+        }
+        .tb-dd-section-label:first-of-type { padding-top:6px; }
+        .tb-dd-item {
+            display:flex; align-items:center; gap:10px;
+            width:100%; text-align:left;
+            padding:9px 14px;
+            background:none; border:none;
+            font-family:'Outfit',sans-serif; font-size:12px;
+            font-weight:500; color:var(--muted2);
+            cursor:pointer; text-decoration:none;
+            transition:background 0.15s, color 0.15s;
+        }
+        .tb-dd-item:hover { background:var(--surface); color:var(--white); }
+        .tb-dd-item i { width:18px; text-align:center; font-size:13px; color:var(--muted); flex-shrink:0; }
+        .tb-dd-item:hover i { color:var(--red); }
+        .tb-dd-item.tb-dd-primary { color:var(--red); font-weight:600; }
+        .tb-dd-item.tb-dd-primary i { color:var(--red); opacity:0.9; }
+        .tb-dd-item.tb-dd-primary:hover { background:rgba(232,49,26,0.1); }
+        .btn { font-family:'Outfit',sans-serif; font-weight:600; font-size:12px; padding:6px 12px; border-radius:7px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all 0.2s; text-decoration:none; white-space:nowrap; }
+        .btn-ghost  { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+        .btn-ghost:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .btn-red    { background:var(--red); color:var(--white); }
+        .btn-red:hover { background:var(--red-dark); }
+        .btn-green  { background:var(--green); color:var(--night); font-weight:700; }
+        .btn-green:hover { filter:brightness(1.1); }
+        .btn-yellow { background:var(--yellow); color:var(--night); font-weight:700; }
+        .btn-blue   { background:var(--blue); color:var(--white); }
+        .btn-sm     { padding:5px 10px; font-size:11px; }
+
+        /* ── LAYOUT : carte en haut, transports en 3 colonnes pleine largeur en bas ── */
+        .layout { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+
+        .col-map { flex:1; min-height:0; position:relative; }
+
+        /* Hauteur fixe du bloc = les colonnes gardent une zone scrollable quand les cartes s’empilent */
+        .transports-strip {
+            flex:0 0 auto;
+            display:flex; flex-direction:column;
+            height:min(48vh, 520px);
+            min-height:200px;
+            max-height:min(52vh, 560px);
+            background:var(--night2);
+            border-top:1px solid var(--border);
+            overflow:hidden;
+        }
+        .strip-head { flex-shrink:0; border-bottom:1px solid var(--border); }
+        .strip-cols {
+            flex:1 1 0;
+            min-height:0;
+            display:grid; grid-template-columns:repeat(3, minmax(0, 1fr));
+            gap:10px; padding:8px 12px 10px;
+        }
+        .transport-col {
+            min-width:0; min-height:0;
+            overflow-y:auto; overflow-x:hidden;
+            -webkit-overflow-scrolling:touch;
+            display:flex; flex-direction:column; gap:7px;
+            padding-right:4px;
+        }
+        .transport-col::-webkit-scrollbar { width:4px; }
+        .transport-col::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+
+        @media (max-width: 900px) {
+            .strip-cols { grid-template-columns:1fr; }
+            .transports-strip { height:min(52vh, 520px); }
+        }
+
+        /* ── (legacy) entête transports ── */
+        .col-transports { background:var(--night2); display:flex; flex-direction:column; overflow:hidden; }
+        .col-header { padding:10px 12px 8px; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .col-title { font-family:'Bebas Neue',cursive; font-size:17px; letter-spacing:1px; color:var(--muted2); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+        .col-title span { font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; background:rgba(232,49,26,0.12); color:var(--red); padding:2px 8px; border-radius:100px; }
+
+        /* Stats mini */
+        .stats-mini { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); flex-shrink:0; }
+        .sm { background:var(--night2); padding:8px 4px; text-align:center; cursor:pointer; transition:background 0.2s; }
+        .sm:hover,.sm.active { background:var(--night3); }
+        .sm-num { font-family:'Bebas Neue',cursive; font-size:20px; letter-spacing:1px; }
+        .sm-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+        .sm-amt { font-size:10px; color:var(--muted2); margin-top:2px; font-weight:600; }
+
+        /* Filter */
+        .filter-bar { padding:8px; flex-shrink:0; border-bottom:1px solid var(--border); }
+        .filter-bar input { width:100%; padding:7px 10px; background:var(--night3); border:1px solid var(--border2); border-radius:7px; font-family:'Outfit',sans-serif; font-size:12px; color:var(--white); }
+        .filter-bar input::placeholder { color:var(--muted); }
+        .filter-bar input:focus { outline:none; border-color:var(--red); }
+
+
+        /* Order card */
+        .order-card {
+            background:var(--night3); border:1.5px solid var(--border2);
+            border-radius:12px; padding:13px 14px; margin-bottom:7px;
+            cursor:grab; position:relative; overflow:hidden;
+            transition:all 0.2s; user-select:none;
+        }
+        .order-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; }
+        .order-card.pending::before   { background:var(--yellow); }
+        .order-card.urgent::before    { background:var(--orange); animation:pulseBar 1.2s ease-in-out infinite; }
+        .order-card.in_transit::before{ background:var(--purple); }
+        @keyframes pulseBar { 0%,100%{opacity:1}50%{opacity:0.3} }
+        .order-card:hover { border-color:rgba(255,255,255,0.25); transform:translateX(2px); box-shadow:0 4px 12px rgba(0,0,0,0.3); }
+        .order-card.dragging { opacity:0.3; transform:scale(0.97); }
+        .order-card.highlight-flash {
+            outline:3px solid var(--red); outline-offset:2px;
+            animation:hlFlash 1s ease-in-out 2;
+        }
+        @keyframes hlFlash { 0%,100%{ outline-color:var(--red); } 50%{ outline-color:rgba(232,49,26,0.35); } }
+        .toi.highlight-flash-toi {
+            outline:2px solid var(--red); outline-offset:2px; border-radius:8px;
+            animation:hlFlash 1s ease-in-out 2;
+        }
+        .oc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+        .oc-num { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; color:var(--muted2); }
+        .oc-badge { font-size:11px; font-weight:700; text-transform:uppercase; padding:2px 6px; border-radius:100px; }
+        .oc-badge.pending   { background:rgba(245,158,11,0.15); color:var(--yellow); }
+        .oc-badge.urgent    { background:rgba(249,115,22,0.15); color:var(--orange); }
+        .oc-badge.in_transit{ background:rgba(168,85,247,0.15); color:var(--purple); }
+        .oc-stop { display:flex; align-items:center; gap:6px; padding:1px 0; }
+        .oc-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+        .oc-dot.p { background:var(--blue); }
+        .oc-dot.d { background:var(--red); }
+        .oc-addr { font-size:13px; color:var(--white); white-space:normal; overflow:visible; text-overflow:clip; line-height:1.35; }
+        .oc-client { font-size:12px; color:var(--muted2); margin-top:6px; font-weight:600; }
+        .oc-meta { display:flex; gap:6px; margin-top:6px; }
+        .oc-tag { font-size:12px; color:var(--muted); background:var(--surface); padding:2px 6px; border-radius:5px; }
+        .drag-hint { font-size:10px; color:var(--muted); text-align:center; padding:4px; opacity:0.6; }
+
+        /* ── COL 2 : TOURNÉES ── */
+        .col-tours { background:var(--night2); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+        .tours-list { flex:1; overflow-y:auto; padding:8px; }
+        .tours-list::-webkit-scrollbar { width:2px; }
+        .tours-list::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+
+        /* Tour card */
+        .tour-card { background:var(--night3); border:1.5px solid var(--border2); border-radius:14px; margin-bottom:10px; overflow:hidden; transition:border-color 0.2s; }
+        .tour-card.drag-over { border-color:var(--green); background:rgba(34,197,94,0.06); transform:scale(1.005); }
+        .tour-head { padding:11px 13px; display:flex; align-items:center; gap:8px; cursor:pointer; border-bottom:1px solid var(--border); }
+        .tour-color { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .tour-name { font-family:'Bebas Neue',cursive; font-size:14px; letter-spacing:1px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .tour-count { font-size:12px; font-weight:700; padding:2px 7px; border-radius:100px; background:var(--surface); color:var(--muted2); flex-shrink:0; }
+        .tour-chevron { color:var(--muted); font-size:11px; transition:transform 0.2s; flex-shrink:0; }
+        .tour-card.expanded .tour-chevron { transform:rotate(180deg); }
+        .tour-body { display:none; padding:10px; }
+        .tour-card.expanded .tour-body { display:block; }
+
+        /* Drop zone */
+        .drop-zone { min-height:80px; border:2px dashed var(--border2); border-radius:12px; padding:8px; margin-bottom:8px; transition:all 0.15s; }
+        .drop-zone.drag-over { border-color:var(--green); background:rgba(34,197,94,0.08); border-width:2px; transform:scale(1.01); }
+        .drop-zone.drag-near { border-color:rgba(34,197,94,0.5); background:rgba(34,197,94,0.04); }
+        .drop-hint { text-align:center; padding:18px 14px; font-size:14px; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:8px; flex-direction:column; }
+        .drop-hint i { font-size:22px; opacity:0.4; }
+
+        /* Tour order item */
+        .toi { background:var(--surface); border-radius:7px; padding:7px 9px; margin-bottom:3px; display:flex; align-items:center; gap:7px; }
+        .toi-idx { font-family:'Bebas Neue',cursive; font-size:13px; width:16px; text-align:center; flex-shrink:0; }
+        .toi-info { flex:1; overflow:hidden; }
+        .toi-num  { font-size:13px; font-weight:600; color:var(--muted2); }
+        .toi-addr { font-size:12px; color:var(--muted2); white-space:normal; overflow:visible; text-overflow:clip; line-height:1.35; }
+        .toi-addr small { display:block; color:var(--muted); margin-top:2px; }
+        .toi-remove { background:none; border:none; cursor:pointer; color:var(--muted); font-size:11px; padding:2px; transition:color 0.2s; flex-shrink:0; }
+        .toi-remove:hover { color:var(--red); }
+
+        /* Tour driver */
+        .tour-driver-sel { width:100%; padding:9px 11px; background:var(--surface); border:1px solid var(--border2); border-radius:8px; font-family:'Outfit',sans-serif; font-size:12px; color:var(--white); margin-bottom:8px; }
+        .tour-driver-sel option { background:var(--night3); font-size:13px; }
+        .tour-driver-sel:focus { outline:none; border-color:var(--green); }
+
+        /* Tour summary (fixe) */
+        .tour-summary { background:var(--night); border:1px solid var(--border2); border-radius:10px; padding:10px; margin-bottom:8px; }
+        .ts-title { font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+        .ts-driver { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted2); margin-bottom:6px; padding:6px 8px; background:var(--surface); border-radius:7px; }
+        .ts-total { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px; }
+        .ts-stat { background:var(--surface); border-radius:7px; padding:8px; text-align:center; }
+        .ts-val { font-family:'Bebas Neue',cursive; font-size:26px; letter-spacing:1px; }
+        .ts-lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+        .ts-stops { display:flex; flex-direction:column; gap:3px; }
+        .ts-stop { display:flex; align-items:center; gap:6px; font-size:13px; padding:4px 6px; background:var(--surface); border-radius:6px; }
+        .ts-stop-num { font-family:'Bebas Neue',cursive; font-size:13px; width:14px; text-align:center; flex-shrink:0; }
+        .ts-stop-addr { flex:1; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ts-stop-info { font-size:12px; font-weight:600; flex-shrink:0; white-space:nowrap; }
+        .ts-stop-arrow { font-size:9px; color:var(--muted); flex-shrink:0; }
+
+        /* Tour actions */
+        .tour-actions { display:flex; gap:5px; }
+        .tour-actions .btn { flex:1; justify-content:center; }
+
+        #map { width:100%; height:100%; }
+
+        /* Map controls */
+        .map-ctrl { position:absolute; top:10px; right:10px; z-index:100; display:flex; flex-direction:column; gap:4px; }
+        .mc { width:32px; height:32px; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:7px; display:grid; place-items:center; color:var(--muted2); font-size:12px; cursor:pointer; transition:all 0.2s; }
+        .mc:hover { color:var(--white); border-color:rgba(255,255,255,0.3); }
+        .mc.active { background:rgba(232,49,26,0.2); border-color:var(--red); color:var(--red); }
+
+        /* Legend */
+        .map-legend { position:absolute; bottom:12px; right:10px; z-index:100; background:rgba(17,17,24,0.92); backdrop-filter:blur(10px); border:1px solid var(--border2); border-radius:10px; padding:8px 12px; }
+        .leg-row { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--muted2); margin-bottom:3px; }
+        .leg-row:last-child { margin:0; }
+        .leg-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+        .leg-sq  { width:7px; height:7px; border-radius:1px; flex-shrink:0; transform:rotate(45deg); }
+
+        /* ── MODAL ── */
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:500; align-items:center; justify-content:center; padding:20px; }
+        .modal.open { display:flex; }
+        .modal-box { background:var(--night3); border:1px solid var(--border2); border-radius:22px; padding:32px; width:100%; max-width:420px; box-shadow:0 40px 100px rgba(0,0,0,0.6); animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+        @keyframes boxIn { from{opacity:0;transform:scale(0.94) translateY(14px)} to{opacity:1;transform:none} }
+        .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+        .modal-title { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; }
+        .modal-close { width:28px; height:28px; background:var(--surface); border:none; border-radius:50%; cursor:pointer; display:grid; place-items:center; font-size:12px; color:var(--muted); }
+        .modal-close:hover { color:var(--white); background:var(--border2); }
+        .field { margin-bottom:12px; }
+        .field label { display:block; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+        .field input, .field select { width:100%; padding:10px 12px; background:var(--surface); border:1.5px solid var(--border2); border-radius:9px; font-family:'Outfit',sans-serif; font-size:13px; color:var(--white); }
+        .field input:focus, .field select:focus { outline:none; border-color:var(--red); }
+        .field select option { background:var(--night3); }
+        .color-picker { display:flex; gap:7px; flex-wrap:wrap; margin-top:6px; }
+        .color-opt { width:26px; height:26px; border-radius:50%; cursor:pointer; border:2.5px solid transparent; transition:all 0.2s; }
+        .color-opt.selected { border-color:var(--white); transform:scale(1.15); }
+        .modal-actions { display:flex; gap:8px; margin-top:18px; }
+        .modal-actions .btn { flex:1; justify-content:center; padding:11px; }
+
+        /* Toast */
+        .toast { position:fixed; top:14px; right:14px; padding:11px 16px; border-radius:10px; display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; background:var(--night3); border:1px solid var(--border2); box-shadow:0 12px 40px rgba(0,0,0,0.4); z-index:9999; transform:translateX(calc(100% + 40px)); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1); }
+        .toast.show { transform:translateX(0); }
+        .toast.success .t-ico { color:var(--green); }
+        .toast.error   .t-ico { color:var(--red); }
+        .toast.info    .t-ico { color:var(--blue); }
+        .t-ico { font-size:14px; }
+
+        /* Loader */
+        .loader { display:none; position:fixed; inset:0; background:rgba(10,10,15,0.85); backdrop-filter:blur(4px); place-items:center; z-index:2000; flex-direction:column; gap:12px; }
+        .loader.on { display:grid; }
+        .spin { width:36px; height:36px; border:2.5px solid var(--border2); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; }
+        .loader-txt { font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:2px; color:var(--muted2); animation:pulse 1.5s ease-in-out infinite; }
+        @keyframes spin    { to{transform:rotate(360deg)} }
+        @keyframes pulse   { 0%,100%{opacity:1}50%{opacity:0.4} }
+
+        .empty-state { padding:30px 12px; text-align:center; }
+        .empty-ico { font-size:28px; opacity:0.12; margin-bottom:8px; }
+        .empty-txt { font-size:11px; color:var(--muted); line-height:1.6; }
+
+        /* ── FLOATING TOURS PANEL ── */
+        .tours-float {
+            position:fixed;
+            top:68px;
+            right:16px;
+            left:auto;
+            width:380px; min-width:280px; max-width:650px;
+            min-height:220px; max-height:calc(100vh - 100px);
+            background:rgba(17,17,24,0.97);
+            backdrop-filter:blur(20px);
+            border:1px solid var(--border2);
+            border-radius:16px;
+            box-shadow:0 20px 60px rgba(0,0,0,0.5);
+            z-index:1000;
+            display:flex; flex-direction:column;
+            overflow:hidden;
+            resize:both;
+        }
+        .tours-float-header {
+            padding:10px 14px;
+            display:flex; align-items:center; gap:10px;
+            border-bottom:1px solid var(--border);
+            cursor:move; user-select:none; flex-shrink:0;
+            background:var(--night3);
+            border-radius:16px 16px 0 0;
+        }
+        .tf-title { font-family:'Bebas Neue',cursive; font-size:16px; letter-spacing:1px; flex:1; }
+        .tf-badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:100px; background:rgba(34,197,94,0.15); color:var(--green); }
+        .tf-btn { width:28px; height:28px; background:var(--surface); border:none; border-radius:7px; cursor:pointer; display:grid; place-items:center; color:var(--muted); font-size:12px; transition:all 0.2s; flex-shrink:0; }
+        .tf-btn:hover { background:var(--border2); color:var(--white); }
+        .tf-btn.minimize { font-size:14px; }
+        .tours-float-body { flex:1; overflow-y:auto; padding:8px; }
+        .tours-float-body::-webkit-scrollbar { width:3px; }
+        .tours-float-body::-webkit-scrollbar-thumb { background:var(--border2); border-radius:100px; }
+        .tours-float.minimized .tours-float-body { display:none; }
+        .tours-float.minimized { min-height:auto; resize:none; }
+        .resize-handle {
+            position:absolute; bottom:0; right:0;
+            width:16px; height:16px; cursor:se-resize;
+            display:flex; align-items:flex-end; justify-content:flex-end;
+            padding:3px; color:var(--muted); font-size:10px;
+        }
+
+        /* ── ORDER DETAIL MODAL ── */
+        .order-detail-modal {
+            display:none; position:fixed; inset:0;
+            background:rgba(0,0,0,0.75); backdrop-filter:blur(10px);
+            z-index:2000; align-items:center; justify-content:center; padding:20px;
+        }
+        .order-detail-modal.open { display:flex; }
+        .odm-box {
+            background:var(--night3); border:1px solid var(--border2);
+            border-radius:22px; padding:28px; width:100%; max-width:480px;
+            box-shadow:0 40px 100px rgba(0,0,0,0.6);
+            animation:boxIn 0.3s cubic-bezier(0.4,0,0.2,1);
+            max-height:90vh; overflow-y:auto;
+        }
+        .odm-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+        .odm-num  { font-family:'Bebas Neue',cursive; font-size:22px; letter-spacing:1px; color:var(--red); }
+        .odm-close { width:30px; height:30px; background:var(--surface); border:none; border-radius:50%; cursor:pointer; display:grid; place-items:center; font-size:13px; color:var(--muted); }
+        .odm-close:hover { color:var(--white); background:var(--border2); }
+        .odm-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px; }
+        .odm-section { margin-bottom:16px; }
+        .odm-section-title { font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+        .odm-row { display:flex; align-items:flex-start; gap:10px; padding:8px 12px; background:var(--surface); border-radius:10px; margin-bottom:6px; }
+        .odm-row-icon { width:28px; height:28px; border-radius:7px; display:grid; place-items:center; font-size:12px; flex-shrink:0; }
+        .odm-row-content { flex:1; }
+        .odm-row-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px; }
+        .odm-row-value { font-size:14px; font-weight:500; color:var(--white); line-height:1.4; }
+        .odm-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px; }
+        .odm-stat { background:var(--surface); border-radius:10px; padding:12px; text-align:center; }
+        .odm-stat-val { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:1px; }
+        .odm-stat-lbl { font-size:10px; color:var(--muted); margin-top:2px; }
+        .odm-actions { display:flex; gap:8px; margin-top:20px; }
+        .odm-actions .btn { flex:1; justify-content:center; padding:12px; }
+
+        /* Leaflet dark */
+        .leaflet-tile { filter:brightness(0.85) saturate(0.6) invert(1) hue-rotate(180deg); }
+        .leaflet-container { background:#0a0a0f; }
+        .leaflet-control-zoom { display:none; }
+
+        /* Route label */
+        .route-label { background:rgba(17,17,24,0.92); border-radius:7px; padding:3px 7px; font-family:'Outfit',sans-serif; font-size:11px; font-weight:600; color:white; white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
     </style>
 </head>
 <body>
 
-<!-- SIDEBAR -->
-<aside class="sidebar">
-    <a href="dashboard.html" class="sidebar-logo">
-        <div class="mark">C</div>
-        <span>Colixo <em>Admin</em></span>
+<div class="toast" id="toast"><span class="t-ico" id="toastIco"></span><span id="toastTxt"></span></div>
+<div class="loader" id="loader"><div class="spin"></div><div class="loader-txt" id="loaderTxt">Calcul route…</div></div>
+
+<header class="topbar">
+    <a href="dashboard.html" class="logo">
+        <div class="logo-mark"><i class="fas fa-home"></i></div>
+        Colixo <em>Dispatch</em>
     </a>
-
-    <!-- Bouton retour dashboard toujours visible -->
-    <a href="dashboard.html" class="nav-item nav-item-home">
-        <i class="fas fa-home"></i><span>← Dashboard</span>
-    </a>
-
-    <nav style="flex:1;padding:4px 0;">
-        <div class="nav-group" id="grp-operations">
-            <div class="sidebar-section" onclick="toggleGroup('grp-operations')">Opérations <i class="fas fa-chevron-down sec-arrow"></i></div>
-            <div class="nav-group-items">
-                <a class="nav-item active" href="dispatch.html"><i class="fas fa-search-location"></i><span>Suivi colis</span></a>
-                <a class="nav-item" href="transports-dispatch.html"><i class="fas fa-truck"></i><span>Dispatch</span></a>
-                <a class="nav-item" href="../commandes-client.html"><i class="fas fa-inbox"></i><span>Commandes clients</span></a>
-                <a class="nav-item" href="new-transport.html"><i class="fas fa-plus-circle"></i><span>Nouveau transport</span></a>
-                <a class="nav-item" href="carte-conducteurs.html"><i class="fas fa-location-dot"></i><span>Carte conducteurs</span></a>
-            </div>
-        </div>
-        <div class="nav-group" id="grp-gestion">
-            <div class="sidebar-section" onclick="toggleGroup('grp-gestion')">Gestion <i class="fas fa-chevron-down sec-arrow"></i></div>
-            <div class="nav-group-items">
-                <a class="nav-item" href="facturation.html"><i class="fas fa-file-invoice-dollar"></i><span>Facturation</span></a>
-                <a class="nav-item" href="finances.html"><i class="fas fa-euro-sign"></i><span>Finances</span></a>
-                <a class="nav-item" href="analytics.html"><i class="fas fa-chart-bar"></i><span>Analytics</span></a>
-                <a class="nav-item" href="tarification.html"><i class="fas fa-tags"></i><span>Tarification</span></a>
-            </div>
-        </div>
-        <div class="nav-group" id="grp-rh">
-            <div class="sidebar-section" onclick="toggleGroup('grp-rh')">RH <i class="fas fa-chevron-down sec-arrow"></i></div>
-            <div class="nav-group-items">
-                <a class="nav-item" href="rh.html"><i class="fas fa-users-cog"></i><span>Gestion RH</span></a>
-                <a class="nav-item" href="planning-rh.html"><i class="fas fa-calendar-alt"></i><span>Planning</span></a>
-                <a class="nav-item" href="tournees.html"><i class="fas fa-route"></i><span>Tournées</span></a>
-            </div>
-        </div>
-        <div class="nav-group" id="grp-systeme">
-            <div class="sidebar-section" onclick="toggleGroup('grp-systeme')">Système <i class="fas fa-chevron-down sec-arrow"></i></div>
-            <div class="nav-group-items">
-                <a class="nav-item" href="inscriptions.html"><i class="fas fa-user-plus"></i><span>Inscriptions</span></a>
-                <a class="nav-item" href="brimot/facturation.html"><i class="fas fa-broom"></i><span>Brimot</span></a>
-                <a class="nav-item" href="driver-app.html"><i class="fas fa-mobile-alt"></i><span>App Chauffeur</span></a>
-            </div>
-        </div>
-    </nav>
-
-    <div class="sidebar-bottom">
-        <div class="user-chip">
-            <div class="user-avatar" id="sideAvatar">A</div>
-            <div class="user-info">
-                <div class="user-name" id="sideName">Admin</div>
-                <div class="user-role" id="sideRole">—</div>
-            </div>
-            <button class="btn-logout" title="Déconnexion" onclick="(async function(){try{await window.SUPABASE_CLIENT.auth.signOut();}catch(e){}try{localStorage.removeItem('colixo_user');}catch(e){}window.location.href='../login/index.html?noredirect=1';})()">
-                <i class="fas fa-sign-out-alt"></i>
+    <div class="tb-title">Suivi colis</div>
+    <div class="tb-right">
+        <div class="tb-dd" data-tb-dd>
+            <button type="button" class="btn btn-ghost tb-dd-trigger" aria-expanded="false" aria-haspopup="true">
+                <i class="fas fa-plus"></i> Création <i class="fas fa-chevron-down"></i>
             </button>
-        </div>
-    </div>
-</aside>
-
-<!-- MAIN -->
-<div class="main">
-    <div class="topbar">
-        <span class="page-title">SUIVI COLIS</span>
-        <div class="spacer"></div>
-        <button class="btn btn-ghost btn-sm" id="btnRefresh"><i class="fas fa-sync-alt"></i> Actualiser</button>
-    </div>
-
-    <div class="content">
-        <!-- LISTE -->
-        <div class="panel-list">
-            <div class="search-bar">
-                <input type="search" id="q" placeholder="🔍 Numéro, destinataire, adresse…">
-            </div>
-            <div class="filter-bar">
-                <button class="fchip active" data-f="tous">Tous</button>
-                <button class="fchip" data-f="pending_validation">À valider</button>
-                <button class="fchip" data-f="pending">En attente</button>
-                <button class="fchip" data-f="planned">Planifiés</button>
-                <button class="fchip" data-f="in_transit">En route</button>
-                <button class="fchip" data-f="delivered">Livrés</button>
-            </div>
-            <div class="orders-list" id="ordersList">
-                <div class="empty-list"><i class="fas fa-spinner fa-spin"></i><span>Chargement…</span></div>
+            <div class="tb-dd-panel" role="menu">
+                <a href="new-transport.html" class="tb-dd-item tb-dd-primary" role="menuitem"><i class="fas fa-plus"></i> Nouveau transport</a>
+                <button type="button" class="tb-dd-item" role="menuitem" onclick="closeAllTbDd(); openNewTour();"><i class="fas fa-route"></i> Nouvelle tournée</button>
+                <button type="button" class="tb-dd-item" role="menuitem" onclick="closeAllTbDd(); forceGeocodeAll();"><i class="fas fa-map-marked-alt"></i> Géocoder les adresses</button>
+                <button type="button" class="tb-dd-item" role="menuitem" onclick="closeAllTbDd(); autoOptimize();"><i class="fas fa-magic"></i> Optimiser les tournées</button>
             </div>
         </div>
-
-        <!-- DETAIL -->
-        <div class="panel-detail" id="panelDetail">
-            <div class="empty-detail">
-                <i class="fas fa-search-location"></i>
-                <span>Sélectionnez un ordre pour voir son suivi</span>
+        <div class="tb-dd" data-tb-dd>
+            <button type="button" class="btn btn-ghost tb-dd-trigger" aria-expanded="false" aria-haspopup="true">
+                <i class="fas fa-coins"></i> Finances <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="tb-dd-panel" role="menu">
+                <div class="tb-dd-section-label">Véhicules &amp; coûts</div>
+                <a href="finances.html" class="tb-dd-item" role="menuitem"><i class="fas fa-truck"></i> Coûts véhicules</a>
+                <div class="tb-dd-section-label">Analyse</div>
+                <button type="button" class="tb-dd-item" role="menuitem" onclick="closeAllTbDd(); openRentabiliteModal();"><i class="fas fa-chart-pie"></i> Rentabilité</button>
             </div>
+        </div>
+        <div class="tb-dd" data-tb-dd>
+            <button type="button" class="btn btn-ghost tb-dd-trigger" aria-expanded="false" aria-haspopup="true">
+                <i class="fas fa-desktop"></i> Affichage <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="tb-dd-panel" role="menu">
+                <div class="tb-dd-section-label">Écrans</div>
+                <a href="carte-conducteurs.html" class="tb-dd-item" role="menuitem"><i class="fas fa-location-dot"></i> Carte conducteurs (GPS)</a>
+                <button type="button" class="tb-dd-item" role="menuitem" id="btnDualScreen" onclick="closeAllTbDd(); openDualScreen();"><i class="fas fa-desktop"></i> Double écran (carte)</button>
+                <button type="button" class="tb-dd-item" role="menuitem" onclick="closeAllTbDd(); refreshDispatchDashboard();"><i class="fas fa-sync-alt"></i> Actualiser le dashboard</button>
+                <div class="tb-dd-section-label">Navigation</div>
+                <a href="transports-dispatch.html" class="tb-dd-item" role="menuitem"><i class="fas fa-list-ul"></i> Liste transports → Dispatch</a>
+                <a href="dashboard.html" class="tb-dd-item" role="menuitem"><i class="fas fa-th-large"></i> Tableau de bord</a>
+            </div>
+        </div>
+        <a href="transports-dispatch.html" class="btn btn-ghost"><i class="fas fa-truck"></i> Dispatch</a>
+        <a href="new-transport.html" class="btn btn-red"><i class="fas fa-plus"></i> Transport</a>
+        <button class="btn btn-ghost" title="Déconnexion" onclick="(async function(){try{await window.SUPABASE_CLIENT.auth.signOut();}catch(e){}try{localStorage.removeItem('colixo_user');}catch(e){}window.location.href='../login/index.html?noredirect=1';})()">
+            <i class="fas fa-sign-out-alt"></i>
+        </button>
+    </div>
+</header>
+<script>
+(function () {
+    window.closeAllTbDd = function () {
+        document.querySelectorAll('.tb-dd.open').forEach(function (el) { el.classList.remove('open'); });
+        document.querySelectorAll('.tb-dd-trigger[aria-expanded="true"]').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+    };
+    document.addEventListener('click', function () { window.closeAllTbDd(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.closeAllTbDd(); });
+    document.querySelectorAll('[data-tb-dd]').forEach(function (dd) {
+        var trig = dd.querySelector('.tb-dd-trigger');
+        if (!trig) return;
+        dd.addEventListener('click', function (ev) { ev.stopPropagation(); });
+        trig.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var wasOpen = dd.classList.contains('open');
+            window.closeAllTbDd();
+            if (!wasOpen) {
+                dd.classList.add('open');
+                trig.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+})();
+</script>
+
+<!-- ═══ Carte + bandeau transports (3 colonnes) ═══ -->
+<div class="layout">
+
+    <!-- ── Carte (haut) ── -->
+    <div class="col-map">
+        <div id="map"></div>
+        <div class="map-ctrl">
+            <div class="mc" onclick="map.zoomIn()"  title="Zoom +"><i class="fas fa-plus"></i></div>
+            <div class="mc" onclick="map.zoomOut()" title="Zoom -"><i class="fas fa-minus"></i></div>
+            <div class="mc" onclick="fitAll()"       title="Voir tout"><i class="fas fa-expand"></i></div>
+            <div class="mc" id="mcRoutes" onclick="toggleRoutes()" title="Routes" style="margin-top:6px;"><i class="fas fa-route"></i></div>
+        </div>
+        <div class="map-legend">
+            <div class="leg-row"><div class="leg-dot" style="background:var(--blue)"></div> Enlèvement</div>
+            <div class="leg-row"><div class="leg-sq"  style="background:var(--red)"></div> Livraison</div>
+            <div class="leg-row"><div class="leg-dot" style="background:var(--yellow)"></div> En attente</div>
+            <div class="leg-row"><div class="leg-dot" style="background:var(--orange)"></div> Urgent</div>
+            <div class="leg-row"><div class="leg-dot" style="background:var(--green)"></div> Planifié</div>
+        </div>
+    </div>
+
+    <!-- ── Transports : pleine largeur, 3 colonnes (bas) ── -->
+    <div class="transports-strip">
+        <div class="strip-head col-transports">
+            <div class="col-header">
+                <div class="col-title">
+                    TRANSPORTS EN ATTENTE
+                    <span id="pendingCount">0</span>
+                </div>
+                <div class="filter-bar" style="padding:0;">
+                    <input type="text" id="searchOrders" placeholder="🔍 Rechercher…" oninput="applyFilters()">
+                </div>
+            </div>
+            <div class="stats-mini">
+                <div class="sm active" id="smAll" onclick="setFilter('')">
+                    <div class="sm-num" id="smNumAll">0</div>
+                    <div class="sm-lbl">Tous</div>
+                    <div class="sm-amt" id="smAmtAll">0.00 CHF</div>
+                </div>
+                <div class="sm" id="smPending" onclick="setFilter('pending')">
+                    <div class="sm-num" id="smNumPending" style="color:var(--yellow)">0</div>
+                    <div class="sm-lbl">Attente</div>
+                    <div class="sm-amt" id="smAmtPending">0.00 CHF</div>
+                </div>
+                <div class="sm" id="smUrgent" onclick="setFilter('urgent')">
+                    <div class="sm-num" id="smNumUrgent" style="color:var(--orange)">0</div>
+                    <div class="sm-lbl">Urgents</div>
+                    <div class="sm-amt" id="smAmtUrgent">0.00 CHF</div>
+                </div>
+                <div class="sm" id="smAll2" onclick="setFilter('all')">
+                    <div class="sm-num" id="smNumAll2" style="color:var(--muted)">0</div>
+                    <div class="sm-lbl">Planifiés</div>
+                    <div class="sm-amt" id="smAmtPlanned">0.00 CHF</div>
+                </div>
+            </div>
+            <div class="drag-hint"><i class="fas fa-hand-point-right"></i> Glissez vers une tournée (panneau à droite) →</div>
+        </div>
+        <div class="strip-cols">
+            <div class="transport-col order-list" id="orderListCol0"></div>
+            <div class="transport-col order-list" id="orderListCol1"></div>
+            <div class="transport-col order-list" id="orderListCol2"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ═══ MODAL NOUVELLE TOURNÉE ═══ -->
+<div id="modalTour" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">NOUVELLE TOURNÉE</div>
+            <button class="modal-close" onclick="closeModal('modalTour')">✕</button>
+        </div>
+        <div class="field">
+            <label>Nom *</label>
+            <input type="text" id="tourName" placeholder="Ex: Tournée Lausanne matin" required>
+        </div>
+        <div class="field">
+            <label>Couleur</label>
+            <div class="color-picker" id="colorPicker">
+                <div class="color-opt selected" data-color="#22c55e" style="background:#22c55e"></div>
+                <div class="color-opt" data-color="#3b82f6" style="background:#3b82f6"></div>
+                <div class="color-opt" data-color="#f59e0b" style="background:#f59e0b"></div>
+                <div class="color-opt" data-color="#f97316" style="background:#f97316"></div>
+                <div class="color-opt" data-color="#a855f7" style="background:#a855f7"></div>
+                <div class="color-opt" data-color="#ec4899" style="background:#ec4899"></div>
+                <div class="color-opt" data-color="#14b8a6" style="background:#14b8a6"></div>
+                <div class="color-opt" data-color="#e8311a" style="background:#e8311a"></div>
+            </div>
+        </div>
+        <div class="field">
+            <label>Chauffeur</label>
+            <select id="tourDriver">
+                <option value="">— Assigner plus tard —</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Véhicule</label>
+            <select id="tourVehicle">
+                <option value="">— Auto (selon chauffeur) —</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Date de la tournée</label>
+            <input type="date" id="newTourPlannedDate">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="createTour()"><i class="fas fa-check"></i> Créer</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalTour')">Annuler</button>
         </div>
     </div>
 </div>
 
-<div class="loader" id="loader"><i class="fas fa-circle-notch fa-spin" style="font-size:32px;color:var(--red);"></i></div>
+<!-- ═══ MODAL ASSIGNER ═══ -->
+<div id="modalAssign" class="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-title">ASSIGNER CHAUFFEUR</div>
+            <button class="modal-close" onclick="closeModal('modalAssign')">✕</button>
+        </div>
+        <div id="assignInfo" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
+        <div class="field">
+            <label>Chauffeur</label>
+            <select id="assignDriver"><option value="">— Choisir —</option></select>
+        </div>
+        <input type="hidden" id="assignOrderId">
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="doAssign()"><i class="fas fa-user-check"></i> Assigner</button>
+            <button class="btn btn-ghost" onclick="closeModal('modalAssign')">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL RENTABILITÉ / KM JOUR ═══ -->
+<div id="modalRentabilite" class="modal">
+    <div class="modal-box" style="max-width:720px; max-height:88vh; overflow-y:auto;">
+        <div class="modal-head">
+            <div class="modal-title">RENTABILITÉ &amp; KM</div>
+            <button class="modal-close" onclick="closeModal('modalRentabilite')">✕</button>
+        </div>
+        <div class="field" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:8px;">
+            <div style="flex:1; min-width:160px;">
+                <label>Date</label>
+                <input type="date" id="rentDashDate">
+            </div>
+            <button type="button" class="btn btn-blue" onclick="loadRentabiliteDash()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+        </div>
+        <div id="rentDashSummary" style="font-size:12px; color:var(--muted2); margin-bottom:10px; line-height:1.5;"></div>
+        <div style="overflow-x:auto; border:1px solid var(--border2); border-radius:10px;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead>
+                    <tr style="background:var(--surface); text-align:left;">
+                        <th style="padding:10px; color:var(--muted); font-size:10px; text-transform:uppercase;">Véhicule</th>
+                        <th style="padding:10px; color:var(--muted); font-size:10px; text-transform:uppercase;">Chauffeur</th>
+                        <th style="padding:10px; color:var(--muted); font-size:10px; text-transform:uppercase;">Km jour</th>
+                        <th style="padding:10px; color:var(--muted); font-size:10px; text-transform:uppercase;">Tourn.</th>
+                        <th style="padding:10px; color:var(--muted); font-size:10px; text-transform:uppercase;">CA</th>
+                        <th style="padding:10px; color:var(--muted); font-size:10px; text-transform:uppercase;">Coût</th>
+                        <th style="padding:10px; color:var(--muted); font-size:10px; text-transform:uppercase;">Marge</th>
+                    </tr>
+                </thead>
+                <tbody id="rentDashBody"></tbody>
+            </table>
+        </div>
+        <p style="font-size:10px; color:var(--muted); margin-top:12px; line-height:1.5;">
+            <strong>Km</strong> : saisie chauffeur (app, par véhicule). <strong>CA / coût / marge</strong> : après calcul de route + « Sauver » sur une tournée ce jour-là (<code>dispatch_tour_snapshots</code>).
+        </p>
+    </div>
+</div>
 
 <script>
-// ── SIDEBAR GROUPES (partagé avec dashboard) ──
-function toggleGroup(id){
-    var grp=document.getElementById(id);if(!grp)return;
-    var items=grp.querySelector('.nav-group-items');
-    var collapsed=grp.classList.toggle('collapsed');
-    items.style.maxHeight=collapsed?'0px':'600px';
-    var st=JSON.parse(localStorage.getItem('colixo_sidebar_groups')||'{}');
-    st[id]=collapsed;
-    localStorage.setItem('colixo_sidebar_groups',JSON.stringify(st));
-}
-(function initSidebarGroups(){
-    var st=JSON.parse(localStorage.getItem('colixo_sidebar_groups')||'{}');
-    document.querySelectorAll('.nav-group').forEach(function(grp){
-        var items=grp.querySelector('.nav-group-items');
-        if(st[grp.id]===true){grp.classList.add('collapsed');items.style.maxHeight='0px';}
-        else{items.style.maxHeight='600px';}
-    });
-})();
+(function () {
+    'use strict';
 
-(function(){
-'use strict';
-if(!window.SUPABASE_CONFIG){document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>';return;}
-var db=window.SUPABASE_CLIENT;
+    if (!window.SUPABASE_CONFIG) { document.body.innerHTML='<div style="padding:40px;color:red;">❌ config.js manquant</div>'; return; }
+    const db = window.SUPABASE_CLIENT;
 
-var allOrders=[];
-var currentFilter='tous';
-var currentId=null;
-var entreprises={};
-var timerInterval=null;
-
-function esc(s){if(s==null)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-function fmt(d){if(!d)return'—';var dt=new Date(d);return dt.toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'});}
-function fmtShort(d){if(!d)return'';var dt=new Date(d);return dt.toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'});}
-
-var STATUS_LABEL={
-    pending_validation:'En attente validation',
-    pending:'En attente',
-    planned:'Planifié',
-    in_transit:'En route',
-    delivered:'Livré',
-    refused:'Refusé'
-};
-
-function chipHtml(o){
-    var s=o.admin_status==='pending_validation'?'pending_validation':(o.status||'pending');
-    var l=STATUS_LABEL[s]||s;
-    return'<span class="chip '+s+'">'+esc(l)+'</span>';
-}
-
-// ── LOAD ──
-async function load(){
-    if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
-    var[{data:orders},{data:ents}]=await Promise.all([
-        db.from('transport_orders_simple').select('*').order('created_at',{ascending:false}),
-        db.from('entreprises').select('id,nom')
-    ]);
-    allOrders=orders||[];
-    (ents||[]).forEach(function(e){entreprises[e.id]=e.nom;});
-    render();
-    // Ré-ouvrir le détail si un ordre était sélectionné
-    if(currentId){
-        var o=allOrders.find(function(x){return x.id===currentId;});
-        if(o)showDetail(o);
+    // Timestamp heure locale suisse (évite décalage UTC)
+    function nowCH() {
+        const d = new Date();
+        const off = -d.getTimezoneOffset();
+        const sign = off >= 0 ? '+' : '-';
+        const hh = String(Math.floor(Math.abs(off)/60)).padStart(2,'0');
+        const mm = String(Math.abs(off)%60).padStart(2,'0');
+        const local = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+        return local.toISOString().slice(0,-1) + sign + hh + ':' + mm;
     }
-}
 
-// ── RENDER LIST ──
-function render(){
-    var q=(document.getElementById('q').value||'').toLowerCase().trim();
-    var list=allOrders.filter(function(o){
-        if(currentFilter!=='tous'){
-            if(currentFilter==='pending_validation'&&o.admin_status!=='pending_validation')return false;
-            if(currentFilter==='pending'&&(o.status!=='pending'||o.admin_status==='pending_validation'))return false;
-            if(currentFilter==='planned'&&o.status!=='planned')return false;
-            if(currentFilter==='in_transit'&&o.status!=='in_transit')return false;
-            if(currentFilter==='delivered'&&o.status!=='delivered')return false;
+    /* ── Protection session ── */
+    (async () => {
+        const { data: { session } } = await db.auth.getSession();
+        const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+        if (!session && !codeUser) { window.location.replace('../login/index.html'); return; }
+        if (codeUser && !['admin','super_admin'].includes(codeUser.role)) {
+            window.location.replace('../login/index.html'); return;
         }
-        if(q){
-            var hay=(o.order_number||'')+(o.delivery_address||'')+(o.pickup_address||'')+(o.destinataire_nom||'');
-            if(hay.toLowerCase().indexOf(q)<0)return false;
-        }
-        return true;
-    });
+    })();
+    const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImUxMmJjYzg5NTQ4MGNiYWU2NGFjMzg3ZDFlNjJhY2ZmYWUwNmUxYmM0YzY3NmZmMDI5NjVmOTlhIiwiaCI6Im11cm11cjY0In0=';
 
-    var el=document.getElementById('ordersList');
-    if(!list.length){
-        el.innerHTML='<div class="empty-list"><i class="fas fa-box-open"></i><span>Aucun résultat</span></div>';
-        return;
+    /* ── State ── */
+    let allOrders  = [];
+    let chauffeurs = []; window._chauffeurs = chauffeurs;
+    let vehicules  = [];
+    let fraisVehiculesMois = [];
+    let kmVehiculesMois = [];
+    let tours      = [];
+    let mapMarkers = {};
+    let mapLines   = [];
+    let tourMapLayers = {};
+    let showRoutes = true;
+    let filterSt   = '';
+    let filterQ    = '';
+    let selectedColor = '#22c55e';
+    let dragOrderId   = null;
+
+    /* ── Helpers ── */
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function toast(type, msg) {
+        clearTimeout(toastTimer);
+        toastEl.className = 'toast ' + type + ' show';
+        document.getElementById('toastIco').textContent = type==='success'?'✓':type==='error'?'✕':'ℹ';
+        document.getElementById('toastTxt').textContent = msg;
+        toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 4000);
     }
-    el.innerHTML=list.map(function(o){
-        var entNom=o.entreprise_id?entreprises[o.entreprise_id]||'—':'—';
-        var addr=(o.delivery_address||'').split(',')[0]||'—';
-        var selected=o.id===currentId?' selected':'';
-        return'<div class="order-item'+selected+'" data-id="'+o.id+'">'
-            +'<div class="oi-top"><span class="oi-num">'+esc(o.order_number||o.id.slice(0,8))+'</span>'+chipHtml(o)+'<span class="oi-date">'+fmtShort(o.created_at)+'</span></div>'
-            +'<div class="oi-addr"><i class="fas fa-map-marker-alt" style="color:var(--red);margin-right:4px;font-size:10px;"></i>'+esc(addr)+'</div>'
-            +'<div class="oi-bottom"><span class="oi-client"><i class="fas fa-building" style="margin-right:3px;"></i>'+esc(entNom)+'</span>'+(o.destinataire_nom?'<span style="margin-left:auto;font-size:11px;color:var(--muted2);">'+esc(o.destinataire_nom)+'</span>':'')+'</div>'
-        +'</div>';
-    }).join('');
+    const loaderEl = document.getElementById('loader');
+    function showLoad(txt='Calcul route…') { document.getElementById('loaderTxt').textContent=txt; loaderEl.classList.add('on'); }
+    function hideLoad() { loaderEl.classList.remove('on'); }
+    const shortAddr = a => a ? a.split(',').slice(0,2).join(',').trim() : '—';
+    const fmtMoney = n => `${Number(n||0).toFixed(2)} CHF`;
+    const STATUS_COLORS = { pending:'#f59e0b', planned:'#3b82f6', urgent:'#f97316', in_transit:'#a855f7', in_delivery:'#a855f7', delivering:'#a855f7', delivered:'#22c55e' };
+    const TOUR_COLORS   = ['#22c55e','#3b82f6','#f59e0b','#f97316','#a855f7','#ec4899','#14b8a6','#e8311a'];
+    function todayCH() {
+        return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    }
+    function tourColorFromId(tid) {
+        const s = String(tid);
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
+        return TOUR_COLORS[Math.abs(h) % TOUR_COLORS.length];
+    }
+    function rebuildToursFromOrders() {
+        const stOk = new Set(['planned','in_transit','in_delivery','delivering']);
+        const withTour = allOrders.filter(o => o.tour_id && stOk.has(o.status));
+        if (!withTour.length) {
+            tours = [];
+            const tc = document.getElementById('tourCount');
+            if (tc) tc.textContent = '0';
+            return;
+        }
+        const byTour = new Map();
+        for (const o of withTour) {
+            const tid = o.tour_id;
+            if (!byTour.has(tid)) byTour.set(tid, []);
+            byTour.get(tid).push(o);
+        }
+        const rebuilt = [];
+        for (const [tid, arr] of byTour) {
+            arr.sort((a, b) => (a.tour_position || 999) - (b.tour_position || 999));
+            const head = arr[0];
+            const driverId = head.driver_id || null;
+            const vehicleId = head.vehicle_id || vehicules.find(v => v.chauffeur_id === driverId)?.id || null;
+            const tourPlannedDate = head.tour_planned_date || todayCH();
+            const drv = chauffeurs.find(c => c.id === driverId);
+            const dname = drv ? `${drv.prenom || ''} ${drv.nom || ''}`.trim() : 'Tournée';
+            rebuilt.push({
+                id: tid,
+                name: `${dname} · ${tourPlannedDate}`,
+                color: tourColorFromId(tid),
+                driverId,
+                vehicleId,
+                tourPlannedDate,
+                orderIds: arr.map(o => o.id),
+                expanded: true,
+                routeData: null,
+                planning: null
+            });
+        }
+        tours = rebuilt;
+        const tc = document.getElementById('tourCount');
+        if (tc) tc.textContent = String(tours.length);
+    }
+    const monthKey = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const monthBounds = (d=new Date()) => {
+        const y = d.getFullYear();
+        const m = d.getMonth();
+        const start = new Date(y, m, 1);
+        const end = new Date(y, m + 1, 0);
+        return {
+            start: `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`,
+            end: `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`
+        };
+    };
+    const daysInCurrentMonth = () => new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
+    const vehLabel = v => [v?.immatriculation, [v?.marque, v?.modele].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || 'Véhicule';
 
-    // Click handlers
-    el.querySelectorAll('.order-item').forEach(function(item){
-        item.addEventListener('click',function(){
-            var id=this.getAttribute('data-id');
-            var o=allOrders.find(function(x){return x.id===id;});
-            if(o)showDetail(o);
+    /* ── Modals ── */
+    function openModal(id)  { const m=document.getElementById(id); if(m){m.style.display='flex';m.classList.add('open');} }
+    window.closeModal = id  => { const m=document.getElementById(id); if(m){m.style.display='none';m.classList.remove('open');} };
+    document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) window.closeModal(m.id); }));
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal.open').forEach(m=>window.closeModal(m.id)); });
+
+    /* ── Color picker ── */
+    document.querySelectorAll('.color-opt').forEach(opt=>{
+        opt.addEventListener('click',()=>{
+            document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('selected'));
+            opt.classList.add('selected'); selectedColor=opt.dataset.color;
         });
     });
-}
 
-// ── TIMER HELPERS ──
-function fmtDuration(ms){
-    if(ms<0)ms=0;
-    var s=Math.floor(ms/1000);
-    var h=Math.floor(s/3600);
-    var m=Math.floor((s%3600)/60);
-    var sec=s%60;
-    return(h?h+'h ':'')+String(m).padStart(2,'0')+'min '+String(sec).padStart(2,'0')+'s';
-}
-function timerCardHtml(o){
-    if(!o.picked_up_at)return'';
-    var live=o.status==='in_transit';
-    var done=o.status==='delivered'&&!!o.delivered_at;
-    if(!live&&!done)return'';
-    var cls=live?'live':'done';
-    var icon=live?'<span class="pulse-dot"></span>':'<i class="fas fa-flag-checkered"></i>';
-    var badge=live?'En cours de livraison':'Durée totale de livraison';
-    var display='';
-    if(done){
-        var ms=new Date(o.delivered_at)-new Date(o.picked_up_at);
-        display=fmtDuration(ms);
-    } else {
-        display='--:--';
-    }
-    return'<div class="timer-card '+cls+'" id="timerCard">'
-        +'<div class="info-label"><i class="fas fa-stopwatch" style="margin-right:5px;"></i>Horloge de livraison</div>'
-        +'<div class="timer-badge">'+icon+' '+badge+'</div>'
-        +'<div class="timer-display" id="timerDisplay">'+display+'</div>'
-        +(o.picked_up_at?'<div style="font-size:11px;color:var(--muted);margin-top:6px;">Prise en charge : '+fmt(o.picked_up_at)+'</div>':'')
-        +(done?'<div style="font-size:11px;color:var(--muted);">Livré : '+fmt(o.delivered_at)+'</div>':'')
-    +'</div>';
-}
+    /* ── MAP ── */
+    const map = L.map('map',{zoomControl:false,attributionControl:false}).setView([46.8182,8.2275],8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    window.addEventListener('resize', function () { try { map.invalidateSize(); } catch (e) {} });
 
-// ── DETAIL ──
-async function showDetail(o){
-    currentId=o.id;
-    if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
-    // Marquer selected dans la liste
-    document.querySelectorAll('.order-item').forEach(function(el){
-        el.classList.toggle('selected',el.getAttribute('data-id')===o.id);
-    });
-
-    // Charger la livraison + chauffeur en parallèle
-    var[{data:del},{data:drv}]=await Promise.all([
-        db.from('deliveries').select('*').eq('order_id',o.id).maybeSingle(),
-        o.driver_id?db.from('utilisateurs').select('prenom,nom,telephone').eq('id',o.driver_id).maybeSingle():{data:null}
-    ]);
-
-    var entNom=o.entreprise_id?entreprises[o.entreprise_id]:'—';
-    var drvName=drv?((drv.prenom||'')+' '+(drv.nom||'')).trim():'—';
-
-    // Timeline steps
-    var steps=[
-        {key:'created',label:'Commande reçue',time:o.created_at,done:true},
-        {key:'validated',label:'Acceptée par Colixo',time:o.validated_at,done:!!o.validated_at||(o.admin_status==='accepted'||['planned','in_transit','delivered'].includes(o.status))},
-        {key:'planned',label:'Chauffeur assigné',time:o.assigned_at,done:o.status==='planned'||o.status==='in_transit'||o.status==='delivered'},
-        {key:'in_transit',label:'Enlèvement effectué',time:o.picked_up_at,done:o.status==='in_transit'||o.status==='delivered'},
-        {key:'delivered',label:'Livré',time:o.delivered_at,done:o.status==='delivered'}
-    ];
-
-    var activeIdx=steps.reduce(function(a,s,i){return s.done?i:a;},0);
-
-    var tlHtml=steps.map(function(s,i){
-        var cls=s.done?(i<activeIdx?'done':'active'):'pending';
-        if(o.status==='delivered')cls=s.done?'done':'pending';
-        var icon=s.done?'✓':(i===activeIdx?'●':'○');
-        return'<div class="tl-step">'
-            +'<div class="tl-dot '+cls+'">'+icon+'</div>'
-            +'<div class="tl-label'+(cls==='pending'?' pending':'')+'">'+esc(s.label)+'</div>'
-            +(s.time&&s.done?'<div class="tl-time">'+fmt(s.time)+'</div>':'')
-        +'</div>';
-    }).join('');
-
-    // Adresse Google Maps
-    var mapsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(o.delivery_address||'');
-
-    // Preuve de livraison
-    var deliveryHtml='';
-    if(del){
-        deliveryHtml='<div class="sec-title"><i class="fas fa-check-circle" style="color:var(--green);margin-right:6px;"></i>Preuve de livraison</div>'
-            +'<div class="delivery-box">'
-            +(del.note_livraison?'<div style="font-size:13px;color:var(--muted2);margin-bottom:10px;"><i class="fas fa-comment" style="margin-right:6px;"></i>'+esc(del.note_livraison)+'</div>':'')
-            +(del.has_signature?'<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Signature :</div><canvas class="sig-canvas" id="sigCanvas"></canvas>':'')
-            +(del.photo_data?'<div style="font-size:12px;color:var(--muted);margin:8px 0 4px;">Photo :</div><img class="delivery-photo" src="'+del.photo_data+'" alt="Photo livraison">':'')
-            +(del.gps_lat&&del.gps_lng?'<a class="maps-link" href="https://www.google.com/maps?q='+del.gps_lat+','+del.gps_lng+'" target="_blank"><i class="fas fa-map-marker-alt"></i>Position GPS de livraison</a>':'')
-        +'</div>';
+    function makeIcon(color, pulse=false, shape='circle') {
+        const s=12;
+        const html = shape==='square'
+            ? `<div style="width:10px;height:10px;background:${color};border:2px solid white;border-radius:2px;transform:rotate(45deg);box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>`
+            : `<div style="width:${s}px;height:${s}px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5);${pulse?'animation:mp 1.2s ease-in-out infinite':''}"></div>
+               ${pulse?`<div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid ${color};opacity:0.4;animation:mr 1.2s ease-in-out infinite"></div>`:''}
+               <style>@keyframes mp{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}@keyframes mr{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(2);opacity:0}}</style>`;
+        return L.divIcon({html:`<div style="position:relative;">${html}</div>`,className:'',iconSize:[s,s],iconAnchor:[s/2,s/2]});
     }
 
-    document.getElementById('panelDetail').innerHTML=
-        '<div class="detail-header">'
-            +'<div>'
-                +'<div class="detail-num">'+esc(o.order_number||o.id.slice(0,8))+'</div>'
-                +'<div class="detail-meta"><div>'+chipHtml(o)+'</div><div class="sub">Créé le '+fmt(o.created_at)+'</div></div>'
-            +'</div>'
-            +'<div style="margin-left:auto;display:flex;gap:8px;align-items:flex-start;">'
-                +'<a href="'+mapsUrl+'" target="_blank" class="btn btn-ghost btn-sm"><i class="fas fa-map-marker-alt"></i> Maps</a>'
-                +(o.status!=='delivered'?'<a href="transports-dispatch.html" class="btn btn-ghost btn-sm"><i class="fas fa-truck"></i> Dispatch</a>':'')
-            +'</div>'
-        +'</div>'
+    function makeStopIcon(num, color) {
+        return L.divIcon({
+            html:`<div style="width:22px;height:22px;background:${color};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:12px;color:white;box-shadow:0 2px 8px rgba(0,0,0,0.5);">${num}</div>`,
+            className:'', iconSize:[22,22], iconAnchor:[11,11]
+        });
+    }
 
-        +'<div class="info-grid">'
-            +'<div class="info-card">'
-                +'<div class="info-label"><i class="fas fa-arrow-up" style="color:var(--blue);"></i> Enlèvement</div>'
-                +'<div class="info-val">'+esc(o.pickup_address||'—')+'</div>'
-            +'</div>'
-            +'<div class="info-card">'
-                +'<div class="info-label"><i class="fas fa-map-marker-alt" style="color:var(--red);"></i> Livraison</div>'
-                +'<div class="info-val">'+esc(o.delivery_address||'—')+'</div>'
-                +(o.destinataire_nom?'<div class="info-val muted" style="font-size:12px;margin-top:4px;">'+esc(o.destinataire_nom)+(o.destinataire_tel?' · '+esc(o.destinataire_tel):'')+'</div>':'')
-                +'<a class="maps-link" href="'+mapsUrl+'" target="_blank"><i class="fas fa-external-link-alt"></i>Ouvrir dans Maps</a>'
-            +'</div>'
-            +'<div class="info-card">'
-                +'<div class="info-label"><i class="fas fa-building"></i> Client</div>'
-                +'<div class="info-val">'+esc(entNom)+'</div>'
-            +'</div>'
-            +'<div class="info-card">'
-                +'<div class="info-label"><i class="fas fa-user"></i> Chauffeur</div>'
-                +'<div class="info-val">'+(drv?esc(drvName):'<span style="color:var(--muted)">Non assigné</span>')+'</div>'
-                +(drv&&drv.telephone?'<div class="info-val muted" style="font-size:12px;margin-top:4px;"><i class="fas fa-phone" style="margin-right:4px;"></i>'+esc(drv.telephone)+'</div>':'')
-            +'</div>'
-            +'<div class="info-card">'
-                +'<div class="info-label"><i class="fas fa-box"></i> Colis</div>'
-                +'<div class="info-val">'+(o.quantity||1)+' colis — '+(o.weight||'—')+' kg</div>'
-            +'</div>'
-            +'<div class="info-card">'
-                +'<div class="info-label"><i class="fas fa-tag"></i> Service</div>'
-                +'<div class="info-val">'+esc(o.service_type||o.speed||'Standard')+(o.night_delivery?' 🌙':'')+(o.price_chf?'<span style="color:var(--green);margin-left:8px;font-size:13px;">'+parseFloat(o.price_chf).toFixed(2)+' CHF</span>':'')+'</div>'
-            +'</div>'
-            +(o.instructions?'<div class="info-card full"><div class="info-label"><i class="fas fa-comment"></i> Instructions</div><div class="info-val muted">'+esc(o.instructions)+'</div></div>':'')
-            +(o.distance_km||o.duration_min?'<div class="info-card"><div class="info-label"><i class="fas fa-road"></i> Itinéraire OSRM</div><div class="info-val">'+(o.distance_km?o.distance_km+' km':'—')+(o.duration_min?' · '+Math.floor(o.duration_min/60)+'h'+String(o.duration_min%60).padStart(2,'0'):'')+'</div></div>':'')
-            +timerCardHtml(o)
-        +'</div>'
-
-        +'<div class="sec-title"><i class="fas fa-route" style="margin-right:6px;"></i>Progression</div>'
-        +'<div class="timeline">'+tlHtml+'</div>'
-
-        +deliveryHtml;
-
-    // Chrono live si en_transit
-    if(o.status==='in_transit'&&o.picked_up_at){
-        var start=new Date(o.picked_up_at).getTime();
-        function tickTimer(){
-            var el=document.getElementById('timerDisplay');
-            if(!el){clearInterval(timerInterval);timerInterval=null;return;}
-            el.textContent=fmtDuration(Date.now()-start);
+    /* ── LOAD DATA ── */
+    async function loadAll() {
+        const mb = monthBounds();
+        const mk = monthKey();
+        const [{data:orders},{data:chauf},{data:vehs},{data:frais},{data:km}] = await Promise.all([
+            db.from('transport_orders_simple').select('*').neq('status','delivered').order('created_at',{ascending:false}),
+            db.from('utilisateurs').select('id,nom,prenom,email,actif').eq('role','chauffeur'),
+            db.from('vehicules').select('*').eq('actif',true),
+            db.from('vehicule_frais').select('*').eq('mois', mk),
+            db.from('vehicule_km').select('*').gte('date', mb.start).lte('date', mb.end)
+        ]);
+        let raw = orders||[];
+        const hlParam = new URLSearchParams(window.location.search).get('highlight');
+        if (hlParam && !raw.some(o=>o.id===hlParam)) {
+            const { data: extraOrder } = await db.from('transport_orders_simple').select('*').eq('id', hlParam).maybeSingle();
+            if (extraOrder) raw = [extraOrder, ...raw];
         }
-        tickTimer();
-        timerInterval=setInterval(tickTimer,1000);
+        // Trier : les transports planifiés avec tour_position d'abord
+        allOrders = raw.sort((a,b) => {
+            // Si même tournée, trier par position
+            if(a.tour_id && a.tour_id===b.tour_id) {
+                return (a.tour_position||999) - (b.tour_position||999);
+            }
+            // Sinon tri par date décroissante
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+        chauffeurs = (chauf||[]).filter(c => c.actif !== false);
+        vehicules = vehs || [];
+        fraisVehiculesMois = frais || [];
+        kmVehiculesMois = km || [];
+        window._chauffeurs = chauffeurs;
+        console.log('[Dispatch] Chauffeurs chargés:', chauffeurs.length);
+        rebuildToursFromOrders();
+        updateStats();
+        applyFilters();
+        renderMap();
+        setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 150);
+        window.populateSelects();
+        renderTours();
+        setTimeout(window.populateSelects, 300);
+        setTimeout(function () { try { applyHighlightFromUrl(); } catch (e) { console.warn('[Dispatch] highlight', e); } }, 400);
     }
 
-    // Dessiner la signature si présente
-    if(del&&del.has_signature&&del.signature_data){
-        setTimeout(function(){
-            var canvas=document.getElementById('sigCanvas');
-            if(!canvas)return;
-            var img=new Image();
-            img.onload=function(){
-                var ctx=canvas.getContext('2d');
-                canvas.width=canvas.offsetWidth;
-                canvas.height=80;
-                ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    function escDataAttr(val) {
+        if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(val);
+        return String(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    /** Ouvre / surligne un transport depuis ?highlight=<uuid> (liste → dispatch). */
+    function applyHighlightFromUrl(pinnedId) {
+        const id = pinnedId || new URLSearchParams(window.location.search).get('highlight');
+        if (!id) return;
+        if (!pinnedId) {
+            try {
+                const u = new URL(window.location.href);
+                u.searchParams.delete('highlight');
+                history.replaceState({}, '', u.pathname + u.search + u.hash);
+            } catch (e) {}
+        }
+        const card = document.querySelector('.order-card[data-id="' + escDataAttr(id) + '"]');
+        if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.add('highlight-flash');
+            setTimeout(function () { card.classList.remove('highlight-flash'); }, 2500);
+            return;
+        }
+        const toi = document.querySelector('.toi[data-order="' + escDataAttr(id) + '"]');
+        if (toi) {
+            const tc = toi.closest('.tour-card');
+            if (tc && !tc.classList.contains('expanded')) {
+                const tid = toi.getAttribute('data-tour');
+                if (tid) {
+                    const t = tours.find(x => x.id === tid);
+                    if (t) { t.expanded = true; renderTours(); }
+                    setTimeout(function () { applyHighlightFromUrl(id); }, 350);
+                    return;
+                }
+            }
+            toi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            toi.classList.add('highlight-flash-toi');
+            setTimeout(function () { toi.classList.remove('highlight-flash-toi'); }, 2500);
+            return;
+        }
+        if (typeof showOrderDetail === 'function') showOrderDetail(id);
+    }
+
+    /* ── Stats ── */
+    function updateStats() {
+        const pending = allOrders.filter(o=>o.status==='pending'&&o.priority!=='urgent');
+        const urgent  = allOrders.filter(o=>o.priority==='urgent');
+        const planned = allOrders.filter(o=>o.status==='planned');
+        const all     = allOrders.filter(o=>o.status!=='delivered');
+        const sumAmount = list => list.reduce((s,o)=>s+Number(o.price_chf||0),0);
+        document.getElementById('smNumAll').textContent    = all.length;
+        document.getElementById('smNumPending').textContent= pending.length;
+        document.getElementById('smNumUrgent').textContent = urgent.length;
+        document.getElementById('smNumAll2').textContent   = planned.length;
+        document.getElementById('pendingCount').textContent= pending.length + urgent.length;
+        const elAllAmt = document.getElementById('smAmtAll');
+        const elPendingAmt = document.getElementById('smAmtPending');
+        const elUrgentAmt = document.getElementById('smAmtUrgent');
+        const elPlannedAmt = document.getElementById('smAmtPlanned');
+        if (elAllAmt) elAllAmt.textContent = fmtMoney(sumAmount(all));
+        if (elPendingAmt) elPendingAmt.textContent = fmtMoney(sumAmount(pending));
+        if (elUrgentAmt) elUrgentAmt.textContent = fmtMoney(sumAmount(urgent));
+        if (elPlannedAmt) elPlannedAmt.textContent = fmtMoney(sumAmount(planned));
+    }
+
+    /* ── Filters ── */
+    window.setFilter = function(st) {
+        filterSt=st;
+        document.querySelectorAll('.sm').forEach(s=>s.classList.remove('active'));
+        const map2 = {'':{id:'smAll'},'pending':{id:'smPending'},'urgent':{id:'smUrgent'},'all':{id:'smAll2'}};
+        document.getElementById(map2[st]?.id||'smAll')?.classList.add('active');
+        applyFilters();
+    };
+    window.applyFilters = function() {
+        filterQ  = document.getElementById('searchOrders').value.toLowerCase();
+        renderOrderList();
+    };
+
+    /* ── Order list ── */
+    function renderOrderList() {
+        const inTourIds = new Set(tours.flatMap(t=>t.orderIds));
+        let list = [...allOrders].filter(o=>!inTourIds.has(o.id));
+
+        if(filterSt==='all')    list = list.filter(o=>o.status!=='delivered');
+        else if(filterSt==='urgent')  list = list.filter(o=>o.priority==='urgent');
+        else if(filterSt==='pending') list = list.filter(o=>o.status==='pending'&&o.priority!=='urgent');
+        else list = list.filter(o=>o.status!=='delivered'&&o.status!=='planned');
+
+        if(filterQ) list=list.filter(o=>(o.order_number||'').toLowerCase().includes(filterQ)||(o.pickup_address||'').toLowerCase().includes(filterQ)||(o.delivery_address||'').toLowerCase().includes(filterQ));
+
+        // Sort: urgent first
+        list.sort((a,b)=>{
+            if(a.priority==='urgent'&&b.priority!=='urgent') return -1;
+            if(b.priority==='urgent'&&a.priority!=='urgent') return 1;
+            return new Date(b.created_at)-new Date(a.created_at);
+        });
+
+        const colEls = ['orderListCol0','orderListCol1','orderListCol2'].map(id => document.getElementById(id));
+        if(!list.length) {
+            const empty = `<div class="empty-state"><div class="empty-ico">📦</div><div class="empty-txt">Aucun transport en attente</div></div>`;
+            colEls[0].innerHTML = '';
+            colEls[1].innerHTML = empty;
+            colEls[2].innerHTML = '';
+            return;
+        }
+
+        const buckets = [[], [], []];
+        list.forEach((o, idx) => {
+            const st=o.priority==='urgent'?'urgent':(o.status||'pending');
+            const stl={pending:'Attente',urgent:'🔥 URGENT',in_transit:'En route',planned:'Planifié'}[st]||st;
+            const clientLabel = o.destinataire_nom || o.client_name || o.entreprise_nom || o.customer_name || 'Client inconnu';
+            const card = `<div class="order-card ${st}" data-id="${o.id}" draggable="true"
+                ondragstart="dragStart(event,'${o.id}')" ondragend="dragEnd(event)"
+                onclick="showOrderDetail('${o.id}')">
+                <div class="oc-top">
+                    <span class="oc-num">${o.order_number||o.id.slice(0,8)}</span>
+                    <span class="oc-badge ${st}">${stl}</span>
+                </div>
+                <div class="oc-stop"><div class="oc-dot p"></div><div class="oc-addr">${shortAddr(o.pickup_address)}</div></div>
+                <div class="oc-stop"><div class="oc-dot d"></div><div class="oc-addr">${shortAddr(o.delivery_address)}</div></div>
+                ${clientLabel ? `<div class="oc-client"><i class="fas fa-user"></i> ${clientLabel}</div>` : ''}
+                <div class="oc-meta">
+                    ${o.distance_km?`<span class="oc-tag"><i class="fas fa-route"></i> ${o.distance_km}km</span>`:''}
+                    ${o.weight?`<span class="oc-tag"><i class="fas fa-weight-hanging"></i> ${o.weight}kg</span>`:''}
+                    ${o.priority==='urgent'?`<span class="oc-tag" style="color:var(--orange)">⚡ Urgent</span>`:''}
+                    <span class="oc-tag" style="color:var(--red);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();confirmDeleteOrder('${o.id}','${(o.order_number||'').replace(/'/g,'')}')" title="Supprimer"><i class="fas fa-trash"></i></span>
+                </div>
+            </div>`;
+            buckets[idx % 3].push(card);
+        });
+        colEls.forEach((el, i) => { el.innerHTML = buckets[i].join(''); });
+    }
+
+    /* ── GEOCODE cache ── */
+    const geoCache = {};
+    async function geocodeAddr(addr) {
+        if(!addr) return null;
+        const normalized = String(addr)
+            .replace(/\s+/g, ' ')
+            .replace(/,+/g, ',')
+            .replace(/\s*,\s*/g, ', ')
+            .trim();
+        const key = normalized.slice(0,60);
+        if(geoCache[key]) return geoCache[key];
+        try {
+            await new Promise(r=>setTimeout(r,300)); // Respecter Nominatim 1/sec
+            // Forcer Suisse uniquement pour éviter les faux positifs (ex: France)
+            const q = normalized.toLowerCase().includes('suisse') || normalized.toLowerCase().includes('switzerland')
+                ? normalized
+                : `${normalized}, Suisse`;
+            const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=ch&bounded=1&viewbox=5.95,47.85,10.60,45.75`,{headers:{'Accept-Language':'fr'}});
+            const d = await r.json();
+            if(d[0]) { const c={lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}; geoCache[key]=c; return c; }
+        } catch(e) {}
+        // Fallback OpenRoute geocoder (plus fiable en production)
+        try {
+            const text = normalized.toLowerCase().includes('suisse') || normalized.toLowerCase().includes('switzerland')
+                ? normalized
+                : `${normalized}, Suisse`;
+            const r2 = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${encodeURIComponent(ORS_KEY)}&text=${encodeURIComponent(text)}&size=1&boundary.country=CH`);
+            const d2 = await r2.json();
+            const feat = d2?.features?.[0];
+            const coords = feat?.geometry?.coordinates;
+            if(coords && coords.length >= 2) {
+                const c = { lat: Number(coords[1]), lng: Number(coords[0]) };
+                geoCache[key]=c;
+                return c;
+            }
+        } catch(e) {}
+        return null;
+    }
+
+    async function saveGeocode(order, pickupCoord, deliveryCoord) {
+        try {
+            const payload = {};
+            if (pickupCoord) { payload.pickup_lat = pickupCoord.lat; payload.pickup_lng = pickupCoord.lng; }
+            if (deliveryCoord) { payload.delivery_lat = deliveryCoord.lat; payload.delivery_lng = deliveryCoord.lng; }
+            if (!Object.keys(payload).length) return;
+            await db.from('transport_orders_simple').update(payload).eq('id', order.id);
+        } catch(e) {
+            console.warn('[Dispatch] save geocode failed', e?.message || e);
+        }
+    }
+
+    function isInSwissBounds(lat, lng) {
+        if (lat == null || lng == null) return false;
+        return lat >= 45.6 && lat <= 47.95 && lng >= 5.8 && lng <= 10.7;
+    }
+
+    async function ensureOrderCoords(order, force=false) {
+        let pickupCoord = null;
+        let deliveryCoord = null;
+        const badPickup = order.pickup_lat && order.pickup_lng && !isInSwissBounds(Number(order.pickup_lat), Number(order.pickup_lng));
+        const badDelivery = order.delivery_lat && order.delivery_lng && !isInSwissBounds(Number(order.delivery_lat), Number(order.delivery_lng));
+        if ((force || !order.pickup_lat || badPickup) && order.pickup_address) {
+            pickupCoord = await geocodeAddr(order.pickup_address);
+            if (pickupCoord) { order.pickup_lat = pickupCoord.lat; order.pickup_lng = pickupCoord.lng; }
+        }
+        if ((force || !order.delivery_lat || badDelivery) && order.delivery_address) {
+            deliveryCoord = await geocodeAddr(order.delivery_address);
+            if (deliveryCoord) { order.delivery_lat = deliveryCoord.lat; order.delivery_lng = deliveryCoord.lng; }
+        }
+        if (pickupCoord || deliveryCoord) await saveGeocode(order, pickupCoord, deliveryCoord);
+    }
+
+    window.forceGeocodeAll = async function() {
+        const candidates = allOrders.filter(o=>o.status!=='delivered' && (o.pickup_address || o.delivery_address));
+        if(!candidates.length){ toast('info','Tous les transports ont déjà des coordonnées'); return; }
+        showLoad(`Geocodage de ${candidates.length} transport(s)…`);
+        let ok = 0;
+        for (const o of candidates) {
+            await ensureOrderCoords(o, true);
+            if ((o.pickup_lat || o.delivery_lat)) ok++;
+        }
+        hideLoad();
+        await loadAll();
+        toast('success', `Geocodage terminé: ${ok}/${candidates.length}`);
+    };
+
+    // Bouton "refresh" : recharge transports + stats + carte
+    window.refreshDispatchDashboard = async function() {
+        try {
+            showLoad('Mise à jour du dispatch…');
+            await loadAll();
+            toast('success', 'Dashboard actualisé');
+        } catch (e) {
+            console.warn('[Dispatch] refresh failed', e);
+            toast('error', 'Erreur lors de la mise à jour');
+        } finally {
+            hideLoad();
+        }
+    };
+
+    /* ── MAP render ── */
+    async function renderMap() {
+        Object.values(mapMarkers).forEach(m=>{if(m.p)map.removeLayer(m.p);if(m.d)map.removeLayer(m.d);if(m.l)map.removeLayer(m.l);if(m.label)map.removeLayer(m.label);});
+        mapMarkers={};
+        mapLines.forEach(l=>map.removeLayer(l)); mapLines=[];
+
+        // Marker dépôt Yverdon
+        if(!window._depotMarker) {
+            window._depotMarker = L.marker([46.7785,6.6409],{
+                icon:L.divIcon({
+                    html:`<div style="width:18px;height:18px;background:#e8311a;border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 3px 10px rgba(0,0,0,0.5)"></div>`,
+                    className:'',iconSize:[18,18],iconAnchor:[9,9]
+                })
+            }).addTo(map).bindTooltip('🏭 Dépôt — Yverdon-les-Bains',{permanent:true,direction:'right',className:'',offset:[12,0]});
+        }
+
+        const bounds=[[46.7785,6.6409]];
+        // Afficher tous sauf livrés — in_transit EN PREMIER pour visibilité
+        const ordersToRender = [
+            ...allOrders.filter(o=>['in_transit','in_delivery','delivering'].includes(o.status)),
+            ...allOrders.filter(o=>o.status!=='delivered'&&!['in_transit','in_delivery','delivering'].includes(o.status))
+        ];
+
+        for(const o of ordersToRender) {
+            const isMoving = ['in_transit','in_delivery','delivering'].includes(o.status);
+            const color=STATUS_COLORS[o.priority==='urgent'?'urgent':(o.status||'pending')]||STATUS_COLORS.pending;
+            const pulse=isMoving||o.priority==='urgent'||o.status==='pending';
+            const mg={};
+
+            let pLat=o.pickup_lat,   pLng=o.pickup_lng;
+            let dLat=o.delivery_lat, dLng=o.delivery_lng;
+
+            if(!pLat && o.pickup_address && !geoCache['trying_'+o.id+'_p']) {
+                geoCache['trying_'+o.id+'_p']=true;
+                const c=await geocodeAddr(o.pickup_address);
+                if(c){pLat=c.lat;pLng=c.lng;}
+            }
+            if(!dLat && o.delivery_address && !geoCache['trying_'+o.id+'_d']) {
+                geoCache['trying_'+o.id+'_d']=true;
+                const c=await geocodeAddr(o.delivery_address);
+                if(c){dLat=c.lat;dLng=c.lng;}
+            }
+
+            if(pLat) {
+                mg.p=L.marker([pLat,pLng],{icon:makeIcon(color,pulse,'circle'), zIndexOffset: isMoving?1000:0})
+                    .addTo(map)
+                    .on('click',()=>focusOrderMap(o.id))
+                    .bindTooltip(`<b>${o.order_number||'—'}</b>${isMoving?'<br>🚚 <b>EN ROUTE</b>':''}<br>📍 ${shortAddr(o.pickup_address)}`,{direction:'top'});
+                bounds.push([pLat,pLng]);
+            }
+            if(dLat) {
+                // Marqueur livraison plus grand si en transit
+                const iconSize = isMoving ? [16,16] : [12,12];
+                mg.d=L.marker([dLat,dLng],{
+                    icon:isMoving
+                        ? L.divIcon({
+                            html:`<div style="position:relative;">
+                                <div style="width:20px;height:20px;background:${color};border:3px solid white;border-radius:3px;transform:rotate(45deg);box-shadow:0 0 12px ${color};animation:pulse 1s infinite;"></div>
+                                <style>@keyframes pulse{0%,100%{box-shadow:0 0 8px ${color}}50%{box-shadow:0 0 20px ${color}}}</style>
+                            </div>`,
+                            className:'',iconSize:[20,20],iconAnchor:[10,10]
+                          })
+                        : makeIcon(color,false,'square'),
+                    zIndexOffset: isMoving?1000:0
+                }).addTo(map)
+                    .on('click',()=>focusOrderMap(o.id))
+                    .bindTooltip(`<b>${o.order_number||'—'}</b>${isMoving?'<br>🎯 <b>DESTINATION</b>':''}<br>🏁 ${shortAddr(o.delivery_address)}`,{direction:'top'});
+                bounds.push([dLat,dLng]);
+
+                // Label "EN ROUTE" flottant pour in_transit
+                if(isMoving && dLat) {
+                    mg.label = L.marker([dLat,dLng],{
+                        icon:L.divIcon({
+                            html:`<div style="background:${color};color:white;padding:2px 7px;border-radius:100px;font-size:10px;font-weight:700;white-space:nowrap;margin-top:-28px;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🚚 EN ROUTE</div>`,
+                            className:'',iconAnchor:[-4,28]
+                        }),
+                        interactive:false
+                    }).addTo(map);
+                }
+            }
+            if(pLat&&dLat) {
+                const lineStyle = isMoving
+                    ? {color,weight:3,opacity:0.7,dashArray:'8 4'}
+                    : {color,weight:1.5,opacity:0.2,dashArray:'4 6'};
+                mg.l=L.polyline([[pLat,pLng],[dLat,dLng]],lineStyle).addTo(map);
+                mapLines.push(mg.l);
+            }
+            mapMarkers[o.id]=mg;
+        }
+        if(bounds.length>1) { try{map.fitBounds(bounds,{padding:[40,40]});}catch(e){} }
+    }
+
+    window.fitAll=function(){
+        const b=allOrders.reduce((a,o)=>{if(o.pickup_lat)a.push([o.pickup_lat,o.pickup_lng]);if(o.delivery_lat)a.push([o.delivery_lat,o.delivery_lng]);return a;},[]);
+        if(b.length) map.fitBounds(b,{padding:[40,40]});
+    };
+    window.toggleRoutes=function(){
+        showRoutes=!showRoutes;
+        document.getElementById('mcRoutes').classList.toggle('active',showRoutes);
+        mapLines.forEach(l=>showRoutes?map.addLayer(l):map.removeLayer(l));
+    };
+    window.focusOrderMap=function(id){
+        const o=allOrders.find(x=>x.id===id); if(!o||!o.pickup_lat) return;
+        map.flyTo([o.pickup_lat,o.pickup_lng],14,{duration:0.8});
+    };
+
+    /* ── DRAG & DROP ── */
+    window.dragStart=function(e,id){ dragOrderId=id; e.dataTransfer.effectAllowed='copy'; setTimeout(()=>document.querySelector(`.order-card[data-id="${id}"]`)?.classList.add('dragging'),0); };
+    window.dragEnd=function(){ document.querySelectorAll('.order-card.dragging').forEach(el=>el.classList.remove('dragging')); document.querySelectorAll('.drop-zone.drag-over,.tour-card.drag-over').forEach(el=>el.classList.remove('drag-over')); dragOrderId=null; };
+
+    function setupDropZone(dz, tourId) {
+        // Dragover sur la zone
+        dz.addEventListener('dragover', e=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add('drag-over'); });
+        dz.addEventListener('dragenter', e=>{ e.preventDefault(); dz.classList.add('drag-over'); });
+        dz.addEventListener('dragleave', e=>{ if(!dz.contains(e.relatedTarget)) dz.classList.remove('drag-over'); });
+        dz.addEventListener('drop', e=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag-over'); if(dragOrderId) addToTour(tourId,dragOrderId); });
+
+        // Aussi accepter le drop sur la tour-card entière (pas seulement la drop zone)
+        const tourCard = document.getElementById('tc-'+tourId);
+        if(tourCard) {
+            const dropTarget = () => {
+                if(!dragOrderId) return;
+                const tour = tours.find(t=>t.id===tourId);
+                if(tour && !tour.expanded) tour.expanded = true;
+                addToTour(tourId, dragOrderId);
             };
-            img.src=del.signature_data;
-        },100);
-    }
-}
-
-// ── FILTRES ──
-document.querySelectorAll('.fchip').forEach(function(btn){
-    btn.addEventListener('click',function(){
-        document.querySelectorAll('.fchip').forEach(function(b){b.classList.remove('active');});
-        this.classList.add('active');
-        currentFilter=this.getAttribute('data-f');
-        render();
-    });
-});
-document.getElementById('q').addEventListener('input',function(){render();});
-document.getElementById('btnRefresh').addEventListener('click',function(){load();});
-
-// ── HIGHLIGHT depuis URL ?highlight=id ──
-var hlId=new URLSearchParams(location.search).get('highlight');
-
-// ── INIT ──
-(async function(){
-    try{
-        var _a=await db.auth.getSession();
-        var cu=JSON.parse(localStorage.getItem('colixo_user')||'null');
-        if(!_a.data.session&&!cu){window.location.href='../login/index.html';return;}
-        var uid=(_a.data.session&&_a.data.session.user&&_a.data.session.user.id)||(cu&&cu.id);
-        if(uid){
-            var u=await db.from('utilisateurs').select('prenom,nom,role').eq('id',uid).maybeSingle();
-            var me=(u&&u.data)||cu||{};
-            var n=((me.prenom||'')+(me.nom?' '+me.nom:'')).trim()||'Admin';
-            document.getElementById('sideName').textContent=n;
-            document.getElementById('sideRole').textContent=me.role||'—';
-            document.getElementById('sideAvatar').textContent=(n[0]||'A').toUpperCase();
-        }
-        await load();
-        // Ouvrir l'ordre si highlight dans URL
-        if(hlId){
-            var ho=allOrders.find(function(x){return x.id===hlId;});
-            if(ho){
-                showDetail(ho);
-                // Scroller vers l'item
-                var el=document.querySelector('[data-id="'+hlId+'"]');
-                if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+            tourCard.addEventListener('dragover', e=>{ e.preventDefault(); tourCard.classList.add('drag-over'); dz.classList.add('drag-near'); });
+            tourCard.addEventListener('dragenter', e=>{ e.preventDefault(); tourCard.classList.add('drag-over'); });
+            tourCard.addEventListener('dragleave', e=>{ if(!tourCard.contains(e.relatedTarget)){tourCard.classList.remove('drag-over');dz.classList.remove('drag-near');} });
+            tourCard.addEventListener('drop', e=>{ 
+                e.preventDefault(); 
+                tourCard.classList.remove('drag-over'); 
+                dz.classList.remove('drag-near');
+                dz.classList.remove('drag-over');
+                dropTarget();
+            });
+            const head = tourCard.querySelector('.tour-head');
+            if(head){
+                head.addEventListener('dragover', e=>{ e.preventDefault(); tourCard.classList.add('drag-over'); });
+                head.addEventListener('drop', e=>{ e.preventDefault(); dropTarget(); });
             }
         }
-        // Realtime
-        db.channel('suivi_rt')
-            .on('postgres_changes',{event:'*',schema:'public',table:'transport_orders_simple'},function(){
-                setTimeout(function(){load();},500);
-            }).subscribe();
-    }catch(ex){
-        console.error(ex);
     }
-})();
+
+    /* ── TOURS ── */
+    window.openNewTour=function(){
+        document.getElementById('tourName').value='';
+        const vehSel = document.getElementById('tourVehicle');
+        if (vehSel) vehSel.value = '';
+        const nd = document.getElementById('newTourPlannedDate');
+        if (nd) nd.value = todayCH();
+        selectedColor='#22c55e';
+        document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('selected'));
+        document.querySelector('.color-opt[data-color="#22c55e"]')?.classList.add('selected');
+        populateSelects();
+        openModal('modalTour');
+        // Double appel après rendu modal
+        requestAnimationFrame(()=>requestAnimationFrame(populateSelects));
+    };
+
+    window.createTour=function(){
+        const name=document.getElementById('tourName').value.trim();
+        if(!name){toast('error','Donnez un nom'); return;}
+        const driverId=document.getElementById('tourDriver').value||null;
+        const vehicleId=document.getElementById('tourVehicle').value||null;
+        const tourPlannedDate=document.getElementById('newTourPlannedDate')?.value||todayCH();
+        tours.push({id:'t'+Date.now(),name,color:selectedColor,driverId,vehicleId,tourPlannedDate,orderIds:[],expanded:true,routeData:null});
+        window.closeModal('modalTour');
+        renderTours();
+        document.getElementById('tourCount').textContent=tours.length;
+        toast('success',`Tournée "${name}" créée — glissez des transports !`);
+    };
+
+    function addToTour(tourId, orderId) {
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        if(tour.orderIds.includes(orderId)){toast('info','Déjà dans cette tournée');return;}
+        tour.orderIds.push(orderId);
+        tour.routeData=null; // Reset route cache
+        renderTours();
+        renderOrderList();
+        toast('success','✓ Transport ajouté');
+    }
+    window.addToTour=addToTour;
+
+    /* ── ORDER DETAIL ── */
+    window.showOrderDetail = function(id) {
+        const o = allOrders.find(x=>x.id===id);
+        if(!o) return;
+        const st    = o.priority==='urgent'?'urgent':(o.status||'pending');
+        const stCol = {pending:'var(--yellow)',urgent:'var(--orange)',planned:'var(--blue)',in_transit:'var(--purple)',delivered:'var(--green)'}[st]||'var(--muted)';
+        const stLbl = {pending:'En attente',urgent:'🔥 URGENT',planned:'Planifié',in_transit:'En route',delivered:'Livré'}[st]||st;
+        const driver= chauffeurs.find(c=>c.id===o.driver_id);
+
+        document.getElementById('orderDetailBox').innerHTML = `
+            <div class="odm-head">
+                <div class="odm-num">${o.order_number||o.id.slice(0,8)}</div>
+                <span class="odm-badge" style="background:${stCol}22;color:${stCol};border:1px solid ${stCol}44">${stLbl}</span>
+                <button class="odm-close" onclick="closeOrderDetail()">✕</button>
+            </div>
+
+            <div class="odm-stats">
+                <div class="odm-stat">
+                    <div class="odm-stat-val" style="color:var(--blue)">${o.distance_km||'—'}</div>
+                    <div class="odm-stat-lbl">km</div>
+                </div>
+                <div class="odm-stat">
+                    <div class="odm-stat-val" style="color:var(--green)">${o.price_chf||'—'}</div>
+                    <div class="odm-stat-lbl">CHF</div>
+                </div>
+                <div class="odm-stat">
+                    <div class="odm-stat-val" style="color:var(--yellow)">${o.weight||'—'}</div>
+                    <div class="odm-stat-lbl">kg</div>
+                </div>
+            </div>
+
+            <div class="odm-section">
+                <div class="odm-section-title">Adresses</div>
+                <div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(59,130,246,0.15);color:var(--blue)"><i class="fas fa-map-marker-alt"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Enlèvement</div>
+                        <div class="odm-row-value">${o.pickup_address||'—'}</div>
+                    </div>
+                </div>
+                <div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(232,49,26,0.15);color:var(--red)"><i class="fas fa-flag-checkered"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Livraison</div>
+                        <div class="odm-row-value">${o.delivery_address||'—'}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="odm-section">
+                <div class="odm-section-title">Destinataire</div>
+                <div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(168,85,247,0.15);color:var(--purple)"><i class="fas fa-user"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Nom</div>
+                        <div class="odm-row-value">${o.destinataire_nom||o.client_name||o.entreprise_nom||'Client non spécifié'}</div>
+                    </div>
+                </div>
+                ${o.destinataire_tel?`<div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(34,197,94,0.15);color:var(--green)"><i class="fas fa-phone"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Téléphone</div>
+                        <div class="odm-row-value"><a href="tel:${o.destinataire_tel}" style="color:var(--green)">${o.destinataire_tel}</a></div>
+                    </div>
+                </div>`:''}
+            </div>
+
+            <div class="odm-section">
+                <div class="odm-section-title">Transport</div>
+                <div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(245,158,11,0.15);color:var(--yellow)"><i class="fas fa-box"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Colis</div>
+                        <div class="odm-row-value">${o.quantity||1} colis · ${o.weight||0}kg · ${o.package_type||'Standard'}</div>
+                    </div>
+                </div>
+                <div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(59,130,246,0.15);color:var(--blue)"><i class="fas fa-clock"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Service</div>
+                        <div class="odm-row-value">${o.service_type||o.speed||'Standard'} ${o.night_delivery?'· 🌙 Livraison nuit':''}</div>
+                    </div>
+                </div>
+                ${driver?`<div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(34,197,94,0.15);color:var(--green)"><i class="fas fa-user-tie"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Chauffeur assigné</div>
+                        <div class="odm-row-value">${driver.prenom||''} ${driver.nom||''}</div>
+                    </div>
+                </div>`:''}
+                ${o.instructions?`<div class="odm-row">
+                    <div class="odm-row-icon" style="background:rgba(168,85,247,0.15);color:var(--purple)"><i class="fas fa-sticky-note"></i></div>
+                    <div class="odm-row-content">
+                        <div class="odm-row-label">Instructions</div>
+                        <div class="odm-row-value">${o.instructions}</div>
+                    </div>
+                </div>`:''}
+            </div>
+
+            <div class="odm-actions">
+                ${st!=='delivered'?`<button class="btn btn-yellow" onclick="closeOrderDetail();openAssign('${o.id}')"><i class="fas fa-user-plus"></i> Assigner</button>`:''}
+                ${o.delivery_lat?`<button class="btn btn-blue" onclick="closeOrderDetail();focusOrderMap('${o.id}')"><i class="fas fa-map-marker-alt"></i> Carte</button>`:''}
+                <button class="btn btn-ghost" onclick="window.open('etiquette-colis.html?id=${o.id}','_blank')" style="border-color:rgba(59,130,246,0.25);"><i class="fas fa-qrcode"></i> Étiquette</button>
+                ${st!=='delivered'?`<button class="btn btn-green" onclick="closeOrderDetail();markDelivered('${o.id}')"><i class="fas fa-check"></i> Livré</button>`:''}
+                <button class="btn btn-ghost" onclick="confirmDeleteOrder('${o.id}','${(o.order_number||'').replace(/'/g,'')}')" style="color:var(--red);border-color:rgba(232,49,26,0.3);flex:0;padding:12px 14px;"><i class="fas fa-trash"></i></button>
+            </div>`;
+
+        document.getElementById('orderDetailModal').classList.add('open');
+    };
+
+    window.confirmDeleteOrder = function(id, num) {
+        // Mini confirm dialog
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--night3);border:1px solid rgba(232,49,26,0.3);border-radius:20px;padding:32px;max-width:340px;width:100%;text-align:center;animation:boxIn 0.25s cubic-bezier(0.4,0,0.2,1);">
+                <div style="font-size:36px;margin-bottom:14px;">🗑️</div>
+                <div style="font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:1px;margin-bottom:8px;">SUPPRIMER</div>
+                <div style="font-size:14px;color:var(--muted);margin-bottom:24px;line-height:1.6;">
+                    Supprimer le transport <strong style="color:var(--white)">${num}</strong> ?<br>
+                    <span style="color:var(--red);font-size:12px;">Cette action est irréversible.</span>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button onclick="deleteOrder('${id}');this.closest('[style*=fixed]').remove();" 
+                        style="flex:1;padding:12px;background:var(--red);color:white;border:none;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;cursor:pointer;font-size:14px;">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
+                    <button onclick="this.closest('[style*=fixed]').remove();"
+                        style="flex:1;padding:12px;background:var(--surface);color:var(--muted2);border:1px solid var(--border2);border-radius:10px;font-family:'Outfit',sans-serif;cursor:pointer;font-size:14px;">
+                        Annuler
+                    </button>
+                </div>
+            </div>`;
+        overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    };
+
+    window.deleteOrder = async function(id) {
+        showLoad('Suppression…');
+        try {
+            const { error } = await db.from('transport_orders_simple').delete().eq('id', id);
+            if(error) throw error;
+            closeOrderDetail();
+            toast('success', 'Transport supprimé ✓');
+            await loadAll();
+        } catch(e) { toast('error', e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.closeOrderDetail = function() {
+        document.getElementById('orderDetailModal').classList.remove('open');
+    };
+
+    window.markDelivered = async function(id) {
+        showLoad('Mise à jour…');
+        try {
+            await db.from('transport_orders_simple').update({status:'delivered',delivered_at:nowCH()}).eq('id',id);
+            toast('success','Marqué comme livré ✓');
+            await loadAll();
+        } catch(e) { toast('error',e.message); }
+        finally { hideLoad(); }
+    };
+
+    window.removeFromTour=function(tourId,orderId){
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        tour.orderIds=tour.orderIds.filter(id=>id!==orderId);
+        tour.routeData=null;
+        clearTourMap(tourId);
+        renderTours(); renderOrderList();
+    };
+
+    window.toggleTour=function(id){
+        const t=tours.find(x=>x.id===id); if(t){t.expanded=!t.expanded;renderTours();}
+    };
+
+    window.setTourDriver=function(tourId,driverId){
+        const t=tours.find(x=>x.id===tourId); if(!t) return;
+        t.driverId=driverId||null;
+        if(!t.vehicleId && t.driverId){
+            const autoVeh = vehicules.find(v=>v.chauffeur_id===t.driverId);
+            if(autoVeh) t.vehicleId = autoVeh.id;
+        }
+        t.routeData=null;
+        renderTours();
+    };
+    window.setTourVehicle=function(tourId,vehicleId){
+        const t=tours.find(x=>x.id===tourId); if(!t) return;
+        t.vehicleId=vehicleId||null;
+        t.routeData=null;
+        renderTours();
+    };
+    window.setTourDate=function(tourId,ymd){
+        const t=tours.find(x=>x.id===tourId); if(!t) return;
+        t.tourPlannedDate=ymd||todayCH();
+        t.routeData=null;
+        renderTours();
+    };
+
+    window.deleteTour=function(id){
+        tours=tours.filter(t=>t.id!==id);
+        clearTourMap(id);
+        renderTours(); renderOrderList();
+        document.getElementById('tourCount').textContent=tours.length;
+    };
+
+    /* ── RENDER TOURS ── */
+    function renderTours(){
+        const visibleTours = tours.filter(t=>{
+            const orders = t.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
+            if(!orders.length) return true;
+            return !orders.every(o=>['in_transit','in_delivery','delivering'].includes(o.status));
+        });
+        document.getElementById('tourCount').textContent=visibleTours.length;
+        const el=document.getElementById('toursList');
+        if(!visibleTours.length){
+            el.innerHTML=`<div class="empty-state"><div class="empty-ico">🗺️</div><div class="empty-txt">Aucune tournée.<br>Cliquez "+ Tournée"<br>ou "Optimiser"</div></div>`;
+            return;
+        }
+        el.innerHTML=visibleTours.map(tour=>{
+            const orders=tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
+            const driver=chauffeurs.find(c=>c.id===tour.driverId);
+            const autoVeh = vehicules.find(v=>v.chauffeur_id===tour.driverId) || null;
+            const selectedVehId = tour.vehicleId || autoVeh?.id || '';
+            const selectedVeh = vehicules.find(v=>v.id===selectedVehId);
+            const driverName=driver?`${driver.prenom||''} ${driver.nom||''}`.trim():'Non assigné';
+            const rd=tour.routeData;
+
+            return `<div class="tour-card ${tour.expanded?'expanded':''}" id="tc-${tour.id}">
+                <div class="tour-head" onclick="toggleTour('${tour.id}')">
+                    <div class="tour-color" style="background:${tour.color}"></div>
+                    <div class="tour-name" style="color:${tour.color}">${tour.name}</div>
+                    <div class="tour-count">${orders.length}</div>
+                    <i class="fas fa-chevron-down tour-chevron"></i>
+                </div>
+                <div class="tour-body">
+                    <!-- Chauffeur -->
+                    <select class="tour-driver-sel" onchange="setTourDriver('${tour.id}',this.value)">
+                        <option value="">🚗 Chauffeur…</option>
+                        ${chauffeurs.map(c=>`<option value="${c.id}" ${c.id===tour.driverId?'selected':''}>${c.prenom||''} ${c.nom||''}</option>`).join('')}
+                    </select>
+                    <select class="tour-driver-sel" onchange="setTourVehicle('${tour.id}',this.value)">
+                        <option value="">🚛 Auto (selon chauffeur)</option>
+                        ${vehicules.map(v=>`<option value="${v.id}" ${v.id===selectedVehId?'selected':''}>${vehLabel(v)}</option>`).join('')}
+                    </select>
+                    <input type="date" class="tour-driver-sel" style="margin-bottom:8px;"
+                        value="${tour.tourPlannedDate||todayCH()}"
+                        onchange="setTourDate('${tour.id}',this.value)"
+                        title="Date planifiée (sauvegardée avec la tournée)">
+
+                    <!-- Planning summary (si optimisation auto) -->
+                    ${tour.planning ? `<div style="background:var(--night);border:1px solid var(--border2);border-radius:9px;padding:9px 10px;margin-bottom:8px;font-size:11px;">
+                        <div style="font-family:'Bebas Neue',cursive;font-size:12px;letter-spacing:1px;color:var(--muted2);margin-bottom:7px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-calendar-alt" style="color:${tour.color}"></i> PLANNING JOURNÉE
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px;">
+                            <div style="background:var(--surface);border-radius:6px;padding:6px 8px;">
+                                <div style="font-family:'Bebas Neue',cursive;font-size:16px;color:${tour.color}">${tour.planning.depart}</div>
+                                <div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Départ Yverdon</div>
+                            </div>
+                            <div style="background:var(--surface);border-radius:6px;padding:6px 8px;">
+                                <div style="font-family:'Bebas Neue',cursify;font-size:16px;color:${tour.color}">${tour.planning.fin}</div>
+                                <div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Fin prévue</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;">
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-steering-wheel" style="color:${tour.color}"></i> ${tour.planning.conduite} conduite
+                            </span>
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-weight-hanging" style="color:${tour.color}"></i> ${tour.planning.poids}kg
+                            </span>
+                            <span style="background:var(--surface);padding:3px 7px;border-radius:5px;color:var(--muted2);">
+                                <i class="fas fa-clock" style="color:${tour.color}"></i> ${tour.planning.journee}h journée
+                            </span>
+                        </div>
+                        ${tour.planning.stops.map((s,i)=>`
+                            <div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid var(--border);font-size:10px;">
+                                <span style="font-family:'Bebas Neue',cursify;font-size:13px;color:${tour.color};width:14px;text-align:center;">${i+1}</span>
+                                <span style="flex:1;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortAddr(s.order.delivery_address)}</span>
+                                ${s.pauseAjoutee?`<span style="color:var(--yellow);font-weight:700;">☕${s.pauseAjoutee}min</span>`:''}
+                                <span style="color:${tour.color};font-weight:600;white-space:nowrap;">${s.heureArrStr}</span>
+                            </div>`).join('')}
+                    </div>` : ''}
+
+                    <!-- Drop zone -->
+                    <div class="drop-zone" id="dz-${tour.id}">
+                        ${orders.length===0
+                            ? `<div class="drop-hint"><i class="fas fa-inbox"></i><span>Glissez des transports ici</span></div>`
+                            : orders.map((o,i)=>`
+                                <div class="toi" draggable="true"
+                                    data-tour="${tour.id}" data-order="${o.id}" data-idx="${i}"
+                                    ondragstart="reorderDragStart(event,'${tour.id}',${i})"
+                                    ondragover="reorderDragOver(event)"
+                                    ondrop="reorderDrop(event,'${tour.id}',${i})"
+                                    style="cursor:grab;">
+                                    <i class="fas fa-grip-vertical" style="color:var(--muted);font-size:10px;flex-shrink:0;"></i>
+                                    <span class="toi-idx" style="color:${tour.color}">${i+1}</span>
+                                    <div class="toi-info">
+                                        <div class="toi-num">${o.order_number||o.id.slice(0,8)}</div>
+                                        <div class="toi-addr">
+                                            📍 ${o.pickup_address || '—'}
+                                            <small>🏁 ${o.delivery_address || '—'}</small>
+                                        </div>
+                                    </div>
+                                    <button class="toi-remove" onclick="removeFromTour('${tour.id}','${o.id}')"><i class="fas fa-times"></i></button>
+                                </div>`).join('')
+                        }
+                    </div>
+
+                    <!-- Récap route (fixe, ne disparait pas) -->
+                    ${rd ? `<div class="tour-summary">
+                        <div class="ts-title"><i class="fas fa-route" style="color:${tour.color}"></i> Récapitulatif route</div>
+                        <div class="ts-driver"><i class="fas fa-user" style="color:${tour.color}"></i> ${driverName}</div>
+                        <div class="ts-driver"><i class="fas fa-truck" style="color:${tour.color}"></i> ${selectedVeh ? vehLabel(selectedVeh) : 'Véhicule non défini'}</div>
+                        <div class="ts-total">
+                            <div class="ts-stat">
+                                <div class="ts-val" style="color:${tour.color}">${rd.totalKm}</div>
+                                <div class="ts-lbl">km total</div>
+                            </div>
+                            <div class="ts-stat">
+                                <div class="ts-val" style="color:${tour.color}">${rd.totalDuree}</div>
+                                <div class="ts-lbl">durée</div>
+                            </div>
+                        </div>
+                        <div class="ts-total">
+                            <div class="ts-stat">
+                                <div class="ts-val" style="color:var(--green)">${fmtMoney(rd.revenue||0)}</div>
+                                <div class="ts-lbl">CA tournée</div>
+                            </div>
+                            <div class="ts-stat">
+                                <div class="ts-val" style="color:var(--yellow)">${fmtMoney(rd.cost||0)}</div>
+                                <div class="ts-lbl">coût revient</div>
+                            </div>
+                        </div>
+                        <div class="ts-driver" style="justify-content:space-between;">
+                            <span><i class="fas fa-chart-line" style="color:${(rd.margin||0)>=0?'var(--green)':'var(--red)'}"></i> Marge</span>
+                            <strong style="color:${(rd.margin||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(rd.margin||0)} (${Number(rd.marginPct||0).toFixed(1)}%)</strong>
+                        </div>
+                        <div class="ts-driver" style="justify-content:space-between;">
+                            <span><i class="fas fa-gauge-high" style="color:${tour.color}"></i> Coût réel/km</span>
+                            <strong>${Number(rd.realCostPerKm||0).toFixed(2)} CHF</strong>
+                        </div>
+                        <div class="ts-driver" style="justify-content:space-between;">
+                            <span><i class="fas fa-calendar-day" style="color:${tour.color}"></i> Résultat jour véhicule</span>
+                            <strong style="color:${(rd.vehicleDayMargin||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(rd.vehicleDayMargin||0)}</strong>
+                        </div>
+                        <div class="ts-stops">
+                            ${rd.segments.map((seg,i)=>`
+                                <div class="ts-stop">
+                                    <span class="ts-stop-num" style="color:${tour.color}">${i+1}</span>
+                                    <span class="ts-stop-addr">${seg.addr}</span>
+                                    <span class="ts-stop-arrow">→</span>
+                                    <span class="ts-stop-info" style="color:${tour.color}">${seg.km}km · ${seg.min}min</span>
+                                </div>`).join('')}
+                        </div>
+                    </div>` : ''}
+
+                    <!-- Actions -->
+                    <div class="tour-actions">
+                        <button class="btn btn-blue btn-sm" onclick="calcTourRoute('${tour.id}')">
+                            <i class="fas fa-route"></i> Route
+                        </button>
+                        <button class="btn btn-green btn-sm" onclick="saveTour('${tour.id}')">
+                            <i class="fas fa-save"></i> Sauver
+                        </button>
+                        <button class="btn btn-ghost btn-sm" onclick="deleteTour('${tour.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        // Setup drop zones
+        tours.forEach(t=>{
+            const dz=document.getElementById('dz-'+t.id);
+            if(dz) setupDropZone(dz,t.id);
+        });
+    }
+
+    /* ── ORS ROUTING ── */
+    async function getORSRoute(waypoints) {
+        if(waypoints.length<2) return null;
+        try {
+            const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{
+                method:'POST',
+                headers:{'Authorization':ORS_KEY,'Content-Type':'application/json'},
+                body:JSON.stringify({coordinates:waypoints.map(p=>[p[1],p[0]])})
+            });
+            if(!res.ok) throw new Error(`ORS ${res.status}`);
+            return await res.json();
+        } catch(e) { console.error('[ORS]',e.message); return null; }
+    }
+
+    /* ── CALC + DRAW TOUR ROUTE ── */
+    window.calcTourRoute=async function(tourId){
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        const orders=tour.orderIds.map(id=>allOrders.find(o=>o.id===id)).filter(Boolean);
+
+        // Build waypoints: utiliser pickup si dispo, sinon delivery
+        const wpts=[];
+        orders.forEach((o,i)=>{
+            if(i===0 && o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
+            if(o.delivery_lat) wpts.push([o.delivery_lat,o.delivery_lng]);
+            else if(o.pickup_lat) wpts.push([o.pickup_lat,o.pickup_lng]);
+        });
+
+        if(wpts.length<2){toast('info','Transports sans coordonnées GPS');return;}
+
+        showLoad('Calcul route ORS…');
+        const data=await getORSRoute(wpts);
+        hideLoad();
+
+        if(!data?.features?.[0]){toast('error','Route ORS indisponible'); clearTourMap(tourId); drawFallbackRoute(tour,wpts); return;}
+
+        const feature=data.features[0];
+        const props=feature.properties;
+        const segments=props.segments||[];
+        const totalKm=(props.summary.distance/1000).toFixed(1);
+        const totalMin=Math.round(props.summary.duration/60);
+        const totalH=Math.floor(totalMin/60);
+        const totalM=totalMin%60;
+        const totalDuree=totalH>0?`${totalH}h${totalM.toString().padStart(2,'0')}`:`${totalMin}min`;
+
+        // Segments info
+        const segsInfo=segments.map((seg,i)=>({
+            addr:shortAddr(orders[i]?.delivery_address||''),
+            km:(seg.distance/1000).toFixed(1),
+            min:Math.round(seg.duration/60)
+        }));
+
+        const revenue = orders.reduce((s,o)=>s+Number(o.price_chf||0),0);
+        const autoVeh = vehicules.find(v=>v.chauffeur_id===tour.driverId) || null;
+        const vehId = tour.vehicleId || autoVeh?.id || null;
+        const veh = vehicules.find(v=>v.id===vehId) || null;
+        const frais = fraisVehiculesMois.find(f=>f.vehicule_id===vehId) || null;
+        const kmMois = kmVehiculesMois.filter(k=>k.vehicule_id===vehId).reduce((s,k)=>s+Number(k.km_parcourus||0),0);
+        const carbMois = Number(frais?.carburant_chf||0);
+        const fixedMois = Number(frais?.leasing_chf||0) + Number(frais?.assurance_chf||0) + Number(frais?.entretien_chf||0) + Number(frais?.reparations_chf||0) + Number(frais?.divers_chf||0);
+        const chauffeurJour = Number(veh?.cout_chauffeur_jour || veh?.chauffeur_cout_jour || 0);
+        const fuelPerKm = kmMois > 0 ? carbMois / kmMois : ECON.costPerKm;
+        const realCostPerKm = fuelPerKm;
+        const toursVeh = Math.max(1, tours.filter(t=>(t.vehicleId || vehicules.find(v=>v.chauffeur_id===t.driverId)?.id || null)===vehId).length);
+        const fixedJourPart = (fixedMois / daysInCurrentMonth() + chauffeurJour) / toursVeh;
+        const cost = Number(totalKm) * fuelPerKm + orders.length * ECON.costPerStop + fixedJourPart;
+        const margin = revenue - cost;
+        const marginPct = revenue > 0 ? (margin/revenue*100) : 0;
+        const toursVehCalc = tours.filter(t=>(t.vehicleId || vehicules.find(v=>v.chauffeur_id===t.driverId)?.id || null)===vehId && t.routeData);
+        const vehicleDayRevenue = toursVehCalc.reduce((s,t)=>s+Number(t.routeData?.revenue||0),0) + revenue;
+        const vehicleDayCost = toursVehCalc.reduce((s,t)=>s+Number(t.routeData?.cost||0),0) + cost;
+        const vehicleDayMargin = vehicleDayRevenue - vehicleDayCost;
+        // Save route data to tour (persiste dans la colonne)
+        tour.routeData={ totalKm, totalDuree, segments:segsInfo, revenue, cost, margin, marginPct, realCostPerKm, vehicleDayMargin };
+
+        // Draw on map
+        clearTourMap(tourId);
+        const layers=[];
+
+        // Route line
+        const routeLayer=L.geoJSON(feature.geometry,{style:{color:tour.color,weight:4,opacity:0.85}}).addTo(map);
+        layers.push(routeLayer);
+
+        // Labels entre stops
+        segments.forEach((seg,i)=>{
+            if(i>=wpts.length-1) return;
+            const midLat=(wpts[i][0]+wpts[i+1][0])/2;
+            const midLng=(wpts[i][1]+wpts[i+1][1])/2;
+            const km=(seg.distance/1000).toFixed(1);
+            const min=Math.round(seg.duration/60);
+            const lbl=L.marker([midLat,midLng],{
+                icon:L.divIcon({
+                    html:`<div class="route-label" style="border:1px solid ${tour.color};"><span style="color:${tour.color}">▶</span> ${km}km · ${min}min</div>`,
+                    className:'', iconAnchor:[40,10]
+                }),
+                interactive:false
+            }).addTo(map);
+            layers.push(lbl);
+        });
+
+        // Stop markers numérotés
+        orders.forEach((o,i)=>{
+            if(!o.delivery_lat) return;
+            const m=L.marker([o.delivery_lat,o.delivery_lng],{icon:makeStopIcon(i+1,tour.color)})
+                .addTo(map)
+                .bindTooltip(`<b>Stop ${i+1}</b><br>${shortAddr(o.delivery_address)}<br><span style="color:${tour.color}">${segsInfo[i]?.km||'?'}km — ${segsInfo[i]?.min||'?'}min</span>`,{direction:'top'});
+            layers.push(m);
+        });
+
+        tourMapLayers[tourId]=layers;
+        map.fitBounds(routeLayer.getBounds(),{padding:[60,60]});
+
+        renderTours(); // Mise à jour récap fixe
+        toast('success',`Route calculée — ${totalKm}km · ${totalDuree}`);
+    };
+
+    function clearTourMap(tourId){
+        if(tourMapLayers[tourId]){
+            tourMapLayers[tourId].forEach(l=>{ try{map.removeLayer(l);}catch(e){} });
+            tourMapLayers[tourId]=[];
+        }
+    }
+
+    function drawFallbackRoute(tour, wpts){
+        const line=L.polyline(wpts,{color:tour.color,weight:3,opacity:0.6,dashArray:'8 4'}).addTo(map);
+        tourMapLayers[tour.id]=[line];
+        map.fitBounds(wpts,{padding:[60,60]});
+    }
+
+    /* ════════════════════════════════════════════════════
+       MOTEUR D'OPTIMISATION LEMAN DISPATCH
+       Réglementation suisse conducteurs + contraintes véhicule
+       ════════════════════════════════════════════════════ */
+
+    const DEPOT = { lat: 46.7785, lng: 6.6409, name: 'Yverdon-les-Bains' };
+
+    // ── Paramètres réglementation ──
+    const RULES = {
+        depart:          5 * 60,       // 05h00 en minutes depuis minuit
+        minParStop:      5,            // 5 min/livraison
+        maxPoidsKg:      1000,         // 1000 kg max/véhicule
+        maxConduiteMin:  4.5 * 60,     // 4h30 max avant pause
+        pauseObligMin:   45,           // 45 min de pause
+        maxConducteTotal:9 * 60,       // 9h conduite totale
+        maxJourneeMin:   12 * 60,      // 12h journée totale
+        vitesseMoyKmH:   60,           // 60 km/h moyenne Suisse romande
+    };
+    const ECON = {
+        costPerKm: 1.35,   // CHF/km
+        costPerStop: 2.00  // CHF/stop
+    };
+
+    // ── Haversine ──
+    const haversine = (a, b) => {
+        const R=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+        const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+        return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+    };
+
+    // ── Temps de trajet estimé (minutes) ──
+    const trajetMin = (a, b) => Math.round(haversine(a,b) / RULES.vitesseMoyKmH * 60);
+
+    // ── Nearest Neighbor depuis un point ──
+    function nearestNeighbor(orders, start) {
+        const route=[], remaining=[...orders];
+        let cur=start;
+        while(remaining.length) {
+            let best=0, bestD=Infinity;
+            remaining.forEach((o,i)=>{
+                const lat=o.pickup_lat||o.delivery_lat, lng=o.pickup_lng||o.delivery_lng;
+                if(!lat) return;
+                let d=haversine(cur,{lat,lng});
+                if(o.priority==='urgent') d*=0.1; // Urgents très prioritaires
+                if(d<bestD){bestD=d;best=i;}
+            });
+            route.push(remaining.splice(best,1)[0]);
+            const last=route[route.length-1];
+            cur={lat:last.delivery_lat||last.pickup_lat||cur.lat, lng:last.delivery_lng||last.pickup_lng||cur.lng};
+        }
+        return route;
+    }
+
+    function orderPoint(o, fallback) {
+        return {
+            lat: o.delivery_lat || o.pickup_lat || fallback.lat,
+            lng: o.delivery_lng || o.pickup_lng || fallback.lng
+        };
+    }
+    function routeDistanceKm(orderList, start) {
+        if(!orderList.length) return 0;
+        let cur=start, d=0;
+        for(const o of orderList){
+            const p=orderPoint(o,cur);
+            d += haversine(cur,p);
+            cur = p;
+        }
+        return d;
+    }
+    function optimizeOrder2Opt(orderList, start) {
+        if(orderList.length < 4) return orderList;
+        let best=[...orderList], improved=true, guard=0;
+        while(improved && guard<25){
+            improved=false; guard++;
+            for(let i=1;i<best.length-2;i++){
+                for(let k=i+1;k<best.length-1;k++){
+                    const cand=[...best.slice(0,i), ...best.slice(i,k+1).reverse(), ...best.slice(k+1)];
+                    if(routeDistanceKm(cand,start)+0.01 < routeDistanceKm(best,start)){ best=cand; improved=true; }
+                }
+            }
+        }
+        return best;
+    }
+
+    // ── Simuler une tournée avec les contraintes légales ──
+    // Retourne { valide, stops, poidsTotal, tempsTotal, finHeure, raison }
+    function simulerTournee(orders) {
+        let tempsConduite = 0;   // minutes de conduite accumulées depuis dernière pause
+        let conduiteTotal = 0;   // total conduite journée
+        let tempsJournee  = 0;   // total journée (conduite + livraisons + pauses)
+        let poidsTotal    = 0;
+        let cur           = DEPOT;
+        const stops       = [];
+
+        for(const o of orders) {
+            const lat = o.delivery_lat||o.pickup_lat;
+            const lng = o.delivery_lng||o.pickup_lng;
+            if(!lat) continue;
+
+            const tTrajet  = trajetMin(cur, {lat, lng});
+            const poids    = parseFloat(o.weight)||0;
+
+            // Vérifier poids
+            if(poidsTotal + poids > RULES.maxPoidsKg) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Poids max dépassé (${poidsTotal+poids}kg > ${RULES.maxPoidsKg}kg)` };
+            }
+
+            // Pause obligatoire si on dépasse 4h30 de conduite
+            let pauseAjoutee = 0;
+            if(tempsConduite + tTrajet > RULES.maxConduiteMin) {
+                pauseAjoutee   = RULES.pauseObligMin;
+                tempsConduite  = 0; // Reset compteur conduite
+                tempsJournee  += pauseAjoutee;
+            }
+
+            // Vérifier limite conduite totale
+            if(conduiteTotal + tTrajet > RULES.maxConducteTotal) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Limite conduite 9h atteinte` };
+            }
+
+            // Vérifier limite journée
+            if(tempsJournee + tTrajet + RULES.minParStop > RULES.maxJourneeMin) {
+                return { valide:false, stops, poidsTotal, tempsJournee, raison:`Limite journée 12h atteinte` };
+            }
+
+            // Ajouter le stop
+            tempsConduite += tTrajet;
+            conduiteTotal += tTrajet;
+            tempsJournee  += tTrajet + RULES.minParStop;
+            poidsTotal    += poids;
+            cur            = {lat, lng};
+
+            const heureArr = RULES.depart + tempsJournee;
+            stops.push({
+                order:     o,
+                tTrajet,
+                pauseAjoutee,
+                heureArr,   // minutes depuis minuit
+                heureArrStr: minutesToHHMM(heureArr)
+            });
+        }
+
+        const finMin = RULES.depart + tempsJournee;
+        return {
+            valide:      true,
+            stops,
+            poidsTotal:  poidsTotal.toFixed(0),
+            tempsJournee,
+            conduiteTotal,
+            finHeure:    minutesToHHMM(finMin),
+            raison:      null
+        };
+    }
+
+    function minutesToHHMM(min) {
+        const h = Math.floor(min/60)%24;
+        const m = min%60;
+        return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+    }
+
+    // ── ALGORITHME PRINCIPAL ──
+    window.autoOptimize = async function() {
+        if(!chauffeurs.length) { toast('error','Aucun chauffeur disponible'); return; }
+
+        const inTourIds = new Set(tours.flatMap(t=>t.orderIds));
+        const candidates = allOrders.filter(o=>
+            o.status!=='delivered' && o.status!=='planned' &&
+            !inTourIds.has(o.id)
+        );
+        if (!candidates.length) { toast('info','Aucun transport disponible à optimiser'); return; }
+        showLoad('Geocodage des transports…');
+        for (const o of candidates) { await ensureOrderCoords(o); }
+        hideLoad();
+        const pending = candidates.filter(o=>(o.delivery_lat||o.pickup_lat));
+
+        if(!pending.length) { toast('info',`Aucun transport avec coordonnées GPS à optimiser (0/${candidates.length})`); return; }
+
+        // 1. Trier : urgents d'abord, puis par distance depuis dépôt
+        const sorted = nearestNeighbor(pending, DEPOT);
+
+        // 2. Répartir entre chauffeurs en respectant les contraintes
+        const assignments = chauffeurs.map(c=>({ chauffeur:c, orders:[] }));
+        const nonAssignes = [];
+
+        for(const order of sorted) {
+            let assigned = false;
+
+            // Essayer d'ajouter à chaque chauffeur (round-robin intelligent)
+            for(const asgn of assignments) {
+                const test = simulerTournee([...asgn.orders, order]);
+                if(test.valide) {
+                    asgn.orders.push(order);
+                    assigned = true;
+                    break;
+                }
+            }
+
+            if(!assigned) nonAssignes.push(order);
+        }
+
+        // 3. Créer les tournées
+        const newTours = [];
+        assignments.forEach((asgn, i) => {
+            if(!asgn.orders.length) return;
+
+            // Optimiser l'ordre pour réduire la distance totale
+            asgn.orders = optimizeOrder2Opt(asgn.orders, DEPOT);
+            // Simuler pour obtenir les infos détaillées
+            const sim   = simulerTournee(asgn.orders);
+            const color = TOUR_COLORS[i % TOUR_COLORS.length];
+            const name  = `${asgn.chauffeur.prenom||''} ${asgn.chauffeur.nom||''}`.trim();
+
+            // Construire le résumé planning
+            const depart  = minutesToHHMM(RULES.depart);
+            const fin     = sim.finHeure;
+            const conHH   = Math.floor(sim.conduiteTotal/60);
+            const conMM   = sim.conduiteTotal%60;
+
+            const tour = {
+                id:        't'+Date.now()+i,
+                name:      `${name} — ${depart}→${fin}`,
+                color,
+                driverId:  asgn.chauffeur.id,
+                vehicleId: (vehicules.find(v=>v.chauffeur_id===asgn.chauffeur.id)||{}).id || null,
+                tourPlannedDate: todayCH(),
+                orderIds:  asgn.orders.map(o=>o.id),
+                expanded:  true,
+                routeData: null,
+                planning: {
+                    depart, fin,
+                    nbStops:       sim.stops.length,
+                    poids:         sim.poidsTotal,
+                    conduite:      `${conHH}h${conMM.toString().padStart(2,'0')}`,
+                    journee:       Math.round(sim.tempsJournee/60*10)/10,
+                    stops:         sim.stops,
+                }
+            };
+            tours.push(tour);
+            newTours.push(tour);
+        });
+
+        if(!newTours.length) { toast('error','Impossible de créer les tournées'); return; }
+
+        // 4. Avertir si des transports n'ont pas pu être assignés
+        if(nonAssignes.length) {
+            toast('error', `⚠️ ${nonAssignes.length} transport${nonAssignes.length>1?'s':''} non assigné${nonAssignes.length>1?'s':''} — capacité ou temps dépassés`);
+        }
+
+        renderTours();
+        renderOrderList();
+
+        const totalStops = newTours.reduce((s,t)=>s+t.orderIds.length,0);
+        toast('success', `✓ ${newTours.length} tournée${newTours.length>1?'s':''} — ${totalStops} transports — départ ${minutesToHHMM(RULES.depart)}`);
+
+        // Calculer routes ORS (espacées pour éviter rate limit)
+        newTours.forEach((t,i) => setTimeout(()=>calcTourRoute(t.id), i*1800));
+    };
+
+    /* ── REORDER STOPS IN TOUR ── */
+    let reorderDragIdx = null;
+    let reorderTourId  = null;
+
+    window.reorderDragStart = function(e, tourId, idx) {
+        reorderTourId  = tourId;
+        reorderDragIdx = idx;
+        e.dataTransfer.effectAllowed = 'move';
+        e.stopPropagation(); // Empêcher le drag global
+    };
+
+    window.reorderDragOver = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    window.reorderDrop = function(e, tourId, targetIdx) {
+        e.preventDefault();
+        e.stopPropagation();
+        if(reorderTourId !== tourId || reorderDragIdx === null || reorderDragIdx === targetIdx) return;
+
+        const tour = tours.find(t=>t.id===tourId);
+        if(!tour) return;
+
+        // Réorganiser le tableau
+        const newOrder = [...tour.orderIds];
+        const [moved]  = newOrder.splice(reorderDragIdx, 1);
+        newOrder.splice(targetIdx, 0, moved);
+        tour.orderIds  = newOrder;
+        tour.routeData = null; // Reset cache route
+
+        reorderDragIdx = null;
+        reorderTourId  = null;
+        renderTours();
+        toast('info', 'Ordre mis à jour — recalculez la route');
+    };
+
+    /* ── SAVE TOUR ── */
+    window.saveTour=async function(tourId){
+        const tour=tours.find(t=>t.id===tourId); if(!tour) return;
+        if(!tour.orderIds.length){toast('error','Ajoutez des transports');return;}
+        if(!tour.driverId){toast('error','Assignez un chauffeur');return;}
+
+        const vid = tour.vehicleId || vehicules.find(v=>v.chauffeur_id===tour.driverId)?.id || null;
+        const tpd = tour.tourPlannedDate || todayCH();
+
+        showLoad('Sauvegarde…');
+        try {
+            // Sauvegarder avec position dans la tournée
+            for(let i=0; i<tour.orderIds.length; i++){
+                await db.from('transport_orders_simple').update({
+                    status:      'planned',
+                    driver_id:   tour.driverId,
+                    vehicle_id:  vid,
+                    tour_planned_date: tpd,
+                    assigned_at: nowCH(),
+                    tour_id:     tour.id,
+                    tour_position: i+1  // Position dans la tournée
+                }).eq('id', tour.orderIds[i]);
+            }
+            if (tour.routeData) {
+                const { error: snapErr } = await db.from('dispatch_tour_snapshots').insert([{
+                    tour_id:           tour.id,
+                    tour_planned_date: tpd,
+                    vehicle_id:        vid,
+                    driver_id:         tour.driverId,
+                    total_km:          parseFloat(tour.routeData.totalKm) || 0,
+                    duration_text:     String(tour.routeData.totalDuree || ''),
+                    revenue_chf:       Number(tour.routeData.revenue || 0),
+                    cost_chf:          Number(tour.routeData.cost || 0),
+                    margin_chf:        Number(tour.routeData.margin || 0),
+                    margin_pct:        Number(tour.routeData.marginPct || 0),
+                    nb_stops:          tour.orderIds.length
+                }]);
+                if (snapErr) console.warn('[Dispatch] dispatch_tour_snapshots:', snapErr.message);
+            }
+            const driver=chauffeurs.find(c=>c.id===tour.driverId);
+            const dName=driver?`${driver.prenom||''} ${driver.nom||''}`.trim():'Chauffeur';
+
+            // Notification push
+            await window.ColixoPush?.notifyDriver(
+                tour.driverId,
+                '🚚 Nouvelle tournée assignée !',
+                `Tournée "${tour.name}" — ${tour.orderIds.length} transport${tour.orderIds.length>1?'s':''} à effectuer`,
+                {type:'tour_assigned'}
+            );
+
+            toast('success',`✓ Tournée assignée à ${dName} — visible sur l'app chauffeur`);
+            syncMapWindow();
+            await loadAll();
+            renderTours();
+        } catch(e){toast('error',e.message);}
+        finally{hideLoad();}
+    };
+
+    /* ── ASSIGN SINGLE ── */
+    window.openAssign=function(id){
+        const o=allOrders.find(x=>x.id===id); if(!o) return;
+        document.getElementById('assignOrderId').value=id;
+        document.getElementById('assignInfo').textContent=`${o.order_number||''} · ${shortAddr(o.pickup_address)} → ${shortAddr(o.delivery_address)}`;
+        openModal('modalAssign');
+    };
+    window.doAssign=async function(){
+        const id=document.getElementById('assignOrderId').value;
+        const dId=document.getElementById('assignDriver').value;
+        if(!dId){toast('error','Choisissez un chauffeur');return;}
+        showLoad('Assignation…');
+        try {
+            await db.from('transport_orders_simple').update({status:'planned',driver_id:dId,assigned_at:nowCH()}).eq('id',id);
+            const o=allOrders.find(x=>x.id===id);
+            await window.ColixoPush?.notifyDriver(dId,'📦 Nouveau transport !',`${o?.order_number||''} — ${shortAddr(o?.pickup_address)} → ${shortAddr(o?.delivery_address)}`,{type:'order_assigned'});
+            toast('success','Chauffeur assigné ✓');
+            window.closeModal('modalAssign');
+            await loadAll();
+        } catch(e){toast('error',e.message);}
+        finally{hideLoad();}
+    };
+
+    /* ── POPULATE SELECTS ── */
+    window.populateSelects = function populateSelects(){
+        const list = window._chauffeurs || chauffeurs || [];
+        const opts1 = '<option value="">— Assigner plus tard —</option>' + list.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        const opts2 = '<option value="">— Choisir —</option>'            + list.map(c=>`<option value="${c.id}">${c.prenom||''} ${c.nom||''}</option>`).join('');
+        const optsVeh = '<option value="">— Auto (selon chauffeur) —</option>' + (vehicules||[]).map(v=>`<option value="${v.id}">${vehLabel(v)}</option>`).join('');
+        const s1 = document.getElementById('tourDriver');
+        const s2 = document.getElementById('assignDriver');
+        const s3 = document.getElementById('tourVehicle');
+        if(s1) s1.innerHTML = opts1;
+        if(s2) s2.innerHTML = opts2;
+        if(s3) s3.innerHTML = optsVeh;
+        console.log('[Dispatch] populateSelects — chauffeurs:', list.length, list.map(c=>c.prenom));
+    };
+
+    function rentChName(id) {
+        const c = chauffeurs.find(x => x.id === id);
+        return c ? `${c.prenom || ''} ${c.nom || ''}`.trim() : '—';
+    }
+
+    window.openRentabiliteModal = function() {
+        const el = document.getElementById('rentDashDate');
+        if (el && !el.value) el.value = todayCH();
+        openModal('modalRentabilite');
+        loadRentabiliteDash();
+    };
+
+    window.loadRentabiliteDash = async function() {
+        const body = document.getElementById('rentDashBody');
+        const sumEl = document.getElementById('rentDashSummary');
+        if (!body) return;
+        const d = document.getElementById('rentDashDate')?.value || todayCH();
+        body.innerHTML = `<tr><td colspan="7" style="padding:14px;color:var(--muted)">Chargement…</td></tr>`;
+        if (sumEl) sumEl.textContent = '';
+        const [{ data: kmRows, error: errKm }, { data: snaps, error: errSn }] = await Promise.all([
+            db.from('vehicule_km').select('*').eq('date', d),
+            db.from('dispatch_tour_snapshots').select('*').eq('tour_planned_date', d)
+        ]);
+        if (errKm || errSn) {
+            const msg = [errKm?.message, errSn?.message].filter(Boolean).join(' — ');
+            body.innerHTML = `<tr><td colspan="7" style="padding:14px;color:var(--red)">${msg || 'Erreur chargement'}</td></tr>`;
+            return;
+        }
+        const byVeh = new Map();
+        for (const k of kmRows || []) {
+            const vid = k.vehicule_id;
+            if (!vid) continue;
+            if (!byVeh.has(vid)) {
+                byVeh.set(vid, { km: 0, tours: 0, rev: 0, cost: 0, mar: 0, chauffeurId: k.chauffeur_id || null });
+            }
+            const row = byVeh.get(vid);
+            row.km += parseFloat(k.km_parcourus) || 0;
+            if (k.chauffeur_id) row.chauffeurId = k.chauffeur_id;
+        }
+        for (const s of snaps || []) {
+            const vid = s.vehicle_id;
+            if (!vid) continue;
+            if (!byVeh.has(vid)) {
+                byVeh.set(vid, { km: 0, tours: 0, rev: 0, cost: 0, mar: 0, chauffeurId: s.driver_id || null });
+            }
+            const row = byVeh.get(vid);
+            row.tours += 1;
+            row.rev += parseFloat(s.revenue_chf) || 0;
+            row.cost += parseFloat(s.cost_chf) || 0;
+            row.mar += parseFloat(s.margin_chf) || 0;
+            if (s.driver_id) row.chauffeurId = s.driver_id;
+        }
+        const rows = [...byVeh.entries()].map(([vid, r]) => {
+            const v = vehicules.find(x => x.id === vid);
+            return { vid, imm: v ? vehLabel(v) : vid.slice(0, 8) + '…', ...r };
+        }).sort((a, b) => a.imm.localeCompare(b.imm, 'fr'));
+
+        let tKm = 0, tRev = 0, tCost = 0, tMar = 0;
+        for (const r of rows) {
+            tKm += r.km;
+            tRev += r.rev;
+            tCost += r.cost;
+            tMar += r.mar;
+        }
+        if (sumEl) {
+            sumEl.innerHTML = `<strong>${d}</strong> — Totaux : <span style="color:var(--yellow)">${tKm.toFixed(0)} km</span> · CA <span style="color:var(--green)">${fmtMoney(tRev)}</span> · Coût <span style="color:var(--orange)">${fmtMoney(tCost)}</span> · Marge <span style="color:${tMar >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtMoney(tMar)}</span>`;
+        }
+        if (!rows.length) {
+            body.innerHTML = `<tr><td colspan="7" style="padding:14px;color:var(--muted)">Aucune donnée ce jour (km ou tournées sauvegardées).</td></tr>`;
+            return;
+        }
+        body.innerHTML = rows.map(r => {
+            const mCol = r.mar >= 0 ? 'var(--green)' : 'var(--red)';
+            return `<tr style="border-top:1px solid var(--border2);">
+                <td style="padding:10px;"><strong>${r.imm}</strong></td>
+                <td style="padding:10px;color:var(--muted2);">${rentChName(r.chauffeurId)}</td>
+                <td style="padding:10px;color:var(--yellow);">${r.km ? r.km.toFixed(0) : '—'}</td>
+                <td style="padding:10px;">${r.tours || '—'}</td>
+                <td style="padding:10px;color:var(--green);">${r.rev ? fmtMoney(r.rev) : '—'}</td>
+                <td style="padding:10px;color:var(--orange);">${r.cost ? fmtMoney(r.cost) : '—'}</td>
+                <td style="padding:10px;font-weight:600;color:${mCol};">${r.mar || r.rev ? fmtMoney(r.mar) : '—'}</td>
+            </tr>`;
+        }).join('');
+    };
+
+    /* ── DUAL SCREEN ── */
+    let mapWindow = null;
+
+    /** URL carte : paramètre unique pour forcer le rechargement (sinon window nommée garde l’ancienne page en cache). */
+    function dispatchMapPageUrl() {
+        const v = window.COLIXO_ASSET_VERSION || '1';
+        return 'dispatch-map.html?v=' + encodeURIComponent(v) + '&_=' + Date.now();
+    }
+
+    window.openDualScreen = async function() {
+        // Vérifier si l'API Multi-Screen est disponible
+        if ('getScreenDetails' in window) {
+            try {
+                const screenDetails = await window.getScreenDetails();
+                const screens = screenDetails.screens;
+
+                if(screens.length >= 2) {
+                    // Trouver le 2ème écran
+                    const screen2 = screens.find(s => !s.isPrimary) || screens[1];
+                    const opts = `left=${screen2.left},top=${screen2.top},width=${screen2.width},height=${screen2.height},fullscreen=1`;
+
+                    // Ouvrir la carte sur le 2ème écran
+                    mapWindow = window.open(dispatchMapPageUrl(), 'ColixoDispatchMap', opts);
+                    if(mapWindow) {
+                        toast('success', '🖥️ Carte ouverte sur le 2ème écran !');
+                        document.getElementById('btnDualScreen').style.background = 'rgba(34,197,94,0.2)';
+                        document.getElementById('btnDualScreen').style.borderColor = 'var(--green)';
+                        document.getElementById('btnDualScreen').style.color = 'var(--green)';
+
+                        // Masquer la carte : le bandeau transports prend la hauteur
+                        document.querySelector('.col-map').style.display = 'none';
+                        (function () {
+                            var ts = document.querySelector('.transports-strip');
+                            if (ts) { ts.style.flex = '1'; ts.style.maxHeight = 'none'; ts.style.minHeight = '0'; }
+                        })();
+                        setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 200);
+
+                        // Envoyer les données à la carte externe via BroadcastChannel
+                        const channel = new BroadcastChannel('colixo_dispatch');
+                        channel.postMessage({ type: 'INIT', orders: allOrders, tours, chauffeurs });
+
+                        // Écouter les mises à jour de la carte
+                        mapWindow.addEventListener('beforeunload', () => {
+                            document.querySelector('.col-map').style.display = '';
+                            var ts = document.querySelector('.transports-strip');
+                            if (ts) { ts.style.flex = ''; ts.style.maxHeight = ''; ts.style.minHeight = ''; }
+                            document.getElementById('btnDualScreen').style = '';
+                            setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 200);
+                            toast('info', 'Carte fermée — retour vue unique');
+                        });
+                        return;
+                    }
+                }
+            } catch(e) {
+                console.warn('Multi-screen API:', e.message);
+            }
+        }
+
+        // Fallback : ouvrir dans une nouvelle fenêtre standard
+        const w = window.screen.width;
+        const h = window.screen.height;
+
+        // Essayer d'ouvrir sur écran secondaire (heuristique)
+        const opts = `left=${w},top=0,width=${w},height=${h}`;
+        mapWindow = window.open(dispatchMapPageUrl(), 'ColixoDispatchMap', opts);
+
+        if(mapWindow) {
+            toast('success', '🖥️ Carte ouverte — déplacez-la sur votre 2ème écran');
+            // Mettre à jour couleur bouton
+            document.getElementById('btnDualScreen').style.cssText = 'background:rgba(34,197,94,0.15);border-color:var(--green);color:var(--green);';
+
+            // Écouter fermeture
+            const checkClosed = setInterval(() => {
+                if(mapWindow.closed) {
+                    clearInterval(checkClosed);
+                    mapWindow = null;
+                    document.getElementById('btnDualScreen').style.cssText = '';
+                    toast('info', 'Carte externe fermée');
+                }
+            }, 1000);
+        } else {
+            toast('error', 'Popup bloqué — autorisez les popups pour ce site');
+        }
+    };
+
+    // Sync carte externe quand les données changent
+    function syncMapWindow() {
+        if(!mapWindow || mapWindow.closed) return;
+        try {
+            const channel = new BroadcastChannel('colixo_dispatch');
+            channel.postMessage({ type: 'UPDATE', orders: allOrders, tours, chauffeurs });
+        } catch(e) {}
+    }
+
+    /* ── FLOATING PANEL DRAG ── */
+    document.addEventListener('DOMContentLoaded', function() {
+        const panel  = document.getElementById('toursFloat');
+        const header = document.getElementById('toursFloatHeader');
+        if(!panel||!header) return;
+        let dragging=false, startX, startY, startLeft, startTop;
+
+        header.addEventListener('mousedown', e => {
+            if(e.target.closest('.tf-btn')) return;
+            e.preventDefault();
+            const rect  = panel.getBoundingClientRect();
+            panel.style.left  = rect.left + 'px';
+            panel.style.top   = rect.top  + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom= 'auto';
+            dragging  = true;
+            startX    = e.clientX;
+            startY    = e.clientY;
+            startLeft = rect.left;
+            startTop  = rect.top;
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor     = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', e => {
+            if(!dragging) return;
+            let newLeft = startLeft + (e.clientX - startX);
+            let newTop  = startTop  + (e.clientY - startY);
+            newLeft = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  newLeft));
+            newTop  = Math.max(54, Math.min(window.innerHeight - 100, newTop));
+            panel.style.left = newLeft + 'px';
+            panel.style.top  = newTop  + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if(!dragging) return;
+            dragging = false;
+            document.body.style.userSelect = '';
+            document.body.style.cursor     = '';
+        });
+    });
+
+    window.toggleMinimize = function() {
+        const panel = document.getElementById('toursFloat');
+        const btn   = document.getElementById('btnMinimize');
+        const minimized = panel.classList.toggle('minimized');
+        btn.innerHTML = minimized ? '<i class="fas fa-chevron-down"></i>' : '─';
+    };
+
+    /* ── REALTIME ── */
+    db.channel('dispatch_rt')
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'transport_orders_simple'},payload=>{
+            loadAll();
+            toast('info',`📦 Nouveau transport : ${payload.new.order_number||'—'}`);
+        })
+        .on('postgres_changes',{event:'UPDATE',schema:'public',table:'transport_orders_simple'},payload=>{
+            loadAll();
+            // Notification spéciale prise en charge
+            const o = payload.new;
+            if(o.status==='in_transit' && payload.old?.status!=='in_transit') {
+                toast('success', `🚚 ${o.order_number||'—'} — Pris en charge par le chauffeur`);
+                // Vibrer si supporté
+                if(navigator.vibrate) navigator.vibrate([200,100,200]);
+                // Son de notification
+                try {
+                    const ctx = new AudioContext();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.frequency.value = 880;
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.5);
+                    osc.start(); osc.stop(ctx.currentTime+0.5);
+                } catch(e){}
+            }
+            if(o.status==='delivered' && payload.old?.status!=='delivered') {
+                toast('success', `✅ ${o.order_number||'—'} — Livré !`);
+            }
+        })
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications'},payload=>{
+            // Notifications de prise en charge
+            if(payload.new?.title?.includes('Pris en charge')) {
+                toast('success', `🚚 ${payload.new.title}`);
+            }
+        })
+        .subscribe();
+
+    /* ── INIT ── */
+    (async function checkAuthAndInit() {
+        const { data: { session } } = await db.auth.getSession();
+        const codeUser2 = JSON.parse(localStorage.getItem('colixo_user') || 'null');
+        if (!session && !codeUser2) { window.location.href = '../login/index.html'; return; }
+        if (codeUser2) {
+            if (!['admin','super_admin'].includes(codeUser2.role)) {
+                window.location.href = '../login/index.html'; return;
+            }
+        } else {
+            const uid = session.user.id;
+            const { data: user } = await db.from('utilisateurs').select('role,nom,prenom').eq('id', uid).single();
+            if (!user || !['admin','super_admin'].includes(user.role)) {
+                await db.auth.signOut();
+                window.location.href = '../login/index.html'; return;
+            }
+        }
+        loadAll();
+    })();
 })();
 </script>
+    <!-- ── ORDER DETAIL MODAL ── -->
+    <div class="order-detail-modal" id="orderDetailModal" onclick="if(event.target===this)closeOrderDetail()">
+        <div class="odm-box" id="orderDetailBox"></div>
+    </div>
+
+    <!-- ── FLOATING TOURS PANEL ── -->
+    <div class="tours-float" id="toursFloat">
+        <div class="tours-float-header" id="toursFloatHeader">
+            <div class="tf-title">TOURNÉES</div>
+            <span class="tf-badge" id="tourCount">0</span>
+            <button class="tf-btn" onclick="openNewTour()" title="Nouvelle tournée"><i class="fas fa-plus"></i></button>
+            <button class="tf-btn" onclick="autoOptimize()" title="Optimiser"><i class="fas fa-magic"></i></button>
+            <button class="tf-btn minimize" id="btnMinimize" onclick="toggleMinimize()" title="Minimiser">─</button>
+        </div>
+        <div class="tours-float-body">
+            <div id="toursList">
+                <div class="empty-state">
+                    <div class="empty-ico">🗺️</div>
+                    <div class="empty-txt">Aucune tournée.<br>Cliquez + ou Optimiser</div>
+                </div>
+            </div>
+        </div>
+        <div class="resize-handle"><i class="fas fa-grip-lines-vertical"></i></div>
+    </div>
+
 </body>
 </html>

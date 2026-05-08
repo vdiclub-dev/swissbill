@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260431"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260462"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -240,7 +240,7 @@
 
     <!-- Boutons flottants -->
     <div class="floating-actions">
-        <button class="float-btn home" id="btnAccueil" onclick="window.location.href='/magasinier/dashboard.html'" style="display:none;" title="Accueil"><i class="fas fa-home"></i></button>
+        <button class="float-btn home" id="btnAccueil" onclick="window.location.href=(typeof window.colixoHref==='function'?window.colixoHref('/magasinier/dashboard.html'):'/magasinier/dashboard.html')" style="display:none;" title="Accueil"><i class="fas fa-home"></i></button>
         <button class="float-btn" onclick="doLogout()" title="Déconnexion"><i class="fas fa-sign-out-alt"></i></button>
     </div>
 
@@ -467,7 +467,7 @@
             <div class="field"><label>Nom *</label><input type="text" id="mNom" placeholder="Dupont"></div>
         </div>
         <div class="field"><label>Email *</label><input type="email" id="mEmail" placeholder="jean@acme.ch"></div>
-        <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Un code d'accès sera généré — connexion sans mot de passe (page login).</p>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Un code d’accès sera généré — connexion sans mot de passe (page login).</p>
         <div style="font-family:'Bebas Neue',cursive;font-size:13px;color:var(--muted2);margin:14px 0 10px;">🎯 RÔLE</div>
         <div class="role-grid">
             <div class="role-card" data-role="gestionnaire" onclick="selectRole('gestionnaire')">
@@ -949,6 +949,11 @@
             const { data: authData, error: authErr } = await db.auth.signUp({ email, password });
             if(authErr) throw authErr;
             const userId = authData.user?.id;
+            if (!userId) {
+                throw new Error(
+                    'Compte Auth non créé (pas d’UUID). Vérifiez la confirmation e-mail du projet, ou si cet e-mail est déjà enregistré.'
+                );
+            }
 
             const memCode = generateUserAccessCode(selectedRole);
             const { error: userErr } = await db.from('utilisateurs').insert([{
@@ -961,7 +966,7 @@
             }]);
             if(userErr) throw userErr;
 
-            toast(`✅ ${prenom} ${nom} ajouté (${selectedRole}). Code d'accès : <strong>${memCode}</strong>`);
+            toast(`✅ ${prenom} ${nom} ajouté (${selectedRole}). Code d’accès : <strong>${memCode}</strong>`);
             closeModal('modalAddMembre');
             document.getElementById('mPrenom').value = '';
             document.getElementById('mNom').value = '';
@@ -1418,58 +1423,7 @@
 
     window.showPDF = async function(orderId) {
         const id = orderId || currentOrderId; if(!id) return;
-        showLoad();
-        const { data: o } = await db.from('transport_orders_simple').select('*').eq('id', id).single();
-        hideLoad();
-        if(!o) return;
-
-        const qty = parseInt(o.quantity) || 1;
-        const poidsUnitaire = qty > 0 ? ((parseFloat(o.weight)||0) / qty).toFixed(2) : o.weight||0;
-        const svcColors = { eco:'#6b7280', normal:'#3b82f6', express:'#f97316', urgent:'#e8311a' };
-        const qrUrl = window.location.origin + '/admin/driver-app.html?order=' + encodeURIComponent(o.order_number||'') + '&id=' + o.id;
-
-        // Si 1 seul colis → afficher dans le modal comme avant
-        // Si plusieurs → ouvrir directement la fenêtre d'impression avec toutes les étiquettes
-        if(qty === 1) {
-            // Remplir le modal (comportement existant)
-            document.getElementById('etiq-num').textContent = o.order_number || o.id.slice(0,8);
-            document.getElementById('etiq-date').textContent = new Date(o.created_at).toLocaleDateString('fr-CH',{timeZone:'Europe/Zurich'});
-            const svcEl = document.getElementById('etiq-service');
-            svcEl.textContent = (o.service_type||'normal').toUpperCase();
-            svcEl.style.background = svcColors[o.service_type] || '#3b82f6';
-            const nuitEl = document.getElementById('etiq-nuit');
-            nuitEl.style.display = o.night_delivery ? 'inline-block' : 'none';
-            document.getElementById('etiq-exp').innerHTML = (o.pickup_address||'—').replace(/·/g,'<br>').replace(/ - /g,'<br>');
-            document.getElementById('etiq-dest').innerHTML =
-                `<div style="font-size:15px;">${o.destinataire_nom||''}</div>` +
-                `<div style="font-weight:400;font-size:12px;margin-top:4px;">${o.delivery_address||''}</div>` +
-                (o.destinataire_tel ? `<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${o.destinataire_tel}</div>` : '');
-            document.getElementById('etiq-qty').textContent = '1 colis';
-            document.getElementById('etiq-poids').textContent = (o.weight||0) + ' kg';
-            const instrEl = document.getElementById('etiq-instructions');
-            if(o.instructions){ instrEl.style.display='block'; instrEl.innerHTML='⚠️ <strong>Instructions :</strong> '+o.instructions; }
-            else instrEl.style.display='none';
-            document.getElementById('etiq-qrtext').textContent = o.order_number || o.id.slice(0,8);
-            document.getElementById('qrCodeImg').innerHTML = '';
-            const tempDiv = document.createElement('div');
-            tempDiv.style.cssText = 'position:absolute;left:-9999px;';
-            document.body.appendChild(tempDiv);
-            new QRCode(tempDiv, { text: qrUrl, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.H });
-            setTimeout(() => {
-                const canvas = tempDiv.querySelector('canvas');
-                if(canvas){
-                    const img = document.createElement('img');
-                    img.src = canvas.toDataURL('image/png');
-                    img.style.cssText = 'width:120px;height:120px;display:block;border:1px solid #ddd;border-radius:6px;';
-                    document.getElementById('qrCodeImg').appendChild(img);
-                }
-                document.body.removeChild(tempDiv);
-                openModal('modalPDF');
-            }, 300);
-        } else {
-            // Plusieurs colis → générer toutes les étiquettes dans une fenêtre d'impression
-            printToutesEtiquettes(o, qty, poidsUnitaire, qrUrl, svcColors);
-        }
+        window.open('../etiquette-colis.html?id=' + encodeURIComponent(id), '_blank');
     };
 
     // Génère toutes les étiquettes dans une nouvelle fenêtre et lance l'impression
@@ -1888,7 +1842,8 @@
         }
 
         const { data: user } = await db.from('utilisateurs').select('*').eq('id', uid).maybeSingle();
-        if (!user || (user.role !== 'client' && user.role !== 'magasinier')) {
+        const portalRoles = ['client', 'magasinier', 'gestionnaire', 'comptable', 'sous_utilisateur'];
+        if (!user || portalRoles.indexOf(user.role) === -1) {
             window.location.href = h('/login/index.html');
             return;
         }
