@@ -881,15 +881,16 @@
     /** Poids max colis côté UI (tranches tarifaires 0 → 40 kg conservées côté calcul). */
     const PORTAL_MAX_COLIS_KG = 40;
     function getPoidsMax(){
-        // Dériver le max depuis poids_max des produits assignés au client
-        const assigned = getAssignedProduits ? getAssignedProduits() : (clientProduits||[]);
-        const maxFromProducts = assigned.reduce((best, p) => {
-            const mx = Number(p.poids_max||0);
-            return (mx > 0 && (best === null || mx > best)) ? mx : best;
-        }, null);
-        if(maxFromProducts && maxFromProducts > 0) return maxFromProducts;
-        // Fallback: poids_max_kg du tarif client
+        // 1. poids_max depuis produits_tarif (clientProduits chargés au login)
+        const prodsWithMax = (clientProduits||[]).filter(p => Number(p.poids_max||0) > 0);
+        if(prodsWithMax.length > 0){
+            const mx = Math.min(...prodsWithMax.map(p => Number(p.poids_max)));
+            console.log('[DEBUG] getPoidsMax → produits_tarif min=', mx, prodsWithMax.map(p=>p.nom+'='+p.poids_max));
+            return mx;
+        }
+        // 2. Fallback: poids_max_kg du tarif client
         const v = Number(clientTarif?.poids_max_kg);
+        console.log('[DEBUG] getPoidsMax → fallback poids_max_kg=', v, '| PORTAL_MAX=', PORTAL_MAX_COLIS_KG);
         return (v && v > 0) ? v : PORTAL_MAX_COLIS_KG;
     }
     function showPoidsMaxModal(max){
