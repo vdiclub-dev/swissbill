@@ -357,10 +357,6 @@
         .formula-name{font-weight:700;font-size:15px;}
         .formula-price{font-size:22px;font-weight:900;color:var(--white);margin-top:6px;}
         .formula-price-sub{font-size:11px;color:var(--muted);margin-top:2px;}
-        .formula-tier-list{display:grid;gap:5px;margin-top:10px;text-align:left;}
-        .formula-tier-line{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);border-radius:8px;padding:6px 8px;font-size:11px;color:var(--muted2);}
-        .formula-tier-line strong{color:var(--white);font-size:11px;font-weight:800;white-space:nowrap;}
-        .formula-tier-line span{color:var(--green);font-weight:900;white-space:nowrap;}
 
         /* Abonnement banner */
         .abn-banner{display:none;background:linear-gradient(135deg,#1e293b,#0f172a);border:1.5px solid #f59e0b;border-radius:12px;padding:14px 16px;margin-bottom:14px;}
@@ -510,10 +506,10 @@
 
               <div class="form-section">📦 Ajouter un colis</div>
               <div class="field-row">
-                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="2" min="0.1" max="30" step="0.1" oninput="onPkgPoidsChange(this.value)"></div>
+                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="2" min="0.1" max="40" step="0.1" oninput="onPkgPoidsChange(this.value)"></div>
                 <div class="field"><label>Quantité</label><input type="number" id="pkgQtyInput" value="1" min="1" max="99" step="1"></div>
               </div>
-              <div class="tariff-help"><strong>Tarifs par tranche</strong> : indiquez le poids réel et la quantité, puis cliquez sur la carte de vitesse souhaitée. Le colis est ajouté à la liste avec la bonne tranche de prix.</div>
+              <div class="tariff-help"><strong>Tarifs par tranche</strong> : indiquez le poids réel et la quantité, puis cliquez sur la carte de vitesse souhaitée. Le colis est ajouté à la liste avec la bonne tranche — jusqu'à 40 kg.</div>
               <div class="field" style="margin-bottom:4px;"><label>Description (optionnel)</label><input type="text" id="pkgDescription" placeholder="ex: Livres, vêtements…"></div>
 
               <!-- Liste des colis ajoutés -->
@@ -865,6 +861,8 @@
     let client=null, clientEntreprise=null, clientTarif=null;
     let clientPrixMap={}, clientProduits=[], clientTariffRules=[];
     let selectedService='normal', nightDelivery=false;
+    /** Poids max colis côté UI (tranches tarifaires 0 → 40 kg conservées côté calcul). */
+    const PORTAL_MAX_COLIS_KG = 40;
     let colisList = [{id:Date.now(), poids:1, qty:1, type:'colis', added:false}];
     let currentOrderId=null;
     let saveAddressEnabled = false;
@@ -1100,13 +1098,14 @@
             const incr=Number(best.increment_par_kg||0);
             const calcPrice= incr>0 ? unitPrice+poids*incr : best.prix_par_kg ? unitPrice*poids : unitPrice;
             const negocie=clientPrixMap[String(best.id)]!=null && Number(getProduitPrice(best))!==Number(best.prix);
-            const suffix= incr>0
-                ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)}+${incr.toFixed(2)}/kg</span>`
-                : best.prix_par_kg ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)} CHF/kg</span>` : '';
+            /** Pas d’affichage « tarif base + augmentation / kg » : le montant ligne = prix déjà calculé pour ce poids. */
+            const suffix='';
+            const nTot = Number(calcPrice);
             return {
                 ref,
                 label:serviceLabelForGroup(group),
                 prix:calcPrice,
+                priceLine: Number.isFinite(nTot) ? nTot.toFixed(2) : '—',
                 negocie,
                 active:tariffServiceRef(selectedService)===ref,
                 suffix,
@@ -1116,8 +1115,8 @@
         grid.style.gridTemplateColumns=`repeat(${Math.min(items.length,4)},1fr)`;
         grid.innerHTML=items.map(it=>`<div class="tarif-box ${it.speedClass}${it.negocie?' special':''}${it.active?' active-tarif':''}" onclick="selectService(${jsStringArg(it.ref)})">
             <div class="tarif-label">${escHtml(it.label)}</div>
-            <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
-            <div class="tarif-tiers">Tranche calculée selon le poids</div>
+            <div class="tarif-price">${it.priceLine} CHF${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
+            <div class="tarif-tiers">Selon votre poids (${Number(poids).toFixed(1)} kg)</div>
         </div>`).join('');
         renderHomeTariffSummary();
         renderClientTariffPane();
@@ -1185,40 +1184,17 @@
         let label = String(value || fallback || 'Tarif client').trim();
         label = label.replace(/[_-]\d+\b/gi, '');
         label = label.replace(/\b\d+\s*kg\b/gi, '');
+        // Noms BDD parfois du type "Livraison 7.00 + 0.40/kg" — on affiche le libellé sans la formule
+        label = label.replace(/\b\d+[.,]\d+\s*\+\s*\d+[.,]\d+\s*\/\s*kg\b/gi, '');
+        label = label.replace(/\s*\+\s*\d+[.,]\d+\s*(?:CHF\s*)?\/\s*kg\b/gi, '');
         label = label.replace(/\s{2,}/g, ' ').trim();
+        label = label.replace(/^[\s.,;:-]+|[\s.,;:-]+$/g, '');
         return label || fallback || 'Tarif client';
     }
 
     function serviceLabelForGroup(group){
         const best = group?.best || group?.tiers?.[0];
         return cleanServiceLabel(best?.nom, group?.ref);
-    }
-
-    function tierPriceLabel(p){
-        const price = getProduitPrice(p);
-        const incr = Number(p?.increment_par_kg || 0);
-        if(incr > 0) return `${fmt(price)} + ${fmt(incr)}/kg`;
-        if(p?.prix_par_kg) return `${fmt(price)}/kg`;
-        return `${fmt(price)} CHF`;
-    }
-
-    function tierRangeLabel(group, index){
-        const tiers = group?.tiers || [];
-        const min = Number(tiers[index]?.poids_min || 0);
-        const next = tiers[index + 1] ? Number(tiers[index + 1].poids_min || 0) : null;
-        if(next != null && next > min) return `${fmt(min)}-${fmt(next)} kg`;
-        return `${fmt(min)}+ kg`;
-    }
-
-    function tierRowsHtml(group){
-        const tiers = group?.tiers || [];
-        if(!tiers.length) return '';
-        return `<div class="formula-tier-list">${tiers.map((p, idx)=>`
-            <div class="formula-tier-line">
-                <strong>${escHtml(tierRangeLabel(group, idx))}</strong>
-                <span>${escHtml(tierPriceLabel(p))}</span>
-            </div>
-        `).join('')}</div>`;
     }
 
     function getServiceGroups(pool, poids){
@@ -1253,14 +1229,12 @@
             const price = getProduitPrice(p);
             const code = tariffCodeForProduit(p);
             const type = isOptionProduct(p) ? 'Option' : 'Service';
-            const details = Number(p.increment_par_kg||0) > 0
-                ? `${Number(price).toFixed(2)} CHF + ${Number(p.increment_par_kg).toFixed(2)} CHF/kg`
-                : p.prix_par_kg
-                    ? `${Number(price).toFixed(2)} CHF/kg`
-                    : `${Number(price).toFixed(2)} CHF`;
+            const details = p.prix_par_kg
+                ? `${Number(price).toFixed(2)} CHF/kg`
+                : `${Number(price).toFixed(2)} CHF`;
             return {
                 code,
-                name: p.nom || code,
+                name: cleanServiceLabel(p.nom, code),
                 type,
                 typeRank: type === 'Service' ? 0 : 1,
                 family: type === 'Service' ? svcRef(p) : code,
@@ -1318,12 +1292,15 @@
             const unitPrice = getProduitPrice(best);
             const incr = Number(best.increment_par_kg || 0);
             const calcPrice = incr > 0 ? unitPrice + poids * incr : best.prix_par_kg ? unitPrice * poids : unitPrice;
+            const variable = best.prix_par_kg
+                ? `Tarif au kilo (${Number(unitPrice).toFixed(2)} CHF/kg pour ${Number(poids).toFixed(1)} kg)`
+                : `Prix pour votre poids (${Number(poids).toFixed(1)} kg)`;
             return {
                 ref,
                 label: serviceLabelForGroup(group),
                 price: Math.round(calcPrice * 100) / 100,
                 speedClass: group.speedClass,
-                variable: incr > 0 ? `${Number(unitPrice).toFixed(2)} + ${incr.toFixed(2)} CHF/kg` : (best.prix_par_kg ? `${Number(unitPrice).toFixed(2)} CHF/kg` : 'Forfait')
+                variable
             };
         });
         if(!selectedService || !services.some(s=>s.ref===tariffServiceRef(selectedService))) selectedService = services[0].ref;
@@ -1334,7 +1311,7 @@
                 <span class="home-tariff-code">Auto</span>
                 <div>
                     <div class="home-tariff-label">${escHtml(s.label)}</div>
-                    <div class="home-tariff-sub">Tranche calculée selon le poids · ${escHtml(s.variable)}</div>
+                    <div class="home-tariff-sub">${escHtml(s.variable)}</div>
                 </div>
                 <div class="home-tariff-row-price">${fmt(s.price)} CHF</div>
             </div>
@@ -1585,7 +1562,6 @@
                 <div class="formula-name">${escHtml(serviceLabelForGroup(group))}</div>
                 <div class="formula-price">CHF ${fmt(price)}</div>
                 <div class="formula-price-sub">cliquer pour ajouter</div>
-                ${tierRowsHtml(group)}
             </div>`;
         }).join('');
         renderHomeTariffSummary();
@@ -1747,7 +1723,7 @@
     // Package label kept generic; older saved orders can still display legacy sizes.
     const PKG_POIDS = {colis:2, petit:0.5, moyen:5, grand2:15, tgrand:28};
     const PKG_ICONS = {colis:'📦', petit:'📄', moyen:'📦', grand2:'📫', tgrand:'🏗️'};
-    const PKG_NAMES = {colis:'Colis', petit:'Petit (<2kg)', moyen:'Moyen (2-10kg)', grand2:'Grand (10-25kg)', tgrand:'Très grand (>25kg)'};
+    const PKG_NAMES = {colis:'Colis', petit:'Petit (<2kg)', moyen:'Moyen (2-10kg)', grand2:'Grand (10-25kg)', tgrand:'Très grand (25-40 kg)'};
     let currentPkgSize = 'colis';
 
     window.setPkgSize = function(size) {
@@ -1767,7 +1743,9 @@
     };
 
     window.onPkgPoidsChange = function(v) {
-        const p = Math.min(30, Math.max(0.1, parseFloat(v) || 2));
+        const raw = parseFloat(String(v).replace(',', '.'));
+        if(!Number.isFinite(raw)) return;
+        const p = Math.min(PORTAL_MAX_COLIS_KG, Math.max(0.1, raw));
         if(colisList.length === 1 && !colisList[0].added) {
             colisList[0].poids = p;
             colisList[0].service = tariffServiceRef(selectedService);
@@ -1781,7 +1759,7 @@
     window.addWizardColis = function(serviceRef) {
         if(serviceRef) selectedService = tariffServiceRef(serviceRef);
         if(colisList.length === 1 && !colisList[0].added) colisList[0].service = selectedService;
-        const poids = Math.min(30, Math.max(0.1, parseFloat(document.getElementById('pkgPoidsInput')?.value) || 2));
+        const poids = Math.min(PORTAL_MAX_COLIS_KG, Math.max(0.1, parseFloat(document.getElementById('pkgPoidsInput')?.value) || 2));
         const qty   = Math.max(1, parseInt(document.getElementById('pkgQtyInput')?.value) || 1);
         const desc  = document.getElementById('pkgDescription')?.value.trim() || '';
         const size  = currentPkgSize;
@@ -2061,7 +2039,7 @@
                         <div class="colis-badge">${c.type === 'colis' ? '📦 Colis' : '📬 Enveloppe'}</div>
                     </div>
                     <div class="colis-body" id="colis-body-${c.id}">
-                        <div class="colis-field"><label>Poids (kg)</label><input type="number" value="${c.poids}" min="2" max="30" step="0.1" oninput="updateColis(${idx}, 'poids', this.value)"></div>
+                        <div class="colis-field"><label>Poids (kg)</label><input type="number" value="${c.poids}" min="0.1" max="${PORTAL_MAX_COLIS_KG}" step="0.1" oninput="updateColis(${idx}, 'poids', this.value)"></div>
                         <div class="colis-field"><label>Quantité</label><input type="number" value="${c.qty}" min="1" oninput="updateColis(${idx}, 'qty', this.value)"></div>
                         <div class="colis-actions">
                             ${colisList.length > 1 ? `<div class="colis-delete" onclick="removeColis(${idx})"><i class="fas fa-trash"></i></div>` : ''}
@@ -2070,12 +2048,17 @@
                 </div>
             `;
         }).join('');
+        updateServicePrices();
         updateTotalPrice();
     }
 
     window.updateColis = function(idx, field, value){
-        if(field === 'poids') colisList[idx].poids = parseFloat(value) || 0;
-        if(field === 'qty')   colisList[idx].qty   = parseInt(value)   || 1;
+        if(field === 'poids') {
+            const raw = parseFloat(String(value).replace(',', '.'));
+            if(!Number.isFinite(raw)) return;
+            colisList[idx].poids = Math.min(PORTAL_MAX_COLIS_KG, Math.max(0.1, raw));
+        }
+        if(field === 'qty')   colisList[idx].qty   = parseInt(value, 10)   || 1;
         // Recalculate price without re-rendering the form (preserves focus)
         updateTarifDisplay();
         updateTotalPrice();
