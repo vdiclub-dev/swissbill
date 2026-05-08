@@ -252,6 +252,9 @@
         .formula-name{font-weight:700;font-size:15px;}
         .formula-price{font-size:22px;font-weight:900;color:var(--white);margin-top:6px;}
         .formula-price-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+        .formula-tranches{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:2px;}
+        .formula-tranche{font-size:10px;color:var(--muted2);display:flex;justify-content:space-between;padding:1px 2px;}
+        .formula-tranche.active-tier{color:var(--green);font-weight:700;}
 
         /* Abonnement banner */
         .abn-banner{display:none;background:linear-gradient(135deg,#1e293b,#0f172a);border:1.5px solid #f59e0b;border-radius:12px;padding:14px 16px;margin-bottom:14px;}
@@ -609,6 +612,23 @@
     </div>
 </div>
 
+<!-- MODAL POIDS MAXIMUM DÉPASSÉ -->
+<div id="modalPoidsMax" class="modal">
+    <div class="modal-box" style="max-width:380px;text-align:center;">
+        <div class="modal-head">
+            <div class="modal-title">⚖️ POIDS MAXIMUM DÉPASSÉ</div>
+            <button class="modal-close" onclick="closeModal('modalPoidsMax')">✕</button>
+        </div>
+        <div style="padding:16px 0 20px;">
+            <div style="font-size:44px;margin-bottom:14px;">🚫</div>
+            <p id="modalPoidsMaxMsg" style="font-size:15px;color:var(--white);margin-bottom:10px;font-weight:600;"></p>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:6px;">Votre tarif actuel ne couvre pas ce poids.</p>
+            <p style="font-size:13px;color:var(--yellow);font-weight:600;">Contactez Colixo pour passer à un tarif adapté.</p>
+        </div>
+        <button class="btn-login" style="border-radius:10px;" onclick="closeModal('modalPoidsMax')">OK</button>
+    </div>
+</div>
+
 <!-- MODAL AJOUT MEMBRE -->
 <div id="modalAddMembre" class="modal">
     <div class="modal-box" style="max-width:480px;">
@@ -678,6 +698,26 @@
     function toast(msg){const t=document.getElementById('toast');t.innerHTML=msg;t.className='toast show';setTimeout(()=>t.classList.remove('show'),3000);}
     function showLoad(){document.getElementById('loader').classList.add('on');}
     function hideLoad(){document.getElementById('loader').classList.remove('on');}
+    function getPoidsMax(){
+        const v = Number(clientTarif?.poids_max_kg);
+        return (v && v > 0) ? v : 30;
+    }
+    function showPoidsMaxModal(max){
+        const msg=document.getElementById('modalPoidsMaxMsg');
+        if(msg) msg.textContent=`Ce colis dépasse le poids maximum de votre tarif (${max} kg).`;
+        openModal('modalPoidsMax');
+    }
+    function validateColisPoids(){
+        const poidsMax = getPoidsMax();
+        // Check input field (in case user typed without clicking "Ajouter")
+        const inputVal = parseFloat(document.getElementById('pkgPoidsInput')?.value) || 0;
+        if(inputVal > poidsMax){ showPoidsMaxModal(poidsMax); return false; }
+        // Check all colis in list
+        for(const c of colisList){
+            if((c.poids||0) > poidsMax){ showPoidsMaxModal(poidsMax); return false; }
+        }
+        return true;
+    }
     function showScreen(name){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('screen'+name).classList.add('active');}
 
     function openModal(id){const m=document.getElementById(id);if(m){m.style.display='flex';m.classList.add('open');}}
@@ -739,6 +779,8 @@
             db.from('produits_tarif').select('*').eq('actif', true).order('ordre').order('nom')
         ]);
         clientTarif = tarifData || { prix_inf_2kg:8.5, prix_inf_10kg:11.5, prix_inf_30kg:20.5, prix_eco:7.5, suppl_express:5, suppl_urgent:10, suppl_nuit_chf:25 };
+        console.log('[DEBUG] clientTarif chargé:', JSON.stringify(clientTarif));
+        console.log('[DEBUG] poids_max_kg =', clientTarif?.poids_max_kg, '| getPoidsMax() =', getPoidsMax());
         clientProduits = produitsData||[];
         clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), Number(r.valeur)]));
         updateServicePrices();
@@ -799,6 +841,7 @@
         pool.forEach(p=>{ const r=svcRef(p); if(!seen.has(r)){seen.add(r);refs.push(r);} });
         const items=refs.map(ref=>{
             const prods=pool.filter(p=>svcRef(p)===ref);
+            const tiers=prods.slice().sort((a,b)=>Number(a.poids_min)-Number(b.poids_min));
             const best=bestProdForPoids(prods,poids);
             const unitPrice=getProduitPrice(best);
             const incr=Number(best.increment_par_kg||0);
@@ -807,12 +850,17 @@
             const suffix= incr>0
                 ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)}+${incr.toFixed(2)}/kg</span>`
                 : best.prix_par_kg ? `<span style="font-size:9px;color:var(--yellow);display:block;">${unitPrice.toFixed(2)} CHF/kg</span>` : '';
-            return {ref, label:best.nom, prix:calcPrice, negocie, active:selectedService===ref, suffix};
+            let rangeHint='';
+            if(tiers.length>1){
+                const prices=tiers.map(t=>getProduitPrice(t));
+                rangeHint=`<span style="font-size:9px;color:var(--muted);display:block;">${fmt(Math.min(...prices))}–${fmt(Math.max(...prices))} CHF</span>`;
+            }
+            return {ref, label:best.nom, prix:calcPrice, negocie, active:selectedService===ref, suffix, rangeHint};
         });
         grid.style.gridTemplateColumns=`repeat(${Math.min(items.length,4)},1fr)`;
         grid.innerHTML=items.map(it=>`<div class="tarif-box${it.negocie?' special':''}${it.active?' active-tarif':''}" onclick="selectService('${it.ref}')">
             <div class="tarif-label">${it.label}</div>
-            <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
+            <div class="tarif-price">${parseFloat(it.prix).toFixed(2)} CHF${it.suffix}${it.rangeHint}${it.negocie&&!it.suffix&&!it.rangeHint?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
         </div>`).join('');
     }
 
@@ -937,12 +985,24 @@
             const ref=svcRef(p);
             const price=getPrixParColis(poids,ref);
             const badge=idx===popularIdx?'<div class="formula-badge">Populaire</div>':'';
+            const tiers=pool.filter(x=>svcRef(x)===ref).sort((a,b)=>Number(a.poids_min)-Number(b.poids_min));
+            let tranchesHtml='';
+            if(tiers.length>1){
+                tranchesHtml='<div class="formula-tranches">'+tiers.map((t,i)=>{
+                    const pm=Number(t.poids_min);
+                    const nextMin=tiers[i+1]?Number(tiers[i+1].poids_min):null;
+                    const label=i===0?(nextMin?`< ${nextMin} kg`:'—'):(nextMin?`${pm}–${nextMin} kg`:`≥ ${pm} kg`);
+                    const isActive=poids>=pm&&(!nextMin||poids<nextMin);
+                    return `<div class="formula-tranche${isActive?' active-tier':''}">${label}<span>${fmt(getProduitPrice(t))} CHF</span></div>`;
+                }).join('')+'</div>';
+            }
             return `<div class="formula-card${selectedService===ref?' selected':''}" data-svc="${ref}" onclick="selectService('${ref}')">
                 ${badge}
                 <div class="formula-icon">${getSvcIcon(ref)}</div>
                 <div class="formula-name">${p.nom}</div>
                 <div class="formula-price">CHF ${fmt(price)}</div>
                 <div class="formula-price-sub">par colis</div>
+                ${tranchesHtml}
             </div>`;
         }).join('');
     }
@@ -1015,6 +1075,7 @@
     window.wizardNext = function(next) {
         if(next === 2) {
             if(!selectedService) { toast('Choisissez une formule'); return; }
+            if(!validateColisPoids()) return;
         }
         if(next === 3) {
             const addr = document.getElementById('livAdresse')?.value.trim();
@@ -1085,11 +1146,16 @@
     let currentPkgSize = 'petit';
 
     window.setPkgSize = function(size) {
+        const p = PKG_POIDS[size] || 0.5;
+        const poidsMax = getPoidsMax();
+        if(p > poidsMax) {
+            showPoidsMaxModal(poidsMax);
+            return;  // currentPkgSize unchanged — no visual reset needed
+        }
         currentPkgSize = size;
         document.querySelectorAll('.pkg-card').forEach(c => c.classList.remove('selected'));
         const card = document.getElementById('pkg-'+size);
         if(card) card.classList.add('selected');
-        const p = PKG_POIDS[size] || 0.5;
         const input = document.getElementById('pkgPoidsInput');
         if(input) input.value = p;
         // Update first colis only if it's the only one (not yet added to list)
@@ -1103,7 +1169,15 @@
     };
 
     window.onPkgPoidsChange = function(v) {
-        const p = Math.min(30, Math.max(2, parseFloat(v) || 2));
+        const poidsMax = getPoidsMax();
+        const raw = parseFloat(v) || 0;
+        if(raw > poidsMax) {
+            showPoidsMaxModal(poidsMax);
+            const input = document.getElementById('pkgPoidsInput');
+            if(input) input.value = poidsMax;
+            v = poidsMax;
+        }
+        const p = Math.min(poidsMax, Math.max(0.1, parseFloat(v) || 0.1));
         if(colisList.length === 1) colisList[0].poids = p;
         renderServiceButtons();
         updateTarifDisplay();
@@ -1112,7 +1186,10 @@
     };
 
     window.addWizardColis = function() {
-        const poids = Math.min(30, Math.max(2, parseFloat(document.getElementById('pkgPoidsInput')?.value) || 2));
+        const poidsMax = getPoidsMax();
+        const rawPoids = parseFloat(document.getElementById('pkgPoidsInput')?.value) || 0;
+        if(rawPoids > poidsMax) { showPoidsMaxModal(poidsMax); return; }
+        const poids = Math.min(poidsMax, Math.max(0.1, rawPoids));
         const qty   = Math.max(1, parseInt(document.getElementById('pkgQtyInput')?.value) || 1);
         const desc  = document.getElementById('pkgDescription')?.value.trim() || '';
         const size  = currentPkgSize;
@@ -1705,6 +1782,7 @@
 
         if(!destinataireNom) { toast('Nom du destinataire requis'); return; }
         if(!livAdresse || !livNpa || !livVille) { toast('Adresse complète requise'); return; }
+        if(!validateColisPoids()) return;
         for(const c of colisList) { if(!c.poids || c.poids <= 0) { toast('Poids invalide'); return; } }
 
         showLoad();
