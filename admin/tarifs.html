@@ -181,13 +181,13 @@
       <table class="xls">
         <thead>
           <tr>
-            <th style="width:22%">Nom du produit</th>
+            <th style="width:20%">Nom du produit</th>
             <th style="width:9%">Réf.</th>
-            <th style="width:12%">Poids &gt;= (kg)</th>
-            <th style="width:11%">Base (CHF)</th>
-            <th style="width:11%">+CHF/kg</th>
+            <th style="width:16%">Tranche de poids</th>
+            <th style="width:10%">Base (CHF)</th>
+            <th style="width:9%">+CHF/kg</th>
             <th style="width:7%">Actif</th>
-            <th style="width:28%">Actions</th>
+            <th style="width:29%">Actions</th>
           </tr>
         </thead>
         <tbody id="produitsTbody">
@@ -312,7 +312,7 @@
     html += '<tr class="new-row" id="new-row">' +
       '<td><input id="n-nom" type="text" placeholder="Nom du produit" /></td>' +
       '<td><input id="n-ref" type="text" placeholder="REF" /></td>' +
-      '<td><input id="n-poids" type="number" step="0.1" min="0" value="0" placeholder="0" /></td>' +
+      '<td style="display:flex;gap:4px;align-items:center;"><input id="n-poids" type="number" step="0.1" min="0" value="0" style="width:58px;" title="Poids min" /><span style="color:var(--muted);font-size:11px;">–</span><input id="n-poidsmax" type="number" step="0.1" min="0" style="width:58px;" placeholder="∞" title="Poids max" /></td>' +
       '<td><input id="n-prix" type="number" step="0.05" min="0" placeholder="0.00" /></td>' +
       '<td><input id="n-incr" type="number" step="0.01" min="0" value="0" placeholder="0 = fixe" /></td>' +
       '<td></td>' +
@@ -332,7 +332,7 @@
     return '<tr id="pr-' + p.id + '">' +
       '<td><span class="cell cell-nom">' + esc(p.nom) + '</span></td>' +
       '<td><span class="cell cell-ref">' + esc(p.ref || '—') + '</span></td>' +
-      '<td><span class="cell cell-poids">&ge; ' + Number(p.poids_min).toFixed(1) + ' kg</span></td>' +
+      '<td><span class="cell cell-poids">' + Number(p.poids_min).toFixed(1) + ' – ' + (p.poids_max ? Number(p.poids_max).toFixed(1) : '∞') + ' kg</span></td>' +
       '<td><span class="cell cell-prix">' + prixLabel + '</span></td>' +
       '<td style="text-align:center;padding:0 8px;">' + incrLabel + '</td>' +
       '<td class="cell-actif"><span class="cell"><span class="dot ' + (p.actif ? 'on' : 'off') + '"></span></span></td>' +
@@ -347,7 +347,7 @@
     return '<tr id="pr-' + p.id + '" style="background:rgba(59,130,246,.06)">' +
       '<td><input id="e-nom-'   + p.id + '" type="text"   value="' + esc(p.nom)        + '" /></td>' +
       '<td><input id="e-ref-'   + p.id + '" type="text"   value="' + esc(p.ref||'')    + '" /></td>' +
-      '<td><input id="e-poids-' + p.id + '" type="number" step="0.1" min="0" value="'  + p.poids_min + '" /></td>' +
+      '<td style="display:flex;gap:4px;align-items:center;"><input id="e-poids-' + p.id + '" type="number" step="0.1" min="0" value="' + p.poids_min + '" style="width:60px;" title="Poids min" /><span style="color:var(--muted);font-size:11px;">–</span><input id="e-poidsmax-' + p.id + '" type="number" step="0.1" min="0" value="' + (p.poids_max||'') + '" style="width:60px;" placeholder="∞" title="Poids max" /></td>' +
       '<td><input id="e-prix-'  + p.id + '" type="number" step="0.05" min="0" value="' + p.prix      + '" placeholder="0 = gratuit" /></td>' +
       '<td><input id="e-incr-'  + p.id + '" type="number" step="0.01" min="0" value="' + (p.increment_par_kg||0) + '" placeholder="0 = fixe" /></td>' +
       '<td class="cell-actif"><input id="e-actif-' + p.id + '" type="checkbox"' + (p.actif ? ' checked' : '') + ' /></td>' +
@@ -373,14 +373,15 @@
     const nom   = document.getElementById('e-nom-'  + id).value.trim();
     const ref   = document.getElementById('e-ref-'  + id).value.trim();
     const poids_min = parseFloat(document.getElementById('e-poids-' + id).value) || 0;
+    const poids_max = parseFloat(document.getElementById('e-poidsmax-' + id)?.value) || null;
     const prix  = parseFloat(document.getElementById('e-prix-'  + id).value) || 0;
     const increment_par_kg = parseFloat(document.getElementById('e-incr-' + id).value) || 0;
     const actif = document.getElementById('e-actif-' + id).checked;
     if (!nom) { toast('Le nom est obligatoire.', 'err'); return; }
-    const { error } = await db.from('produits_tarif').update({ nom, ref, poids_min, prix, increment_par_kg, actif, updated_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await db.from('produits_tarif').update({ nom, ref, poids_min, poids_max, prix, increment_par_kg, actif, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     const p = produits.find(x => x.id === id);
-    Object.assign(p, { nom, ref, poids_min, prix, increment_par_kg, actif });
+    Object.assign(p, { nom, ref, poids_min, poids_max, prix, increment_par_kg, actif });
     let syncMessage = '';
     try {
       const synced = await syncActiveClientRulesForProduct(p);
@@ -408,11 +409,12 @@
     const nom   = document.getElementById('n-nom').value.trim();
     const ref   = document.getElementById('n-ref').value.trim();
     const poids_min = parseFloat(document.getElementById('n-poids').value) || 0;
+    const poids_max = parseFloat(document.getElementById('n-poidsmax')?.value) || null;
     const prix  = parseFloat(document.getElementById('n-prix').value) || 0;
     const increment_par_kg = parseFloat(document.getElementById('n-incr')?.value) || 0;
     if (!nom) { toast('Le nom est obligatoire.', 'err'); document.getElementById('n-nom').focus(); return; }
     const ordre = produits.length + 1;
-    const { data, error } = await db.from('produits_tarif').insert({ nom, ref, poids_min, prix, increment_par_kg, actif: true, ordre }).select().single();
+    const { data, error } = await db.from('produits_tarif').insert({ nom, ref, poids_min, poids_max, prix, increment_par_kg, actif: true, ordre }).select().single();
     if (error) { toast('Erreur: ' + error.message, 'err'); return; }
     produits.push(data);
     let autoApplied = 0;

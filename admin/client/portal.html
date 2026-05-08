@@ -880,7 +880,18 @@
     let selectedService='normal', nightDelivery=false;
     /** Poids max colis côté UI (tranches tarifaires 0 → 40 kg conservées côté calcul). */
     const PORTAL_MAX_COLIS_KG = 40;
-    function getPoidsMax(){ const v=Number(clientTarif?.poids_max_kg); return (v&&v>0)?v:PORTAL_MAX_COLIS_KG; }
+    function getPoidsMax(){
+        // Dériver le max depuis poids_max des produits assignés au client
+        const assigned = getAssignedProduits ? getAssignedProduits() : (clientProduits||[]);
+        const maxFromProducts = assigned.reduce((best, p) => {
+            const mx = Number(p.poids_max||0);
+            return (mx > 0 && (best === null || mx > best)) ? mx : best;
+        }, null);
+        if(maxFromProducts && maxFromProducts > 0) return maxFromProducts;
+        // Fallback: poids_max_kg du tarif client
+        const v = Number(clientTarif?.poids_max_kg);
+        return (v && v > 0) ? v : PORTAL_MAX_COLIS_KG;
+    }
     function showPoidsMaxModal(max){
         const msg=document.getElementById('modalPoidsMaxMsg');
         if(msg) msg.textContent=`Ce colis dépasse le poids maximum de votre tarif (${max} kg).`;
