@@ -1236,7 +1236,7 @@
         return cleanServiceLabel(best?.nom, group?.ref);
     }
 
-    function getServiceGroups(pool, poids){
+    function getServiceGroups(pool, poids, filterRange){
         const groups = new Map();
         (pool || []).forEach(p=>{
             const ref = svcRef(p);
@@ -1256,6 +1256,7 @@
                 firstOrder: Math.min(...orderedTiers.map(p=>Number(p.ordre || 100)))
             };
         }).filter(group => {
+            if (!filterRange) return true;
             return group.tiers.some(t => {
                 const min = Number(t.poids_min || 0);
                 const max = Number(t.poids_max || 0);
@@ -1601,8 +1602,8 @@
         const inputEl=document.getElementById('pkgPoidsInput');
         const inputPoids=inputEl?parseFloat(inputEl.value)||0:0;
         const poids=inputPoids>0?inputPoids:(colisList.length?(colisList[0].poids||1):1);
-        const services=getServiceGroups(pool, poids);
-        if(!selectedService||!services.find(g=>g.ref===tariffServiceRef(selectedService))) selectedService=services[0].ref;
+        const services=getServiceGroups(pool, poids, inputPoids>0);
+        if(!selectedService||!services.find(g=>g.ref===tariffServiceRef(selectedService))) selectedService=services[0]?.ref;
         grid.style.gridTemplateColumns=`repeat(${Math.min(services.length,3)},1fr)`;
         const singleService=services.length===1;
         const helpEl=document.getElementById('tariffHelpText');
@@ -1831,7 +1832,7 @@
         if (!Number.isFinite(raw) || raw <= 0) return;
         const p = Math.min(getPoidsMax(), Math.max(0.1, raw));
         const pool = getAssignedProduits().filter(pr => !isOptionProduct(pr));
-        const services = getServiceGroups(pool, p);
+        const services = getServiceGroups(pool, p, true);
         if (services.length === 1) {
             addWizardColis(services[0].ref);
         }
