@@ -506,10 +506,10 @@
 
               <div class="form-section">📦 Ajouter un colis</div>
               <div class="field-row">
-                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="2" min="0.1" max="40" step="0.1" oninput="onPkgPoidsChange(this.value)"></div>
+                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="" min="0.1" max="40" step="0.1" placeholder="ex: 5.5" oninput="onPkgPoidsChange(this.value)" onchange="onPkgPoidsCommit(this.value)" onkeydown="if(event.key==='Enter'){this.blur();}"></div>
                 <div class="field"><label>Quantité</label><input type="number" id="pkgQtyInput" value="1" min="1" max="99" step="1"></div>
               </div>
-              <div class="tariff-help"><strong>Tarifs par tranche</strong> : indiquez le poids réel et la quantité, puis cliquez sur la carte de vitesse souhaitée. Le colis est ajouté à la liste avec la bonne tranche — jusqu'à 40 kg.</div>
+              <div class="tariff-help"><strong>Tarifs par tranche</strong> : entrez le poids réel et la quantité — le colis est ajouté automatiquement avec la bonne tranche tarifaire.</div>
               <div class="field" style="margin-bottom:4px;"><label>Description (optionnel)</label><input type="text" id="pkgDescription" placeholder="ex: Livres, vêtements…"></div>
 
               <!-- Liste des colis ajoutés -->
@@ -1255,6 +1255,12 @@
                 firstWeight: Math.min(...orderedTiers.map(p=>Number(p.poids_min || 0))),
                 firstOrder: Math.min(...orderedTiers.map(p=>Number(p.ordre || 100)))
             };
+        }).filter(group => {
+            return group.tiers.some(t => {
+                const min = Number(t.poids_min || 0);
+                const max = Number(t.poids_max || 0);
+                return poids >= min && (max === 0 || poids <= max);
+            });
         }).sort((a,b)=>
             tariffSpeedRank(a.speedClass) - tariffSpeedRank(b.speedClass) ||
             a.firstOrder - b.firstOrder ||
@@ -1533,18 +1539,24 @@
     function getAssignedProduits(){
         const serviceRules = (clientTariffRules || [])
           .filter(r => !isOptionProduct({ ref: r.tariff_code, nom: r.name }))
-          .map(r => ({
-            id: r.id,
-            produit_id: r.produit_id || null,
-            nom: r.name || r.tariff_code || 'Tarif client',
-            ref: r.tariff_code || r.name || '',
-            poids_min: Number(r.min_weight_kg || 0),
-            prix: Number(r.base_price_chf || 0),
-            increment_par_kg: Number(r.price_per_kg_chf || 0),
-            prix_par_kg: false,
-            ordre: Number(r.priority || 100),
-            _tariffRule: true
-        }));
+          .map(r => {
+            const linkedProd = r.produit_id
+                ? (clientProduits || []).find(p => String(p.id) === String(r.produit_id))
+                : null;
+            return {
+                id: r.id,
+                produit_id: r.produit_id || null,
+                nom: r.name || r.tariff_code || 'Tarif client',
+                ref: r.tariff_code || r.name || '',
+                poids_min: Number(r.min_weight_kg || linkedProd?.poids_min || 0),
+                poids_max: Number(r.max_weight_kg || linkedProd?.poids_max || 0),
+                prix: Number(r.base_price_chf || 0),
+                increment_par_kg: Number(r.price_per_kg_chf || 0),
+                prix_par_kg: false,
+                ordre: Number(r.priority || 100),
+                _tariffRule: true
+            };
+          });
         const optionProducts = clientProduits.filter(p => {
             const ov = clientPrixMap[String(p.id)];
             return ov && ov.contrainte;
@@ -1586,21 +1598,25 @@
             renderHomeTariffSummary();
             return;
         }
-        const poids=colisList.length?(colisList[0].poids||1):1;
+        const inputEl=document.getElementById('pkgPoidsInput');
+        const inputPoids=inputEl?parseFloat(inputEl.value)||0:0;
+        const poids=inputPoids>0?inputPoids:(colisList.length?(colisList[0].poids||1):1);
         const services=getServiceGroups(pool, poids);
         if(!selectedService||!services.find(g=>g.ref===tariffServiceRef(selectedService))) selectedService=services[0].ref;
         grid.style.gridTemplateColumns=`repeat(${Math.min(services.length,3)},1fr)`;
+        const singleService=services.length===1;
         const popularIdx=services.length>1?Math.floor(services.length/2):0;
         grid.innerHTML=services.map((group,idx)=>{
             const ref=group.ref;
             const price=getPrixParColis(poids,ref);
-            const badge=idx===popularIdx?'<div class="formula-badge">Populaire</div>':'';
-            return `<div class="formula-card ${group.speedClass}${tariffServiceRef(selectedService)===ref?' selected':''}" data-svc="${escHtml(ref)}" onclick="addWizardColis(${jsStringArg(ref)})">
+            const badge=idx===popularIdx&&!singleService?'<div class="formula-badge">Populaire</div>':'';
+            const sub=singleService?'':'cliquer pour ajouter';
+            return `<div class="formula-card ${group.speedClass}${tariffServiceRef(selectedService)===ref?' selected':''}" data-svc="${escHtml(ref)}"${singleService?'':` onclick="addWizardColis(${jsStringArg(ref)})"`}>
                 ${badge}
                 <div class="formula-icon">${getSvcIcon(ref)}</div>
                 <div class="formula-name">${escHtml(serviceLabelForGroup(group))}</div>
                 <div class="formula-price">CHF ${fmt(price)}</div>
-                <div class="formula-price-sub">cliquer pour ajouter</div>
+                ${sub?`<div class="formula-price-sub">${sub}</div>`:''}
             </div>`;
         }).join('');
         renderHomeTariffSummary();
@@ -1802,6 +1818,17 @@
         updateTarifDisplay();
         renderWizardColis();
         updateTotalPrice();
+    };
+
+    window.onPkgPoidsCommit = function(v) {
+        const raw = parseFloat(String(v).replace(',', '.'));
+        if (!Number.isFinite(raw) || raw <= 0) return;
+        const p = Math.min(getPoidsMax(), Math.max(0.1, raw));
+        const pool = getAssignedProduits().filter(pr => !isOptionProduct(pr));
+        const services = getServiceGroups(pool, p);
+        if (services.length === 1) {
+            addWizardColis(services[0].ref);
+        }
     };
 
     window.addWizardColis = function(serviceRef) {
