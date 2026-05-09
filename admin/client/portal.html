@@ -504,13 +504,12 @@
             <!-- ── ÉTAPE 1 : COLIS ── -->
             <div class="wstep active" id="wstep1">
 
-              <div class="form-section">📦 Ajouter un colis</div>
+              <div class="form-section">📦 Choisissez votre formule</div>
               <div class="field-row">
-                <div class="field"><label>Poids (kg)</label><input type="number" id="pkgPoidsInput" value="" min="0.1" max="40" step="0.1" placeholder="ex: 5.5" oninput="onPkgPoidsChange(this.value)" onchange="onPkgPoidsCommit(this.value)" onkeydown="if(event.key==='Enter'){this.blur();}"></div>
                 <div class="field"><label>Quantité</label><input type="number" id="pkgQtyInput" value="1" min="1" max="99" step="1"></div>
+                <div class="field"><label>Description (optionnel)</label><input type="text" id="pkgDescription" placeholder="ex: Livres, vêtements…"></div>
               </div>
-              <div class="tariff-help" id="tariffHelpText"><strong>Tarifs par tranche</strong> : entrez le poids et la quantité — le colis est ajouté automatiquement avec la bonne tranche.</div>
-              <div class="field" style="margin-bottom:4px;"><label>Description (optionnel)</label><input type="text" id="pkgDescription" placeholder="ex: Livres, vêtements…"></div>
+              <input type="hidden" id="pkgPoidsInput" value="">
 
               <!-- Liste des colis ajoutés -->
               <div id="wizardColisList"></div>
@@ -1590,6 +1589,12 @@
         return src.sort((a,b)=>Number(b.poids_min)-Number(a.poids_min))[0];
     }
 
+    function tierFamilyLabel(tier){
+        let name = String(tier.nom || tier.ref || 'Service').trim();
+        name = name.replace(/\s*[—–]\s*\d.*$/, '').trim();
+        return cleanServiceLabel(name, svcRef(tier));
+    }
+
     function renderServiceButtons(){
         const grid=document.getElementById('serviceGrid');
         if(!grid) return;
@@ -1599,31 +1604,25 @@
             renderHomeTariffSummary();
             return;
         }
-        const inputEl=document.getElementById('pkgPoidsInput');
-        const inputPoids=inputEl?parseFloat(inputEl.value)||0:0;
-        const poids=inputPoids>0?inputPoids:(colisList.length?(colisList[0].poids||1):1);
-        const services=getServiceGroups(pool, poids, inputPoids>0);
-        if(!selectedService||!services.find(g=>g.ref===tariffServiceRef(selectedService))) selectedService=services[0]?.ref;
-        grid.style.gridTemplateColumns=`repeat(${Math.min(services.length,3)},1fr)`;
-        const singleService=services.length===1;
-        const helpEl=document.getElementById('tariffHelpText');
-        if(helpEl){
-            helpEl.innerHTML = singleService
-                ? '<strong>Tarifs par tranche</strong> : entrez le poids et la quantité — le colis est ajouté automatiquement avec la bonne tranche.'
-                : '<strong>Tarifs par tranche</strong> : entrez le poids et la quantité, puis cliquez sur la formule souhaitée pour ajouter le colis.';
-        }
-        const popularIdx=services.length>1?Math.floor(services.length/2):0;
-        grid.innerHTML=services.map((group,idx)=>{
-            const ref=group.ref;
-            const price=getPrixParColis(poids,ref);
-            const badge=idx===popularIdx&&!singleService?'<div class="formula-badge">Populaire</div>':'';
-            const sub=singleService?'':'cliquer pour ajouter';
-            return `<div class="formula-card ${group.speedClass}${tariffServiceRef(selectedService)===ref?' selected':''}" data-svc="${escHtml(ref)}"${singleService?'':` onclick="addWizardColis(${jsStringArg(ref)})"`}>
-                ${badge}
+        const tiers=pool.slice().sort((a,b)=>{
+            const sa=tariffSpeedRank(tariffSpeedClass(svcRef(a),a.nom));
+            const sb=tariffSpeedRank(tariffSpeedClass(svcRef(b),b.nom));
+            return sa-sb||Number(a.poids_min||0)-Number(b.poids_min||0)||(a.ref||'').localeCompare(b.ref||'');
+        });
+        grid.style.gridTemplateColumns=`repeat(${Math.min(tiers.length,3)},1fr)`;
+        grid.innerHTML=tiers.map(tier=>{
+            const ref=tier.ref||'';
+            const price=getProduitPrice(tier);
+            const speedClass=tariffSpeedClass(svcRef(tier),tier.nom);
+            const minKg=Number(tier.poids_min||0);
+            const maxKg=Number(tier.poids_max||0);
+            const weightLabel=maxKg>0?`${minKg} – ${maxKg} kg`:`${minKg} kg+`;
+            const label=tierFamilyLabel(tier);
+            return `<div class="formula-card ${speedClass}" data-svc="${escHtml(ref)}" onclick="addWizardColisFromTier(${jsStringArg(ref)})">
                 <div class="formula-icon">${getSvcIcon(ref)}</div>
-                <div class="formula-name">${escHtml(serviceLabelForGroup(group))}</div>
-                <div class="formula-price">CHF ${fmt(price)}</div>
-                ${sub?`<div class="formula-price-sub">${sub}</div>`:''}
+                <div class="formula-name">${escHtml(label)}</div>
+                <div class="formula-price-sub" style="font-size:12px;opacity:.75;margin:-2px 0 6px;">${escHtml(weightLabel)}</div>
+                <div class="formula-price">CHF ${fmt(price)}</div>
             </div>`;
         }).join('');
         renderHomeTariffSummary();
@@ -1857,6 +1856,29 @@
             colisList.push(colisData);
         }
         // Reset form to default
+        setPkgSize('colis');
+        const qtyEl = document.getElementById('pkgQtyInput'); if(qtyEl) qtyEl.value = 1;
+        const descEl = document.getElementById('pkgDescription'); if(descEl) descEl.value = '';
+        renderWizardColis();
+        renderServiceButtons();
+        updateTotalPrice();
+    };
+
+    window.addWizardColisFromTier = function(tariffCode) {
+        const exact = tariffExactRef(tariffCode);
+        const tier = getAssignedProduits().find(p => !isOptionProduct(p) && tariffExactRef(p.ref || p.nom) === exact);
+        if(!tier) return;
+        const poids = Number(tier.poids_max) > 0 ? Number(tier.poids_max) : Math.max(Number(tier.poids_min || 0), 1);
+        const qty   = Math.max(1, parseInt(document.getElementById('pkgQtyInput')?.value) || 1);
+        const desc  = document.getElementById('pkgDescription')?.value.trim() || '';
+        const size  = currentPkgSize;
+        const service = exact;
+        const colisData = {id: Date.now(), poids, qty, type:'colis', size, description: desc, service, added: true};
+        if(colisList.length === 1 && !colisList[0].added){
+            colisList[0] = colisData;
+        } else {
+            colisList.push(colisData);
+        }
         setPkgSize('colis');
         const qtyEl = document.getElementById('pkgQtyInput'); if(qtyEl) qtyEl.value = 1;
         const descEl = document.getElementById('pkgDescription'); if(descEl) descEl.value = '';
