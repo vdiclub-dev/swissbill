@@ -6,8 +6,8 @@
   <title>Colixo — Acceptation des CGV</title>
   <script data-cfasync="false" src="/js/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script data-cfasync="false" src="config.js?v=20260511r"></script>
-  <script data-cfasync="false" src="js/auth.js?v=20260511r-code-session"></script>
+  <script data-cfasync="false" src="config.js?v=20260511s"></script>
+  <script data-cfasync="false" src="js/auth.js?v=20260511s-code-session"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -209,6 +209,14 @@
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  function withTimeout(promise, ms, fallbackValue) {
+    let timer;
+    const timeout = new Promise(resolve => {
+      timer = setTimeout(() => resolve(fallbackValue), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
   function stripHtml(html) {
     const d = document.createElement('div');
     d.innerHTML = html;
@@ -217,8 +225,12 @@
 
   async function getClientIp() {
     try {
-      const r = await fetch('https://api.ipify.org?format=json');
-      return (await r.json()).ip || null;
+      const data = await withTimeout(
+        fetch('https://api.ipify.org?format=json').then(r => r.json()),
+        2500,
+        null
+      );
+      return data && data.ip ? data.ip : null;
     } catch (e) { return null; }
   }
 
@@ -480,7 +492,12 @@
           });
 
           setStatus('<span class="spinner"></span> Archivage du PDF…');
-          const uploaded = await uploadPdf(userId, cgv.version_code, pdfBuffer);
+          const uploaded = await withTimeout(
+            uploadPdf(userId, cgv.version_code, pdfBuffer),
+            8000,
+            null
+          );
+          if (!uploaded) throw new Error('Archivage PDF trop long');
           pdfPath = uploaded.path;
           pdfUrl  = uploaded.publicUrl;
         } catch (pdfErr) {
