@@ -100,21 +100,21 @@ function normCode(value: unknown): string {
 
 async function isManualAdminAuthorized(payload: WebhookPayload): Promise<boolean> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const adminId = String(payload.admin_id ?? "").trim();
   const adminCode = normCode(payload.admin_code);
-  if (!supabaseUrl || !serviceKey || !adminId || !adminCode) return false;
+  if (!supabaseUrl || !anonKey || !adminId || !adminCode) return false;
 
-  const admin = createClient(supabaseUrl, serviceKey);
-  const { data, error } = await admin
-    .from("utilisateurs")
-    .select("role, code_usr, code")
-    .eq("id", adminId)
-    .maybeSingle();
-
-  if (error || !data || !["admin", "super_admin"].includes(String(data.role))) return false;
-  const dbCodes = [data.code_usr, data.code].map(normCode).filter(Boolean);
-  return dbCodes.includes(adminCode);
+  const supabase = createClient(supabaseUrl, anonKey);
+  const { data, error } = await supabase.rpc("admin_verify_code", {
+    p_admin_id: adminId,
+    p_code: adminCode,
+  });
+  if (error) {
+    console.error("admin_verify_code", error.message);
+    return false;
+  }
+  return data === true;
 }
 
 Deno.serve(async (req) => {
