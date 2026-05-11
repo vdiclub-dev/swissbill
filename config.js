@@ -33,7 +33,7 @@
 // Quand une mise en production importante a lieu, cette valeur doit évoluer
 // en même temps que les autres marqueurs de version pour éviter les mélanges
 // de vieux HTML et de nouveaux assets.
-window.COLIXO_ASSET_VERSION = '20260511q';
+window.COLIXO_ASSET_VERSION = '20260511r';
 
 /**
  * Résout le préfixe d'URL sous lequel le site est servi.
@@ -457,13 +457,12 @@ window.colixoLogout = async function () {
 
 /**
  * Vérifie si le serveur publie une version plus récente que le bundle déjà
- * chargé dans l'onglet, puis déclenche un rechargement unique si nécessaire.
+ * chargé dans l'onglet.
  *
  * But :
- * - limiter les cas où un ancien HTML ou un ancien config.js reste servi
- *   depuis le cache navigateur ou CDN
- * - ne pas entrer dans une boucle de reload grâce à un garde-fou stocké
- *   dans `sessionStorage`
+ * - diagnostiquer les cas où un ancien HTML ou un ancien config.js reste
+ *   servi depuis le cache navigateur ou CDN
+ * - éviter les rechargements automatiques visibles qui font clignoter l'onglet
  */
 (function colixoCheckServerVersion() {
     var bundle = window.COLIXO_ASSET_VERSION;
@@ -477,15 +476,9 @@ window.colixoLogout = async function () {
             var server = String(txt || '').trim();
             if (!server || server === bundle) return;
             if (server < bundle) return;
-            var key = 'colixo_reload_ok_' + server;
-            try {
-                if (sessionStorage.getItem(key)) return;
-                sessionStorage.setItem(key, '1');
-            } catch (e) {}
-            if (typeof console !== 'undefined' && console.debug) {
-                console.debug('[Colixo] version serveur', server, '> bundle', bundle, '— rechargement');
+            if (typeof console !== 'undefined' && console.warn) {
+                console.warn('[Colixo] version serveur', server, '> bundle', bundle, '- rechargez la page en force si l’affichage semble ancien.');
             }
-            location.reload();
         })
         .catch(function () {});
 })();
