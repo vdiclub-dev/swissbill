@@ -87,9 +87,34 @@
     }
   }
 
+  function readLoginHandoff() {
+    try {
+      var raw = window.name || "";
+      if (raw.indexOf("COLIXO_LOGIN:") !== 0) return null;
+      var payload = JSON.parse(raw.slice("COLIXO_LOGIN:".length));
+      if (!payload || !payload.profile || !payload.code) return null;
+      return payload;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeLoginHandoff(profile, code) {
+    try {
+      window.name = "COLIXO_LOGIN:" + JSON.stringify({
+        profile: profile || null,
+        code: String(code || "").trim().toUpperCase(),
+        ts: Date.now()
+      });
+    } catch (e) {}
+  }
+
   function clearLegacyUser() {
     removeStoredItem("colixo_user");
     removeStoredItem("colixo_access_code");
+    try {
+      if ((window.name || "").indexOf("COLIXO_LOGIN:") === 0) window.name = "";
+    } catch (e) {}
   }
 
   function syncLegacyUser(profile) {
@@ -112,10 +137,11 @@
   function readLegacyUser() {
     try {
       var raw = getStoredItem("colixo_user");
-      return raw ? JSON.parse(raw) : null;
+      if (raw) return JSON.parse(raw);
     } catch (e) {
-      return null;
     }
+    var handoff = readLoginHandoff();
+    return handoff && handoff.profile ? handoff.profile : null;
   }
 
   function getLegacyCode() {
@@ -123,6 +149,10 @@
     var code = legacyUser && (legacyUser.code || legacyUser.code_usr || legacyUser.code_acces || legacyUser.code_connexion);
     if (!code) {
       code = getStoredItem("colixo_access_code");
+    }
+    if (!code) {
+      var handoff = readLoginHandoff();
+      code = handoff && handoff.code;
     }
     return code ? String(code).trim().toUpperCase() : null;
   }
@@ -414,9 +444,9 @@
   window.colixoRoleHome = roleHome;
   window.colixoLogout = colixoLogout;
   window.colixoStoreLegacyLogin = function (profile, code) {
+    writeLoginHandoff(profile, code);
     var saved = syncLegacyUser(Object.assign({}, profile || {}, { code: code || getLegacyCode() }));
     if (code) saved = setStoredItem("colixo_access_code", String(code).trim().toUpperCase()) || saved;
-    if (!saved) throw new Error("Edge bloque le stockage de session. Autorisez les cookies et donnees de site pour Colixo, puis reessayez.");
   };
   window.colixoGetAuthContext = colixoGetAuthContext;
   window.colixoRequireRoute = colixoRequireRoute;
