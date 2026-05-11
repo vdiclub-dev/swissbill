@@ -267,6 +267,10 @@
       }
     }
 
+    if (opts.skipSupabaseSession === true) {
+      return null;
+    }
+
     var sessionCtx = await getVerifiedSession();
     if (sessionCtx.authUser) {
       var profileCtx = await loadProfileFromAuth(sessionCtx.authUser);
