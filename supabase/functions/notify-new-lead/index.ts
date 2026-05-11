@@ -170,6 +170,7 @@ Deno.serve(async (req) => {
 
   let subject: string;
   let text: string;
+  let html: string | undefined;
   let clientConfirmation: { to: string; subject: string; text: string; html: string } | null = null;
 
   if (payload.table === "quota_alert") {
@@ -233,6 +234,7 @@ Deno.serve(async (req) => {
     const statut = String(record.statut ?? "en_attente").trim();
     const createdAt = String(record.created_at ?? "—").trim();
     const id = String(record.id ?? "—").trim();
+    const validationUrl = "https://www.colixo.ch/admin/inscriptions.html";
 
     subject = entreprise && entreprise !== "—"
       ? `[Colixo] Nouvelle demande : ${entreprise}`
@@ -248,7 +250,24 @@ Deno.serve(async (req) => {
       `Statut : ${statut || "—"}\n` +
       `Créée le : ${createdAt || "—"}\n` +
       `ID : ${id || "—"}\n\n` +
-      `Message :\n${message || "—"}\n`;
+      `Message :\n${message || "—"}\n\n` +
+      `Valider la demande :\n${validationUrl}\n`;
+    html =
+      `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;max-width:680px;">` +
+      `<div style="font-size:22px;font-weight:800;color:#e8311a;margin-bottom:14px;">Nouvelle demande Colixo</div>` +
+      `<p>Une nouvelle demande d'inscription est en attente de validation.</p>` +
+      `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin:18px 0;">` +
+      `<div><strong>Prénom :</strong> ${escapeHtml(prenom || "—")}</div>` +
+      `<div><strong>Nom :</strong> ${escapeHtml(nom || "—")}</div>` +
+      `<div><strong>Email :</strong> ${escapeHtml(email || "—")}</div>` +
+      `<div><strong>Téléphone :</strong> ${escapeHtml(telephone || "—")}</div>` +
+      `<div><strong>Entreprise :</strong> ${escapeHtml(entreprise || "—")}</div>` +
+      `<div><strong>Statut :</strong> ${escapeHtml(statut || "—")}</div>` +
+      `<div><strong>ID :</strong> ${escapeHtml(id || "—")}</div>` +
+      `</div>` +
+      `<p><a href="${validationUrl}" style="display:inline-block;background:#e8311a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">Ouvrir la validation</a></p>` +
+      `${message && message !== "—" ? `<p><strong>Message :</strong><br>${escapeHtml(message)}</p>` : ""}` +
+      `</div>`;
 
     if (isValidEmail(email)) {
       const displayName = [prenom, nom].filter(Boolean).join(" ").trim() || "Bonjour";
@@ -298,6 +317,7 @@ Deno.serve(async (req) => {
         to,
         subject,
         text,
+        html,
         replyTo,
       });
       adminSent = true;
