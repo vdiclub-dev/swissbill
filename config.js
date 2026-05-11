@@ -33,7 +33,7 @@
 // Quand une mise en production importante a lieu, cette valeur doit évoluer
 // en même temps que les autres marqueurs de version pour éviter les mélanges
 // de vieux HTML et de nouveaux assets.
-window.COLIXO_ASSET_VERSION = '20260511s';
+window.COLIXO_ASSET_VERSION = '20260511t';
 
 /**
  * Résout le préfixe d'URL sous lequel le site est servi.
@@ -203,6 +203,55 @@ function colixoAuthStorage() {
     };
 }
 
+/**
+ * Nettoie les traces d'auth navigateur qui peuvent rester bloquées dans Edge.
+ *
+ * Edge regroupe souvent cookies, localStorage et sessionStorage sous "cookies
+ * et données de site". Supabase persiste surtout dans Web Storage, mais une
+ * ancienne clé peut suffire à bloquer getSession/getUser ou à créer un état
+ * contradictoire entre compte Auth et login par code.
+ */
+function colixoClearAuthStorage() {
+    var keyPatterns = [
+        /^colixo_/i,
+        /^Colixo-auth/i,
+        /^sb-.*auth-token/i,
+        /supabase/i
+    ];
+
+    function clearStore(store) {
+        if (!store) return;
+        var keys = [];
+        try {
+            for (var i = 0; i < store.length; i++) {
+                var key = store.key(i);
+                if (keyPatterns.some(function (re) { return re.test(key || ''); })) {
+                    keys.push(key);
+                }
+            }
+            keys.forEach(function (key) { store.removeItem(key); });
+        } catch (e) {}
+    }
+
+    try { clearStore(window.localStorage); } catch (e) {}
+    try { clearStore(window.sessionStorage); } catch (e) {}
+    try { if ((window.name || '').indexOf('COLIXO_LOGIN:') === 0) window.name = ''; } catch (e) {}
+
+    try {
+        document.cookie.split(';').forEach(function (cookie) {
+            var name = cookie.split('=')[0].trim();
+            if (!name || !keyPatterns.some(function (re) { return re.test(name); })) return;
+            document.cookie = name + '=; Max-Age=0; path=/';
+            document.cookie = name + '=; Max-Age=0; path=/; domain=' + location.hostname;
+            if (location.hostname.indexOf('.') > -1) {
+                document.cookie = name + '=; Max-Age=0; path=/; domain=.' + location.hostname.replace(/^www\./, '');
+            }
+        });
+    } catch (e) {}
+}
+
+window.colixoClearAuthStorage = colixoClearAuthStorage;
+
 // ------------------------------------------------------------
 // Client Supabase partagé
 //
@@ -286,9 +335,7 @@ window.colixoLogout = async function () {
             console.warn('[Colixo] logout:', e && e.message ? e.message : e);
         }
     }
-    try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
-    try { sessionStorage.removeItem('colixo_user'); sessionStorage.removeItem('colixo_access_code'); } catch (e) {}
-    try { sessionStorage.removeItem('colixo_login_bust'); } catch (e) {}
+    colixoClearAuthStorage();
     var to = (typeof window.colixoHref === 'function')
         ? window.colixoHref('/login/index.html?logout=1')
         : '/login/index.html?logout=1';

@@ -110,6 +110,10 @@
   }
 
   function clearLegacyUser() {
+    if (typeof window.colixoClearAuthStorage === "function") {
+      window.colixoClearAuthStorage();
+      return;
+    }
     removeStoredItem("colixo_user");
     removeStoredItem("colixo_access_code");
     try {
