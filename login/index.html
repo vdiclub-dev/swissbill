@@ -2,12 +2,12 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260508b -->
+    <!-- colixo-build:20260511q -->
     <script>
     (function(){try{
       // Skip cache-busting redirect in native app (Capacitor WebView)
       if(navigator.userAgent.indexOf('ColixoApp')!==-1)return;
-      var BUILD='20260508b';
+      var BUILD='20260511q';
       try{
         if(localStorage.getItem('colixo_deploy')!==BUILD){
           localStorage.setItem('colixo_deploy',BUILD);
@@ -38,8 +38,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../config.js?v=20260511g"></script>
-    <script data-cfasync="false" src="../js/auth.js?v=20260511g-portal-tabs"></script>
+    <script data-cfasync="false" src="../config.js?v=20260511q"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260511q-code-session"></script>
     
     <style>
         :root {
@@ -283,7 +283,12 @@
             try { await db.auth.signOut(); } catch (e) {}
             try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
             try { sessionStorage.removeItem('colixo_user'); sessionStorage.removeItem('colixo_access_code'); } catch (e) {}
+            var cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete('switch');
+            cleanUrl.searchParams.set('switched', '1');
+            window.location.replace(cleanUrl.toString());
         })();
+        return;
     }
 
     if (new URLSearchParams(location.search).get('logout') === '1') {
@@ -508,7 +513,18 @@
     renderCodeInput();
 
     /* ── Redirection selon rôle ── */
-    function redirectByRole(role) {
+    function bustHtml(path) {
+        const u = new URL((typeof window.colixoHref === 'function') ? window.colixoHref(path) : path, window.location.origin);
+        u.searchParams.set('_cb', Date.now());
+        return u.pathname + u.search + u.hash;
+    }
+
+    function redirectByRole(role, user) {
+        if (['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].includes(role) &&
+            user && !user.cgv_version_accepted) {
+            window.location.href = bustHtml('/accept-cgv.html');
+            return;
+        }
         const routes = {
             super_admin: '/admin/dashboard.html',
             admin:       '/admin/dashboard.html',
@@ -520,7 +536,7 @@
             sous_utilisateur: '/admin/client/portal.html'
         };
         const path = routes[role] || '/admin/client/portal.html';
-        window.location.href = (typeof window.colixoHref === 'function') ? window.colixoHref(path) : path;
+        window.location.href = bustHtml(path);
     }
 
     /* Ne pas auto-rediriger depuis localStorage :
@@ -581,6 +597,7 @@
 
         showLoad();
         try {
+            try { await db.auth.signOut(); } catch (e) {}
             let user = null;
             try {
                 user = await loginWithCodeDirect(code);
@@ -625,7 +642,7 @@
 
             toast('success', 'Bienvenue ! Redirection en cours…');
             hideLoad();
-            redirectByRole(user.role);
+            redirectByRole(user.role, user);
 
         } catch (err) {
             hideLoad();

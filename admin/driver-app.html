@@ -19,7 +19,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../config.js?v=20260508b"></script>
+    <script data-cfasync="false" src="../config.js?v=20260511q"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260511q-code-session"></script>
     <script data-cfasync="false" src="../push-manager.js?v=20260508b"></script>
     <script src="workflow.js?v=20260508b"></script>
     <script src="realtime.js?v=20260508b"></script>
@@ -1351,6 +1352,7 @@
         }
         showLoad();
         try {
+            try { await db.auth.signOut(); } catch (e) {}
             const { data, error } = await db.rpc('login_with_code', { p_code: code });
             const user = Array.isArray(data) ? (data[0] || null) : (data || null);
             if (error) throw error;
@@ -1360,13 +1362,19 @@
                 toast('error', 'Accès réservé aux chauffeurs.');
                 return;
             }
-            localStorage.setItem('colixo_user', JSON.stringify({
+            const legacyProfile = {
                 id: user.id,
                 role: user.role,
                 nom: user.nom,
                 prenom: user.prenom,
-                code: user.code_usr
-            }));
+                code: user.code_usr || code
+            };
+            if (typeof window.colixoStoreLegacyLogin === 'function') {
+                window.colixoStoreLegacyLogin(legacyProfile, code);
+            } else {
+                localStorage.setItem('colixo_user', JSON.stringify(legacyProfile));
+                localStorage.setItem('colixo_access_code', code);
+            }
             const { data: fullData, error: e2 } = await db
                 .rpc('get_code_user_profile', { p_user_id: user.id, p_code: code });
             const full = Array.isArray(fullData) ? (fullData[0] || null) : (fullData || null);
@@ -1405,18 +1413,19 @@
         const { data:{session} } = await db.auth.getSession();
         const codeUser = JSON.parse(localStorage.getItem('colixo_user') || 'null');
         if(!session && !codeUser) return;
+        if(codeUser && ['chauffeur','admin','super_admin'].includes(codeUser.role)) {
+            const storedCode = String(codeUser.code || codeUser.code_usr || window.colixoGetStoredCode?.() || '').trim().toUpperCase();
+            const { data:userData } = await db.rpc('get_code_user_profile', { p_user_id: codeUser.id, p_code: storedCode });
+            const user = Array.isArray(userData) ? (userData[0] || null) : (userData || null);
+            if(user) { driver=user; afterLogin(); return; }
+        }
         if(session) {
             const auth = await window.colixoGetAuthContext({
                 roles: ['chauffeur','admin','super_admin'],
-                legacyRoles: []
+                legacyRoles: ['chauffeur','admin','super_admin']
             });
             const user = auth ? auth.profile : null;
             if(user && ['chauffeur','admin','super_admin'].includes(user.role)) { driver=user; afterLogin(); }
-        } else if(codeUser && ['chauffeur','admin','super_admin'].includes(codeUser.role)) {
-            const storedCode = String(codeUser.code || codeUser.code_usr || '').trim().toUpperCase();
-            const { data:userData } = await db.rpc('get_code_user_profile', { p_user_id: codeUser.id, p_code: storedCode });
-            const user = Array.isArray(userData) ? (userData[0] || null) : (userData || null);
-            if(user) { driver=user; afterLogin(); }
         }
     }
 
