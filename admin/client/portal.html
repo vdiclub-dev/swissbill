@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511e -->
+    <!-- colixo-build:20260511f -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511e"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511e-tracking-history"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511f"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511f-import-tracking"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -929,6 +929,10 @@
 
     function getClientScopeId() {
         return client?.entreprise_id || client?.id || null;
+    }
+
+    function getStoredPortalCode() {
+        return (typeof window.colixoGetStoredCode === 'function' ? window.colixoGetStoredCode() : '').trim().toUpperCase();
     }
 
     function toast(msg){const t=document.getElementById('toast');t.innerHTML=msg;t.className='toast show';setTimeout(()=>t.classList.remove('show'),3000);}
@@ -2819,11 +2823,13 @@
             .limit(50);
         // Commandes actives = non livrées/complétées + livrées dans les dernières 24h
         const TERMINAL = ['completed', 'invoiced'];
-        const orders = (data || []).filter(o => {
+        let orders = (data || []).filter(o => {
             if (TERMINAL.includes(o.status)) return false;
             if (o.status === 'delivered') return (new Date() - new Date(o.delivered_at || o.created_at)) < 86400000;
             return true;
         });
+        const importOnly = await loadImportedOrderFallback(data || [], false);
+        if(importOnly.length) orders = orders.concat(importOnly);
         document.getElementById('badgeOrders').textContent = orders.length;
         const dashActiveOrders = document.getElementById('dashActiveOrders');
         if(dashActiveOrders) dashActiveOrders.textContent = orders.length;
@@ -2852,10 +2858,13 @@
         const { data: orders } = await db.from('transport_orders_simple')
             .select('*').eq('entreprise_id', getClientScopeId())
             .order('created_at', { ascending: false });
-        if(!orders?.length) { el.innerHTML = '<div class="empty">📋 Aucune expédition</div>'; return; }
+        const importOnly = await loadImportedOrderFallback(orders || [], true);
+        const allOrders = (orders || []).concat(importOnly)
+            .sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        if(!allOrders.length) { el.innerHTML = '<div class="empty">📋 Aucune expédition</div>'; return; }
 
         // Charger les preuves livraison pour toutes les commandes livrées
-        const deliveredIds = orders.filter(o => o.status === 'delivered').map(o => o.id);
+        const deliveredIds = allOrders.filter(o => !o.__importOnly && o.status === 'delivered').map(o => o.id);
         let deliveriesByOrder = {};
         if(deliveredIds.length) {
             const { data: delivs } = await db.from('deliveries')
@@ -2864,7 +2873,74 @@
             (delivs || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
         }
 
-        el.innerHTML = orders.map(o => renderOrderCard(o, deliveriesByOrder[o.id] || null)).join('');
+        el.innerHTML = allOrders.map(o => renderOrderCard(o, deliveriesByOrder[o.id] || null)).join('');
+    }
+
+    async function loadImportedOrderFallback(transportRows, includeAll) {
+        const existingSourceIds = new Set((transportRows || []).map(o => o.source_order_id).filter(Boolean));
+        try {
+            const data = await fetchImportedOrders(includeAll ? 200 : 50);
+            return data
+                .filter(o => !existingSourceIds.has(o.id))
+                .filter(o => includeAll || !['completed','invoiced','cancelled'].includes(o.status || 'pending'))
+                .map(mapImportedOrder);
+        } catch(e) {
+            console.warn('[Colixo] imports historique indisponibles', e);
+            return [];
+        }
+    }
+
+    async function fetchImportedOrders(limit) {
+        const storedCode = getStoredPortalCode();
+        if(client?.id && storedCode) {
+            const rpc = await db.rpc('client_import_list_orders', {
+                p_user_id: client.id,
+                p_code: storedCode,
+                p_limit: limit || 200
+            });
+            if(!rpc.error && Array.isArray(rpc.data)) return rpc.data;
+            if(rpc.error) console.warn('[Colixo] client_import_list_orders indisponible', rpc.error);
+        }
+
+        const q = db.from('orders')
+                .select('id,external_reference,delivery_name,delivery_address,delivery_zip,delivery_city,delivery_phone,delivery_instructions,pickup_name,pickup_address,pickup_zip,pickup_city,parcel_count,weight_kg,service_level,tariff_code,status,source_system,import_batch_id,total_price_chf,pricing_status,pricing_details,created_at')
+                .eq('client_id', getClientScopeId())
+                .eq('source_system', 'client_import')
+                .order('created_at', { ascending: false })
+                .limit(limit || 200);
+        const { data, error } = await q;
+        if(error) {
+            console.warn('[Colixo] lecture directe orders indisponible', error);
+            return [];
+        }
+        return data || [];
+    }
+
+    function mapImportedOrder(o) {
+        const pickup = [o.pickup_address, [o.pickup_zip, o.pickup_city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+        const delivery = [o.delivery_address, [o.delivery_zip, o.delivery_city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+        return {
+            __importOnly: true,
+            id: o.id,
+            source_order_id: o.id,
+            import_batch_id: o.import_batch_id,
+            order_number: o.external_reference || o.id.slice(0,8),
+            client_number: o.external_reference || '',
+            pickup_address: pickup || o.pickup_name || '—',
+            delivery_address: delivery || '—',
+            destinataire_nom: o.delivery_name || '',
+            destinataire_tel: o.delivery_phone || '',
+            weight: o.weight_kg || 0,
+            quantity: o.parcel_count || 1,
+            service_type: o.service_level || 'standard',
+            instructions: o.delivery_instructions || '',
+            price_chf: o.total_price_chf || null,
+            status: o.status || 'pending',
+            admin_status: 'pending_validation',
+            created_at: o.created_at,
+            pricing_status: o.pricing_status,
+            tariff_code: o.tariff_code
+        };
     }
 
     function renderOrderCard(o, delivery) {
@@ -2904,9 +2980,8 @@
         const blBtn = hasProof
             ? `<button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>`
             : '';
-        const trackBtn = !isRefused
-            ? `<button class="btn btn-ghost" style="color:var(--blue);border-color:rgba(59,130,246,0.25);" onclick="showTrackingHistory('${o.id}')"><i class="fas fa-map-pin"></i> ${isDelivered?'Historique suivi':'Suivi colis'}</button>`
-            : '';
+        const trackHandler = o.__importOnly ? `showImportedTrackingHistory('${o.id}')` : `showTrackingHistory('${o.id}')`;
+        const trackBtn = `<button class="btn btn-ghost" style="color:var(--blue);border-color:rgba(59,130,246,0.25);" onclick="${trackHandler}"><i class="fas fa-map-pin"></i> ${isDelivered?'Historique suivi':'Suivi colis'}</button>`;
         const deleteBtn = canDelete
             ? `<button class="btn btn-ghost" style="color:var(--red);border-color:rgba(232,49,26,0.2);" onclick="deleteOrder('${o.id}','${escHtml(o.order_number||'')}')"><i class="fas fa-trash"></i> ${isRefused?'Mettre à la poubelle':'Annuler'}</button>`
             : '';
@@ -2938,6 +3013,7 @@
                 <span class="oc-tag">📦 ${o.quantity||1} colis</span>
                 <span class="oc-tag">⚖️ ${o.weight||0} kg</span>
                 <span class="oc-tag">⚡ ${o.service_type||'normal'}</span>
+                ${o.__importOnly?'<span class="oc-tag" style="color:#fed7aa">📥 Import Excel</span>':''}
                 ${o.night_delivery?'<span class="oc-tag">🌙 Nuit</span>':''}
                 ${deliveredFmt?`<span class="oc-tag" style="color:var(--green)">✓ ${deliveredFmt}</span>`:''}
             </div>
@@ -3030,6 +3106,79 @@
                 <div class="timeline">${timelineHtml}</div>
                 ${eventHtml}
                 ${proofHtml}
+            `;
+            openModal('modalTrackingHistory');
+        } catch(e) {
+            console.error(e);
+            toast('❌ ' + (e.message || e));
+        } finally {
+            hideLoad();
+        }
+    };
+
+    window.showImportedTrackingHistory = async function(orderId) {
+        showLoad();
+        try {
+            let o = null;
+            try {
+                const imported = await fetchImportedOrders(500);
+                o = (imported || []).find(row => row.id === orderId) || null;
+            } catch(fetchError) {
+                console.warn('[Colixo] impossible de relire les imports par RPC', fetchError);
+            }
+            if(!o) {
+                const { data, error } = await db.from('orders')
+                    .select('id,external_reference,delivery_name,delivery_address,delivery_zip,delivery_city,delivery_phone,delivery_instructions,pickup_name,pickup_address,pickup_zip,pickup_city,parcel_count,weight_kg,service_level,tariff_code,status,source_system,import_batch_id,total_price_chf,pricing_status,pricing_details,created_at')
+                    .eq('id', orderId)
+                    .eq('client_id', getClientScopeId())
+                    .maybeSingle();
+                if(error || !data) throw error || new Error('Commande importée introuvable');
+                o = data;
+            }
+            const mapped = mapImportedOrder(o);
+            const statusLabel = {
+                pending: 'Importée · en attente de validation',
+                draft: 'Brouillon import',
+                accepted: 'Acceptée',
+                planned: 'Planifiée',
+                in_transit: 'En route',
+                delivered: 'Livrée',
+                completed: 'Terminée',
+                cancelled: 'Annulée'
+            }[mapped.status] || mapped.status || 'Importée';
+
+            const content = document.getElementById('trackingHistoryContent');
+            content.innerHTML = `
+                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+                    <div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:22px;">${escHtml(mapped.order_number)}</div>
+                        <div style="font-size:12px;color:var(--muted);">Import Excel/CSV · créé le ${fmtTL(mapped.created_at) || '—'}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end;">
+                        <span class="oc-tag">📥 Import Excel</span>
+                        <span class="oc-tag">📦 ${mapped.quantity||1} colis</span>
+                        <span class="oc-tag">⚖️ ${mapped.weight||0} kg</span>
+                    </div>
+                </div>
+                <div class="tracking-addresses">
+                    <div class="tracking-addr-box"><div class="tracking-addr-label">🔵 Enlèvement</div><div class="tracking-addr-val">${escHtml(mapped.pickup_address||'—')}</div></div>
+                    <div class="tracking-addr-box"><div class="tracking-addr-label">🔴 Livraison</div><div class="tracking-addr-val">${escHtml(mapped.delivery_address||'—')}</div></div>
+                </div>
+                <div class="timeline">
+                    <div class="tl-step">
+                        <div class="tl-left"><div class="tl-dot done">✓</div><div class="tl-line done"></div></div>
+                        <div class="tl-content"><div class="tl-label done">Commande chargée depuis Excel/CSV</div><div class="tl-time">🕐 ${fmtTL(mapped.created_at) || '—'}</div></div>
+                    </div>
+                    <div class="tl-step">
+                        <div class="tl-left"><div class="tl-dot active">📋</div></div>
+                        <div class="tl-content"><div class="tl-label active">${escHtml(statusLabel)}</div><div class="tl-time">Référence client : ${escHtml(mapped.order_number)}</div></div>
+                    </div>
+                </div>
+                <div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);color:var(--muted2);font-size:12px;line-height:1.45;">
+                    Cette commande provient d’un import Excel/CSV. Dès qu’elle est synchronisée dans le dispatch Colixo, le suivi détaillé chauffeur et le BL apparaissent ici automatiquement.
+                    ${mapped.tariff_code ? `<br><strong style="color:#fff;">Code tarif :</strong> ${escHtml(mapped.tariff_code)}` : ''}
+                    ${mapped.price_chf != null ? `<br><strong style="color:#fff;">Prix :</strong> ${fmt(mapped.price_chf)} CHF` : ''}
+                </div>
             `;
             openModal('modalTrackingHistory');
         } catch(e) {
