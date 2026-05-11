@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511u -->
+    <!-- colixo-build:20260511w -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511v"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511v-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511w"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511w-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -1981,29 +1981,55 @@
         return '';
     }
 
+    function hasCompleteDeliveryAddress() {
+        return ['livAdresse', 'livNpa', 'livVille'].every(id => document.getElementById(id)?.value.trim());
+    }
+
+    function hasCompletePickupAddress() {
+        const pickupType = document.querySelector('input[name="pickupType"]:checked')?.value;
+        if (pickupType === 'custom') {
+            return ['customPickupAddress', 'customPickupNpa', 'customPickupVille'].every(id => document.getElementById(id)?.value.trim());
+        }
+        return Boolean(getPickupAddressString());
+    }
+
+    function resetDistancePreview(message = '') {
+        distanceKm = null;
+        const resultEl = document.getElementById('distanceResult');
+        const overageEl = document.getElementById('distanceOverage');
+        if (resultEl) resultEl.textContent = message;
+        if (overageEl) {
+            overageEl.style.display = 'none';
+            overageEl.innerHTML = '';
+        }
+        updateTotalPrice();
+    }
+
     window.calcDistance = async function() {
-        const deliveryAddr = [
-            document.getElementById('livAdresse').value.trim(),
-            document.getElementById('livNpa').value.trim(),
-            document.getElementById('livVille').value.trim()
-        ].filter(Boolean).join(' ');
+        const deliveryParts = [
+            document.getElementById('livAdresse')?.value.trim() || '',
+            document.getElementById('livNpa')?.value.trim() || '',
+            document.getElementById('livVille')?.value.trim() || ''
+        ];
+        const deliveryAddr = deliveryParts.filter(Boolean).join(' ');
         const pickupAddr = getPickupAddressString();
 
-        if (!deliveryAddr || !pickupAddr) {
-            document.getElementById('distanceResult').textContent = 'Renseignez les deux adresses';
+        if (!deliveryParts.every(Boolean) || !hasCompletePickupAddress() || !pickupAddr) {
+            resetDistancePreview(deliveryAddr ? 'Renseignez les deux adresses complètes' : '');
             return;
         }
         const btn = document.getElementById('btnCalcDist');
         const resultEl = document.getElementById('distanceResult');
-        btn.disabled = true;
-        resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calcul en cours…';
-        document.getElementById('distanceOverage').style.display = 'none';
+        if (btn) btn.disabled = true;
+        if (resultEl) resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calcul en cours…';
+        const overageEl = document.getElementById('distanceOverage');
+        if (overageEl) overageEl.style.display = 'none';
         distanceKm = null;
 
         try {
             const [from, to] = await Promise.all([geocodeAddress(pickupAddr), geocodeAddress(deliveryAddr)]);
             distanceKm = await getRouteDistanceKm(from, to);
-            resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
+            if (resultEl) resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
 
             const _abn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
             const included = Number(_abn?.km_inclus ?? clientTarif?.included_km ?? 0);
@@ -2011,15 +2037,17 @@
             if (included > 0 && rate > 0 && distanceKm > included) {
                 const extra = Math.round((distanceKm - included) * 10) / 10;
                 const cost = Math.round(extra * rate * 100) / 100;
-                document.getElementById('distanceOverage').style.display = 'block';
-                document.getElementById('distanceOverage').innerHTML =
-                    `⚠️ Dépassement : ${extra} km au-delà des ${included} km inclus × ${rate.toFixed(2)} CHF/km = <strong>+${cost.toFixed(2)} CHF</strong>`;
+                if (overageEl) {
+                    overageEl.style.display = 'block';
+                    overageEl.innerHTML =
+                        `⚠️ Dépassement : ${extra} km au-delà des ${included} km inclus × ${rate.toFixed(2)} CHF/km = <strong>+${cost.toFixed(2)} CHF</strong>`;
+                }
             }
         } catch(e) {
-            resultEl.innerHTML = `<span style="color:var(--red)"><i class="fas fa-exclamation-triangle"></i> ${e.message}</span>`;
+            if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)"><i class="fas fa-exclamation-triangle"></i> ${e.message}</span>`;
             distanceKm = null;
         } finally {
-            btn.disabled = false;
+            if (btn) btn.disabled = false;
         }
         updateTotalPrice();
     };
@@ -2064,7 +2092,16 @@
 
     function scheduleDistanceCalc() {
         clearTimeout(_distTimer);
-        _distTimer = setTimeout(() => window.calcDistance(), 1200);
+        resetDistancePreview();
+        if (!hasCompleteDeliveryAddress()) return;
+        if (!hasCompletePickupAddress()) {
+            const resultEl = document.getElementById('distanceResult');
+            if (resultEl) resultEl.textContent = 'Renseignez l’adresse de départ';
+            return;
+        }
+        const resultEl = document.getElementById('distanceResult');
+        if (resultEl) resultEl.innerHTML = '<i class="fas fa-clock"></i> Distance en attente…';
+        _distTimer = setTimeout(() => window.calcDistance(), 700);
     }
     // ────────────────────────────────────────────────────────────────
 
@@ -2223,6 +2260,7 @@
         document.getElementById('livVille').value = addr.ville || '';
         document.getElementById('destTel').value = addr.telephone || '';
         toast('Adresse chargée');
+        scheduleDistanceCalc();
         openPortalPane('new');
     };
 
@@ -2261,6 +2299,7 @@
         document.getElementById('autocompleteList').style.display = 'none';
         document.getElementById('searchRecipient').value = addr.nom;
         toast('Adresse chargée');
+        scheduleDistanceCalc();
     };
 
     document.addEventListener('click', function(e) {
@@ -3827,13 +3866,16 @@
         hidePricesForMagasinier();
         loadOrders();
         // Auto-calc distance when delivery address changes
-        ['livAdresse','livNpa','livVille'].forEach(id => {
+        ['livAdresse','livNpa','livVille','customPickupAddress','customPickupNpa','customPickupVille'].forEach(id => {
             const el = document.getElementById(id);
-            if(el) el.addEventListener('input', scheduleDistanceCalc);
+            if(el) ['input','change','blur'].forEach(evt => el.addEventListener(evt, scheduleDistanceCalc));
         });
         document.querySelectorAll('input[name="pickupType"]').forEach(r => {
-            r.addEventListener('change', () => { distanceKm = null; document.getElementById('distanceResult').textContent = ''; updateTotalPrice(); });
+            r.addEventListener('change', () => scheduleDistanceCalc());
         });
+        setTimeout(() => {
+            if (hasCompleteDeliveryAddress()) scheduleDistanceCalc();
+        }, 300);
         document.getElementById('tabTeam').style.display = 'block';
         loadTeam();
         document.getElementById('departAddr').innerHTML = clientEntreprise
