@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511w -->
+    <!-- colixo-build:20260511x -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511w"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511w-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511x"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511x-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -594,6 +594,13 @@
                   <div id="distanceResult" style="font-size:13px;color:var(--muted);"></div>
                 </div>
                 <div id="distanceOverage" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;font-size:12px;color:var(--yellow);"></div>
+                <div id="addressPriceEstimate" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border2);">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:800;">
+                    <span style="color:var(--muted);font-size:12px;text-transform:uppercase;">Prix estimé</span>
+                    <span id="addressTotalPrice" style="font-size:18px;color:var(--green);">0 CHF</span>
+                  </div>
+                  <div id="addressPriceDetail" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
+                </div>
               </div>
               <div id="distanceBox"></div>
 
@@ -928,7 +935,7 @@
     let colisExpediesMonth = 0;
 
     function getClientScopeId() {
-        return client?.entreprise_id || client?.id || null;
+        return client?.entreprise_id || clientEntreprise?.id || client?.id || null;
     }
 
     function getStoredPortalCode() {
@@ -2005,6 +2012,15 @@
         updateTotalPrice();
     }
 
+    function getDistancePricingInfo() {
+        const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
+        const includedKm = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
+        const extraKmRate = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
+        const extraKm = distanceKm != null && includedKm > 0 ? Math.max(0, Math.round((distanceKm - includedKm) * 10) / 10) : 0;
+        const kmCost = extraKm > 0 && extraKmRate > 0 ? Math.round(extraKm * extraKmRate * 100) / 100 : 0;
+        return { includedKm, extraKmRate, extraKm, kmCost };
+    }
+
     window.calcDistance = async function() {
         const deliveryParts = [
             document.getElementById('livAdresse')?.value.trim() || '',
@@ -2031,16 +2047,17 @@
             distanceKm = await getRouteDistanceKm(from, to);
             if (resultEl) resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
 
-            const _abn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-            const included = Number(_abn?.km_inclus ?? clientTarif?.included_km ?? 0);
-            const rate = Number(_abn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
-            if (included > 0 && rate > 0 && distanceKm > included) {
-                const extra = Math.round((distanceKm - included) * 10) / 10;
-                const cost = Math.round(extra * rate * 100) / 100;
+            const { includedKm, extraKmRate, extraKm, kmCost } = getDistancePricingInfo();
+            if (includedKm > 0 && extraKmRate > 0 && overageEl) {
+                const inIncludedRange = kmCost <= 0;
+                overageEl.style.display = 'block';
+                overageEl.style.background = inIncludedRange ? 'rgba(16,185,129,0.10)' : 'rgba(245,158,11,0.1)';
+                overageEl.style.borderColor = inIncludedRange ? 'rgba(16,185,129,0.30)' : 'rgba(245,158,11,0.3)';
+                overageEl.style.color = inIncludedRange ? 'var(--green)' : 'var(--yellow)';
                 if (overageEl) {
-                    overageEl.style.display = 'block';
-                    overageEl.innerHTML =
-                        `⚠️ Dépassement : ${extra} km au-delà des ${included} km inclus × ${rate.toFixed(2)} CHF/km = <strong>+${cost.toFixed(2)} CHF</strong>`;
+                    overageEl.innerHTML = inIncludedRange
+                        ? `Supplément km : <strong>+0.00 CHF</strong> (${distanceKm} km, inclus jusqu’à ${includedKm} km)`
+                        : `Supplément km : ${extraKm} km au-delà des ${includedKm} km inclus × ${extraKmRate.toFixed(2)} CHF/km = <strong>+${kmCost.toFixed(2)} CHF</strong>`;
                 }
             }
         } catch(e) {
@@ -2135,14 +2152,8 @@
         let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
 
         // Overage km cost — active abonnement overrides tarif base settings
-        let kmCost = 0;
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-        const includedKm = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
-        const extraKmRate = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
-        if (distanceKm != null && includedKm > 0 && extraKmRate > 0 && distanceKm > includedKm) {
-            const extraKm = Math.round((distanceKm - includedKm) * 10) / 10;
-            kmCost = Math.round(extraKm * extraKmRate * 100) / 100;
-        }
+        const { includedKm, extraKmRate, extraKm, kmCost } = getDistancePricingInfo();
 
         // Supplément colis hors quota mensuel
         let colisSup = 0;
@@ -2162,7 +2173,10 @@
         const rabaisMontant = rabaisPct > 0 ? subtotal * rabaisPct / 100 : 0;
         let total = subtotal - rabaisMontant;
 
-        document.getElementById('totalPrice').textContent = fmt(total) + ' CHF';
+        const totalText = fmt(total) + ' CHF';
+        document.getElementById('totalPrice').textContent = totalText;
+        const addressTotalEl = document.getElementById('addressTotalPrice');
+        if(addressTotalEl) addressTotalEl.textContent = totalText;
 
         const serviceNames = Array.from(new Set(colisList.map(c => {
             const ref = getServiceRefForColis(c);
@@ -2171,12 +2185,18 @@
         })));
         const detailParts=[`${serviceNames.join(' + ')}: ${fmt(baseTotal)} CHF`];
         if(distanceKm != null) detailParts.push(`📍 ${distanceKm} km`);
-        if(kmCost > 0) detailParts.push(`Dépassement km +${fmt(kmCost)} CHF`);
+        if(distanceKm != null && includedKm > 0 && extraKmRate > 0) {
+            if(kmCost > 0) detailParts.push(`Km sup ${extraKm} km × ${fmt(extraKmRate)} CHF = +${fmt(kmCost)} CHF`);
+            else detailParts.push(`Km sup +0.00 CHF (${includedKm} km inclus)`);
+        }
         if(colisSup > 0) detailParts.push(`Colis hors forfait +${fmt(colisSup)} CHF`);
         if(optLabels.length) detailParts.push(...optLabels);
         if(nuitSuppl) detailParts.push('Nuit +'+fmt(nuitSuppl)+' CHF');
         if(rabaisMontant>0) detailParts.push(`Rabais volume ${rabaisPct}% −${fmt(rabaisMontant)} CHF`);
-        document.getElementById('priceDetail').innerHTML = detailParts.join(' · ');
+        const detailHtml = detailParts.join(' · ');
+        document.getElementById('priceDetail').innerHTML = detailHtml;
+        const addressDetailEl = document.getElementById('addressPriceDetail');
+        if(addressDetailEl) addressDetailEl.innerHTML = detailHtml;
         return total;
     }
 
@@ -3855,7 +3875,9 @@
 
         const entPromise = user.entreprise_id
             ? db.from('entreprises').select('*').eq('id', user.entreprise_id).single()
-            : Promise.resolve({ data: null });
+            : (user.email
+                ? db.from('entreprises').select('*').eq('email', user.email).limit(1).maybeSingle()
+                : Promise.resolve({ data: null }));
         const [{ data: ent }] = await Promise.all([entPromise]);
         clientEntreprise = ent || null;
 
