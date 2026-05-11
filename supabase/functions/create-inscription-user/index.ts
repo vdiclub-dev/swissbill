@@ -163,15 +163,39 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Rôle non autorisé." });
   }
 
-  const { data: existingProf } = await supabaseAdmin
+  const { data: existingProf, error: existingErr } = await supabaseAdmin
     .from("utilisateurs")
-    .select("id")
+    .select("id, code_usr, code")
     .eq("email", email)
     .maybeSingle();
+  if (existingErr) {
+    console.error("existing utilisateurs lookup", existingErr);
+    return json({ ok: false, error: existingErr.message ?? "Lecture du profil impossible." });
+  }
   if (existingProf?.id) {
+    const existingCode = (existingProf.code_usr || existingProf.code || code_usr).trim();
+    const { error: updErr } = await supabaseAdmin.from("utilisateurs").update({
+      role,
+      actif: true,
+      code_usr: existingCode,
+      code: existingCode,
+      prenom: prenom || null,
+      nom: nom || null,
+      telephone,
+      entreprise_nom,
+    }).eq("id", existingProf.id);
+    if (updErr) {
+      console.error("utilisateurs update existing", updErr);
+      return json({
+        ok: false,
+        error: updErr.message ?? "Mise à jour du profil impossible.",
+      });
+    }
     return json({
-      ok: false,
-      error: "Un profil existe déjà pour cet email — utilisez la mise à jour depuis la liste.",
+      ok: true,
+      user_id: existingProf.id,
+      code_usr: existingCode,
+      existing_profile: true,
     });
   }
 
@@ -235,5 +259,5 @@ Deno.serve(async (req) => {
     });
   }
 
-  return json({ ok: true, user_id: userId });
+  return json({ ok: true, user_id: userId, code_usr });
 });
