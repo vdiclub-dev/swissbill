@@ -1,5 +1,6 @@
 /**
  * Alerte e-mail quand une nouvelle demande arrive dans public.demandes_inscription.
+ * Pour les demandes d'inscription, envoie aussi un accusé de réception au client.
  *
  * Déploiement :
  *   supabase functions deploy notify-new-lead --no-verify-jwt
@@ -32,6 +33,62 @@ type WebhookPayload = {
   schema?: string;
   record?: Record<string, unknown>;
 };
+
+function parseSender(value: string): { email: string; name?: string } {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(.*?)<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^["']|["']$/g, "");
+    return { email: match[2].trim(), ...(name ? { name } : {}) };
+  }
+  return { email: trimmed };
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function sendBrevoEmail(args: {
+  apiKey: string;
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  replyTo?: string;
+}) {
+  const body: Record<string, unknown> = {
+    sender: parseSender(args.from),
+    to: [{ email: args.to }],
+    subject: args.subject,
+    textContent: args.text,
+  };
+  if (args.html) body.htmlContent = args.html;
+  if (args.replyTo && isValidEmail(args.replyTo)) body.replyTo = { email: args.replyTo };
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": args.apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Brevo ${res.status}: ${errBody}`);
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -77,6 +134,7 @@ Deno.serve(async (req) => {
 
   let subject: string;
   let text: string;
+  let clientConfirmation: { to: string; subject: string; text: string; html: string } | null = null;
 
   if (payload.table === "quota_alert") {
     const r = record;
@@ -155,6 +213,37 @@ Deno.serve(async (req) => {
       `Créée le : ${createdAt || "—"}\n` +
       `ID : ${id || "—"}\n\n` +
       `Message :\n${message || "—"}\n`;
+
+    if (isValidEmail(email)) {
+      const displayName = [prenom, nom].filter(Boolean).join(" ").trim() || "Bonjour";
+      const companyLine = entreprise && entreprise !== "—" ? `Entreprise : ${entreprise}\n` : "";
+      clientConfirmation = {
+        to: email,
+        subject: "Votre demande d'inscription Colixo a bien été reçue",
+        text:
+          `Bonjour ${displayName},\n\n` +
+          `Nous confirmons la réception de votre demande d'inscription Colixo.\n\n` +
+          `${companyLine}` +
+          `Notre équipe va la vérifier puis vous transmettre votre code d'accès dès validation.\n\n` +
+          `Vous n'avez rien d'autre à faire pour le moment.\n\n` +
+          `Cordialement,\n` +
+          `L'équipe Colixo\n` +
+          `info@colixo.ch\n`,
+        html:
+          `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;max-width:620px;">` +
+          `<div style="font-size:22px;font-weight:800;color:#e8311a;margin-bottom:14px;">Colixo</div>` +
+          `<p>Bonjour ${escapeHtml(displayName)},</p>` +
+          `<p>Nous confirmons la réception de votre demande d'inscription Colixo.</p>` +
+          `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin:18px 0;">` +
+          `${companyLine ? `<div><strong>Entreprise :</strong> ${escapeHtml(entreprise)}</div>` : ""}` +
+          `<div><strong>Statut :</strong> en attente de validation</div>` +
+          `</div>` +
+          `<p>Notre équipe va la vérifier puis vous transmettre votre code d'accès dès validation.</p>` +
+          `<p>Vous n'avez rien d'autre à faire pour le moment.</p>` +
+          `<p style="margin-top:22px;">Cordialement,<br><strong>L'équipe Colixo</strong><br><a href="mailto:info@colixo.ch" style="color:#e8311a;">info@colixo.ch</a></p>` +
+          `</div>`,
+      };
+    }
   } else {
     return new Response(JSON.stringify({ ok: true, skipped: "wrong table" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -162,29 +251,55 @@ Deno.serve(async (req) => {
   }
 
   const replyTo = String(record.email ?? "").trim() || undefined;
+  const errors: string[] = [];
+  let adminSent = false;
 
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key": brevoKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      sender: { email: from },
-      to: [{ email: to }],
+  try {
+    await sendBrevoEmail({
+      apiKey: brevoKey,
+      from,
+      to,
       subject,
-      textContent: text,
-      ...(replyTo ? { replyTo: { email: replyTo } } : {}),
-    }),
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    console.error("Brevo error", res.status, errBody);
-    return new Response(errBody, { status: 502, headers: corsHeaders });
+      text,
+      replyTo,
+    });
+    adminSent = true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Brevo admin notification error", message);
+    errors.push(`admin: ${message}`);
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
+  if (clientConfirmation) {
+    try {
+      await sendBrevoEmail({
+        apiKey: brevoKey,
+        from,
+        to: clientConfirmation.to,
+        subject: clientConfirmation.subject,
+        text: clientConfirmation.text,
+        html: clientConfirmation.html,
+        replyTo: to,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Brevo client confirmation error", message);
+      errors.push(`client: ${message}`);
+    }
+  }
+
+  if (!adminSent) {
+    return new Response(JSON.stringify({ ok: false, errors }), {
+      status: 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  return new Response(JSON.stringify({
+    ok: true,
+    client_confirmation: !!clientConfirmation && !errors.some((e) => e.startsWith("client:")),
+    warnings: errors,
+  }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
