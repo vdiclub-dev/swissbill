@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511c -->
+    <!-- colixo-build:20260511e -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511c"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511c-edge-handoff"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511e"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511e-tracking-history"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -752,6 +752,20 @@
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="printEtiquette()"><i class="fas fa-print"></i> Imprimer l'étiquette</button>
             <button class="btn btn-ghost" onclick="closeModal('modalPDF')">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SUIVI / HISTORIQUE COLIS -->
+<div id="modalTrackingHistory" class="modal">
+    <div class="modal-box" style="max-width:720px;">
+        <div class="modal-head">
+            <div class="modal-title">📍 SUIVI DU COLIS</div>
+            <button class="modal-close" onclick="closeModal('modalTrackingHistory')">✕</button>
+        </div>
+        <div id="trackingHistoryContent" style="margin-top:12px;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('modalTrackingHistory')">Fermer</button>
         </div>
     </div>
 </div>
@@ -2890,8 +2904,8 @@
         const blBtn = hasProof
             ? `<button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>`
             : '';
-        const trackBtn = !isDelivered && !isRefused
-            ? `<button class="btn btn-ghost" style="color:var(--blue);border-color:rgba(59,130,246,0.25);" onclick="openPortalPane('tracking')"><i class="fas fa-map-pin"></i> Suivre</button>`
+        const trackBtn = !isRefused
+            ? `<button class="btn btn-ghost" style="color:var(--blue);border-color:rgba(59,130,246,0.25);" onclick="showTrackingHistory('${o.id}')"><i class="fas fa-map-pin"></i> ${isDelivered?'Historique suivi':'Suivi colis'}</button>`
             : '';
         const deleteBtn = canDelete
             ? `<button class="btn btn-ghost" style="color:var(--red);border-color:rgba(232,49,26,0.2);" onclick="deleteOrder('${o.id}','${escHtml(o.order_number||'')}')"><i class="fas fa-trash"></i> ${isRefused?'Mettre à la poubelle':'Annuler'}</button>`
@@ -2934,6 +2948,97 @@
             </div>
         </div>`;
     }
+
+    window.showTrackingHistory = async function(orderId) {
+        showLoad();
+        try {
+            const [{ data: o }, { data: events }, { data: preuve }, { data: delivery }] = await Promise.all([
+                db.from('transport_orders_simple').select('*')
+                    .eq('id', orderId)
+                    .eq('entreprise_id', getClientScopeId())
+                    .single(),
+                db.from('tracking_events').select('*').eq('order_id', orderId).order('created_at', { ascending: true }),
+                db.from('preuves_livraison').select('*').eq('stop_id', orderId).maybeSingle(),
+                db.from('deliveries').select('*').eq('order_id', orderId).maybeSingle()
+            ]);
+            if(!o) throw new Error('Transport introuvable');
+
+            const steps = getTimelineSteps(o);
+            const deliveryProof = delivery || null;
+            const hasProof = !!(deliveryProof && (deliveryProof.photo_data || deliveryProof.signature_data)) || !!(preuve && (preuve.photo_url || preuve.signature_url));
+            const photoSrc = deliveryProof?.photo_data || preuve?.photo_url || null;
+            const sigSrc = deliveryProof?.signature_data || preuve?.signature_url || null;
+            const noteChauf = deliveryProof?.note_livraison || null;
+
+            const timelineHtml = steps.map((s, i) => `
+                <div class="tl-step">
+                    <div class="tl-left">
+                        <div class="tl-dot ${s.state}">${s.state === 'done' ? '✓' : s.icon}</div>
+                        ${i < steps.length-1 ? `<div class="tl-line ${s.state==='done'?'done':''}"></div>` : ''}
+                    </div>
+                    <div class="tl-content">
+                        <div class="tl-label ${s.state}">${s.label}</div>
+                        ${s.time ? `<div class="tl-time">🕐 ${s.time}</div>` : ''}
+                    </div>
+                </div>`).join('');
+
+            const eventHtml = (events || []).length
+                ? `<div style="margin-top:14px;">
+                    <div style="font-size:11px;font-weight:900;color:var(--muted2);text-transform:uppercase;margin-bottom:8px;">Historique détaillé</div>
+                    ${(events || []).map(ev => `
+                        <div style="display:grid;grid-template-columns:118px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;">
+                            <div style="color:var(--muted);">${fmtTL(ev.created_at)}</div>
+                            <div>
+                                <strong style="color:#fff;">${escHtml(ev.event_type || 'Événement')}</strong>
+                                ${ev.location ? `<div style="color:var(--muted2);margin-top:2px;">📍 ${escHtml(ev.location)}</div>` : ''}
+                                ${ev.note || ev.description ? `<div style="color:var(--muted2);margin-top:2px;">${escHtml(ev.note || ev.description)}</div>` : ''}
+                            </div>
+                        </div>`).join('')}
+                </div>`
+                : `<div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--muted2);font-size:12px;">Aucun événement détaillé supplémentaire pour l’instant.</div>`;
+
+            const proofHtml = hasProof
+                ? `<div style="margin-top:14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:12px;padding:12px;">
+                    <div style="font-size:11px;font-weight:900;color:var(--green);text-transform:uppercase;margin-bottom:8px;">Preuve de livraison</div>
+                    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                        ${photoSrc ? `<img src="${photoSrc}" style="height:86px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuve('${o.id}')">` : ''}
+                        ${sigSrc ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${sigSrc}" style="height:86px;border-radius:6px;object-fit:contain;" title="Signature"></div>` : ''}
+                        ${noteChauf ? `<div style="font-size:12px;color:var(--muted2);min-width:160px;"><strong style="color:#fff;">Note livreur</strong><br>${escHtml(noteChauf)}</div>` : ''}
+                        <button class="btn btn-ghost" style="color:var(--green)" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> Voir preuve</button>
+                        <button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>
+                    </div>
+                </div>`
+                : '';
+
+            const content = document.getElementById('trackingHistoryContent');
+            content.innerHTML = `
+                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+                    <div>
+                        <div style="font-family:'Bebas Neue',cursive;font-size:22px;">${escHtml(o.order_number || o.id.slice(0,8))}</div>
+                        <div style="font-size:12px;color:var(--muted);">Créé le ${fmtTL(o.created_at) || '—'}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end;">
+                        <span class="oc-tag">📦 ${o.quantity||1} colis</span>
+                        <span class="oc-tag">⚖️ ${o.weight||0} kg</span>
+                        <span class="oc-tag">⚡ ${escHtml(o.service_type||'normal')}</span>
+                    </div>
+                </div>
+                <div class="tracking-addresses">
+                    <div class="tracking-addr-box"><div class="tracking-addr-label">🔵 Enlèvement</div><div class="tracking-addr-val">${escHtml(o.pickup_address||'—')}</div></div>
+                    <div class="tracking-addr-box"><div class="tracking-addr-label">🔴 Livraison</div><div class="tracking-addr-val">${escHtml(o.delivery_address||'—')}</div></div>
+                </div>
+                <div class="timeline">${timelineHtml}</div>
+                ${eventHtml}
+                ${proofHtml}
+            `;
+            openModal('modalTrackingHistory');
+        } catch(e) {
+            console.error(e);
+            toast('❌ ' + (e.message || e));
+        } finally {
+            hideLoad();
+        }
+    };
 
     window.openRefusedEdit = async function(orderId) {
         showLoad();
