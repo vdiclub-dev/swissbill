@@ -22,6 +22,8 @@
  *     x-webhook-secret  = <WEBHOOK_SECRET>
  */
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
@@ -32,6 +34,8 @@ type WebhookPayload = {
   table?: string;
   schema?: string;
   record?: Record<string, unknown>;
+  admin_id?: string;
+  admin_code?: string;
 };
 
 function parseSender(value: string): { email: string; name?: string } {
@@ -90,6 +94,29 @@ async function sendBrevoEmail(args: {
   }
 }
 
+function normCode(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+async function isManualAdminAuthorized(payload: WebhookPayload): Promise<boolean> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const adminId = String(payload.admin_id ?? "").trim();
+  const adminCode = normCode(payload.admin_code);
+  if (!supabaseUrl || !serviceKey || !adminId || !adminCode) return false;
+
+  const admin = createClient(supabaseUrl, serviceKey);
+  const { data, error } = await admin
+    .from("utilisateurs")
+    .select("role, code_usr, code")
+    .eq("id", adminId)
+    .maybeSingle();
+
+  if (error || !data || !["admin", "super_admin"].includes(String(data.role))) return false;
+  const dbCodes = [data.code_usr, data.code].map(normCode).filter(Boolean);
+  return dbCodes.includes(adminCode);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -99,19 +126,28 @@ Deno.serve(async (req) => {
     return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
   }
 
-  const secret = Deno.env.get("WEBHOOK_SECRET")?.trim();
-  if (secret) {
-    const headerSecret = (req.headers.get("x-webhook-secret") ?? "").trim();
-    if (headerSecret !== secret) {
-      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-    }
-  }
-
   let payload: WebhookPayload;
   try {
     payload = (await req.json()) as WebhookPayload;
   } catch {
     return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+  }
+
+  const isManualSignupConfirmation =
+    payload.type === "manual_signup_confirmation" &&
+    (!payload.table || payload.table === "demandes_inscription");
+
+  const secret = Deno.env.get("WEBHOOK_SECRET")?.trim();
+  if (secret) {
+    const headerSecret = (req.headers.get("x-webhook-secret") ?? "").trim();
+    if (headerSecret !== secret && !isManualSignupConfirmation) {
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    }
+    if (headerSecret !== secret && isManualSignupConfirmation && !(await isManualAdminAuthorized(payload))) {
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    }
+  } else if (isManualSignupConfirmation && !(await isManualAdminAuthorized(payload))) {
+    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
   }
 
   const record = payload.record;
@@ -252,22 +288,24 @@ Deno.serve(async (req) => {
 
   const replyTo = String(record.email ?? "").trim() || undefined;
   const errors: string[] = [];
-  let adminSent = false;
+  let adminSent = isManualSignupConfirmation;
 
-  try {
-    await sendBrevoEmail({
-      apiKey: brevoKey,
-      from,
-      to,
-      subject,
-      text,
-      replyTo,
-    });
-    adminSent = true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Brevo admin notification error", message);
-    errors.push(`admin: ${message}`);
+  if (!isManualSignupConfirmation) {
+    try {
+      await sendBrevoEmail({
+        apiKey: brevoKey,
+        from,
+        to,
+        subject,
+        text,
+        replyTo,
+      });
+      adminSent = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Brevo admin notification error", message);
+      errors.push(`admin: ${message}`);
+    }
   }
 
   if (clientConfirmation) {
@@ -289,6 +327,13 @@ Deno.serve(async (req) => {
   }
 
   if (!adminSent) {
+    return new Response(JSON.stringify({ ok: false, errors }), {
+      status: 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (isManualSignupConfirmation && errors.some((e) => e.startsWith("client:"))) {
     return new Response(JSON.stringify({ ok: false, errors }), {
       status: 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

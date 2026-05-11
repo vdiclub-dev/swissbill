@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../config.js?v=20260462"></script>
-    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
+    <script data-cfasync="false" src="../config.js?v=20260511h"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260511h-manual-confirmation"></script>
     <style>
         :root {
             --night:#0d0f14; --night2:#13171f; --night3:#1c2130;
@@ -437,6 +437,7 @@
                 </div>
                 <div class="card-footer">
                     ${statut === 'en_attente' ? `
+                        <button class="btn-email" onclick="renvoyerConfirmationInscription('${d.id}')"><i class="fas fa-paper-plane"></i> Confirmation</button>
                         <button class="btn-valider" onclick="openValidation('${d.id}')"><i class="fas fa-check"></i> Valider & Créer compte</button>
                         <button class="btn-refuser" onclick="refuserDemande('${d.id}')"><i class="fas fa-times"></i></button>
                     ` : statut === 'valide' ? `
@@ -649,6 +650,37 @@ L'équipe Colixo`
         const d = allDemandes.find(x => x.id == id);
         if (!d || !d.email) { toast('error', 'Email introuvable'); return; }
         ouvrirEmailNotification(d.email, d.prenom, d.code_attribue || '—', d.role_attribue || 'client');
+    };
+
+    window.renvoyerConfirmationInscription = async function(id) {
+        const d = allDemandes.find(x => x.id == id);
+        if (!d || !d.email) { toast('error', 'Email introuvable'); return; }
+
+        const adminCode = (codeUser?.code || codeUser?.code_usr || window.colixoGetStoredCode?.() || '').trim().toUpperCase();
+        if (!codeUser?.id || !adminCode) {
+            toast('error', 'Session admin incomplète. Reconnectez-vous avec votre code admin.');
+            return;
+        }
+
+        try {
+            toast('success', 'Envoi de la confirmation...');
+            const { data, error } = await db.functions.invoke('notify-new-lead', {
+                body: {
+                    type: 'manual_signup_confirmation',
+                    table: 'demandes_inscription',
+                    admin_id: codeUser.id,
+                    admin_code: adminCode,
+                    record: d
+                }
+            });
+            if (error) throw error;
+            if (data && data.ok === false) {
+                throw new Error((data.errors || [data.error || 'Envoi impossible']).join(' · '));
+            }
+            toast('success', 'Confirmation renvoyée au client.');
+        } catch (err) {
+            toast('error', 'Erreur envoi confirmation : ' + (err.message || err));
+        }
     };
 
     // ── Init ──
