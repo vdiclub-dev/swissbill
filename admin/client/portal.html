@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511x -->
+    <!-- colixo-build:20260511y -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511x"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511x-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511y"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511y-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -460,6 +460,7 @@
                             <div class="home-tariff-price">—<span>Prix estimé</span></div>
                         </div>
                     </div>
+                    <div id="clientKmNotice" style="display:none;margin-top:14px;padding:13px 15px;border-radius:14px;background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.28);color:#bfdbfe;font-size:12px;line-height:1.45;"></div>
                     <div class="home-contact" aria-label="Contact Colixo">
                         <a href="tel:+41798700488"><i class="fas fa-phone"></i> +41 79 870 04 88</a>
                         <a href="mailto:info@colixo.ch"><i class="fas fa-envelope"></i> info@colixo.ch</a>
@@ -589,6 +590,7 @@
 
               <div class="form-section" style="margin-top:16px;"><i class="fas fa-route" style="color:var(--blue)"></i> DISTANCE</div>
               <div style="background:var(--night3);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;margin-bottom:8px;">
+                <div id="distanceKmRuleNotice" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.28);color:#bfdbfe;font-size:12px;line-height:1.45;"></div>
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                   <button type="button" onclick="calcDistance()" id="btnCalcDist" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;"><i class="fas fa-ruler-horizontal"></i> Calculer</button>
                   <div id="distanceResult" style="font-size:13px;color:var(--muted);"></div>
@@ -1074,6 +1076,7 @@
         clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), r]));
         updateServicePrices();
         renderColis();
+        renderClientKmNotice();
         updateTotalPrice();
     }
 
@@ -2012,13 +2015,132 @@
         updateTotalPrice();
     }
 
+    function getActiveKmTierConfig() {
+        const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a => a && a.actif) : null;
+        const cfg = activeAbn?.km_pricing || activeAbn?.kmPricing || clientTarif?.km_pricing || null;
+        if (!cfg || !cfg.profiles || typeof cfg.profiles !== 'object') return null;
+        return cfg;
+    }
+
+    function getFieldValue(id) {
+        return document.getElementById(id)?.value.trim() || '';
+    }
+
+    function getCurrentPickupPostalInfo() {
+        const pickupType = document.querySelector('input[name="pickupType"]:checked')?.value;
+        if (pickupType === 'custom') {
+            return { npa: getFieldValue('customPickupNpa'), ville: getFieldValue('customPickupVille') };
+        }
+        return { npa: clientEntreprise?.npa || '', ville: clientEntreprise?.ville || '' };
+    }
+
+    function getCurrentDeliveryPostalInfo() {
+        return { npa: getFieldValue('livNpa'), ville: getFieldValue('livVille') };
+    }
+
+    function normalizeCityName(value) {
+        return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function postalMatchesRule(info, profile) {
+        const npa = String(info?.npa || '').trim();
+        const city = normalizeCityName(info?.ville || '');
+        const prefixes = Array.isArray(profile?.match_postal_prefixes) ? profile.match_postal_prefixes : [];
+        const cities = Array.isArray(profile?.match_cities) ? profile.match_cities : [];
+        return prefixes.some(prefix => npa.startsWith(String(prefix))) ||
+            cities.some(name => city.includes(normalizeCityName(name)));
+    }
+
+    function getKmTierProfile(config) {
+        if (!config?.profiles) return null;
+        const lausanneKey = config.lausanne_profile || 'lausanne';
+        const lausanneProfile = config.profiles[lausanneKey];
+        const pickupInfo = getCurrentPickupPostalInfo();
+        const deliveryInfo = getCurrentDeliveryPostalInfo();
+        if (lausanneProfile && (postalMatchesRule(pickupInfo, lausanneProfile) || postalMatchesRule(deliveryInfo, lausanneProfile))) {
+            return { key: lausanneKey, profile: lausanneProfile };
+        }
+        const defaultKey = config.default_profile || 'pickup';
+        const fallbackProfile = config.profiles[defaultKey] || Object.values(config.profiles)[0];
+        return fallbackProfile ? { key: defaultKey, profile: fallbackProfile } : null;
+    }
+
+    function calculateTieredKmCost(distance, tiers) {
+        if (distance == null || !Number.isFinite(Number(distance)) || !Array.isArray(tiers)) return { cost: 0, segments: [] };
+        let remaining = Number(distance);
+        let previousLimit = 0;
+        let cost = 0;
+        const segments = [];
+        tiers.forEach(tier => {
+            if (remaining <= 0) return;
+            const hasLimit = tier.up_to != null && tier.up_to !== '';
+            const limit = hasLimit ? Number(tier.up_to) : Infinity;
+            const width = Math.max(0, Math.min(remaining, limit - previousLimit));
+            const rate = Number(tier.rate || 0);
+            if (width > 0 && rate > 0) {
+                const amount = Math.round(width * rate * 100) / 100;
+                cost += amount;
+                segments.push({ km: Math.round(width * 10) / 10, rate, amount });
+            }
+            remaining -= width;
+            previousLimit = hasLimit ? limit : previousLimit;
+        });
+        return { cost: Math.round(cost * 100) / 100, segments };
+    }
+
+    function tierSegmentsLabel(segments) {
+        return (segments || []).map(seg => `${seg.km} km × ${fmt(seg.rate)} CHF`).join(' + ');
+    }
+
+    function kmTierNoticeHtml(config) {
+        const pickup = config?.profiles?.pickup;
+        const lausanne = config?.profiles?.lausanne;
+        if (!pickup && !lausanne) return '';
+        const line = profile => {
+            const tiers = (profile?.tiers || []).map(t => {
+                const suffix = t.up_to ? `≤ ${t.up_to} km` : 'au-delà';
+                return `${suffix}: ${fmt(t.rate)} CHF/km`;
+            }).join(' · ');
+            return `<div><strong>${escHtml(profile?.label || 'Règle km')}</strong> ${escHtml(tiers)}</div>`;
+        };
+        return `<div><strong>Tarification kilométrique spéciale</strong></div>
+            <div>Le N° postal est obligatoire pour appliquer le bon barème.</div>
+            ${pickup ? line(pickup) : ''}
+            ${lausanne ? line(lausanne) : ''}`;
+    }
+
+    function renderClientKmNotice() {
+        const config = getActiveKmTierConfig();
+        const html = config ? kmTierNoticeHtml(config) : '';
+        ['clientKmNotice', 'distanceKmRuleNotice'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.style.display = html ? 'block' : 'none';
+            el.innerHTML = html;
+        });
+    }
+
     function getDistancePricingInfo() {
+        const tierConfig = getActiveKmTierConfig();
+        const tierProfile = tierConfig ? getKmTierProfile(tierConfig) : null;
+        if (tierProfile?.profile) {
+            const calc = calculateTieredKmCost(distanceKm, tierProfile.profile.tiers || []);
+            return {
+                mode: 'tiered',
+                label: tierProfile.profile.label || 'Tarification km',
+                includedKm: 0,
+                extraKmRate: 0,
+                extraKm: distanceKm || 0,
+                kmCost: calc.cost,
+                tierSegments: calc.segments
+            };
+        }
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
         const includedKm = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
         const extraKmRate = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
         const extraKm = distanceKm != null && includedKm > 0 ? Math.max(0, Math.round((distanceKm - includedKm) * 10) / 10) : 0;
         const kmCost = extraKm > 0 && extraKmRate > 0 ? Math.round(extraKm * extraKmRate * 100) / 100 : 0;
-        return { includedKm, extraKmRate, extraKm, kmCost };
+        return { mode: 'simple', includedKm, extraKmRate, extraKm, kmCost, tierSegments: [] };
     }
 
     window.calcDistance = async function() {
@@ -2047,18 +2169,24 @@
             distanceKm = await getRouteDistanceKm(from, to);
             if (resultEl) resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
 
-            const { includedKm, extraKmRate, extraKm, kmCost } = getDistancePricingInfo();
-            if (includedKm > 0 && extraKmRate > 0 && overageEl) {
+            const pricingInfo = getDistancePricingInfo();
+            if (pricingInfo.mode === 'tiered' && overageEl) {
+                const segmentText = tierSegmentsLabel(pricingInfo.tierSegments);
+                overageEl.style.display = 'block';
+                overageEl.style.background = 'rgba(59,130,246,0.10)';
+                overageEl.style.borderColor = 'rgba(59,130,246,0.30)';
+                overageEl.style.color = '#bfdbfe';
+                overageEl.innerHTML = `Barème ${escHtml(pricingInfo.label)} : ${segmentText ? escHtml(segmentText) + ' = ' : ''}<strong>+${fmt(pricingInfo.kmCost)} CHF</strong>`;
+            } else if (pricingInfo.includedKm > 0 && pricingInfo.extraKmRate > 0 && overageEl) {
+                const { includedKm, extraKmRate, extraKm, kmCost } = pricingInfo;
                 const inIncludedRange = kmCost <= 0;
                 overageEl.style.display = 'block';
                 overageEl.style.background = inIncludedRange ? 'rgba(16,185,129,0.10)' : 'rgba(245,158,11,0.1)';
                 overageEl.style.borderColor = inIncludedRange ? 'rgba(16,185,129,0.30)' : 'rgba(245,158,11,0.3)';
                 overageEl.style.color = inIncludedRange ? 'var(--green)' : 'var(--yellow)';
-                if (overageEl) {
-                    overageEl.innerHTML = inIncludedRange
-                        ? `Supplément km : <strong>+0.00 CHF</strong> (${distanceKm} km, inclus jusqu’à ${includedKm} km)`
-                        : `Supplément km : ${extraKm} km au-delà des ${includedKm} km inclus × ${extraKmRate.toFixed(2)} CHF/km = <strong>+${kmCost.toFixed(2)} CHF</strong>`;
-                }
+                overageEl.innerHTML = inIncludedRange
+                    ? `Supplément km : <strong>+0.00 CHF</strong> (${distanceKm} km, inclus jusqu’à ${includedKm} km)`
+                    : `Supplément km : ${extraKm} km au-delà des ${includedKm} km inclus × ${extraKmRate.toFixed(2)} CHF/km = <strong>+${kmCost.toFixed(2)} CHF</strong>`;
             }
         } catch(e) {
             if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)"><i class="fas fa-exclamation-triangle"></i> ${e.message}</span>`;
@@ -2153,7 +2281,8 @@
 
         // Overage km cost — active abonnement overrides tarif base settings
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-        const { includedKm, extraKmRate, extraKm, kmCost } = getDistancePricingInfo();
+        const distancePricing = getDistancePricingInfo();
+        const { includedKm, extraKmRate, extraKm, kmCost } = distancePricing;
 
         // Supplément colis hors quota mensuel
         let colisSup = 0;
@@ -2185,7 +2314,10 @@
         })));
         const detailParts=[`${serviceNames.join(' + ')}: ${fmt(baseTotal)} CHF`];
         if(distanceKm != null) detailParts.push(`📍 ${distanceKm} km`);
-        if(distanceKm != null && includedKm > 0 && extraKmRate > 0) {
+        if(distanceKm != null && distancePricing.mode === 'tiered') {
+            const segmentText = tierSegmentsLabel(distancePricing.tierSegments);
+            detailParts.push(`Km ${distancePricing.label}: ${segmentText ? segmentText + ' = ' : ''}+${fmt(kmCost)} CHF`);
+        } else if(distanceKm != null && includedKm > 0 && extraKmRate > 0) {
             if(kmCost > 0) detailParts.push(`Km sup ${extraKm} km × ${fmt(extraKmRate)} CHF = +${fmt(kmCost)} CHF`);
             else detailParts.push(`Km sup +0.00 CHF (${includedKm} km inclus)`);
         }
@@ -2360,6 +2492,7 @@
         if(paneName==='history') loadHistory();
         if(paneName==='addresses') loadSavedAddresses();
         if(paneName==='tariffs') renderClientTariffPane();
+        renderClientKmNotice();
         if(paneName==='team') loadTeam();
     };
 
