@@ -45,14 +45,33 @@
   }
 
   function storageList() {
+    var localOk = false;
+    var sessionOk = false;
+    function works(store) {
+      try {
+        var k = "__colixo_auth_probe__";
+        store.setItem(k, "1");
+        store.removeItem(k);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    try {
+      localOk = !!window.localStorage && works(window.localStorage);
+    } catch (e) {}
+    try {
+      sessionOk = !!window.sessionStorage && works(window.sessionStorage);
+    } catch (e) {}
     var list = [];
-    try {
-      if (window.localStorage) list.push(window.localStorage);
-    } catch (e) {}
-    try {
-      if (window.sessionStorage) list.push(window.sessionStorage);
-    } catch (e) {}
+    if (localOk) list.push(window.localStorage);
+    if (sessionOk) list.push(window.sessionStorage);
     return list;
+  }
+
+  function primaryStorage() {
+    var stores = storageList();
+    return stores[0] || null;
   }
 
   function getStoredItem(key) {
@@ -67,15 +86,14 @@
   }
 
   function setStoredItem(key, value) {
-    var stores = storageList();
-    var saved = false;
-    for (var i = 0; i < stores.length; i++) {
-      try {
-        stores[i].setItem(key, value);
-        saved = true;
-      } catch (e) {}
+    var store = primaryStorage();
+    if (!store) return false;
+    try {
+      store.setItem(key, value);
+      return true;
+    } catch (e) {
+      return false;
     }
-    return saved;
   }
 
   function removeStoredItem(key) {

@@ -33,7 +33,7 @@
 // Quand une mise en production importante a lieu, cette valeur doit évoluer
 // en même temps que les autres marqueurs de version pour éviter les mélanges
 // de vieux HTML et de nouveaux assets.
-window.COLIXO_ASSET_VERSION = '20260511af';
+window.COLIXO_ASSET_VERSION = '20260511ag';
 
 /**
  * Résout le préfixe d'URL sous lequel le site est servi.
@@ -241,11 +241,17 @@ function colixoClearAuthStorage() {
         document.cookie.split(';').forEach(function (cookie) {
             var name = cookie.split('=')[0].trim();
             if (!name || !keyPatterns.some(function (re) { return re.test(name); })) return;
-            document.cookie = name + '=; Max-Age=0; path=/';
-            document.cookie = name + '=; Max-Age=0; path=/; domain=' + location.hostname;
-            if (location.hostname.indexOf('.') > -1) {
-                document.cookie = name + '=; Max-Age=0; path=/; domain=.' + location.hostname.replace(/^www\./, '');
-            }
+            var host = location.hostname;
+            var domains = ['', host, '.' + host, host.replace(/^www\./, ''), '.' + host.replace(/^www\./, '')]
+                .filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+            var paths = ['/', window.COLIXO_BASE_PATH || '/', location.pathname.replace(/\/[^/]*$/, '/') || '/']
+                .filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+            paths.forEach(function (path) {
+                document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; path=' + path + '; SameSite=Lax';
+                domains.forEach(function (domain) {
+                    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; path=' + path + '; domain=' + domain + '; SameSite=Lax';
+                });
+            });
         });
     } catch (e) {}
 }
