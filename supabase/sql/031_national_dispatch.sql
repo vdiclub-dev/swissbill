@@ -162,6 +162,26 @@ create table if not exists public.route_stops (
   created_at timestamptz not null default now()
 );
 
+alter table public.route_stops add column if not exists route_id uuid references public.routes(id) on delete cascade;
+alter table public.route_stops add column if not exists order_id uuid;
+alter table public.route_stops add column if not exists order_table text not null default 'transport_orders_simple';
+alter table public.route_stops add column if not exists stop_number integer;
+alter table public.route_stops add column if not exists loading_order integer;
+alter table public.route_stops add column if not exists load_group text;
+alter table public.route_stops add column if not exists service_level text;
+alter table public.route_stops add column if not exists status text not null default 'planned';
+alter table public.route_stops add column if not exists address text;
+alter table public.route_stops add column if not exists postcode text;
+alter table public.route_stops add column if not exists city text;
+alter table public.route_stops add column if not exists recipient_name text;
+alter table public.route_stops add column if not exists parcel_count integer not null default 1;
+alter table public.route_stops add column if not exists qr_token text;
+alter table public.route_stops add column if not exists eta_at timestamptz;
+alter table public.route_stops add column if not exists delivered_at timestamptz;
+alter table public.route_stops add column if not exists lat numeric(10,7);
+alter table public.route_stops add column if not exists lng numeric(10,7);
+alter table public.route_stops add column if not exists created_at timestamptz not null default now();
+
 create index if not exists idx_route_stops_route_order
   on public.route_stops(route_id, stop_number, loading_order);
 
