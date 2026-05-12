@@ -74,6 +74,19 @@
     return stores[0] || null;
   }
 
+  function sessionOnlyStorage() {
+    try {
+      var store = window.sessionStorage;
+      if (!store) return primaryStorage();
+      var k = "__colixo_session_probe__";
+      store.setItem(k, "1");
+      store.removeItem(k);
+      return store;
+    } catch (e) {
+      return primaryStorage();
+    }
+  }
+
   function getStoredItem(key) {
     var stores = storageList();
     for (var i = 0; i < stores.length; i++) {
@@ -87,6 +100,17 @@
 
   function setStoredItem(key, value) {
     var store = primaryStorage();
+    if (!store) return false;
+    try {
+      store.setItem(key, value);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function setSessionItem(key, value) {
+    var store = sessionOnlyStorage();
     if (!store) return false;
     try {
       store.setItem(key, value);
@@ -135,9 +159,10 @@
     } catch (e) {}
   }
 
-  function syncLegacyUser(profile) {
+  function syncLegacyUser(profile, sessionOnly) {
     if (!profile || !profile.id) return;
-    return setStoredItem(
+    var setter = sessionOnly ? setSessionItem : setStoredItem;
+    return setter(
       "colixo_user",
       JSON.stringify({
         id: profile.id,
@@ -463,8 +488,8 @@
   window.colixoLogout = colixoLogout;
   window.colixoStoreLegacyLogin = function (profile, code) {
     writeLoginHandoff(profile, code);
-    var saved = syncLegacyUser(Object.assign({}, profile || {}, { code: code || getLegacyCode() }));
-    if (code) saved = setStoredItem("colixo_access_code", String(code).trim().toUpperCase()) || saved;
+    var saved = syncLegacyUser(Object.assign({}, profile || {}, { code: code || getLegacyCode() }), true);
+    if (code) saved = setSessionItem("colixo_access_code", String(code).trim().toUpperCase()) || saved;
   };
   window.colixoGetAuthContext = colixoGetAuthContext;
   window.colixoRequireRoute = colixoRequireRoute;
