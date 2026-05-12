@@ -461,16 +461,47 @@
 
     function renderRegionOverview(){
         var byRegion = groupOrdersByDestinationRegion(state.orders);
-        var html = Object.keys(byRegion).map(function(code){
+        var codes = state.regions.map(function(r){ return r.code; });
+        Object.keys(byRegion).forEach(function(code){ if(codes.indexOf(code) < 0) codes.push(code); });
+        var html = codes.map(function(code){
             var reg = state.regions.find(function(r){ return r.code === code; }) || { name:code };
-            return '<div class="rec-card"><div class="rec-head"><div><div class="rec-title">'+esc(reg.name)+'</div><div class="rec-meta">'+code+' · '+byRegion[code].length+' colis</div></div><span class="pill p-national">'+code+'</span></div></div>';
-        }).join('') || '<div class="empty">Aucune région à traiter.</div>';
+            var zones = state.zones.filter(function(z){ return z.region_code === code; });
+            var count = byRegion[code] ? byRegion[code].length : 0;
+            return '<div class="rec-card"><div class="rec-head"><div><div class="rec-title">'+esc(reg.name)+'</div><div class="rec-meta">'+code+' · '+count+' colis · '+zones.length+' zone(s)</div></div><span class="pill p-national">'+code+'</span></div>'
+                +'<div class="mini-tags">'+zones.map(function(z){ return '<span>'+esc(z.code)+'</span>'; }).join('')+'</div></div>';
+        }).join('') || '<div class="empty">Aucune région configurée.</div>';
         var el = document.getElementById('regionOverview');
         if(el) el.innerHTML = html;
     }
 
+    function renderOpsOverview(){
+        var serviceCards = [
+            ['48h', 'Livraison 48h depuis le jour ouvrable suivant la prise en charge.', 'p-48h'],
+            ['24h', 'Prioritaire si la zone, la ligne et le cut-off le permettent.', 'p-24h'],
+            ['Express', 'Alerte rouge avec validation manuelle dispatch obligatoire.', 'p-express']
+        ].map(function(c){
+            return '<div class="overview-card"><span class="pill '+c[2]+'">'+c[0]+'</span><strong>'+c[0]+'</strong><p>'+c[1]+'</p></div>';
+        }).join('');
+        var networkCards = [
+            [state.regions.length, 'Régions nationales', 'Suisse romande, alémanique, Tessin, Grisons, zones industrielles.'],
+            [state.zones.length, 'Zones logistiques', 'Chaque NPA est rattaché à une zone de livraison.'],
+            [state.postalZones.length, 'Règles NPA', 'Plages de codes postaux suisses prêtes pour le routage.'],
+            [state.linehauls.length, 'Lignes nationales', 'À compléter avec les transferts inter-régions réels.'],
+            [state.partners.length, 'Partenaires', 'À connecter pour les zones non couvertes Colixo.'],
+            [state.vehicles.length, 'Véhicules', 'Affectation aux routes locales et nationales.']
+        ].map(function(c){
+            return '<div class="setup-card"><b>'+c[0]+'</b><strong>'+c[1]+'</strong><span>'+c[2]+'</span></div>';
+        }).join('');
+        return '<div class="overview">'
+            +'<div class="overview-hero"><div><div class="hero-kicker">Centre de contrôle national</div><h2>Le moteur est prêt, il attend des colis à dispatcher.</h2><p>Quand HGC ou un autre client crée des colis, cette page classera les commandes par NPA, région, zone, délai et solution recommandée.</p></div><div class="hero-actions"><a class="btn btn-red" href="transports-dispatch.html">Voir transports</a><a class="btn btn-ghost" href="../commandes-client.html">Commandes client</a></div></div>'
+            +'<div class="overview-section"><h3>Règles de service</h3><div class="overview-grid">'+serviceCards+'</div></div>'
+            +'<div class="overview-section"><h3>État du réseau</h3><div class="setup-grid">'+networkCards+'</div></div>'
+            +'<div class="overview-section"><h3>Flux prévu</h3><div class="flow-steps"><span>Colis client</span><i class="fas fa-arrow-right"></i><span>NPA</span><i class="fas fa-arrow-right"></i><span>Région / zone</span><i class="fas fa-arrow-right"></i><span>Tournée, ligne ou partenaire</span><i class="fas fa-arrow-right"></i><span>Validation admin</span></div></div>'
+            +'</div>';
+    }
+
     function renderOrders(){
-        if(!state.orders.length) return '<div class="empty">Aucun colis en attente.</div>';
+        if(!state.orders.length) return renderOpsOverview();
         return '<table><thead><tr><th>Commande</th><th>Service</th><th>Origine</th><th>Destination</th><th>Zone</th><th>Délai</th><th>Décision suggérée</th><th>Actions</th></tr></thead><tbody>'
             + state.orders.map(function(o){
                 var d = suggestDispatchDecision(o);
@@ -498,12 +529,18 @@
         if(grouped.manual.length){
             parts.push('<div class="rec-card"><div class="rec-title">À valider manuellement</div><div class="rec-meta">'+grouped.manual.length+' colis express ou sans solution configurée.</div></div>');
         }
-        return '<div class="cards">'+(parts.join('') || '<div class="empty">Aucune recommandation.</div>')+'</div>';
+        if(!parts.length){
+            parts.push('<div class="rec-card"><div class="rec-title">Aucune recommandation active</div><div class="rec-meta">Les recommandations apparaîtront dès qu’un colis en attente aura un NPA de livraison exploitable.</div></div>');
+            parts.push('<div class="rec-card"><div class="rec-title">Tournées locales</div><div class="rec-meta">Les colis dans la même région seront proposés en tournée locale, avec livraison du point le plus éloigné vers le retour.</div></div>');
+            parts.push('<div class="rec-card"><div class="rec-title">Lignes nationales</div><div class="rec-meta">Les colis inter-régions seront proposés en batch linehaul dès que les lignes seront configurées.</div></div>');
+            parts.push('<div class="rec-card"><div class="rec-title">Partenaires régionaux</div><div class="rec-meta">Les zones non couvertes directement par Colixo seront envoyées vers le partenaire admissible.</div></div>');
+        }
+        return '<div class="cards">'+parts.join('')+'</div>';
     }
 
     function renderRoutes(){
         var rows = state.routes || [];
-        if(!rows.length) return '<div class="empty">Aucune route nationale créée.</div>';
+        if(!rows.length) return '<div class="overview"><div class="overview-hero"><div><div class="hero-kicker">Routes & live</div><h2>Aucune route nationale créée pour le moment.</h2><p>Quand une tournée locale, une ligne nationale ou un lot partenaire sera validé, elle apparaîtra ici avec son statut, son véhicule et ses propositions de réoptimisation.</p></div></div><div class="setup-grid"><div class="setup-card"><b>0</b><strong>Véhicules en cours</strong><span>Les positions chauffeur alimenteront cette vue.</span></div><div class="setup-card"><b>0</b><strong>Retards détectés</strong><span>Le moteur proposera une réoptimisation si le gain dépasse 10 à 15 minutes.</span></div><div class="setup-card"><b>0</b><strong>Colis à risque</strong><span>Les colis 24h et express restent protégés par la date limite.</span></div></div></div>';
         return '<table><thead><tr><th>Route</th><th>Type</th><th>Zone</th><th>Véhicule</th><th>Statut</th><th>Réoptimisation</th><th>Actions</th></tr></thead><tbody>'
             + rows.map(function(r){
                 return '<tr><td><strong>'+esc(r.name)+'</strong><br><span class="muted">'+esc(r.route_date || '')+'</span></td><td>'+esc(r.route_type)+'</td><td>'+esc(r.zone_code || r.destination_region_code || '—')+'</td><td>'+esc(r.vehicle_id || '—')+'</td><td>'+esc(r.dispatch_status)+'</td><td>'+(r.order_locked?'<span class="pill p-express">Verrouillée</span>':'<span class="pill p-local">Flexible</span>')+'</td><td><button class="btn btn-ghost btn-sm" onclick="renderRouteMap(&quot;'+esc(r.id)+'&quot;)">Carte</button> <button class="btn btn-blue btn-sm" onclick="notifyDriverReoptimization(&quot;'+esc(r.id)+'&quot;)">Réoptimiser</button> <button class="btn btn-ghost btn-sm" onclick="lockRouteOrder(&quot;'+esc(r.id)+'&quot;)">Bloquer</button></td></tr>';
@@ -535,7 +572,16 @@
             L.circleMarker([lat,lng], { radius:6, color:'#e8311a', fillColor:'#e8311a', fillOpacity:.8 }).addTo(state.mapLayer).bindPopup(esc(ref(o))+'<br>'+esc(o.address || o.delivery_address || ''));
         });
         if(points.length > 1) L.polyline(points, { color:'#3b82f6', weight:3, opacity:.7 }).addTo(state.mapLayer);
-        if(points.length) state.map.fitBounds(points, { padding:[30,30] });
+        if(points.length) {
+            state.map.fitBounds(points, { padding:[30,30] });
+        } else {
+            state.regions.forEach(function(r){
+                var lat = parseFloat(r.base_lat), lng = parseFloat(r.base_lng);
+                if(!isFinite(lat) || !isFinite(lng)) return;
+                L.circleMarker([lat,lng], { radius:8, color:'#e8311a', fillColor:'#e8311a', fillOpacity:.75 }).addTo(state.mapLayer).bindPopup('<strong>'+esc(r.name)+'</strong><br>'+esc(r.code));
+            });
+            state.map.setView([46.95, 8.25], 8);
+        }
     }
 
     window.dispatchNationalManualDecision = function(orderId){
