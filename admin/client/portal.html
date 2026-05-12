@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511ab -->
+    <!-- colixo-build:20260511ac -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511ab"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511ab-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511ac"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511ac-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -2038,6 +2038,21 @@
         return { npa: getFieldValue('livNpa'), ville: getFieldValue('livVille') };
     }
 
+    function getSelectedKmProfileKey(config) {
+        const service = getAssignedServiceByRef(selectedService);
+        const ref = tariffExactRef(service?.ref || selectedService);
+        const label = normalizeCityName(`${service?.nom || ''} ${selectedService || ''}`);
+        const pickupKey = config?.pickup_profile || config?.default_profile || 'pickup';
+        const deliveryKey = config?.delivery_profile || 'delivery';
+        if (/\bLEV\b|PRISE|PRIS-EN-CHARGE|ENLEVEMENT|ENLÈVEMENT|PICKUP/.test(ref) || label.includes('pris en charge') || label.includes('prise en charge')) {
+            return pickupKey;
+        }
+        if (/\bPEC\b|LIV|LIVRAISON|DELIVERY/.test(ref) || label.includes('livraison')) {
+            return deliveryKey;
+        }
+        return null;
+    }
+
     function normalizeCityName(value) {
         return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     }
@@ -2053,6 +2068,10 @@
 
     function getKmTierProfile(config) {
         if (!config?.profiles) return null;
+        const serviceProfileKey = getSelectedKmProfileKey(config);
+        if (serviceProfileKey && config.profiles[serviceProfileKey]) {
+            return { key: serviceProfileKey, profile: config.profiles[serviceProfileKey] };
+        }
         const pickupType = document.querySelector('input[name="pickupType"]:checked')?.value;
         const defaultKey = config.default_profile || 'pickup';
         const pickupProfile = config.profiles[defaultKey] || config.profiles.pickup || null;
