@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511ad -->
+    <!-- colixo-build:20260511ae -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511ad"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511ad-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511ae"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511ae-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -460,7 +460,6 @@
                             <div class="home-tariff-price">—<span>Prix estimé</span></div>
                         </div>
                     </div>
-                    <div id="clientKmNotice" style="display:none;margin-top:14px;padding:13px 15px;border-radius:14px;background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.28);color:#bfdbfe;font-size:12px;line-height:1.45;"></div>
                     <div class="home-contact" aria-label="Contact Colixo">
                         <a href="tel:+41798700488"><i class="fas fa-phone"></i> +41 79 870 04 88</a>
                         <a href="mailto:info@colixo.ch"><i class="fas fa-envelope"></i> info@colixo.ch</a>
@@ -590,7 +589,6 @@
 
               <div class="form-section" style="margin-top:16px;"><i class="fas fa-route" style="color:var(--blue)"></i> DISTANCE</div>
               <div style="background:var(--night3);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;margin-bottom:8px;">
-                <div id="distanceKmRuleNotice" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.28);color:#bfdbfe;font-size:12px;line-height:1.45;"></div>
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                   <button type="button" onclick="calcDistance()" id="btnCalcDist" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;"><i class="fas fa-ruler-horizontal"></i> Calculer</button>
                   <div id="distanceResult" style="font-size:13px;color:var(--muted);"></div>
@@ -1380,6 +1378,7 @@
         if(!selectedService || !services.some(s=>s.ref===tariffServiceRef(selectedService))) selectedService = services[0].ref;
         const current = services.find(s=>s.ref===tariffServiceRef(selectedService)) || services[0];
         const optionCount = getAssignedProduits().filter(p=>isOptionProduct(p)).length;
+        const hideServicePrice = Boolean(getActiveKmTierConfig()?.km_only);
         const rows = services.map(s=>`
             <div class="home-tariff-row ${s.speedClass}${s.ref===tariffServiceRef(selectedService)?' active':''}" onclick="selectService(${jsStringArg(s.ref)})">
                 <span class="home-tariff-code">Auto</span>
@@ -1387,7 +1386,7 @@
                     <div class="home-tariff-label">${escHtml(s.label)}</div>
                     <div class="home-tariff-sub">${escHtml(s.variable)}</div>
                 </div>
-                <div class="home-tariff-row-price">${fmt(s.price)} CHF</div>
+                <div class="home-tariff-row-price">${hideServicePrice ? 'Après distance' : fmt(s.price) + ' CHF'}</div>
             </div>
         `).join('');
         el.innerHTML = `
@@ -1397,7 +1396,7 @@
                     <div class="home-tariff-name">${escHtml(current.label)}</div>
                     <div class="home-tariff-meta">Tranche calculée selon ${Number(poids).toFixed(1)} kg · ${optionCount} option(s) disponible(s)</div>
                 </div>
-                <div class="home-tariff-price">${fmt(current.price)} CHF<span>Prix estimé</span></div>
+                <div class="home-tariff-price">${hideServicePrice ? '—' : fmt(current.price) + ' CHF'}<span>Prix estimé</span></div>
             </div>
             <div class="home-tariff-list">${rows}</div>
             <div class="home-tariff-actions">
@@ -1628,6 +1627,7 @@
         const grid=document.getElementById('serviceGrid');
         if(!grid) return;
         const pool=getAssignedProduits().filter(p=>!isOptionProduct(p));
+        const hideServicePrice = Boolean(getActiveKmTierConfig()?.km_only);
         if(!pool.length){
             grid.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px;">Aucun service disponible — contactez Colixo.</div>';
             renderHomeTariffSummary();
@@ -1651,7 +1651,7 @@
                 <div class="formula-icon">${getSvcIcon(ref)}</div>
                 <div class="formula-name">${escHtml(label)}</div>
                 <div class="formula-price-sub" style="font-size:12px;opacity:.75;margin:-2px 0 6px;">${escHtml(weightLabel)}</div>
-                <div class="formula-price">CHF ${fmt(price)}</div>
+                <div class="formula-price">${hideServicePrice ? 'Après distance' : 'CHF ' + fmt(price)}</div>
             </div>`;
         }).join('');
         renderHomeTariffSummary();
@@ -2123,20 +2123,8 @@
         return { cost: Math.round(cost * 100) / 100, segments };
     }
 
-    function kmTierNoticeHtml(config) {
-        return `<div><strong>Tarification kilométrique spéciale</strong></div>
-            <div>Le prix du transport est calculé avec la distance. Le N° postal est obligatoire pour appliquer le bon tarif.</div>`;
-    }
-
     function renderClientKmNotice() {
-        const config = getActiveKmTierConfig();
-        const html = config ? kmTierNoticeHtml(config) : '';
-        ['clientKmNotice', 'distanceKmRuleNotice'].forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.style.display = html ? 'block' : 'none';
-            el.innerHTML = html;
-        });
+        return;
     }
 
     function getDistancePricingInfo() {
