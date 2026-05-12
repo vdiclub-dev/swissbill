@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511ae -->
+    <!-- colixo-build:20260511af -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511ae"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511ae-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511af"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511af-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -1378,7 +1378,7 @@
         if(!selectedService || !services.some(s=>s.ref===tariffServiceRef(selectedService))) selectedService = services[0].ref;
         const current = services.find(s=>s.ref===tariffServiceRef(selectedService)) || services[0];
         const optionCount = getAssignedProduits().filter(p=>isOptionProduct(p)).length;
-        const hideServicePrice = Boolean(getActiveKmTierConfig()?.km_only);
+        const hideKmPrices = Boolean(getActiveKmTierConfig()?.km_only);
         const rows = services.map(s=>`
             <div class="home-tariff-row ${s.speedClass}${s.ref===tariffServiceRef(selectedService)?' active':''}" onclick="selectService(${jsStringArg(s.ref)})">
                 <span class="home-tariff-code">Auto</span>
@@ -1386,7 +1386,7 @@
                     <div class="home-tariff-label">${escHtml(s.label)}</div>
                     <div class="home-tariff-sub">${escHtml(s.variable)}</div>
                 </div>
-                <div class="home-tariff-row-price">${hideServicePrice ? 'Après distance' : fmt(s.price) + ' CHF'}</div>
+                <div class="home-tariff-row-price">${hideKmPrices && isKmPricedService(s.ref, s.label) ? 'Après distance' : fmt(s.price) + ' CHF'}</div>
             </div>
         `).join('');
         el.innerHTML = `
@@ -1396,7 +1396,7 @@
                     <div class="home-tariff-name">${escHtml(current.label)}</div>
                     <div class="home-tariff-meta">Tranche calculée selon ${Number(poids).toFixed(1)} kg · ${optionCount} option(s) disponible(s)</div>
                 </div>
-                <div class="home-tariff-price">${hideServicePrice ? '—' : fmt(current.price) + ' CHF'}<span>Prix estimé</span></div>
+                <div class="home-tariff-price">${hideKmPrices && isKmPricedService(current.ref, current.label) ? '—' : fmt(current.price) + ' CHF'}<span>Prix estimé</span></div>
             </div>
             <div class="home-tariff-list">${rows}</div>
             <div class="home-tariff-actions">
@@ -1627,7 +1627,7 @@
         const grid=document.getElementById('serviceGrid');
         if(!grid) return;
         const pool=getAssignedProduits().filter(p=>!isOptionProduct(p));
-        const hideServicePrice = Boolean(getActiveKmTierConfig()?.km_only);
+        const hideKmPrices = Boolean(getActiveKmTierConfig()?.km_only);
         if(!pool.length){
             grid.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px;">Aucun service disponible — contactez Colixo.</div>';
             renderHomeTariffSummary();
@@ -1647,11 +1647,12 @@
             const maxKg=Number(tier.poids_max||0);
             const weightLabel=maxKg>0?`${minKg} – ${maxKg} kg`:`${minKg} kg+`;
             const label=tierFamilyLabel(tier);
+            const hidePrice = hideKmPrices && isKmPricedService(ref, label);
             return `<div class="formula-card ${speedClass}" data-svc="${escHtml(ref)}" onclick="addWizardColisFromTier(${jsStringArg(ref)})">
                 <div class="formula-icon">${getSvcIcon(ref)}</div>
                 <div class="formula-name">${escHtml(label)}</div>
                 <div class="formula-price-sub" style="font-size:12px;opacity:.75;margin:-2px 0 6px;">${escHtml(weightLabel)}</div>
-                <div class="formula-price">${hideServicePrice ? 'Après distance' : 'CHF ' + fmt(price)}</div>
+                <div class="formula-price">${hidePrice ? 'Après distance' : 'CHF ' + fmt(price)}</div>
             </div>`;
         }).join('');
         renderHomeTariffSummary();
@@ -2037,6 +2038,15 @@
 
     function getCurrentDeliveryPostalInfo() {
         return { npa: getFieldValue('livNpa'), ville: getFieldValue('livVille') };
+    }
+
+    function isKmPricedService(refValue, labelValue) {
+        const ref = tariffExactRef(refValue);
+        const label = normalizeCityName(labelValue);
+        return /\b(PEC|LEV)\b|LIV|LIVRAISON|DELIVERY|PRISE|PRIS-EN-CHARGE|ENLEVEMENT|ENLÈVEMENT|PICKUP/.test(ref) ||
+            label.includes('livraison') ||
+            label.includes('pris en charge') ||
+            label.includes('prise en charge');
     }
 
     function getSelectedKmProfileKey(config) {
