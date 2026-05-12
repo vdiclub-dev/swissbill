@@ -33,7 +33,7 @@
 // Quand une mise en production importante a lieu, cette valeur doit évoluer
 // en même temps que les autres marqueurs de version pour éviter les mélanges
 // de vieux HTML et de nouveaux assets.
-window.COLIXO_ASSET_VERSION = '20260511y';
+window.COLIXO_ASSET_VERSION = '20260511z';
 
 /**
  * Résout le préfixe d'URL sous lequel le site est servi.

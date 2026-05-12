@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511y -->
+    <!-- colixo-build:20260511z -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511y"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511y-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511z"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511z-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -2088,25 +2088,9 @@
         return { cost: Math.round(cost * 100) / 100, segments };
     }
 
-    function tierSegmentsLabel(segments) {
-        return (segments || []).map(seg => `${seg.km} km × ${fmt(seg.rate)} CHF`).join(' + ');
-    }
-
     function kmTierNoticeHtml(config) {
-        const pickup = config?.profiles?.pickup;
-        const lausanne = config?.profiles?.lausanne;
-        if (!pickup && !lausanne) return '';
-        const line = profile => {
-            const tiers = (profile?.tiers || []).map(t => {
-                const suffix = t.up_to ? `≤ ${t.up_to} km` : 'au-delà';
-                return `${suffix}: ${fmt(t.rate)} CHF/km`;
-            }).join(' · ');
-            return `<div><strong>${escHtml(profile?.label || 'Règle km')}</strong> ${escHtml(tiers)}</div>`;
-        };
         return `<div><strong>Tarification kilométrique spéciale</strong></div>
-            <div>Le N° postal est obligatoire pour appliquer le bon barème.</div>
-            ${pickup ? line(pickup) : ''}
-            ${lausanne ? line(lausanne) : ''}`;
+            <div>Le prix du transport est calculé avec la distance. Le N° postal est obligatoire pour appliquer le bon tarif.</div>`;
     }
 
     function renderClientKmNotice() {
@@ -2128,6 +2112,7 @@
             return {
                 mode: 'tiered',
                 label: tierProfile.profile.label || 'Tarification km',
+                kmOnly: tierConfig.km_only !== false && tierProfile.profile.km_only !== false,
                 includedKm: 0,
                 extraKmRate: 0,
                 extraKm: distanceKm || 0,
@@ -2171,12 +2156,11 @@
 
             const pricingInfo = getDistancePricingInfo();
             if (pricingInfo.mode === 'tiered' && overageEl) {
-                const segmentText = tierSegmentsLabel(pricingInfo.tierSegments);
                 overageEl.style.display = 'block';
                 overageEl.style.background = 'rgba(59,130,246,0.10)';
                 overageEl.style.borderColor = 'rgba(59,130,246,0.30)';
                 overageEl.style.color = '#bfdbfe';
-                overageEl.innerHTML = `Barème ${escHtml(pricingInfo.label)} : ${segmentText ? escHtml(segmentText) + ' = ' : ''}<strong>+${fmt(pricingInfo.kmCost)} CHF</strong>`;
+                overageEl.innerHTML = `Transport au kilomètre : <strong>${fmt(pricingInfo.kmCost)} CHF</strong>`;
             } else if (pricingInfo.includedKm > 0 && pricingInfo.extraKmRate > 0 && overageEl) {
                 const { includedKm, extraKmRate, extraKm, kmCost } = pricingInfo;
                 const inIncludedRange = kmCost <= 0;
@@ -2296,7 +2280,12 @@
             if(horsQuota > 0) colisSup = Math.round(horsQuota * activeAbn.prix_colis_sup * 100) / 100;
         }
 
-        let subtotal = baseTotal + optionsTotal + nuitSuppl + kmCost + colisSup;
+        const kmOnlyPricing = distancePricing.mode === 'tiered' && distancePricing.kmOnly;
+        const billableBaseTotal = kmOnlyPricing ? 0 : baseTotal;
+        const billableOptionsTotal = kmOnlyPricing ? 0 : optionsTotal;
+        const billableNuitSuppl = kmOnlyPricing ? 0 : nuitSuppl;
+        const billableColisSup = kmOnlyPricing ? 0 : colisSup;
+        let subtotal = billableBaseTotal + billableOptionsTotal + billableNuitSuppl + kmCost + billableColisSup;
 
         const rabaisPct = Number(clientTarif?.rabais_volume_pct||0);
         const rabaisMontant = rabaisPct > 0 ? subtotal * rabaisPct / 100 : 0;
@@ -2312,18 +2301,22 @@
             const p = getAssignedServiceByRef(ref);
             return cleanServiceLabel(p?.nom, ref);
         })));
-        const detailParts=[`${serviceNames.join(' + ')}: ${fmt(baseTotal)} CHF`];
-        if(distanceKm != null) detailParts.push(`📍 ${distanceKm} km`);
+        const detailParts = [];
         if(distanceKm != null && distancePricing.mode === 'tiered') {
-            const segmentText = tierSegmentsLabel(distancePricing.tierSegments);
-            detailParts.push(`Km ${distancePricing.label}: ${segmentText ? segmentText + ' = ' : ''}+${fmt(kmCost)} CHF`);
+            detailParts.push(`${distanceKm} km`);
+            detailParts.push(`Transport ${fmt(kmCost)} CHF`);
         } else if(distanceKm != null && includedKm > 0 && extraKmRate > 0) {
+            detailParts.push(`${serviceNames.join(' + ')}: ${fmt(baseTotal)} CHF`);
+            detailParts.push(`${distanceKm} km`);
             if(kmCost > 0) detailParts.push(`Km sup ${extraKm} km × ${fmt(extraKmRate)} CHF = +${fmt(kmCost)} CHF`);
             else detailParts.push(`Km sup +0.00 CHF (${includedKm} km inclus)`);
+        } else {
+            detailParts.push(`${serviceNames.join(' + ')}: ${fmt(baseTotal)} CHF`);
+            if(distanceKm != null) detailParts.push(`${distanceKm} km`);
         }
-        if(colisSup > 0) detailParts.push(`Colis hors forfait +${fmt(colisSup)} CHF`);
-        if(optLabels.length) detailParts.push(...optLabels);
-        if(nuitSuppl) detailParts.push('Nuit +'+fmt(nuitSuppl)+' CHF');
+        if(!kmOnlyPricing && colisSup > 0) detailParts.push(`Colis hors forfait +${fmt(colisSup)} CHF`);
+        if(!kmOnlyPricing && optLabels.length) detailParts.push(...optLabels);
+        if(!kmOnlyPricing && nuitSuppl) detailParts.push('Nuit +'+fmt(nuitSuppl)+' CHF');
         if(rabaisMontant>0) detailParts.push(`Rabais volume ${rabaisPct}% −${fmt(rabaisMontant)} CHF`);
         const detailHtml = detailParts.join(' · ');
         document.getElementById('priceDetail').innerHTML = detailHtml;
