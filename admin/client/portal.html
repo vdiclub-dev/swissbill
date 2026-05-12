@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- colixo-build:20260511ac -->
+    <!-- colixo-build:20260511ad -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260511ac"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260511ac-code-stable"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260511ad"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260511ad-code-stable"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -1895,6 +1895,7 @@
         const desc  = document.getElementById('pkgDescription')?.value.trim() || '';
         const size  = currentPkgSize;
         const service = exact;
+        selectedService = service;
         const colisData = {id: Date.now(), poids, qty, type:'colis', size, description: desc, service, added: true};
         colisList.push(colisData);
         setPkgSize('colis');
@@ -2039,15 +2040,21 @@
     }
 
     function getSelectedKmProfileKey(config) {
-        const service = getAssignedServiceByRef(selectedService);
-        const ref = tariffExactRef(service?.ref || selectedService);
-        const label = normalizeCityName(`${service?.nom || ''} ${selectedService || ''}`);
+        const serviceRefs = Array.from(new Set((colisList || []).map(c => c?.service).filter(Boolean)));
+        if (!serviceRefs.length && selectedService) serviceRefs.push(selectedService);
+        const serviceTexts = serviceRefs.map(refValue => {
+            const service = getAssignedServiceByRef(refValue);
+            return {
+                ref: tariffExactRef(service?.ref || refValue),
+                label: normalizeCityName(`${service?.nom || ''} ${refValue || ''}`)
+            };
+        });
         const pickupKey = config?.pickup_profile || config?.default_profile || 'pickup';
         const deliveryKey = config?.delivery_profile || 'delivery';
-        if (/\bLEV\b|PRISE|PRIS-EN-CHARGE|ENLEVEMENT|ENLÈVEMENT|PICKUP/.test(ref) || label.includes('pris en charge') || label.includes('prise en charge')) {
+        if (serviceTexts.some(s => /\bLEV\b|PRISE|PRIS-EN-CHARGE|ENLEVEMENT|ENLÈVEMENT|PICKUP/.test(s.ref) || s.label.includes('pris en charge') || s.label.includes('prise en charge'))) {
             return pickupKey;
         }
-        if (/\bPEC\b|LIV|LIVRAISON|DELIVERY/.test(ref) || label.includes('livraison')) {
+        if (serviceTexts.some(s => /\bPEC\b|LIV|LIVRAISON|DELIVERY/.test(s.ref) || s.label.includes('livraison'))) {
             return deliveryKey;
         }
         return null;
