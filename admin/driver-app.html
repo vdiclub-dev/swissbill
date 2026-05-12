@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260512b">
-    <link rel="alternate icon" href="/favicon.ico?v=20260512b">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260512c">
+    <link rel="alternate icon" href="/favicon.ico?v=20260512c">
 <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -20,13 +20,14 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../config.js?v=20260512b"></script>
-    <script data-cfasync="false" src="../js/auth.js?v=20260512b-code-stable"></script>
+    <script data-cfasync="false" src="../config.js?v=20260512c"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260512c-code-stable"></script>
     <script data-cfasync="false" src="../push-manager.js?v=20260508b"></script>
     <script src="workflow.js?v=20260508b"></script>
     <script src="realtime.js?v=20260508b"></script>
     <script src="signature-pad.js?v=20260508b"></script>
     <script src="driver-pod.js?v=20260508b"></script>
+    <script src="parcel-logistics.js?v=20260512c"></script>
     <style>
         :root {
             --red:     #e8311a;
@@ -486,6 +487,21 @@
         .cache-sync-status { position:fixed; bottom:70px; right:14px; background:var(--night3); border:1px solid var(--border2); border-radius:8px; padding:8px 12px; font-size:10px; color:var(--muted2); display:none; align-items:center; gap:6px; z-index:100; }
         .cache-sync-status.show { display:flex; }
         .cache-sync-dot { width:5px; height:5px; background:var(--yellow); border-radius:50%; animation:pulse 1.5s infinite; }
+        .route-switch { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 14px 12px; }
+        .route-switch button { border:1px solid var(--border2); border-radius:12px; padding:12px 10px; background:var(--surface); color:var(--white); font-family:'Outfit',sans-serif; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; gap:8px; }
+        .route-list-head { padding:18px 14px 8px; }
+        .route-list-title { font-family:'Bebas Neue',cursive; font-size:24px; letter-spacing:1px; }
+        .route-list-sub { color:var(--muted2); font-size:12px; line-height:1.45; margin-top:4px; }
+        .route-stop-card { margin:10px 12px; background:var(--night2); border:1px solid var(--border); border-radius:16px; padding:13px; }
+        .route-stop-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+        .route-stop-rank { width:38px; height:38px; border-radius:12px; display:grid; place-items:center; background:var(--red); color:#fff; font-weight:900; font-size:18px; }
+        .route-stop-ref { font-weight:800; font-size:14px; }
+        .route-stop-meta { color:var(--muted); font-size:11px; margin-top:2px; }
+        .route-stop-address { color:var(--white); font-size:14px; line-height:1.35; margin-top:8px; }
+        .route-stop-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+        .route-stop-grid div { background:var(--surface); border-radius:10px; padding:8px; text-align:center; }
+        .route-stop-grid b { display:block; color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.7px; margin-bottom:3px; }
+        .route-stop-grid span { font-weight:800; font-size:13px; }
     </style>
 </head>
 <body>
@@ -610,7 +626,29 @@
         <div class="section-title">MES MISSIONS</div>
         <button onclick="loadMissions()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;"><i class="fas fa-sync-alt"></i></button>
     </div>
+    <div class="route-switch">
+        <button type="button" onclick="showScreen('loading')"><i class="fas fa-boxes-stacked" style="color:var(--yellow);"></i> Chargement</button>
+        <button type="button" onclick="showScreen('delivery')"><i class="fas fa-route" style="color:var(--green);"></i> Livraison</button>
+    </div>
     <div class="scroll-list" id="missionsList"></div>
+</div>
+
+<!-- ═══ CHARGEMENT CHAUFFEUR ═══ -->
+<div class="screen" id="screenLoading">
+    <div class="route-list-head">
+        <div class="route-list-title">CHARGEMENT</div>
+        <div class="route-list-sub">Trié par ordre de chargement. Le stop final est chargé en premier au fond du véhicule.</div>
+    </div>
+    <div class="scroll-list" id="loadingList"></div>
+</div>
+
+<!-- ═══ LIVRAISON CHAUFFEUR ═══ -->
+<div class="screen" id="screenDelivery">
+    <div class="route-list-head">
+        <div class="route-list-title">LIVRAISON</div>
+        <div class="route-list-sub">Trié par numéro d’arrêt. En régional, le premier arrêt est le plus éloigné de la base.</div>
+    </div>
+    <div class="scroll-list" id="deliveryList"></div>
 </div>
 
 <!-- ═══ JOURNÉE : pointage / heures, km, frais ═══ -->
@@ -1285,7 +1323,7 @@
     document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
 
     /* ── Screen nav ── */
-    const NAV_SCREENS = ['missions','map','qr','journal','rh'];
+    const NAV_SCREENS = ['missions','loading','delivery','map','qr','journal','rh'];
     window.showScreen = function(name) {
         console.log('[DEBUG] showScreen appelé avec:', name);
         if (name !== 'qr') stopLiveScanTracks();
@@ -1308,6 +1346,8 @@
         // ═══ PRO: Update breadcrumb ═══
         const breadcrumbLabels = {
             missions: 'Missions',
+            loading: 'Chargement',
+            delivery: 'Livraison',
             map: 'Localisation',
             journal: 'Journée',
             qr: 'Scanner QR',
@@ -1325,6 +1365,8 @@
             return;
         }
         if(name==='journal') initFraisScreen();
+        if(name==='loading') renderDriverRouteView('loading');
+        if(name==='delivery') renderDriverRouteView('delivery');
     };
 
     /* ── LOGIN ── */
@@ -3036,6 +3078,8 @@
         const el = document.getElementById('missionsList');
         if(!missions.length) {
             el.innerHTML = `<div class="empty-state"><div class="empty-ico">🎉</div><div class="empty-txt">Toutes vos missions sont terminées !<br>Excellent travail.</div></div>`;
+            renderDriverRouteView('loading');
+            renderDriverRouteView('delivery');
             updateDashboard();
             return;
         }
@@ -4078,6 +4122,45 @@
                         <i class="fas fa-money-check-alt"></i> Voir la fiche de salaire
                     </button>
                 </div>`:''}
+            </div>`;
+        }).join('');
+        renderDriverRouteView('loading');
+        renderDriverRouteView('delivery');
+    }
+
+    function renderDriverRouteView(mode) {
+        const el = document.getElementById(mode === 'loading' ? 'loadingList' : 'deliveryList');
+        if(!el) return;
+        if(!missions.length) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-ico">📦</div><div class="empty-txt">Aucune mission à afficher.</div></div>`;
+            return;
+        }
+        const prepared = window.ColixoParcelLogistics
+            ? window.ColixoParcelLogistics.calculateLoadingOrder(missions, { mode:'regional' })
+            : missions.map((m,i)=>Object.assign({}, m, { stop_number:i+1, loading_order:missions.length-i }));
+        const key = mode === 'loading' ? 'loading_order' : 'stop_number';
+        const sorted = prepared.slice().sort((a,b)=>(a[key]||0)-(b[key]||0));
+        el.innerHTML = sorted.map((m) => {
+            const qty = parseInt(m.quantity || m.parcel_count || 1, 10) || 1;
+            const svc = m.service_level || m.service_type || m.speed || 'Standard';
+            const rank = m[key] || '—';
+            return `<div class="route-stop-card" onclick="navMission('${m.id}')">
+                <div class="route-stop-top">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div class="route-stop-rank">${rank}</div>
+                        <div>
+                            <div class="route-stop-ref">#${m.order_number || m.id.slice(0,8)}</div>
+                            <div class="route-stop-meta">${m.destinataire_nom || m.client_name || 'Destinataire'} · ${svc}</div>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right" style="color:var(--muted);"></i>
+                </div>
+                <div class="route-stop-address">${m.delivery_address || 'Adresse manquante'}</div>
+                <div class="route-stop-grid">
+                    <div><b>Stop</b><span>${m.stop_number || '—'}</span></div>
+                    <div><b>Charge</b><span>${m.loading_order || '—'}</span></div>
+                    <div><b>Colis</b><span>${qty}</span></div>
+                </div>
             </div>`;
         }).join('');
     }
