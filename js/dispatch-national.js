@@ -190,7 +190,20 @@
         var zone = state.zones.find(function(z){ return z.code === o.destination_zone_code; }) || {};
         var lvl = service(o);
         if(lvl === 'express'){
-            return { type:'manual_express', label:'Express à valider', reason:'Validation dispatch obligatoire', order:o, requires_admin:true };
+            if(zone.service_express !== true){
+                return { type:'manual_express', label:'Express non couvert', reason:'Express non activé sur cette zone', order:o, requires_admin:true };
+            }
+            if(zone.direct_colixo === true && zone.default_partner_required !== true){
+                return { type:'local_route', label:'Colixo direct express', reason:'Zone express livrée par Colixo, validation dispatch obligatoire', order:o, requires_admin:true };
+            }
+            var expressPartner = findAvailablePartner(o.destination_zone_code, 'express');
+            if(expressPartner){
+                return { type:'partner', label:'Transporteur express', reason:'Express couvert par '+expressPartner.name+', validation dispatch obligatoire', order:o, partner:expressPartner, requires_admin:true };
+            }
+            return { type:'manual_express', label:'Express à valider', reason:'Zone express active mais aucun transporteur configuré', order:o, requires_admin:true };
+        }
+        if(lvl === '24h' && zone.service_24h === false){
+            return { type:'manual', label:'24h non couvert', reason:'24h non activé sur cette zone', order:o, requires_admin:true };
         }
         if(o.origin_region_code === o.destination_region_code && zone.direct_colixo !== false){
             return { type:'local_route', label:'Tournée locale', reason:'Origine et destination dans la même région', order:o };
@@ -507,7 +520,7 @@
                 var d = suggestDispatchDecision(o);
                 var cls = service(o)==='express'?'p-express':service(o)==='24h'?'p-24h':'p-48h';
                 var risk = new Date(o.latest_delivery_date).getTime() < Date.now()+12*36e5;
-                return '<tr><td><strong>'+esc(ref(o))+'</strong><br><span class="muted">'+esc(o.destinataire_nom || o.client_name || '')+'</span></td><td><span class="pill '+cls+'">'+esc(service(o))+'</span></td><td>'+esc(o.origin_region_code)+'<br><span class="muted">'+esc(o.pickup_postcode || '')+'</span></td><td>'+esc(o.destination_region_code)+'<br><span class="muted">'+esc(o.delivery_postcode || '')+'</span></td><td>'+esc(o.destination_zone_code || '—')+'</td><td class="'+(risk?'risk':'')+'">'+new Date(o.latest_delivery_date).toLocaleString('fr-CH')+'</td><td><span class="pill '+(d.type==='local_route'?'p-local':d.type==='partner'?'p-partner':d.type==='linehaul'?'p-national':'p-express')+'">'+esc(d.label)+'</span><br><span class="muted">'+esc(d.reason)+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="window.dispatchNationalManualDecision(&quot;'+esc(o.id)+'&quot;)">Modifier</button></td></tr>';
+                return '<tr><td><strong>'+esc(ref(o))+'</strong><br><span class="muted">'+esc(o.destinataire_nom || o.client_name || '')+'</span></td><td><span class="pill '+cls+'">'+esc(service(o))+'</span></td><td>'+esc(o.origin_region_code)+'<br><span class="muted">'+esc(o.pickup_postcode || '')+'</span></td><td>'+esc(o.destination_region_code)+'<br><span class="muted">'+esc(o.delivery_postcode || '')+'</span></td><td>'+esc(o.destination_zone_code || '—')+'</td><td class="'+(risk?'risk':'')+'">'+new Date(o.latest_delivery_date).toLocaleString('fr-CH')+'</td><td><span class="pill '+(service(o)==='express'?'p-express':d.type==='local_route'?'p-local':d.type==='partner'?'p-partner':d.type==='linehaul'?'p-national':'p-express')+'">'+esc(d.label)+'</span><br><span class="muted">'+esc(d.reason)+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="window.dispatchNationalManualDecision(&quot;'+esc(o.id)+'&quot;)">Modifier</button></td></tr>';
             }).join('') + '</tbody></table>';
     }
 

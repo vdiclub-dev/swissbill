@@ -20,14 +20,15 @@
         },
         logistics_zones: {
             title:'Zones logistiques',
-            sub:'Zones de livraison rattachées aux régions. Elles déterminent direct Colixo ou partenaire.',
+            sub:'Zones de livraison rattachées aux régions. Les cases changent la recommandation du dispatch : Colixo direct, express possible ou transporteur partenaire.',
             order:'code',
-            columns:['region_code','code','name','zone_type','service_24h','direct_colixo','default_partner_required','active'],
+            columns:['region_code','code','name','zone_type','service_24h','service_express','direct_colixo','default_partner_required','active'],
+            labels:{region_code:'Région',code:'Code',name:'Nom',zone_type:'Type',service_24h:'24h disponible',service_express:'Express possible',direct_colixo:'Livré par Colixo',default_partner_required:'Transporteur requis',active:'Actif'},
             fields:[
                 ['region_code','Région','text',true], ['code','Code zone','text',true], ['name','Nom','text',true],
-                ['zone_type','Type','text',false], ['service_48h','48h','checkbox',false], ['service_24h','24h','checkbox',false],
-                ['service_express','Express','checkbox',false], ['direct_colixo','Direct Colixo','checkbox',false],
-                ['default_partner_required','Partenaire requis','checkbox',false], ['cutoff_time','Cut-off','time',false],
+                ['zone_type','Type','text',false], ['service_48h','48h disponible','checkbox',false], ['service_24h','24h disponible','checkbox',false],
+                ['service_express','Express possible','checkbox',false], ['direct_colixo','Livré par Colixo','checkbox',false],
+                ['default_partner_required','Transporteur partenaire requis','checkbox',false], ['cutoff_time','Cut-off','time',false],
                 ['center_lat','Latitude centre','number',false], ['center_lng','Longitude centre','number',false], ['active','Actif','checkbox',false]
             ]
         },
@@ -143,7 +144,7 @@
             document.getElementById('configTable').innerHTML = '<div class="empty">Aucune donnée. Utilisez “Préremplir Suisse” ou “Ajouter”.</div>';
             return;
         }
-        document.getElementById('configTable').innerHTML = '<table><thead><tr>'+c.columns.map(function(col){return '<th>'+esc(col)+'</th>';}).join('')+'<th>Actions</th></tr></thead><tbody>'
+        document.getElementById('configTable').innerHTML = '<table><thead><tr>'+c.columns.map(function(col){return '<th>'+esc((c.labels && c.labels[col]) || col)+'</th>';}).join('')+'<th>Actions</th></tr></thead><tbody>'
             + currentRows.map(function(row){
                 return '<tr>'+c.columns.map(function(col){return '<td>'+esc(displayValue(row[col]))+'</td>';}).join('')
                     +'<td><button class="btn btn-ghost btn-sm" onclick="nationalConfigEdit(&quot;'+esc(row.id)+'&quot;)"><i class="fas fa-pen"></i></button> <button class="btn btn-ghost btn-sm" onclick="nationalConfigDelete(&quot;'+esc(row.id)+'&quot;)"><i class="fas fa-trash"></i></button></td></tr>';
