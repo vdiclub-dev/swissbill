@@ -409,8 +409,10 @@
             base_lng:zone.center_lng || null
         };
         var insert = await db.from('routes').insert([routePayload]).select('*').single();
-        if(insert.error && missingColumn(insert.error, ['color_hex'])){
+        if(insert.error && missingColumn(insert.error, ['color_hex','base_lat','base_lng'])){
             delete routePayload.color_hex;
+            delete routePayload.base_lat;
+            delete routePayload.base_lng;
             insert = await db.from('routes').insert([routePayload]).select('*').single();
         }
         if(insert.error) throw insert.error;
