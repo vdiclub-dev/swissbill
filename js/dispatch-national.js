@@ -10,6 +10,9 @@
         linehauls: [],
         partners: [],
         vehicles: [],
+        pickupClients: [],
+        pickupSchedules: [],
+        pickups: [],
         routes: [],
         routeStops: [],
         suggestions: [],
@@ -81,6 +84,34 @@
     function service(o){ return String(o.service_level || o.service_type || o.speed || '48h').toLowerCase().replace('standard','48h').replace('prio','24h').replace('priority','24h'); }
     function qty(o){ var q=parseInt(o.parcel_count || o.quantity || o.nb_colis || 1,10); return isFinite(q)&&q>0?q:1; }
     function weight(o){ var n=parseFloat(o.weight_kg || o.weight || 0); return isFinite(n)?n:0; }
+    function pickupQty(p){ var q=parseInt(p.estimated_parcels || p.parcel_count || 1,10); return isFinite(q)&&q>0?q:1; }
+    function pickupRef(p){ return 'RAM-'+String(p.id || '').slice(0,8).toUpperCase(); }
+    function pickupClientName(id){
+        var row = (state.pickupClients || []).find(function(c){ return String(c.id) === String(id); });
+        if(!row) return id ? 'Client '+String(id).slice(0,8) : 'Client non renseigné';
+        return row.company_name || row.nom || row.name || row.email || 'Client';
+    }
+    function pickupDayIndex(date){ var d = date.getDay(); return d === 0 ? 7 : d; }
+    function pickupDays(schedule){ return Array.isArray(schedule.days_of_week) ? schedule.days_of_week.map(Number).filter(Boolean) : []; }
+    function pickupScheduleMatches(schedule, date){
+        if(schedule.is_active === false) return false;
+        if(schedule.frequency_type === 'daily') return true;
+        return pickupDays(schedule).indexOf(pickupDayIndex(date)) >= 0;
+    }
+    function cleanTime(v){ return String(v || '').slice(0,5); }
+    function pickupEndAt(p){
+        if(!p.pickup_date || !p.time_window_end) return null;
+        return new Date(p.pickup_date+'T'+cleanTime(p.time_window_end)+':00');
+    }
+    function pickupAlertCount(){
+        var now = new Date();
+        return (state.pickups || []).filter(function(p){
+            var done = ['picked_up','failed','cancelled'].indexOf(String(p.status || '')) >= 0;
+            if(done) return false;
+            var end = pickupEndAt(p);
+            return !p.assigned_driver_id || (end && end.getTime() < now.getTime()+45*60000);
+        }).length;
+    }
     function toast(msg, ok){
         var el = document.getElementById('toast');
         if(!el) return;
@@ -101,6 +132,28 @@
             console.warn('[dispatch-national] '+table, e.message || e);
             return fallback || [];
         }
+    }
+    async function safeFirstAvailable(sources){
+        for(var i=0;i<sources.length;i++){
+            var src = sources[i];
+            try{
+                var q = db.from(src.table).select('*');
+                if(src.query) q = src.query(q);
+                var res = await q;
+                if(res.error) throw res.error;
+                if((res.data || []).length || i === sources.length - 1){
+                    return (res.data || []).map(src.normalize || function(r){ return r; });
+                }
+            }catch(e){
+                console.warn('[dispatch-national] '+src.table, e.message || e);
+            }
+        }
+        return [];
+    }
+    function normalizePickupClient(row){
+        var r = Object.assign({}, row || {});
+        r.company_name = r.company_name || r.nom || r.name || r.raison_sociale || r.email || 'Client';
+        return r;
     }
     function nextBusinessDay(date){
         var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -275,16 +328,79 @@
         return state.orders;
     }
 
+    function pickupPayloadFromSchedule(schedule, dateIso){
+        var pc = normalizeSwissPostcode(schedule.pickup_address || '');
+        var zone = findPostalZone(pc) || {};
+        return {
+            schedule_id:schedule.id,
+            client_id:schedule.client_id || null,
+            pickup_date:dateIso,
+            pickup_address:schedule.pickup_address,
+            pickup_postcode:pc || null,
+            pickup_city:schedule.pickup_city || '',
+            pickup_lat:schedule.pickup_lat || null,
+            pickup_lng:schedule.pickup_lng || null,
+            origin_region_code:zone.region_code || null,
+            origin_zone_code:zone.zone_code || null,
+            contact_name:schedule.contact_name || null,
+            contact_phone:schedule.contact_phone || null,
+            time_window_start:schedule.time_window_start,
+            time_window_end:schedule.time_window_end,
+            estimated_parcels:schedule.estimated_parcels || 1,
+            estimated_weight_kg:schedule.estimated_weight_kg || 0,
+            package_type:schedule.package_type || 'colis',
+            priority:schedule.priority || 'normal',
+            driver_notes:schedule.driver_notes || null,
+            source:'recurring',
+            badge:'RAMASSE RECURRENTE',
+            status:'pending',
+            dispatch_status:'pending'
+        };
+    }
+
+    async function ensureTodayPickups(){
+        var date = todayIso();
+        var today = new Date(date+'T12:00:00');
+        var schedules = (state.pickupSchedules || []).filter(function(s){ return pickupScheduleMatches(s, today); });
+        if(!schedules.length) return 0;
+        var existing = await safeSelect('pickups', [], function(q){ return q.eq('pickup_date', date).limit(2000); });
+        var existingBySchedule = {};
+        existing.forEach(function(p){ if(p.schedule_id) existingBySchedule[p.schedule_id] = true; });
+        var payloads = schedules.filter(function(s){ return !existingBySchedule[s.id]; }).map(function(s){ return pickupPayloadFromSchedule(s, date); });
+        if(!payloads.length) return 0;
+        var res = await db.from('pickups').insert(payloads);
+        if(res.error) {
+            console.warn('[dispatch-national] pickups insert', res.error.message || res.error);
+            return 0;
+        }
+        return payloads.length;
+    }
+
+    async function loadPickupData(){
+        state.pickupClients = await safeFirstAvailable([
+            { table:'clients', query:function(q){ return q.limit(3000); }, normalize:normalizePickupClient },
+            { table:'entreprises', query:function(q){ return q.limit(3000); }, normalize:normalizePickupClient }
+        ]);
+        state.pickupSchedules = await safeSelect('pickup_schedules', [], function(q){ return q.limit(3000); });
+        await ensureTodayPickups();
+        state.pickups = await safeSelect('pickups', [], function(q){
+            return q.eq('pickup_date', todayIso()).neq('status', 'cancelled').order('time_window_start', { ascending:true }).limit(2000);
+        });
+        return state.pickups;
+    }
+
     async function createLocalRouteFromZone(zoneCode){
         var orders = state.orders.filter(function(o){ return o.destination_zone_code === zoneCode; });
-        if(!orders.length) throw new Error('Aucun colis pour la zone '+zoneCode);
+        var pickups = state.pickups.filter(function(p){ return (p.origin_zone_code || '') === zoneCode && !p.assigned_route_id; });
+        if(!orders.length && !pickups.length) throw new Error('Aucun colis ou ramasse pour la zone '+zoneCode);
         var zone = state.zones.find(function(z){ return z.code === zoneCode; }) || {};
+        var firstTask = orders[0] || pickups[0] || {};
         var routePayload = {
             name:'Route '+zoneCode+' '+todayIso(),
             route_type:'local',
             route_date:todayIso(),
-            origin_region_code:orders[0].origin_region_code,
-            destination_region_code:orders[0].destination_region_code,
+            origin_region_code:firstTask.origin_region_code || firstTask.destination_region_code || zone.region_code || 'ROM',
+            destination_region_code:firstTask.destination_region_code || firstTask.origin_region_code || zone.region_code || 'ROM',
             zone_code:zoneCode,
             color_hex:zoneColor(zoneCode),
             dispatch_status:'draft',
@@ -298,11 +414,20 @@
             insert = await db.from('routes').insert([routePayload]).select('*').single();
         }
         if(insert.error) throw insert.error;
-        await db.from('transport_orders_simple').update({
-            assigned_route_id:insert.data.id,
-            dispatch_status:'route_suggested',
-            dispatch_decision:{ type:'local_route', zone_code:zoneCode, route_id:insert.data.id }
-        }).in('id', orders.map(function(o){ return o.id; }));
+        if(orders.length){
+            await db.from('transport_orders_simple').update({
+                assigned_route_id:insert.data.id,
+                dispatch_status:'route_suggested',
+                dispatch_decision:{ type:'local_route', zone_code:zoneCode, route_id:insert.data.id }
+            }).in('id', orders.map(function(o){ return o.id; }));
+        }
+        if(pickups.length){
+            await db.from('pickups').update({
+                assigned_route_id:insert.data.id,
+                dispatch_status:'route_suggested',
+                status:'planned'
+            }).in('id', pickups.map(function(p){ return p.id; }));
+        }
         await generateRouteStops(insert.data.id);
         toast('Tournée locale créée pour '+zoneCode, true);
         await refreshAll();
@@ -351,10 +476,13 @@
             route = routeRes.data || {};
         }
         var orders = state.orders.filter(function(o){ return o.assigned_route_id === routeId || o.destination_zone_code === route.zone_code; });
+        var pickups = state.pickups.filter(function(p){ return p.assigned_route_id === routeId || p.origin_zone_code === route.zone_code; });
         var color = routeColor(route);
-        var stops = calculateLoadOrder(orders.map(function(o){ return {
+        var deliveryStops = orders.map(function(o){ return {
             route_id:routeId,
             order_id:o.id,
+            order_table:'transport_orders_simple',
+            stop_type:'delivery',
             service_level:service(o),
             address:o.delivery_address,
             postcode:o.delivery_postcode,
@@ -368,21 +496,51 @@
             zone_code:o.destination_zone_code || route.zone_code || null,
             logistics_zone:o.destination_zone_code || route.zone_code || 'default',
             color_hex:color || zoneColor(o.destination_zone_code || route.zone_code)
-        }; }));
+        }; });
+        var pickupStops = pickups.map(function(p){ return {
+            route_id:routeId,
+            order_id:p.id,
+            order_table:'pickups',
+            pickup_id:p.id,
+            stop_type:'pickup',
+            service_level:p.priority || 'pickup',
+            address:p.pickup_address,
+            postcode:p.pickup_postcode,
+            city:p.pickup_city,
+            recipient_name:pickupClientName(p.client_id),
+            parcel_count:pickupQty(p),
+            lat:p.pickup_lat,
+            lng:p.pickup_lng,
+            status:'planned',
+            load_group:p.origin_zone_code || route.zone_code || 'pickup',
+            zone_code:p.origin_zone_code || route.zone_code || null,
+            logistics_zone:p.origin_zone_code || route.zone_code || 'pickup',
+            color_hex:'#f97316',
+            time_window_start:p.time_window_start,
+            time_window_end:p.time_window_end
+        }; });
+        var stops = calculateLoadOrder(deliveryStops.concat(pickupStops));
         await db.from('route_stops').delete().eq('route_id', routeId);
         if(stops.length){
             var res = await db.from('route_stops').insert(stops);
-            if(res.error && missingColumn(res.error, ['zone_code','logistics_zone','color_hex'])){
+            if(res.error && missingColumn(res.error, ['zone_code','logistics_zone','color_hex','stop_type','pickup_id','time_window_start','time_window_end'])){
                 var compatible = stops.map(function(s){
                     var copy = Object.assign({}, s);
                     delete copy.zone_code;
                     delete copy.logistics_zone;
                     delete copy.color_hex;
+                    delete copy.stop_type;
+                    delete copy.pickup_id;
+                    delete copy.time_window_start;
+                    delete copy.time_window_end;
                     return copy;
                 });
                 res = await db.from('route_stops').insert(compatible);
             }
             if(res.error) throw res.error;
+            if(pickups.length){
+                await db.from('pickups').update({ status:'planned', dispatch_status:'route_suggested', assigned_route_id:routeId }).in('id', pickups.map(function(p){ return p.id; }));
+            }
         }
         return stops;
     }
@@ -494,6 +652,7 @@
     async function refreshAll(){
         await loadReferenceData();
         await loadPendingOrders();
+        await loadPickupData();
         state.routes = await safeSelect('routes', []);
         state.routeStops = await safeSelect('route_stops', []);
         suggestNationalRoutes();
@@ -522,6 +681,8 @@
             [orders.filter(function(o){return service(o)==='48h';}).length, '48h'],
             [orders.filter(function(o){return service(o)==='24h';}).length, '24h'],
             [orders.filter(function(o){return service(o)==='express';}).length, 'Express'],
+            [state.pickups.length, 'Ramasses'],
+            [pickupAlertCount(), 'Alertes ramasse'],
             [risky.length, 'Proches délai']
         ];
         document.getElementById('kpis').innerHTML = kpis.map(function(k){ return '<div class="kpi"><b>'+k[0]+'</b><span>'+esc(k[1])+'</span></div>'; }).join('');
@@ -563,7 +724,7 @@
             return '<div class="setup-card"><b>'+c[0]+'</b><strong>'+c[1]+'</strong><span>'+c[2]+'</span></div>';
         }).join('');
         return '<div class="overview">'
-            +'<div class="overview-hero"><div><div class="hero-kicker">Centre de contrôle national</div><h2>Le moteur est prêt, il attend des colis à dispatcher.</h2><p>Quand HGC ou un autre client crée des colis, cette page classera les commandes par NPA, région, zone, délai et solution recommandée.</p></div><div class="hero-actions"><a class="btn btn-red" href="transports-dispatch.html">Voir transports</a><a class="btn btn-green" href="national-config.html">Configurer réseau</a><a class="btn btn-ghost" href="../commandes-client.html">Commandes client</a></div></div>'
+            +'<div class="overview-hero"><div><div class="hero-kicker">Centre de contrôle national</div><h2>Le moteur est prêt, il attend des colis à dispatcher.</h2><p>Quand HGC ou un autre client crée des colis, cette page classera les commandes par NPA, région, zone, délai et solution recommandée. Les ramasses récurrentes du jour remontent aussi dans cette dispatch.</p></div><div class="hero-actions"><a class="btn btn-red" href="transports-dispatch.html">Voir transports</a><a class="btn btn-orange" href="pickups.html">Ramasses récurrentes</a><a class="btn btn-green" href="national-config.html">Configurer réseau</a><a class="btn btn-ghost" href="../commandes-client.html">Commandes client</a></div></div>'
             +'<div class="overview-section"><h3>Règles de service</h3><div class="overview-grid">'+serviceCards+'</div></div>'
             +'<div class="overview-section"><h3>État du réseau</h3><div class="setup-grid">'+networkCards+'</div></div>'
             +'<div class="overview-section"><h3>Flux prévu</h3><div class="flow-steps"><span>Colis client</span><i class="fas fa-arrow-right"></i><span>NPA</span><i class="fas fa-arrow-right"></i><span>Région / zone</span><i class="fas fa-arrow-right"></i><span>Tournée, ligne ou partenaire</span><i class="fas fa-arrow-right"></i><span>Validation admin</span></div></div>'
@@ -571,8 +732,14 @@
     }
 
     function renderOrders(){
-        if(!state.orders.length) return renderOpsOverview();
+        if(!state.orders.length && !state.pickups.length) return renderOpsOverview();
+        var pickupRows = state.pickups.map(function(p){
+            var end = pickupEndAt(p);
+            var risk = end && end.getTime() < Date.now()+45*60000 && ['picked_up','failed','cancelled'].indexOf(String(p.status || '')) < 0;
+            return '<tr class="pickup-row"><td><strong>'+esc(pickupRef(p))+'</strong><br><span class="pill p-pickup">RAMASSE RÉCURRENTE</span></td><td><span class="pill p-pickup">'+esc(p.priority || 'pickup')+'</span></td><td>'+esc(p.origin_region_code || '—')+'<br><span class="muted">'+esc(p.pickup_postcode || '')+'</span></td><td>Ramasse<br><span class="muted">'+esc(cleanTime(p.time_window_start))+'-'+esc(cleanTime(p.time_window_end))+'</span></td><td>'+zoneBadge(p.origin_zone_code)+'</td><td class="'+(risk?'risk':'')+'">'+esc(cleanTime(p.time_window_end) || '—')+'</td><td><span class="pill p-pickup">Ramasse du jour</span><br><span class="muted">'+esc(pickupClientName(p.client_id))+' · '+esc(pickupQty(p))+' colis estimés</span></td><td><a class="btn btn-ghost btn-sm" href="pickups.html">Ouvrir</a></td></tr>';
+        }).join('');
         return '<table><thead><tr><th>Commande</th><th>Service</th><th>Origine</th><th>Destination</th><th>Zone</th><th>Délai</th><th>Décision suggérée</th><th>Actions</th></tr></thead><tbody>'
+            + pickupRows
             + state.orders.map(function(o){
                 var d = suggestDispatchDecision(o);
                 var cls = service(o)==='express'?'p-express':service(o)==='24h'?'p-24h':'p-48h';
@@ -584,6 +751,10 @@
     function renderRecommendations(){
         var grouped = suggestNationalRoutes();
         var parts = [];
+        var pickupsByZone = groupBy(state.pickups.filter(function(p){ return p.origin_zone_code && !p.assigned_route_id && ['pending','planned','assigned'].indexOf(String(p.status || 'pending')) >= 0; }), function(p){ return p.origin_zone_code; });
+        Object.keys(pickupsByZone).forEach(function(zone){
+            parts.push('<div class="rec-card colored-card" style="--zone-color:#f97316"><div class="rec-head"><div><div class="rec-title">Ramasses récurrentes '+zoneBadge(zone)+'</div><div class="rec-meta">'+pickupsByZone[zone].length+' ramasse(s) · fenêtres horaires à respecter</div></div><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(zone)+'&quot;)">Créer tournée</button></div></div>');
+        });
         Object.keys(grouped.local).forEach(function(zone){
             parts.push('<div class="rec-card colored-card" style="--zone-color:'+esc(zoneColor(zone))+'"><div class="rec-head"><div><div class="rec-title">Tournée locale '+zoneBadge(zone)+'</div><div class="rec-meta">'+grouped.local[zone].length+' colis · validation admin</div></div><button class="btn btn-green btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(zone)+'&quot;)">Créer tournée</button></div></div>');
         });
@@ -608,6 +779,21 @@
         return '<div class="cards">'+parts.join('')+'</div>';
     }
 
+    function renderPickups(){
+        if(!state.pickups.length){
+            return '<div class="overview"><div class="overview-hero"><div><div class="hero-kicker">Ramasses récurrentes</div><h2>Aucune ramasse générée pour aujourd’hui.</h2><p>Créez des règles client dans le module Ramasses. La dispatch générera ensuite automatiquement les tâches du jour.</p></div><div class="hero-actions"><a class="btn btn-orange" href="pickups.html">Configurer les ramasses</a></div></div></div>';
+        }
+        return '<table><thead><tr><th>Ramasse</th><th>Client</th><th>Fenêtre</th><th>Adresse</th><th>Zone</th><th>Volume</th><th>Alerte</th><th>Actions</th></tr></thead><tbody>'
+            + state.pickups.map(function(p){
+                var end = pickupEndAt(p);
+                var done = ['picked_up','failed','cancelled'].indexOf(String(p.status || '')) >= 0;
+                var late = !done && end && end.getTime() < Date.now();
+                var close = !done && end && end.getTime() >= Date.now() && end.getTime() < Date.now()+45*60000;
+                var alert = late ? '<span class="pill p-express">Dépassée</span>' : close ? '<span class="pill p-24h">Proche limite</span>' : !p.assigned_driver_id ? '<span class="pill p-pickup">Non affectée</span>' : '<span class="pill p-local">OK</span>';
+                return '<tr class="pickup-row"><td><strong>'+esc(pickupRef(p))+'</strong><br><span class="pill p-pickup">RAMASSE RÉCURRENTE</span></td><td>'+esc(pickupClientName(p.client_id))+'<br><span class="muted">'+esc(p.contact_name || '')+' '+esc(p.contact_phone || '')+'</span></td><td>'+esc(cleanTime(p.time_window_start))+' - '+esc(cleanTime(p.time_window_end))+'</td><td>'+esc(p.pickup_address || '')+'</td><td>'+zoneBadge(p.origin_zone_code)+'</td><td>'+esc(pickupQty(p))+' colis<br><span class="muted">'+esc(p.estimated_weight_kg || 0)+' kg</span></td><td>'+alert+'</td><td><a class="btn btn-ghost btn-sm" href="pickups.html">Gérer</a></td></tr>';
+            }).join('')+'</tbody></table>';
+    }
+
     function renderRoutes(){
         var rows = state.routes || [];
         if(!rows.length) return '<div class="overview"><div class="overview-hero"><div><div class="hero-kicker">Routes & live</div><h2>Aucune route nationale créée pour le moment.</h2><p>Quand une tournée locale, une ligne nationale ou un lot partenaire sera validé, elle apparaîtra ici avec son statut, son véhicule et ses propositions de réoptimisation.</p></div></div><div class="setup-grid"><div class="setup-card"><b>0</b><strong>Véhicules en cours</strong><span>Les positions chauffeur alimenteront cette vue.</span></div><div class="setup-card"><b>0</b><strong>Retards détectés</strong><span>Le moteur proposera une réoptimisation si le gain dépasse 10 à 15 minutes.</span></div><div class="setup-card"><b>0</b><strong>Colis à risque</strong><span>Les colis 24h et express restent protégés par la date limite.</span></div></div></div>';
@@ -620,7 +806,7 @@
 
     function renderActiveTab(){
         document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === state.activeTab); });
-        var html = state.activeTab === 'orders' ? renderOrders() : state.activeTab === 'reco' ? renderRecommendations() : renderRoutes();
+        var html = state.activeTab === 'orders' ? renderOrders() : state.activeTab === 'pickups' ? renderPickups() : state.activeTab === 'reco' ? renderRecommendations() : renderRoutes();
         document.getElementById('mainTable').innerHTML = html;
     }
 
@@ -641,10 +827,23 @@
         rows.forEach(function(o){
             var lat = parseFloat(o.lat || o.delivery_lat), lng = parseFloat(o.lng || o.delivery_lng);
             if(!isFinite(lat) || !isFinite(lng)) return;
-            var markerColor = routeId ? selectedColor : zoneColor(o.destination_zone_code || o.zone_code || o.load_group);
+            var isPickupStop = o.stop_type === 'pickup' || o.order_table === 'pickups';
+            var markerColor = isPickupStop ? '#f97316' : routeId ? selectedColor : '#22c55e';
             points.push([lat,lng]);
-            L.circleMarker([lat,lng], { radius:6, color:markerColor, fillColor:markerColor, fillOpacity:.8 }).addTo(state.mapLayer).bindPopup(esc(ref(o))+'<br>'+esc(o.address || o.delivery_address || ''));
+            L.circleMarker([lat,lng], { radius:isPickupStop ? 8 : 6, color:markerColor, fillColor:markerColor, fillOpacity:.85 }).addTo(state.mapLayer)
+                .bindPopup(isPickupStop
+                    ? '<strong>RAMASSE RÉCURRENTE</strong><br>'+esc(o.recipient_name || '')+'<br>'+esc(o.address || '')+'<br>'+esc(cleanTime(o.time_window_start))+'-'+esc(cleanTime(o.time_window_end))
+                    : '<strong>Livraison</strong><br>'+esc(ref(o))+'<br>'+esc(o.address || o.delivery_address || ''));
         });
+        if(!routeId){
+            state.pickups.forEach(function(p){
+                var lat = parseFloat(p.pickup_lat), lng = parseFloat(p.pickup_lng);
+                if(!isFinite(lat) || !isFinite(lng)) return;
+                points.push([lat,lng]);
+                L.circleMarker([lat,lng], { radius:8, color:'#f97316', fillColor:'#f97316', fillOpacity:.9, weight:2 }).addTo(state.mapLayer)
+                    .bindPopup('<strong>RAMASSE RÉCURRENTE</strong><br>'+esc(pickupClientName(p.client_id))+'<br>'+esc(cleanTime(p.time_window_start))+'-'+esc(cleanTime(p.time_window_end))+' · '+esc(pickupQty(p))+' colis<br>'+esc(p.driver_notes || ''));
+            });
+        }
         if(points.length > 1) L.polyline(points, { color:selectedColor, weight:3, opacity:.7 }).addTo(state.mapLayer);
         if(points.length) {
             state.map.fitBounds(points, { padding:[30,30] });
@@ -699,6 +898,8 @@
     window.renderNationalDispatchDashboard = renderNationalDispatchDashboard;
     window.renderRegionOverview = renderRegionOverview;
     window.renderRouteMap = renderRouteMap;
+    window.loadPickupData = loadPickupData;
+    window.ensureTodayPickups = ensureTodayPickups;
     window.getDriverCurrentPosition = getDriverCurrentPosition;
     window.calculateLiveETA = calculateLiveETA;
     window.detectTrafficDelay = detectTrafficDelay;

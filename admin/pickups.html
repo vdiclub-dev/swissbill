@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260514f">
+    <link rel="alternate icon" href="/favicon.ico?v=20260514f">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Ramasses recurrentes | Colixo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="../css/dispatch-national.css?v=20260514f">
+    <link rel="stylesheet" href="../css/pickups.css?v=20260514f">
+    <script data-cfasync="false" src="/js/supabase.min.js"></script>
+    <script data-cfasync="false" src="../config.js?v=20260514f"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260514f-code-stable"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script defer src="../js/pickups.js?v=20260514f"></script>
+</head>
+<body>
+<div class="topbar">
+    <a class="btn btn-ghost" href="dispatch-national.html"><i class="fas fa-arrow-left"></i> Retour dispatch national</a>
+    <div class="brand">Ramasses <span>recurrentes</span></div>
+    <div class="spacer"></div>
+    <button class="btn btn-green" id="btnGenerateToday"><i class="fas fa-calendar-check"></i> Generer aujourd'hui</button>
+    <button class="btn btn-ghost" id="btnRefresh"><i class="fas fa-sync-alt"></i> Actualiser</button>
+</div>
+
+<main class="pickups-layout">
+    <aside class="panel pickup-form-panel">
+        <div class="panel-head">
+            <div class="title" id="formTitle">Nouvelle ramasse</div>
+            <div class="sub">Planification automatique par client, adresse, jours et fenetre horaire.</div>
+        </div>
+        <form class="pickup-form" id="pickupForm">
+            <input type="hidden" id="scheduleId">
+            <div class="form-field">
+                <label for="pickupClient">Client</label>
+                <select id="pickupClient"></select>
+            </div>
+            <div class="form-field form-span">
+                <label for="pickupAddress">Adresse de ramasse</label>
+                <input id="pickupAddress" type="text" placeholder="Rue, NPA, ville" required>
+            </div>
+            <div class="form-field">
+                <label for="contactName">Contact</label>
+                <input id="contactName" type="text" placeholder="Nom sur place">
+            </div>
+            <div class="form-field">
+                <label for="contactPhone">Telephone</label>
+                <input id="contactPhone" type="tel" placeholder="+41 ...">
+            </div>
+            <div class="form-field">
+                <label for="frequencyType">Frequence</label>
+                <select id="frequencyType">
+                    <option value="daily">Tous les jours</option>
+                    <option value="weekly">Une fois par semaine</option>
+                    <option value="custom">Jours personnalises</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Actif</label>
+                <label class="switch-row"><input id="isActive" type="checkbox" checked> <span>Ramasse active</span></label>
+            </div>
+            <div class="form-field form-span">
+                <label>Jours concernes</label>
+                <div class="days-grid" id="daysGrid">
+                    <label><input type="checkbox" value="1"> Lun</label>
+                    <label><input type="checkbox" value="2"> Mar</label>
+                    <label><input type="checkbox" value="3"> Mer</label>
+                    <label><input type="checkbox" value="4"> Jeu</label>
+                    <label><input type="checkbox" value="5"> Ven</label>
+                    <label><input type="checkbox" value="6"> Sam</label>
+                    <label><input type="checkbox" value="7"> Dim</label>
+                </div>
+            </div>
+            <div class="form-field">
+                <label for="timeStart">Heure debut</label>
+                <input id="timeStart" type="time" required>
+            </div>
+            <div class="form-field">
+                <label for="timeEnd">Heure fin</label>
+                <input id="timeEnd" type="time" required>
+            </div>
+            <div class="form-field">
+                <label for="estimatedParcels">Colis estimes</label>
+                <input id="estimatedParcels" type="number" min="0" step="1" value="1">
+            </div>
+            <div class="form-field">
+                <label for="estimatedWeight">Poids estime kg</label>
+                <input id="estimatedWeight" type="number" min="0" step="0.1" value="0">
+            </div>
+            <div class="form-field">
+                <label for="packageType">Type de colis</label>
+                <select id="packageType">
+                    <option value="colis">Colis</option>
+                    <option value="palette">Palette</option>
+                    <option value="document">Document</option>
+                    <option value="fragile">Fragile</option>
+                    <option value="mixte">Mixte</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label for="priority">Priorite</label>
+                <select id="priority">
+                    <option value="normal">Normal</option>
+                    <option value="high">Prioritaire</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="express">Express</option>
+                    <option value="low">Bas</option>
+                </select>
+            </div>
+            <details class="form-span advanced-fields">
+                <summary>Coordonnees GPS optionnelles</summary>
+                <div class="coords-grid">
+                    <div class="form-field">
+                        <label for="pickupLat">Latitude</label>
+                        <input id="pickupLat" type="number" step="0.0000001" placeholder="46.8006000">
+                    </div>
+                    <div class="form-field">
+                        <label for="pickupLng">Longitude</label>
+                        <input id="pickupLng" type="number" step="0.0000001" placeholder="6.7416000">
+                    </div>
+                </div>
+            </details>
+            <div class="form-field form-span">
+                <label for="driverNotes">Notes chauffeur</label>
+                <textarea id="driverNotes" rows="4" placeholder="Acces, quai, consignes, personne a appeler..."></textarea>
+            </div>
+            <div class="form-actions form-span">
+                <button class="btn btn-red" type="submit"><i class="fas fa-save"></i> Enregistrer</button>
+                <button class="btn btn-ghost" type="button" id="btnResetForm">Annuler</button>
+            </div>
+        </form>
+    </aside>
+
+    <section class="panel pickup-main">
+        <div class="pickup-hero">
+            <div>
+                <div class="hero-kicker">Dispatch quotidien</div>
+                <h1>Ramasses recurrentes clients</h1>
+                <p>Les ramasses actives du jour sont generees automatiquement, surveillees par alertes, et remontees dans la dispatch nationale avec un badge dedie.</p>
+            </div>
+            <div class="pickup-sync" id="lastSync">Synchronisation...</div>
+        </div>
+
+        <div class="pickup-stats" id="pickupStats"></div>
+
+        <div class="pickup-content-grid">
+            <article class="overview-section">
+                <div class="section-title no-pad">
+                    <span>Ramasses du jour</span>
+                    <span class="muted" id="todayLabel"></span>
+                </div>
+                <div class="table-scroll">
+                    <table class="pickup-table">
+                        <thead>
+                            <tr>
+                                <th>Client</th>
+                                <th>Fenetre</th>
+                                <th>Adresse</th>
+                                <th>Colis</th>
+                                <th>Priorite</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="todayPickupsTable"><tr><td colspan="6">Chargement...</td></tr></tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="overview-section alert-panel">
+                <div class="section-title no-pad">Alertes intelligentes</div>
+                <div id="pickupAlerts" class="pickup-alerts"></div>
+            </article>
+
+            <article class="overview-section schedule-panel">
+                <div class="section-title no-pad">Regles recurrentes</div>
+                <div class="table-scroll">
+                    <table class="pickup-table">
+                        <thead>
+                            <tr>
+                                <th>Client</th>
+                                <th>Frequence</th>
+                                <th>Fenetre</th>
+                                <th>Volume</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedulesTable"><tr><td colspan="6">Chargement...</td></tr></tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="overview-section pickup-map-panel">
+                <div class="section-title no-pad">Carte operations</div>
+                <div id="pickupsMap"></div>
+                <div class="map-note">Orange = ramasse recurrente. Vert = livraison planifiee ou recente.</div>
+            </article>
+        </div>
+    </section>
+</main>
+
+<div id="toast" class="toast"></div>
+</body>
+</html>
