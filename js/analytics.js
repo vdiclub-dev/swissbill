@@ -8,7 +8,7 @@
     var map = null;
     var mapLayer = null;
     var heatLayer = null;
-    var state = { orders:[], clients:[], drivers:[], vehicles:[], warnings:[], period:'year' };
+    var state = { orders:[], clients:[], drivers:[], vehicles:[], warnings:[], period:'year', orderSource:'orders' };
 
     var CH_ZONES = [
         { code:'GE', name:'Genève', lat:46.204, lng:6.143, ranges:[[1200,1299]] },
@@ -26,6 +26,13 @@
     function $(id){ return document.getElementById(id); }
     function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
     function n(v){ var x = Number(v); return isFinite(x) ? x : 0; }
+    function first(o, keys){
+        for(var i=0;i<keys.length;i++){
+            var v = o && o[keys[i]];
+            if(v !== undefined && v !== null && v !== '') return v;
+        }
+        return null;
+    }
     function money(v){ return new Intl.NumberFormat('fr-CH', { style:'currency', currency:'CHF', maximumFractionDigits:0 }).format(n(v)); }
     function km(v){ return new Intl.NumberFormat('fr-CH', { maximumFractionDigits:0 }).format(n(v)) + ' km'; }
     function pct(v){ return isFinite(v) ? Math.round(v) + '%': '—'; }
@@ -36,14 +43,14 @@
     function startOfMonth(v){ return new Date(v.getFullYear(), v.getMonth(), 1); }
     function startOfYear(v){ return new Date(v.getFullYear(), 0, 1); }
     function created(o){ return o.created_at || o.pickup_date || o.delivery_date || o.delivered_at; }
-    function actualDelivery(o){ return o.delivered_at || (isDelivered(o) ? o.delivery_date : null); }
-    function service(o){ return String(o.service_type || 'eco').toLowerCase().replace('standard','eco').replace('prio','priority'); }
-    function price(o){ return n(o.price || o.price_chf || o.total_price); }
-    function distance(o){ return n(o.distance_km || o.km); }
-    function cost(o){ return n(o.estimated_cost) || (distance(o) * 0.85 + 6.5); }
+    function actualDelivery(o){ return first(o, ['delivered_at','delivered_date']) || (isDelivered(o) ? o.delivery_date : null); }
+    function service(o){ return String(first(o, ['service_type','service_level','speed']) || 'eco').toLowerCase().replace('standard','eco').replace('prio','priority'); }
+    function price(o){ return n(first(o, ['price','price_chf','total_price','total_price_chf','total_estimated_price_chf','prix_chf'])); }
+    function distance(o){ return n(first(o, ['distance_km','km','km_total'])); }
+    function cost(o){ return n(first(o, ['estimated_cost','estimated_cost_chf','cost_chf'])) || (distance(o) * 0.85 + 6.5); }
     function isDelivered(o){ return ['delivered','completed','livre','livré'].indexOf(String(o.status || '').toLowerCase()) >= 0; }
     function isOpen(o){ return ['delivered','completed','cancelled','canceled','failed','returned','livre','livré'].indexOf(String(o.status || '').toLowerCase()) < 0; }
-    function parcel(o){ var q = parseInt(o.parcel_count || o.quantity || 1, 10); return isFinite(q) && q > 0 ? q : 1; }
+    function parcel(o){ var q = parseInt(first(o, ['parcel_count','quantity','colis']) || 1, 10); return isFinite(q) && q > 0 ? q : 1; }
 
     function toast(msg, ok){
         var el = $('toast');
@@ -71,6 +78,7 @@
     }
 
     function deadline(o){
+        if(o.latest_delivery_date) return new Date(o.latest_delivery_date);
         if(o.delivered_at && o.delivery_date) return new Date(o.delivery_date);
         var base = o.pickup_date || o.created_at;
         if(!base) return null;
@@ -115,6 +123,48 @@
         return row.company_name || row.name || row.full_name || row.nom || row.label || row.model || row.email || fallback || '—';
     }
 
+    function clientId(o){ return first(o, ['client_id','entreprise_id','customer_id']); }
+    function driverId(o){ return first(o, ['driver_id','chauffeur_id','assigned_driver_id']); }
+    function vehicleId(o){ return first(o, ['vehicle_id','vehicule_id']); }
+
+    function normalizeOrder(o){
+        var row = Object.assign({}, o || {});
+        row.client_id = clientId(row);
+        row.driver_id = driverId(row);
+        row.vehicle_id = vehicleId(row);
+        row.service_type = first(row, ['service_type','service_level','speed']) || 'eco';
+        row.price = price(row);
+        row.distance_km = distance(row);
+        row.parcel_count = parcel(row);
+        row.pickup_lat = first(row, ['pickup_lat','origin_lat','depart_lat']);
+        row.pickup_lng = first(row, ['pickup_lng','origin_lng','depart_lng']);
+        row.delivery_lat = first(row, ['delivery_lat','destination_lat','arrivee_lat']);
+        row.delivery_lng = first(row, ['delivery_lng','destination_lng','arrivee_lng']);
+        row.delivery_postcode = first(row, ['delivery_postcode','delivery_postal','delivery_npa','postcode','zip']);
+        return row;
+    }
+
+    function normalizeClient(row){
+        var r = Object.assign({}, row || {});
+        r.company_name = first(r, ['company_name','nom','name','raison_sociale','email']) || 'Client';
+        r.monthly_volume = first(r, ['monthly_volume','volume_mensuel']);
+        return r;
+    }
+
+    function normalizeDriver(row){
+        var r = Object.assign({}, row || {});
+        r.name = first(r, ['name','full_name']) || [r.prenom, r.nom].filter(Boolean).join(' ') || r.email || 'Chauffeur';
+        return r;
+    }
+
+    function normalizeVehicle(row){
+        var r = Object.assign({}, row || {});
+        r.model = first(r, ['model','modele','label']) || [r.immatriculation, r.marque, r.modele].filter(Boolean).join(' ') || 'Véhicule';
+        r.capacity = first(r, ['capacity','capacite','charge_utile']);
+        r.status = first(r, ['status','statut']) || (r.actif === false ? 'inactive' : 'active');
+        return r;
+    }
+
     function lookup(){
         return { clients:byId(state.clients), drivers:byId(state.drivers), vehicles:byId(state.vehicles) };
     }
@@ -123,7 +173,7 @@
     function driverName(id, lkp){ return rowName(lkp.drivers[id], id ? 'Chauffeur '+String(id).slice(0,8) : 'Non affecté'); }
 
     function extractPostcode(o){
-        var raw = o.delivery_postcode || o.postcode || o.zip || o.delivery_address || '';
+        var raw = first(o, ['delivery_postcode','delivery_postal','delivery_npa','postcode','zip','delivery_address']) || '';
         var m = String(raw).match(/\b([1-9]\d{3})\b/);
         return m ? parseInt(m[1],10) : null;
     }
@@ -148,23 +198,56 @@
         lat = n(lat); lng = n(lng);
         return lat && lng ? { lat:lat, lng:lng } : null;
     }
-    function pickupPoint(o){ return point(o.pickup_lat, o.pickup_lng); }
-    function deliveryPoint(o){ return point(o.delivery_lat, o.delivery_lng); }
+    function pickupPoint(o){ return point(first(o, ['pickup_lat','origin_lat','depart_lat']), first(o, ['pickup_lng','origin_lng','depart_lng'])); }
+    function deliveryPoint(o){ return point(first(o, ['delivery_lat','destination_lat','arrivee_lat']), first(o, ['delivery_lng','destination_lng','arrivee_lng'])); }
 
-    async function readTable(table, queryFn){
+    async function queryTable(table, queryFn){
         try{
             var q = db.from(table).select('*');
             if(queryFn) q = queryFn(q);
             var res = await q;
             if(res.error) throw res.error;
-            return res.data || [];
+            return { data:res.data || [], error:null };
         }catch(e){
-            state.warnings.push({ level:'red', title:'Source Supabase indisponible', body:table+' : '+(e.message || e) });
-            return [];
+            return { data:[], error:e };
         }
     }
 
+    async function readTable(table, queryFn){
+        var res = await queryTable(table, queryFn);
+        if(res.error) state.warnings.push({ level:'red', title:'Source Supabase indisponible', body:table+' : '+(res.error.message || res.error) });
+        return res.data;
+    }
+
+    async function readFirstAvailable(kind, sources){
+        var failures = [];
+        for(var i=0;i<sources.length;i++){
+            var src = sources[i];
+            var res = await queryTable(src.table, src.query);
+            if(res.error){
+                failures.push(src.table+' : '+(res.error.message || res.error));
+                continue;
+            }
+            if(res.data.length || i === sources.length - 1){
+                if(src.onUse) src.onUse(src);
+                if(i > 0 && (res.data.length || failures.length)){
+                    state.warnings.push({
+                        level:'orange',
+                        title:'Source '+kind+' adaptée',
+                        body:'Lecture depuis '+src.table+' pour utiliser les données Colixo existantes.'
+                    });
+                }
+                return (res.data || []).map(src.normalize || function(r){ return r; });
+            }
+        }
+        failures.forEach(function(msg){
+            state.warnings.push({ level:'red', title:'Source '+kind+' indisponible', body:msg });
+        });
+        return [];
+    }
+
     function checkSchema(){
+        if(state.orderSource !== 'orders') return;
         var required = ['created_at','pickup_date','delivery_date','status','service_type','price','distance_km','estimated_cost','driver_id','client_id','vehicle_id','delivered_at','pickup_lat','pickup_lng','delivery_lat','delivery_lng'];
         var sample = state.orders[0];
         if(!sample) return;
@@ -245,7 +328,7 @@
         $('kpiGrid').innerHTML = cards.map(function(c){
             return '<div class="kpi-card" style="--accent:'+c[4]+'"><div class="kpi-top"><div class="kpi-label">'+esc(c[0])+'</div><div class="kpi-icon"><i class="fas '+c[3]+'"></i></div></div><div class="kpi-value">'+esc(c[1])+'</div><div class="kpi-sub">'+esc(c[2])+'</div></div>';
         }).join('');
-        $('dataScope').textContent = period.length+' commande'+(period.length>1?'s':'');
+        $('dataScope').textContent = period.length+' commande'+(period.length>1?'s':'')+' · '+state.orderSource;
     }
 
     function renderCharts(){
@@ -270,8 +353,8 @@
             charts.chartServices = new Chart($('chartServices'), { type:'doughnut', data:{ labels:['Eco','Priority','Express'], datasets:[{ data:[counts.eco, counts.priority, counts.express], backgroundColor:['#22c55e','#ff8a00','#e8311a'], borderColor:'#101014', borderWidth:3 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } }, cutout:'62%' } });
         });
         scheduleChart('chartClients', function(){
-            var rows = Object.keys(groupBy(orders, function(o){ return o.client_id || 'none'; })).map(function(id){
-                var list = orders.filter(function(o){ return (o.client_id || 'none') === id; });
+            var rows = Object.keys(groupBy(orders, function(o){ return clientId(o) || 'none'; })).map(function(id){
+                var list = orders.filter(function(o){ return String(clientId(o) || 'none') === String(id); });
                 return { name:clientName(id, lkp), count:list.length };
             }).sort(function(a,b){ return b.count-a.count; }).slice(0,8).reverse();
             charts.chartClients = new Chart($('chartClients'), { type:'bar', data:{ labels:rows.map(shortName), datasets:[{ label:'Colis', data:rows.map(function(r){ return r.count; }), backgroundColor:'#facc15', borderRadius:6 }] }, options:barYOptions() });
@@ -352,7 +435,7 @@
     function avg(list){ return list.length ? list.reduce(function(s,v){ return s+n(v); },0) / list.length : 0; }
 
     function profitRows(orders, lkp){
-        var grouped = groupBy(orders.filter(function(o){ return o.client_id; }), function(o){ return o.client_id; });
+        var grouped = groupBy(orders.filter(function(o){ return clientId(o); }), function(o){ return clientId(o); });
         return Object.keys(grouped).map(function(id){
             var list = grouped[id];
             var revenue = list.reduce(function(s,o){ return s + price(o); },0);
@@ -365,7 +448,7 @@
     }
 
     function driverRows(orders, lkp){
-        var grouped = groupBy(orders.filter(function(o){ return o.driver_id; }), function(o){ return o.driver_id; });
+        var grouped = groupBy(orders.filter(function(o){ return driverId(o); }), function(o){ return driverId(o); });
         return Object.keys(grouped).map(function(id){
             var list = grouped[id];
             var delivered = list.filter(isDelivered);
@@ -468,15 +551,29 @@
 
     async function loadData(){
         state.warnings = [];
-        state.orders = await readTable('orders', function(q){ return q.order('created_at', { ascending:false }).limit(10000); });
-        var refs = await Promise.all([
-            readTable('clients', function(q){ return q.order('company_name', { ascending:true }).limit(3000); }),
-            readTable('drivers', function(q){ return q.limit(1500); }),
-            readTable('vehicles', function(q){ return q.limit(1500); })
+        state.orderSource = 'orders';
+        state.orders = await readFirstAvailable('commandes', [
+            { table:'orders', query:function(q){ return q.order('created_at', { ascending:false }).limit(10000); }, normalize:normalizeOrder, onUse:function(){ state.orderSource = 'orders'; } },
+            { table:'transport_orders_simple', query:function(q){ return q.order('created_at', { ascending:false }).limit(10000); }, normalize:normalizeOrder, onUse:function(){ state.orderSource = 'transport_orders_simple'; } }
         ]);
-        state.clients = refs[0];
-        state.drivers = refs[1];
-        state.vehicles = refs[2];
+        var refs = await Promise.all([
+            readFirstAvailable('clients', [
+                { table:'clients', query:function(q){ return q.limit(3000); }, normalize:normalizeClient },
+                { table:'entreprises', query:function(q){ return q.limit(3000); }, normalize:normalizeClient }
+            ]),
+            readFirstAvailable('chauffeurs', [
+                { table:'drivers', query:function(q){ return q.limit(1500); }, normalize:normalizeDriver },
+                { table:'chauffeurs', query:function(q){ return q.limit(1500); }, normalize:normalizeDriver },
+                { table:'utilisateurs', query:function(q){ return q.in('role', ['chauffeur','admin','super_admin']).limit(1500); }, normalize:normalizeDriver }
+            ]),
+            readFirstAvailable('véhicules', [
+                { table:'vehicles', query:function(q){ return q.limit(1500); }, normalize:normalizeVehicle },
+                { table:'vehicules', query:function(q){ return q.limit(1500); }, normalize:normalizeVehicle }
+            ])
+        ]);
+        state.clients = refs[0].sort(function(a,b){ return rowName(a).localeCompare(rowName(b), 'fr'); });
+        state.drivers = refs[1].sort(function(a,b){ return rowName(a).localeCompare(rowName(b), 'fr'); });
+        state.vehicles = refs[2].sort(function(a,b){ return rowName(a).localeCompare(rowName(b), 'fr'); });
         checkSchema();
         renderAll();
     }
