@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260512d">
-    <link rel="alternate icon" href="/favicon.ico?v=20260512d">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260514d">
+    <link rel="alternate icon" href="/favicon.ico?v=20260514d">
 <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -15,8 +15,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../config.js?v=20260512d"></script>
-    <script data-cfasync="false" src="../js/auth.js?v=20260512d-code-stable"></script>
+    <script data-cfasync="false" src="../config.js?v=20260514d"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260514d-code-stable"></script>
     <style>
         :root{
             --red:#e8311a;--red-dark:#c0280f;
@@ -662,7 +662,7 @@
     let currentAuthUser = null;
 
     /* ── State ── */
-    let vehicules=[], fraisList=[], kmList=[], transports=[], chauffeurs=[], entreprises=[], dispatchSnaps=[], brimotFactures=[], journalFlux=[];
+    let vehicules=[], fraisList=[], kmList=[], transports=[], chauffeurs=[], entreprises=[], dispatchSnaps=[], brimotFactures=[], chauffeurDepenses=[], journalFlux=[];
     let selMois, selAnnee, charts={};
     let comptaFraisMois=[], comptaTransMois=[];
     let comptaLast={ entity:'both', periodLabel:'', rowsTva:[], rowsBrimot:[], rowsColixo:[], charges:[], tot:{ ht:0,tva:0,ttc:0,nb:0 } };
@@ -681,7 +681,69 @@
     document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) window.closeModal(m.id); }));
     const fmtCHF=n=>parseFloat(n||0).toFixed(2);
     const fmtN  =n=>parseFloat(n||0).toFixed(0);
+    const num   =n=>{ const v=parseFloat(n); return Number.isFinite(v)?v:0; };
     function esc(s){ if(s==null||s==='') return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function monthKeyFromDate(v){ return String(v || '').slice(0,7); }
+    function fraisTotal(f){
+        return num(f.carburant_chf)+num(f.leasing_chf)+num(f.assurance_chf)+num(f.entretien_chf)+num(f.reparations_chf)+num(f.divers_chf);
+    }
+    function emptyFraisRow(vehiculeId, mois){
+        return {
+            vehicule_id:vehiculeId || null,
+            mois:mois || '',
+            carburant_chf:0,
+            carburant_litres:0,
+            leasing_chf:0,
+            assurance_chf:0,
+            entretien_chf:0,
+            reparations_chf:0,
+            divers_chf:0,
+            carburant_app_chf:0,
+            carburant_app_litres:0,
+            depenses_app_chf:0,
+            _from_driver_app:true
+        };
+    }
+    function enrichFraisWithDriverApp(rawFrais, kmRows, depRows, monthFilter){
+        const map = new Map();
+        function keyFor(vehiculeId, mois){ return (vehiculeId || '__sans_vehicule') + '|' + mois; }
+        function ensure(vehiculeId, mois){
+            const key = keyFor(vehiculeId, mois);
+            if(!map.has(key)) map.set(key, emptyFraisRow(vehiculeId, mois));
+            return map.get(key);
+        }
+        (rawFrais || []).forEach(f=>{
+            if(monthFilter && f.mois !== monthFilter) return;
+            const key = keyFor(f.vehicule_id, f.mois);
+            map.set(key, Object.assign(emptyFraisRow(f.vehicule_id, f.mois), f, {
+                carburant_app_chf:0,
+                carburant_app_litres:0,
+                depenses_app_chf:0,
+                _from_driver_app:false
+            }));
+        });
+        (kmRows || []).forEach(k=>{
+            const mois = monthKeyFromDate(k.date);
+            if(!mois || (monthFilter && mois !== monthFilter)) return;
+            const amount = num(k.carburant_montant_chf);
+            const litres = num(k.carburant_litres);
+            if(!amount && !litres) return;
+            const row = ensure(k.vehicule_id, mois);
+            row.carburant_chf = num(row.carburant_chf) + amount;
+            row.carburant_litres = num(row.carburant_litres) + litres;
+            row.carburant_app_chf = num(row.carburant_app_chf) + amount;
+            row.carburant_app_litres = num(row.carburant_app_litres) + litres;
+        });
+        (depRows || []).forEach(dep=>{
+            const mois = monthKeyFromDate(dep.date);
+            const amount = num(dep.montant_chf);
+            if(!mois || !amount || (monthFilter && mois !== monthFilter)) return;
+            const row = ensure(dep.vehicule_id, mois);
+            row.divers_chf = num(row.divers_chf) + amount;
+            row.depenses_app_chf = num(row.depenses_app_chf) + amount;
+        });
+        return Array.from(map.values()).sort((a,b)=>String(b.mois).localeCompare(String(a.mois)));
+    }
     function normTvaKey(pct){
         const n=parseFloat(pct);
         if(isNaN(n)||n<0.01) return '0';
@@ -750,7 +812,7 @@
         const aEnd   = `${selAnnee}-12-31`;
 
         const [
-            {data:vehs}, {data:frais}, {data:km}, {data:trans}, {data:chauf}, {data:ents}, snapQ, brimotQ
+            {data:vehs}, {data:frais}, {data:km}, {data:trans}, {data:chauf}, {data:ents}, snapQ, brimotQ, depQ
         ] = await Promise.all([
             db.from('vehicules').select('*').eq('actif',true),
             db.from('vehicule_frais').select('*').order('mois',{ascending:false}),
@@ -759,21 +821,27 @@
             db.from('utilisateurs').select('id,nom,prenom').in('role',['chauffeur','admin','super_admin']),
             db.from('entreprises').select('id,nom'),
             db.from('dispatch_tour_snapshots').select('*').gte('tour_planned_date',mStart).lte('tour_planned_date',mEnd).order('created_at',{ascending:false}),
-            db.from('brimot_factures').select('*').gte('date_facture',aStart).lte('date_facture',aEnd).order('date_facture',{ascending:true})
+            db.from('brimot_factures').select('*').gte('date_facture',aStart).lte('date_facture',aEnd).order('date_facture',{ascending:true}),
+            db.from('chauffeur_depenses').select('*').gte('date',aStart).lte('date',aEnd).order('date',{ascending:false})
         ]);
 
         vehicules=vehs||[]; fraisList=frais||[]; kmList=km||[]; transports=trans||[]; chauffeurs=chauf||[]; entreprises=ents||[];
         dispatchSnaps = (!snapQ.error && snapQ.data) ? snapQ.data : [];
         brimotFactures = (!brimotQ.error && brimotQ.data) ? brimotQ.data : [];
+        chauffeurDepenses = (!depQ.error && depQ.data) ? depQ.data : [];
         if(brimotQ.error) console.warn('Brimot factures (compta):', brimotQ.error.message||brimotQ.error);
+        if(depQ.error) console.warn('Dépenses chauffeur (finance):', depQ.error.message||depQ.error);
 
         // Frais du mois sélectionné
-        const fraisMois = fraisList.filter(f=>f.mois===`${selAnnee}-${String(selMois).padStart(2,'0')}`);
+        const moisKey = `${selAnnee}-${String(selMois).padStart(2,'0')}`;
+        const fraisMoisRaw = fraisList.filter(f=>f.mois===moisKey);
         const transMois = transports.filter(t=>{
             const d=new Date(t.created_at);
             return d.getFullYear()===selAnnee && d.getMonth()+1===selMois;
         });
         const kmMois    = kmList.filter(k=>k.date>=mStart&&k.date<=mEnd);
+        const depMois   = chauffeurDepenses.filter(d=>d.date>=mStart&&d.date<=mEnd);
+        const fraisMois = enrichFraisWithDriverApp(fraisMoisRaw, kmMois, depMois, moisKey);
 
         renderKPIs(fraisMois, transMois, kmMois);
         renderVehGrid(fraisMois, kmMois, transMois);
@@ -784,6 +852,7 @@
         renderKMTable();
         renderDispatchTables();
         populateFraisSelects();
+        renderFraisTable();
         comptaFraisMois=fraisMois; comptaTransMois=transMois;
         renderComptaCH();
         await loadJournalFlux();
@@ -1251,7 +1320,7 @@
     /* ── KPIs ── */
     function renderKPIs(frais, trans, km) {
         const CA     = trans.reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
-        const fraisT = frais.reduce((s,f)=>s+(parseFloat(f.carburant_chf||0))+(parseFloat(f.leasing_chf||0))+(parseFloat(f.assurance_chf||0))+(parseFloat(f.entretien_chf||0))+(parseFloat(f.reparations_chf||0))+(parseFloat(f.divers_chf||0)),0);
+        const fraisT = frais.reduce((s,f)=>s+fraisTotal(f),0);
         const marge  = CA - fraisT;
         const kmT    = km.reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
         const coutKm = kmT>0 ? fraisT/kmT : 0;
@@ -1280,7 +1349,7 @@
             const chauf = chauffeurs.find(c=>c.id===v.chauffeur_id);
             const km    = kmMois.filter(k=>k.vehicule_id===v.id).reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
             const frais = fraisMois.find(f=>f.vehicule_id===v.id);
-            const fraisT= frais ? [(frais.carburant_chf||0),(frais.leasing_chf||0),(frais.assurance_chf||0),(frais.entretien_chf||0),(frais.reparations_chf||0),(frais.divers_chf||0)].reduce((s,n)=>s+parseFloat(n||0),0) : 0;
+            const fraisT= frais ? fraisTotal(frais) : 0;
             const coutKm= km>0 ? fraisT/km : 0;
             return `<div class="veh-card">
                 <div class="veh-head">
@@ -1390,7 +1459,7 @@
             const chauf  = chauffeurs.find(c=>c.id===v.chauffeur_id);
             const km     = kmMois.filter(k=>k.vehicule_id===v.id).reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
             const frais  = fraisMois.find(f=>f.vehicule_id===v.id);
-            const fraisT = frais?[(frais.carburant_chf||0),(frais.leasing_chf||0),(frais.assurance_chf||0),(frais.entretien_chf||0),(frais.reparations_chf||0),(frais.divers_chf||0)].reduce((s,n)=>s+parseFloat(n||0),0):0;
+            const fraisT = frais ? fraisTotal(frais) : 0;
             const coutKm = km>0?fraisT/km:0;
             // CA des transports de ce chauffeur ce mois
             const caV = transMois.filter(t=>t.driver_id===v.chauffeur_id).reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
@@ -1429,7 +1498,8 @@
 
         // Frais par catégorie
         const catFrais={Carburant:0,Leasing:0,Assurance:0,Entretien:0,Réparations:0,Divers:0};
-        fraisList.forEach(f=>{
+        const fraisAnnee = enrichFraisWithDriverApp(fraisList, kmList, chauffeurDepenses, null);
+        fraisAnnee.forEach(f=>{
             catFrais.Carburant  += parseFloat(f.carburant_chf||0);
             catFrais.Leasing    += parseFloat(f.leasing_chf||0);
             catFrais.Assurance  += parseFloat(f.assurance_chf||0);
@@ -1479,7 +1549,7 @@
             const mStr=`${selAnnee}-${String(i+1).padStart(2,'0')}`;
             const trans=transports.filter(t=>{const d=new Date(t.created_at);return d.getFullYear()===selAnnee&&d.getMonth()===i;});
             const ca=trans.reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
-            const frais=fraisList.filter(f=>f.mois===mStr).reduce((s,f)=>s+(parseFloat(f.carburant_chf||0))+(parseFloat(f.leasing_chf||0))+(parseFloat(f.assurance_chf||0))+(parseFloat(f.entretien_chf||0))+(parseFloat(f.reparations_chf||0))+(parseFloat(f.divers_chf||0)),0);
+            const frais=enrichFraisWithDriverApp(fraisList, kmList, chauffeurDepenses, mStr).reduce((s,f)=>s+fraisTotal(f),0);
             const marge=ca-frais;
             const margePct=ca>0?(marge/ca*100).toFixed(1):0;
             return {nom,nb:trans.length,ca,frais,marge,margePct};
@@ -1656,19 +1726,21 @@
     /* ── FRAIS TABLE ── */
     function renderFraisTable() {
         const tbody=document.getElementById('fraisTable');
-        const sorted=[...fraisList].sort((a,b)=>b.mois.localeCompare(a.mois));
+        const sorted=enrichFraisWithDriverApp(fraisList, kmList, chauffeurDepenses, null);
         tbody.innerHTML=sorted.map(f=>{
             const v=vehicules.find(x=>x.id===f.vehicule_id);
-            const total=(parseFloat(f.carburant_chf||0)+parseFloat(f.leasing_chf||0)+parseFloat(f.assurance_chf||0)+parseFloat(f.entretien_chf||0)+parseFloat(f.reparations_chf||0)+parseFloat(f.divers_chf||0));
+            const total=fraisTotal(f);
+            const fuelApp = num(f.carburant_app_chf) > 0 ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">App chauffeur +${fmtCHF(f.carburant_app_chf)}</div>` : '';
+            const depApp = num(f.depenses_app_chf) > 0 ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">App chauffeur +${fmtCHF(f.depenses_app_chf)}</div>` : '';
             return `<tr>
                 <td>${f.mois}</td>
-                <td><strong>${v?.immatriculation||'—'}</strong></td>
-                <td style="color:var(--yellow)">${fmtCHF(f.carburant_chf)}</td>
+                <td><strong>${v?.immatriculation||(f.vehicule_id?'—':'Frais chauffeur')}</strong></td>
+                <td style="color:var(--yellow)">${fmtCHF(f.carburant_chf)}${fuelApp}</td>
                 <td>${fmtCHF(f.leasing_chf)}</td>
                 <td>${fmtCHF(f.assurance_chf)}</td>
                 <td>${fmtCHF(f.entretien_chf)}</td>
                 <td style="color:var(--red)">${fmtCHF(f.reparations_chf)}</td>
-                <td>${fmtCHF(f.divers_chf)}</td>
+                <td>${fmtCHF(f.divers_chf)}${depApp}</td>
                 <td style="font-weight:700;color:var(--orange)">${total.toFixed(2)}</td>
             </tr>`;
         }).join('')||`<tr><td colspan="9"><div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Aucun frais saisi</div></div></td></tr>`;
@@ -1679,9 +1751,12 @@
         const H=['Mois','Véhicule','Km','CA CHF','Frais CHF','Marge CHF','Marge %'];
         const rows=vehicules.map(v=>{
             const mois=`${selAnnee}-${String(selMois).padStart(2,'0')}`;
-            const km=kmList.filter(k=>k.vehicule_id===v.id&&k.date>=mois+'-01').reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
-            const frais=fraisList.find(f=>f.vehicule_id===v.id&&f.mois===mois);
-            const fraisT=frais?[(frais.carburant_chf||0),(frais.leasing_chf||0),(frais.assurance_chf||0),(frais.entretien_chf||0),(frais.reparations_chf||0),(frais.divers_chf||0)].reduce((s,n)=>s+parseFloat(n||0),0):0;
+            const mEnd=new Date(selAnnee,selMois,0).toISOString().slice(0,10);
+            const monthKm=kmList.filter(k=>k.vehicule_id===v.id&&k.date>=mois+'-01'&&k.date<=mEnd);
+            const km=monthKm.reduce((s,k)=>s+(parseFloat(k.km_parcourus)||0),0);
+            const monthDeps=chauffeurDepenses.filter(d=>d.vehicule_id===v.id&&d.date>=mois+'-01'&&d.date<=mEnd);
+            const frais=enrichFraisWithDriverApp(fraisList.filter(f=>f.vehicule_id===v.id&&f.mois===mois), monthKm, monthDeps, mois)[0];
+            const fraisT=frais?fraisTotal(frais):0;
             const ca=transports.filter(t=>t.driver_id===v.chauffeur_id).reduce((s,t)=>s+(parseFloat(t.price_chf)||0),0);
             const marge=ca-fraisT;
             return [mois,v.immatriculation,km.toFixed(0),ca.toFixed(2),fraisT.toFixed(2),marge.toFixed(2),ca>0?(marge/ca*100).toFixed(1)+'%':''];
