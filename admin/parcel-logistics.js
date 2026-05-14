@@ -12,6 +12,17 @@
         same_day:'Same day',
         vinologue:'Vinologue'
     };
+    var ZONE_COLORS = {
+        ROM_VD_GE:'#2563eb',
+        ROM_NE_JU_FR:'#0891b2',
+        ROM_VS:'#f59e0b',
+        ALE_ZH_AG:'#7c3aed',
+        ALE_BE_BS_BL_SO:'#d97706',
+        ALE_OST:'#0ea5e9',
+        TIC_MAIN:'#db2777',
+        GRI_MAIN:'#64748b',
+        NAT_INDUSTRIAL:'#111827'
+    };
 
     function db(){
         return window.SUPABASE_CLIENT || window.supabaseClient || window.db || null;
@@ -27,6 +38,21 @@
     function serviceLevel(o){
         var raw = o.service_level || o.service_type || o.speed || 'standard';
         return SERVICE_LABELS[String(raw).toLowerCase()] || raw || 'Standard';
+    }
+    function safeColor(v){
+        var c = String(v || '').trim();
+        return /^#[0-9a-f]{6}$/i.test(c) ? c : '#ff8a00';
+    }
+    function zoneCode(o, route){
+        o = o || {};
+        route = route || {};
+        return o.zone_code || o.destination_zone_code || o.logistics_zone || o.zone_logistique || route.zone_code || route.zone || route.destination_zone_code || 'Nationale';
+    }
+    function colorFor(o, route){
+        o = o || {};
+        route = route || {};
+        var code = zoneCode(o, route);
+        return safeColor(o.color_hex || o.zone_color_hex || o.route_color_hex || route.color_hex || route.zone_color_hex || ZONE_COLORS[code] || '#ff8a00');
     }
     function quantity(o){
         var q = parseInt(o.parcel_count || o.quantity || o.nb_colis || 1, 10);
@@ -105,10 +131,13 @@
 
         var totalStops = ordered.length;
         return ordered.map(function(o, idx){
+            var zone = zoneCode(o, route);
             return Object.assign({}, o, {
                 stop_number: idx + 1,
                 loading_order: totalStops - idx,
-                logistics_zone: o.logistics_zone || o.zone_logistique || (route && route.zone) || 'Nationale',
+                logistics_zone: zone,
+                zone_code: o.zone_code || o.destination_zone_code || zone,
+                color_hex: colorFor(o, route),
                 service_level: serviceLevel(o),
                 distance_from_base_km: o._distance_from_base >= 0 ? Math.round(o._distance_from_base * 10) / 10 : null
             });
@@ -147,7 +176,8 @@
             route: order.tournee_nom || order.route_name || order.tournee_id || '—',
             stop: order.stop_number || parcel.stop_number || '—',
             loading: order.loading_order || parcel.loading_order || '—',
-            zone: order.logistics_zone || 'Nationale',
+            zone: zoneCode(order, {}),
+            color: colorFor(order, {}),
             service: order.service_level || serviceLevel(order),
             parcelText: 'Colis ' + parcel.index + '/' + parcel.total,
             parcelId: parcel.parcel_id,
@@ -157,8 +187,9 @@
     function generateParcelLabel(order, parcel){
         parcel = parcel || { index:1, total:quantity(order), parcel_id:ref(order)+'-01', scan_token:tokenFor(order,1), stop_number:order.stop_number, loading_order:order.loading_order };
         var m = labelMeta(order, parcel);
-        return '<section class="parcel-label">'
+        return '<section class="parcel-label" style="--label-color:'+esc(m.color)+'">'
             +'<div class="pl-head"><div><div class="pl-brand">COL<span>I</span>XO</div><div class="pl-small">Étiquette colis intelligente</div></div><div class="pl-ref">'+esc(ref(order))+'</div></div>'
+            +'<div class="pl-zone-band"><span>Zone</span><strong>'+esc(m.zone)+'</strong></div>'
             +'<div class="pl-main">'
                 +'<div class="pl-left">'
                     +'<div class="pl-row big"><b>Tournée</b><strong>'+esc(m.route)+'</strong></div>'
@@ -199,7 +230,7 @@
     }
     function openPrintDoc(title, body, extraClass){
         var styles = '<style>'
-            +'body{margin:0;background:#f3f4f6;font-family:Arial,sans-serif;color:#111}.print-actions{position:sticky;top:0;background:#111;color:#fff;padding:10px 14px;display:flex;gap:10px;align-items:center;z-index:5}.print-actions button{border:0;border-radius:7px;padding:9px 13px;font-weight:700;cursor:pointer}.sheet{padding:12px}.parcel-label{width:148mm;height:105mm;background:#fff;margin:0 auto 10mm;border:1px solid #111;page-break-after:always;padding:8mm;box-sizing:border-box}.pl-head{display:flex;justify-content:space-between;border-bottom:3px solid #e8311a;padding-bottom:4mm}.pl-brand{font-size:28px;font-weight:900;letter-spacing:-1px}.pl-brand span{color:#e8311a}.pl-small{font-size:10px;text-transform:uppercase;color:#555}.pl-ref{font-size:30px;font-weight:900;color:#e8311a}.pl-main{display:grid;grid-template-columns:1fr 34mm;gap:6mm;margin-top:5mm}.pl-row,.pl-dest{border:1px solid #d1d5db;border-radius:8px;padding:7px;margin-bottom:6px}.pl-row b,.pl-grid b,.pl-dest b{display:block;font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.8px}.pl-row strong{font-size:18px}.pl-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}.pl-grid div{border:1px solid #d1d5db;border-radius:8px;padding:7px}.pl-grid strong{display:block;font-size:20px;margin-top:2px}.pl-dest strong{display:block;font-size:19px;margin:3px 0}.pl-dest span{font-size:14px;white-space:pre-wrap}.pl-foot{display:flex;justify-content:space-between;align-items:center;border-top:2px solid #111;padding-top:7px;font-size:16px}.pl-foot span{font-size:12px}.pl-qr{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:7px}.qr{width:112px;height:112px}.pl-qr code{font-size:9px;word-break:break-all;text-align:center}.list{background:#fff;margin:14px auto;padding:20px;max-width:980px;border-radius:10px}.list h1{margin:0 0 4px}.list table{width:100%;border-collapse:collapse;margin-top:14px}.list th,.list td{border-bottom:1px solid #e5e7eb;text-align:left;padding:9px;font-size:13px}.list th{background:#f9fafb;text-transform:uppercase;font-size:10px;color:#666}.pill{display:inline-block;border-radius:99px;padding:3px 8px;background:#fee2e2;color:#991b1b;font-weight:700}.warn{color:#b45309;font-weight:700}.ok{color:#15803d;font-weight:700}@media print{.print-actions{display:none}.sheet{padding:0}.list{box-shadow:none;border-radius:0;margin:0;max-width:none}.parcel-label{margin:0;page-break-after:always}@page{size:A6 landscape;margin:4mm}}'
+            +'body{margin:0;background:#f3f4f6;font-family:Arial,sans-serif;color:#111}.print-actions{position:sticky;top:0;background:#111;color:#fff;padding:10px 14px;display:flex;gap:10px;align-items:center;z-index:5}.print-actions button{border:0;border-radius:7px;padding:9px 13px;font-weight:700;cursor:pointer}.sheet{padding:12px}.parcel-label{width:148mm;height:105mm;background:#fff;margin:0 auto 10mm;border:1px solid #111;border-top:8px solid var(--label-color,#e8311a);page-break-after:always;padding:7mm 8mm 8mm;box-sizing:border-box}.pl-head{display:flex;justify-content:space-between;border-bottom:3px solid var(--label-color,#e8311a);padding-bottom:3mm}.pl-brand{font-size:28px;font-weight:900;letter-spacing:-1px}.pl-brand span{color:var(--label-color,#e8311a)}.pl-small{font-size:10px;text-transform:uppercase;color:#555}.pl-ref{font-size:30px;font-weight:900;color:var(--label-color,#e8311a)}.pl-zone-band{display:flex;align-items:center;justify-content:space-between;margin:3mm 0 4mm;background:var(--label-color,#e8311a);color:#fff;border-radius:7px;padding:6px 9px;text-transform:uppercase;letter-spacing:.8px}.pl-zone-band span{font-size:9px;font-weight:800;opacity:.85}.pl-zone-band strong{font-size:13px}.pl-main{display:grid;grid-template-columns:1fr 34mm;gap:6mm;margin-top:0}.pl-row,.pl-dest{border:1px solid #d1d5db;border-radius:8px;padding:7px;margin-bottom:6px}.pl-row b,.pl-grid b,.pl-dest b{display:block;font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.8px}.pl-row strong{font-size:18px}.pl-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}.pl-grid div{border:1px solid #d1d5db;border-radius:8px;padding:7px}.pl-grid strong{display:block;font-size:20px;margin-top:2px}.pl-dest strong{display:block;font-size:19px;margin:3px 0}.pl-dest span{font-size:14px;white-space:pre-wrap}.pl-foot{display:flex;justify-content:space-between;align-items:center;border-top:2px solid #111;padding-top:7px;font-size:16px}.pl-foot span{font-size:12px}.pl-qr{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:7px}.qr{width:112px;height:112px}.pl-qr code{font-size:9px;word-break:break-all;text-align:center}.list{background:#fff;margin:14px auto;padding:20px;max-width:980px;border-radius:10px}.list h1{margin:0 0 4px}.list table{width:100%;border-collapse:collapse;margin-top:14px}.list th,.list td{border-bottom:1px solid #e5e7eb;text-align:left;padding:9px;font-size:13px}.list th{background:#f9fafb;text-transform:uppercase;font-size:10px;color:#666}.pill{display:inline-block;border-radius:99px;padding:3px 8px;background:var(--route-color,#fee2e2);color:#fff;font-weight:700}.color-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--route-color,#ff8a00);margin-right:6px;vertical-align:-1px}.warn{color:#b45309;font-weight:700}.ok{color:#15803d;font-weight:700}@media print{.print-actions{display:none}.sheet{padding:0}.list{box-shadow:none;border-radius:0;margin:0;max-width:none}.parcel-label{margin:0;page-break-after:always}@page{size:A6 landscape;margin:4mm}}'
             +'</style>';
         var qrcodeScript = '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script><script>window.onload=function(){document.querySelectorAll(".qr").forEach(function(el){new QRCode(el,{text:el.dataset.qr,width:112,height:112,correctLevel:QRCode.CorrectLevel.L});});};<\/script>';
         var w = window.open('', '_blank', 'width=1100,height=900');
@@ -219,7 +250,8 @@
     function listHtml(title, route, stops, sortKey){
         var sorted = stops.slice().sort(function(a,b){ return (a[sortKey] || 0) - (b[sortKey] || 0); });
         var rows = sorted.map(function(o){
-            return '<tr><td><span class="pill">'+esc(o[sortKey] || '—')+'</span></td><td>'+esc(ref(o))+'</td><td>'+esc(o.stop_number || '—')+'</td><td>'+esc(o.loading_order || '—')+'</td><td>'+esc(o.service_level || serviceLevel(o))+'</td><td>'+esc(o.destinataire_nom || o.client_name || '—')+'<br><small>'+esc(o.delivery_address || '—')+'</small></td><td>'+esc(quantity(o))+'</td><td>'+esc(o.status || 'planned')+'</td></tr>';
+            var color = colorFor(o, route);
+            return '<tr style="--route-color:'+esc(color)+'"><td><span class="pill">'+esc(o[sortKey] || '—')+'</span></td><td>'+esc(ref(o))+'</td><td>'+esc(o.stop_number || '—')+'</td><td>'+esc(o.loading_order || '—')+'</td><td>'+esc(o.service_level || serviceLevel(o))+'</td><td><span class="color-dot"></span>'+esc(o.destinataire_nom || o.client_name || '—')+'<br><small>'+esc(zoneCode(o, route))+' · '+esc(o.delivery_address || '—')+'</small></td><td>'+esc(quantity(o))+'</td><td>'+esc(o.status || 'planned')+'</td></tr>';
         }).join('');
         return '<section class="list"><h1>'+esc(title)+'</h1><div>Tournée : <strong>'+esc(route.nom || route.id)+'</strong></div><table><thead><tr><th>Tri</th><th>Commande</th><th>Stop</th><th>Chargement</th><th>Service</th><th>Livraison</th><th>Colis</th><th>Statut</th></tr></thead><tbody>'+rows+'</tbody></table></section>';
     }
@@ -270,7 +302,10 @@
         validateLoadedParcels: validateLoadedParcels,
         detectMissingParcels: detectMissingParcels,
         detectWrongRouteParcel: detectWrongRouteParcel,
-        getPreparedRoute: getPreparedRoute
+        getPreparedRoute: getPreparedRoute,
+        colorFor: colorFor,
+        zoneCode: zoneCode,
+        safeColor: safeColor
     };
     window.generateParcelLabel = generateParcelLabel;
     window.generateRouteLabels = generateRouteLabels;
@@ -282,4 +317,6 @@
     window.validateLoadedParcels = validateLoadedParcels;
     window.detectMissingParcels = detectMissingParcels;
     window.detectWrongRouteParcel = detectWrongRouteParcel;
+    window.colixoParcelColorFor = colorFor;
+    window.colixoParcelZoneCode = zoneCode;
 })();

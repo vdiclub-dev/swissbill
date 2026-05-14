@@ -23,6 +23,7 @@ create table if not exists public.logistics_zones (
   code text not null unique,
   name text not null,
   zone_type text not null default 'regional',
+  color_hex text,
   service_48h boolean not null default true,
   service_24h boolean not null default false,
   service_express boolean not null default false,
@@ -35,6 +36,8 @@ create table if not exists public.logistics_zones (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.logistics_zones add column if not exists color_hex text;
 
 create table if not exists public.postal_zones (
   id uuid primary key default gen_random_uuid(),
@@ -133,6 +136,7 @@ create table if not exists public.routes (
   origin_region_code text,
   destination_region_code text,
   zone_code text,
+  color_hex text,
   vehicle_id uuid references public.vehicles(id) on delete set null,
   partner_id uuid references public.delivery_partners(id) on delete set null,
   linehaul_id uuid references public.linehauls(id) on delete set null,
@@ -150,6 +154,8 @@ create table if not exists public.routes (
   updated_at timestamptz not null default now()
 );
 
+alter table public.routes add column if not exists color_hex text;
+
 create index if not exists idx_routes_dispatch
   on public.routes(route_date, dispatch_status, origin_region_code, destination_region_code);
 
@@ -161,6 +167,9 @@ create table if not exists public.route_stops (
   stop_number integer,
   loading_order integer,
   load_group text,
+  zone_code text,
+  logistics_zone text,
+  color_hex text,
   service_level text,
   status text not null default 'planned',
   address text,
@@ -182,6 +191,9 @@ alter table public.route_stops add column if not exists order_table text not nul
 alter table public.route_stops add column if not exists stop_number integer;
 alter table public.route_stops add column if not exists loading_order integer;
 alter table public.route_stops add column if not exists load_group text;
+alter table public.route_stops add column if not exists zone_code text;
+alter table public.route_stops add column if not exists logistics_zone text;
+alter table public.route_stops add column if not exists color_hex text;
 alter table public.route_stops add column if not exists service_level text;
 alter table public.route_stops add column if not exists status text not null default 'planned';
 alter table public.route_stops add column if not exists address text;
@@ -265,20 +277,21 @@ on conflict (code) do update set
   base_lat = excluded.base_lat,
   base_lng = excluded.base_lng;
 
-insert into public.logistics_zones(region_code, code, name, zone_type, service_48h, service_24h, direct_colixo, default_partner_required)
+insert into public.logistics_zones(region_code, code, name, zone_type, color_hex, service_48h, service_24h, direct_colixo, default_partner_required)
 values
-  ('ROM','ROM_VD_GE','Vaud / Genève','regional',true,true,true,false),
-  ('ROM','ROM_NE_JU_FR','Neuchâtel / Jura / Fribourg','regional',true,true,true,false),
-  ('ROM','ROM_VS','Valais','mountain',true,false,false,true),
-  ('ALE','ALE_ZH_AG','Zurich / Argovie','national',true,true,false,true),
-  ('ALE','ALE_BE_BS_BL_SO','Berne / Bâle / Soleure','national',true,true,false,true),
-  ('ALE','ALE_OST','Suisse orientale','national',true,false,false,true),
-  ('TIC','TIC_MAIN','Tessin','national',true,false,false,true),
-  ('GRI','GRI_MAIN','Grisons','mountain',true,false,false,true),
-  ('NAT','NAT_INDUSTRIAL','Zones industrielles nationales','industrial',true,true,false,true)
+  ('ROM','ROM_VD_GE','Vaud / Genève','regional','#2563eb',true,true,true,false),
+  ('ROM','ROM_NE_JU_FR','Neuchâtel / Jura / Fribourg','regional','#0891b2',true,true,true,false),
+  ('ROM','ROM_VS','Valais','mountain','#f59e0b',true,false,false,true),
+  ('ALE','ALE_ZH_AG','Zurich / Argovie','national','#7c3aed',true,true,false,true),
+  ('ALE','ALE_BE_BS_BL_SO','Berne / Bâle / Soleure','national','#d97706',true,true,false,true),
+  ('ALE','ALE_OST','Suisse orientale','national','#0ea5e9',true,false,false,true),
+  ('TIC','TIC_MAIN','Tessin','national','#db2777',true,false,false,true),
+  ('GRI','GRI_MAIN','Grisons','mountain','#64748b',true,false,false,true),
+  ('NAT','NAT_INDUSTRIAL','Zones industrielles nationales','industrial','#111827',true,true,false,true)
 on conflict (code) do update set
   name = excluded.name,
   zone_type = excluded.zone_type,
+  color_hex = excluded.color_hex,
   service_48h = excluded.service_48h,
   service_24h = excluded.service_24h,
   direct_colixo = excluded.direct_colixo,

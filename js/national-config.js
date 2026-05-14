@@ -5,6 +5,17 @@
     var currentTable = 'logistics_regions';
     var currentRows = [];
     var editingRow = null;
+    var ZONE_COLORS = {
+        ROM_VD_GE:'#2563eb',
+        ROM_NE_JU_FR:'#0891b2',
+        ROM_VS:'#f59e0b',
+        ALE_ZH_AG:'#7c3aed',
+        ALE_BE_BS_BL_SO:'#d97706',
+        ALE_OST:'#0ea5e9',
+        TIC_MAIN:'#db2777',
+        GRI_MAIN:'#64748b',
+        NAT_INDUSTRIAL:'#111827'
+    };
 
     var TABLES = {
         logistics_regions: {
@@ -22,10 +33,11 @@
             title:'Zones logistiques',
             sub:'Zones de livraison rattachées aux régions. Les cases changent la recommandation du dispatch : Colixo direct, express possible ou transporteur partenaire.',
             order:'code',
-            columns:['region_code','code','name','zone_type','service_24h','service_express','direct_colixo','default_partner_required','active'],
-            labels:{region_code:'Région',code:'Code',name:'Nom',zone_type:'Type',service_24h:'24h disponible',service_express:'Express possible',direct_colixo:'Livré par Colixo',default_partner_required:'Transporteur requis',active:'Actif'},
+            columns:['region_code','code','name','color_hex','zone_type','service_24h','service_express','direct_colixo','default_partner_required','active'],
+            labels:{region_code:'Région',code:'Code',name:'Nom',color_hex:'Couleur',zone_type:'Type',service_24h:'24h disponible',service_express:'Express possible',direct_colixo:'Livré par Colixo',default_partner_required:'Transporteur requis',active:'Actif'},
             fields:[
                 ['region_code','Région','text',true], ['code','Code zone','text',true], ['name','Nom','text',true],
+                ['color_hex','Couleur zone','color',false],
                 ['zone_type','Type','text',false], ['service_48h','48h disponible','checkbox',false], ['service_24h','24h disponible','checkbox',false],
                 ['service_express','Express possible','checkbox',false], ['direct_colixo','Livré par Colixo','checkbox',false],
                 ['default_partner_required','Transporteur partenaire requis','checkbox',false], ['cutoff_time','Cut-off','time',false],
@@ -78,6 +90,21 @@
                 ['capacity_parcels','Capacité colis','number',false], ['capacity_weight_kg','Capacité kg','number',false],
                 ['active','Actif','checkbox',false]
             ]
+        },
+        routes: {
+            title:'Tournées',
+            sub:'Couleur et paramètres opérationnels des tournées nationales ou locales.',
+            order:'route_date',
+            columns:['route_date','name','route_type','zone_code','color_hex','dispatch_status','order_locked'],
+            labels:{route_date:'Date',name:'Nom',route_type:'Type',zone_code:'Zone',color_hex:'Couleur',dispatch_status:'Statut',order_locked:'Ordre bloqué'},
+            fields:[
+                ['name','Nom','text',true], ['route_type','Type','text',false], ['route_date','Date','date',false],
+                ['origin_region_code','Région départ','text',false], ['destination_region_code','Région arrivée','text',false],
+                ['zone_code','Zone','text',false], ['color_hex','Couleur tournée','color',false],
+                ['dispatch_status','Statut dispatch','text',false], ['optimization_mode','Optimisation','text',false],
+                ['order_locked','Ordre verrouillé','checkbox',false], ['reoptimization_blocked','Réoptimisation bloquée','checkbox',false],
+                ['notes','Notes','text',false]
+            ]
         }
     };
 
@@ -90,14 +117,14 @@
             {code:'NAT',name:'Zones industrielles nationales',language_code:'fr',country_code:'CH',base_city:'Olten',base_postcode:'4600',base_lat:47.3497,base_lng:7.9033,active:true}
         ],
         logistics_zones:[
-            {region_code:'ROM',code:'ROM_VD_GE',name:'Vaud / Genève',zone_type:'regional',service_48h:true,service_24h:true,service_express:false,direct_colixo:true,default_partner_required:false,active:true},
-            {region_code:'ROM',code:'ROM_NE_JU_FR',name:'Neuchâtel / Jura / Fribourg',zone_type:'regional',service_48h:true,service_24h:true,service_express:false,direct_colixo:true,default_partner_required:false,active:true},
-            {region_code:'ROM',code:'ROM_VS',name:'Valais',zone_type:'mountain',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
-            {region_code:'ALE',code:'ALE_ZH_AG',name:'Zurich / Argovie',zone_type:'national',service_48h:true,service_24h:true,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
-            {region_code:'ALE',code:'ALE_BE_BS_BL_SO',name:'Berne / Bâle / Soleure',zone_type:'national',service_48h:true,service_24h:true,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
-            {region_code:'ALE',code:'ALE_OST',name:'Suisse orientale',zone_type:'national',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
-            {region_code:'TIC',code:'TIC_MAIN',name:'Tessin',zone_type:'national',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
-            {region_code:'GRI',code:'GRI_MAIN',name:'Grisons',zone_type:'mountain',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true}
+            {region_code:'ROM',code:'ROM_VD_GE',name:'Vaud / Genève',color_hex:ZONE_COLORS.ROM_VD_GE,zone_type:'regional',service_48h:true,service_24h:true,service_express:false,direct_colixo:true,default_partner_required:false,active:true},
+            {region_code:'ROM',code:'ROM_NE_JU_FR',name:'Neuchâtel / Jura / Fribourg',color_hex:ZONE_COLORS.ROM_NE_JU_FR,zone_type:'regional',service_48h:true,service_24h:true,service_express:false,direct_colixo:true,default_partner_required:false,active:true},
+            {region_code:'ROM',code:'ROM_VS',name:'Valais',color_hex:ZONE_COLORS.ROM_VS,zone_type:'mountain',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
+            {region_code:'ALE',code:'ALE_ZH_AG',name:'Zurich / Argovie',color_hex:ZONE_COLORS.ALE_ZH_AG,zone_type:'national',service_48h:true,service_24h:true,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
+            {region_code:'ALE',code:'ALE_BE_BS_BL_SO',name:'Berne / Bâle / Soleure',color_hex:ZONE_COLORS.ALE_BE_BS_BL_SO,zone_type:'national',service_48h:true,service_24h:true,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
+            {region_code:'ALE',code:'ALE_OST',name:'Suisse orientale',color_hex:ZONE_COLORS.ALE_OST,zone_type:'national',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
+            {region_code:'TIC',code:'TIC_MAIN',name:'Tessin',color_hex:ZONE_COLORS.TIC_MAIN,zone_type:'national',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true},
+            {region_code:'GRI',code:'GRI_MAIN',name:'Grisons',color_hex:ZONE_COLORS.GRI_MAIN,zone_type:'mountain',service_48h:true,service_24h:false,service_express:false,direct_colixo:false,default_partner_required:true,active:true}
         ],
         postal_zones:[
             {postcode_from:1000,postcode_to:1499,region_code:'ROM',zone_code:'ROM_VD_GE',active:true},
@@ -113,6 +140,17 @@
     };
 
     function esc(v){return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+    function safeColor(v){
+        var c = String(v || '').trim();
+        return /^#[0-9a-f]{6}$/i.test(c) ? c : '#ff8a00';
+    }
+    function displayCell(row, col){
+        if(col === 'color_hex'){
+            var color = safeColor(row[col]);
+            return '<span class="color-cell"><span style="background:'+esc(color)+'"></span>'+esc(row[col] || color)+'</span>';
+        }
+        return esc(displayValue(row[col]));
+    }
     function toast(msg, ok){var el=document.getElementById('toast');el.textContent=msg;el.style.color=ok===false?'#fca5a5':'#fff';el.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(function(){el.classList.remove('show');},3500);}
     function config(){return TABLES[currentTable];}
     function displayValue(v){
@@ -123,6 +161,7 @@
     function parseValue(type, raw, checked){
         if(type === 'checkbox') return !!checked;
         if(type === 'number') return raw === '' ? null : Number(raw);
+        if(type === 'color') return safeColor(raw);
         if(type === 'array') return raw.split(',').map(function(x){return x.trim();}).filter(Boolean);
         if(type === 'intarray') return raw.split(',').map(function(x){return parseInt(x.trim(),10);}).filter(function(n){return isFinite(n);});
         return raw.trim() || null;
@@ -146,7 +185,7 @@
         }
         document.getElementById('configTable').innerHTML = '<table><thead><tr>'+c.columns.map(function(col){return '<th>'+esc((c.labels && c.labels[col]) || col)+'</th>';}).join('')+'<th>Actions</th></tr></thead><tbody>'
             + currentRows.map(function(row){
-                return '<tr>'+c.columns.map(function(col){return '<td>'+esc(displayValue(row[col]))+'</td>';}).join('')
+                return '<tr>'+c.columns.map(function(col){return '<td>'+displayCell(row, col)+'</td>';}).join('')
                     +'<td><button class="btn btn-ghost btn-sm" onclick="nationalConfigEdit(&quot;'+esc(row.id)+'&quot;)"><i class="fas fa-pen"></i></button> <button class="btn btn-ghost btn-sm" onclick="nationalConfigDelete(&quot;'+esc(row.id)+'&quot;)"><i class="fas fa-trash"></i></button></td></tr>';
             }).join('')+'</tbody></table>';
     }
@@ -172,6 +211,11 @@
         if(name === 'days_of_week') return [1,2,3,4,5];
         if(name === 'vehicle_type') return 'van';
         if(name === 'zone_type') return 'regional';
+        if(name === 'route_type') return 'local';
+        if(name === 'dispatch_status') return 'draft';
+        if(name === 'optimization_mode') return 'regional';
+        if(name === 'route_date') return new Date().toISOString().slice(0,10);
+        if(name === 'color_hex') return '#ff8a00';
         return '';
     }
     function closeModal(){document.getElementById('configModal').classList.remove('open');}

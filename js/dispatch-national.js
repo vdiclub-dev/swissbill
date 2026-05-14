@@ -25,15 +25,26 @@
         { code:'GRI', name:'Grisons', base_lat:46.8508, base_lng:9.5320 },
         { code:'NAT', name:'Zones industrielles nationales', base_lat:47.3497, base_lng:7.9033 }
     ];
+    var ZONE_COLORS = {
+        ROM_VD_GE:'#2563eb',
+        ROM_NE_JU_FR:'#0891b2',
+        ROM_VS:'#f59e0b',
+        ALE_ZH_AG:'#7c3aed',
+        ALE_BE_BS_BL_SO:'#d97706',
+        ALE_OST:'#0ea5e9',
+        TIC_MAIN:'#db2777',
+        GRI_MAIN:'#64748b',
+        NAT_INDUSTRIAL:'#111827'
+    };
     var ZONE_FALLBACK = [
-        { code:'ROM_VD_GE', region_code:'ROM', name:'Vaud / Genève', service_24h:true, direct_colixo:true },
-        { code:'ROM_NE_JU_FR', region_code:'ROM', name:'Neuchâtel / Jura / Fribourg', service_24h:true, direct_colixo:true },
-        { code:'ROM_VS', region_code:'ROM', name:'Valais', service_24h:false, direct_colixo:false, default_partner_required:true },
-        { code:'ALE_ZH_AG', region_code:'ALE', name:'Zurich / Argovie', service_24h:true, direct_colixo:false, default_partner_required:true },
-        { code:'ALE_BE_BS_BL_SO', region_code:'ALE', name:'Berne / Bâle / Soleure', service_24h:true, direct_colixo:false, default_partner_required:true },
-        { code:'ALE_OST', region_code:'ALE', name:'Suisse orientale', service_24h:false, direct_colixo:false, default_partner_required:true },
-        { code:'TIC_MAIN', region_code:'TIC', name:'Tessin', service_24h:false, direct_colixo:false, default_partner_required:true },
-        { code:'GRI_MAIN', region_code:'GRI', name:'Grisons', service_24h:false, direct_colixo:false, default_partner_required:true }
+        { code:'ROM_VD_GE', region_code:'ROM', name:'Vaud / Genève', color_hex:ZONE_COLORS.ROM_VD_GE, service_24h:true, direct_colixo:true },
+        { code:'ROM_NE_JU_FR', region_code:'ROM', name:'Neuchâtel / Jura / Fribourg', color_hex:ZONE_COLORS.ROM_NE_JU_FR, service_24h:true, direct_colixo:true },
+        { code:'ROM_VS', region_code:'ROM', name:'Valais', color_hex:ZONE_COLORS.ROM_VS, service_24h:false, direct_colixo:false, default_partner_required:true },
+        { code:'ALE_ZH_AG', region_code:'ALE', name:'Zurich / Argovie', color_hex:ZONE_COLORS.ALE_ZH_AG, service_24h:true, direct_colixo:false, default_partner_required:true },
+        { code:'ALE_BE_BS_BL_SO', region_code:'ALE', name:'Berne / Bâle / Soleure', color_hex:ZONE_COLORS.ALE_BE_BS_BL_SO, service_24h:true, direct_colixo:false, default_partner_required:true },
+        { code:'ALE_OST', region_code:'ALE', name:'Suisse orientale', color_hex:ZONE_COLORS.ALE_OST, service_24h:false, direct_colixo:false, default_partner_required:true },
+        { code:'TIC_MAIN', region_code:'TIC', name:'Tessin', color_hex:ZONE_COLORS.TIC_MAIN, service_24h:false, direct_colixo:false, default_partner_required:true },
+        { code:'GRI_MAIN', region_code:'GRI', name:'Grisons', color_hex:ZONE_COLORS.GRI_MAIN, service_24h:false, direct_colixo:false, default_partner_required:true }
     ];
     var POSTAL_FALLBACK = [
         [1000,1499,'ROM','ROM_VD_GE'], [1500,2999,'ROM','ROM_NE_JU_FR'],
@@ -43,6 +54,27 @@
     ].map(function(r){ return { postcode_from:r[0], postcode_to:r[1], region_code:r[2], zone_code:r[3] }; });
 
     function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function safeColor(v){
+        var c = String(v || '').trim();
+        return /^#[0-9a-f]{6}$/i.test(c) ? c : '#ff8a00';
+    }
+    function zoneColor(code){
+        var zone = (state.zones || []).find(function(z){ return z.code === code; }) || {};
+        return safeColor(zone.color_hex || ZONE_COLORS[code] || '#ff8a00');
+    }
+    function routeColor(route){
+        route = route || {};
+        return safeColor(route.color_hex || zoneColor(route.zone_code || route.destination_zone_code || route.load_group));
+    }
+    function zoneBadge(code, label){
+        var text = label || code || '—';
+        var color = zoneColor(code);
+        return '<span class="zone-badge" style="--zone-color:'+esc(color)+'"><span></span>'+esc(text)+'</span>';
+    }
+    function missingColumn(error, names){
+        var msg = String(error && error.message || error || '');
+        return names.some(function(name){ return msg.indexOf("'"+name+"'") >= 0 || msg.indexOf('"'+name+'"') >= 0 || msg.indexOf(name+' column') >= 0; });
+    }
     function ref(o){ return o.order_number || o.external_reference || String(o.id || '').slice(0,8).toUpperCase(); }
     function todayIso(){ return new Date().toISOString().slice(0,10); }
     function parseDate(v){ return v ? new Date(v) : new Date(); }
@@ -247,18 +279,24 @@
         var orders = state.orders.filter(function(o){ return o.destination_zone_code === zoneCode; });
         if(!orders.length) throw new Error('Aucun colis pour la zone '+zoneCode);
         var zone = state.zones.find(function(z){ return z.code === zoneCode; }) || {};
-        var insert = await db.from('routes').insert([{
+        var routePayload = {
             name:'Route '+zoneCode+' '+todayIso(),
             route_type:'local',
             route_date:todayIso(),
             origin_region_code:orders[0].origin_region_code,
             destination_region_code:orders[0].destination_region_code,
             zone_code:zoneCode,
+            color_hex:zoneColor(zoneCode),
             dispatch_status:'draft',
             optimization_mode:'regional',
             base_lat:zone.center_lat || null,
             base_lng:zone.center_lng || null
-        }]).select('*').single();
+        };
+        var insert = await db.from('routes').insert([routePayload]).select('*').single();
+        if(insert.error && missingColumn(insert.error, ['color_hex'])){
+            delete routePayload.color_hex;
+            insert = await db.from('routes').insert([routePayload]).select('*').single();
+        }
         if(insert.error) throw insert.error;
         await db.from('transport_orders_simple').update({
             assigned_route_id:insert.data.id,
@@ -307,7 +345,13 @@
 
     async function generateRouteStops(routeId){
         var route = state.routes.find(function(r){ return r.id === routeId; }) || {};
+        if(!route.id){
+            var routeRes = await db.from('routes').select('*').eq('id', routeId).maybeSingle();
+            if(routeRes.error) throw routeRes.error;
+            route = routeRes.data || {};
+        }
         var orders = state.orders.filter(function(o){ return o.assigned_route_id === routeId || o.destination_zone_code === route.zone_code; });
+        var color = routeColor(route);
         var stops = calculateLoadOrder(orders.map(function(o){ return {
             route_id:routeId,
             order_id:o.id,
@@ -320,11 +364,24 @@
             lat:o.delivery_lat,
             lng:o.delivery_lng,
             status:'planned',
-            load_group:o.destination_zone_code || 'default'
+            load_group:o.destination_zone_code || route.zone_code || 'default',
+            zone_code:o.destination_zone_code || route.zone_code || null,
+            logistics_zone:o.destination_zone_code || route.zone_code || 'default',
+            color_hex:color || zoneColor(o.destination_zone_code || route.zone_code)
         }; }));
         await db.from('route_stops').delete().eq('route_id', routeId);
         if(stops.length){
             var res = await db.from('route_stops').insert(stops);
+            if(res.error && missingColumn(res.error, ['zone_code','logistics_zone','color_hex'])){
+                var compatible = stops.map(function(s){
+                    var copy = Object.assign({}, s);
+                    delete copy.zone_code;
+                    delete copy.logistics_zone;
+                    delete copy.color_hex;
+                    return copy;
+                });
+                res = await db.from('route_stops').insert(compatible);
+            }
             if(res.error) throw res.error;
         }
         return stops;
@@ -481,7 +538,7 @@
             var zones = state.zones.filter(function(z){ return z.region_code === code; });
             var count = byRegion[code] ? byRegion[code].length : 0;
             return '<div class="rec-card"><div class="rec-head"><div><div class="rec-title">'+esc(reg.name)+'</div><div class="rec-meta">'+code+' · '+count+' colis · '+zones.length+' zone(s)</div></div><span class="pill p-national">'+code+'</span></div>'
-                +'<div class="mini-tags">'+zones.map(function(z){ return '<span>'+esc(z.code)+'</span>'; }).join('')+'</div></div>';
+                +'<div class="mini-tags">'+zones.map(function(z){ return zoneBadge(z.code); }).join('')+'</div></div>';
         }).join('') || '<div class="empty">Aucune région configurée.</div>';
         var el = document.getElementById('regionOverview');
         if(el) el.innerHTML = html;
@@ -520,7 +577,7 @@
                 var d = suggestDispatchDecision(o);
                 var cls = service(o)==='express'?'p-express':service(o)==='24h'?'p-24h':'p-48h';
                 var risk = new Date(o.latest_delivery_date).getTime() < Date.now()+12*36e5;
-                return '<tr><td><strong>'+esc(ref(o))+'</strong><br><span class="muted">'+esc(o.destinataire_nom || o.client_name || '')+'</span></td><td><span class="pill '+cls+'">'+esc(service(o))+'</span></td><td>'+esc(o.origin_region_code)+'<br><span class="muted">'+esc(o.pickup_postcode || '')+'</span></td><td>'+esc(o.destination_region_code)+'<br><span class="muted">'+esc(o.delivery_postcode || '')+'</span></td><td>'+esc(o.destination_zone_code || '—')+'</td><td class="'+(risk?'risk':'')+'">'+new Date(o.latest_delivery_date).toLocaleString('fr-CH')+'</td><td><span class="pill '+(service(o)==='express'?'p-express':d.type==='local_route'?'p-local':d.type==='partner'?'p-partner':d.type==='linehaul'?'p-national':'p-express')+'">'+esc(d.label)+'</span><br><span class="muted">'+esc(d.reason)+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="window.dispatchNationalManualDecision(&quot;'+esc(o.id)+'&quot;)">Modifier</button></td></tr>';
+                return '<tr><td><strong>'+esc(ref(o))+'</strong><br><span class="muted">'+esc(o.destinataire_nom || o.client_name || '')+'</span></td><td><span class="pill '+cls+'">'+esc(service(o))+'</span></td><td>'+esc(o.origin_region_code)+'<br><span class="muted">'+esc(o.pickup_postcode || '')+'</span></td><td>'+esc(o.destination_region_code)+'<br><span class="muted">'+esc(o.delivery_postcode || '')+'</span></td><td>'+zoneBadge(o.destination_zone_code)+'</td><td class="'+(risk?'risk':'')+'">'+new Date(o.latest_delivery_date).toLocaleString('fr-CH')+'</td><td><span class="pill '+(service(o)==='express'?'p-express':d.type==='local_route'?'p-local':d.type==='partner'?'p-partner':d.type==='linehaul'?'p-national':'p-express')+'">'+esc(d.label)+'</span><br><span class="muted">'+esc(d.reason)+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="window.dispatchNationalManualDecision(&quot;'+esc(o.id)+'&quot;)">Modifier</button></td></tr>';
             }).join('') + '</tbody></table>';
     }
 
@@ -528,7 +585,7 @@
         var grouped = suggestNationalRoutes();
         var parts = [];
         Object.keys(grouped.local).forEach(function(zone){
-            parts.push('<div class="rec-card"><div class="rec-head"><div><div class="rec-title">Tournée locale '+esc(zone)+'</div><div class="rec-meta">'+grouped.local[zone].length+' colis · validation admin</div></div><button class="btn btn-green btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(zone)+'&quot;)">Créer tournée</button></div></div>');
+            parts.push('<div class="rec-card colored-card" style="--zone-color:'+esc(zoneColor(zone))+'"><div class="rec-head"><div><div class="rec-title">Tournée locale '+zoneBadge(zone)+'</div><div class="rec-meta">'+grouped.local[zone].length+' colis · validation admin</div></div><button class="btn btn-green btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(zone)+'&quot;)">Créer tournée</button></div></div>');
         });
         Object.keys(grouped.linehaul).forEach(function(key){
             var p = key.split('>');
@@ -556,7 +613,8 @@
         if(!rows.length) return '<div class="overview"><div class="overview-hero"><div><div class="hero-kicker">Routes & live</div><h2>Aucune route nationale créée pour le moment.</h2><p>Quand une tournée locale, une ligne nationale ou un lot partenaire sera validé, elle apparaîtra ici avec son statut, son véhicule et ses propositions de réoptimisation.</p></div></div><div class="setup-grid"><div class="setup-card"><b>0</b><strong>Véhicules en cours</strong><span>Les positions chauffeur alimenteront cette vue.</span></div><div class="setup-card"><b>0</b><strong>Retards détectés</strong><span>Le moteur proposera une réoptimisation si le gain dépasse 10 à 15 minutes.</span></div><div class="setup-card"><b>0</b><strong>Colis à risque</strong><span>Les colis 24h et express restent protégés par la date limite.</span></div></div></div>';
         return '<table><thead><tr><th>Route</th><th>Type</th><th>Zone</th><th>Véhicule</th><th>Statut</th><th>Réoptimisation</th><th>Actions</th></tr></thead><tbody>'
             + rows.map(function(r){
-                return '<tr><td><strong>'+esc(r.name)+'</strong><br><span class="muted">'+esc(r.route_date || '')+'</span></td><td>'+esc(r.route_type)+'</td><td>'+esc(r.zone_code || r.destination_region_code || '—')+'</td><td>'+esc(r.vehicle_id || '—')+'</td><td>'+esc(r.dispatch_status)+'</td><td>'+(r.order_locked?'<span class="pill p-express">Verrouillée</span>':'<span class="pill p-local">Flexible</span>')+'</td><td><button class="btn btn-ghost btn-sm" onclick="renderRouteMap(&quot;'+esc(r.id)+'&quot;)">Carte</button> <button class="btn btn-blue btn-sm" onclick="notifyDriverReoptimization(&quot;'+esc(r.id)+'&quot;)">Réoptimiser</button> <button class="btn btn-ghost btn-sm" onclick="lockRouteOrder(&quot;'+esc(r.id)+'&quot;)">Bloquer</button></td></tr>';
+                var color = routeColor(r);
+                return '<tr><td><span class="route-color-dot" style="background:'+esc(color)+'"></span><strong>'+esc(r.name)+'</strong><br><span class="muted">'+esc(r.route_date || '')+'</span></td><td>'+esc(r.route_type)+'</td><td>'+zoneBadge(r.zone_code || r.destination_region_code)+'</td><td>'+esc(r.vehicle_id || '—')+'</td><td>'+esc(r.dispatch_status)+'</td><td>'+(r.order_locked?'<span class="pill p-express">Verrouillée</span>':'<span class="pill p-local">Flexible</span>')+'</td><td><button class="btn btn-ghost btn-sm" onclick="renderRouteMap(&quot;'+esc(r.id)+'&quot;)">Carte</button> <button class="btn btn-blue btn-sm" onclick="notifyDriverReoptimization(&quot;'+esc(r.id)+'&quot;)">Réoptimiser</button> <button class="btn btn-ghost btn-sm" onclick="lockRouteOrder(&quot;'+esc(r.id)+'&quot;)">Bloquer</button></td></tr>';
             }).join('')+'</tbody></table>';
     }
 
@@ -575,16 +633,19 @@
         }
         state.mapLayer.clearLayers();
         var points = [];
+        var selectedRoute = routeId ? state.routes.find(function(r){ return r.id === routeId; }) : null;
+        var selectedColor = selectedRoute ? routeColor(selectedRoute) : '#3b82f6';
         var rows = routeId
             ? state.routeStops.filter(function(s){ return s.route_id === routeId; })
             : state.orders.filter(function(o){ return o.delivery_lat && o.delivery_lng; });
         rows.forEach(function(o){
             var lat = parseFloat(o.lat || o.delivery_lat), lng = parseFloat(o.lng || o.delivery_lng);
             if(!isFinite(lat) || !isFinite(lng)) return;
+            var markerColor = routeId ? selectedColor : zoneColor(o.destination_zone_code || o.zone_code || o.load_group);
             points.push([lat,lng]);
-            L.circleMarker([lat,lng], { radius:6, color:'#e8311a', fillColor:'#e8311a', fillOpacity:.8 }).addTo(state.mapLayer).bindPopup(esc(ref(o))+'<br>'+esc(o.address || o.delivery_address || ''));
+            L.circleMarker([lat,lng], { radius:6, color:markerColor, fillColor:markerColor, fillOpacity:.8 }).addTo(state.mapLayer).bindPopup(esc(ref(o))+'<br>'+esc(o.address || o.delivery_address || ''));
         });
-        if(points.length > 1) L.polyline(points, { color:'#3b82f6', weight:3, opacity:.7 }).addTo(state.mapLayer);
+        if(points.length > 1) L.polyline(points, { color:selectedColor, weight:3, opacity:.7 }).addTo(state.mapLayer);
         if(points.length) {
             state.map.fitBounds(points, { padding:[30,30] });
         } else {
