@@ -1,5 +1,14 @@
--- Force the official Colixo zone color palette.
--- Use this if all existing zones show the default orange color (#ff8a00).
+-- Fix for databases where public.routes exists without zone_code.
+-- Run this after the failed 035_force_zone_color_palette.sql attempt.
+
+alter table public.logistics_zones add column if not exists color_hex text;
+alter table public.routes add column if not exists zone_code text;
+alter table public.routes add column if not exists color_hex text;
+alter table public.route_stops add column if not exists route_id uuid;
+alter table public.route_stops add column if not exists load_group text;
+alter table public.route_stops add column if not exists zone_code text;
+alter table public.route_stops add column if not exists logistics_zone text;
+alter table public.route_stops add column if not exists color_hex text;
 
 update public.logistics_zones
 set color_hex = case code
@@ -25,14 +34,6 @@ where code in (
   'GRI_MAIN',
   'NAT_INDUSTRIAL'
 );
-
-alter table public.routes add column if not exists zone_code text;
-alter table public.routes add column if not exists color_hex text;
-alter table public.route_stops add column if not exists route_id uuid;
-alter table public.route_stops add column if not exists load_group text;
-alter table public.route_stops add column if not exists zone_code text;
-alter table public.route_stops add column if not exists logistics_zone text;
-alter table public.route_stops add column if not exists color_hex text;
 
 update public.routes r
 set color_hex = z.color_hex
