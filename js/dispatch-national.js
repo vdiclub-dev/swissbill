@@ -815,7 +815,7 @@
     function renderRouteMap(routeId){
         if(!window.L) return;
         if(!state.map){
-            state.map = L.map('nationalMap').setView([46.9, 8.2], 8);
+            state.map = L.map('nationalMap', { zoomControl:false, attributionControl:false, scrollWheelZoom:false }).setView([46.9, 8.2], 8);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'&copy; OpenStreetMap' }).addTo(state.map);
             state.mapLayer = L.layerGroup().addTo(state.map);
         }

@@ -287,7 +287,7 @@
     function renderMap(){
         if(!window.L) return;
         if(!map){
-            map = L.map('pickupsMap', { scrollWheelZoom:false }).setView([46.85, 8.2], 8);
+            map = L.map('pickupsMap', { zoomControl:false, attributionControl:false, scrollWheelZoom:false }).setView([46.85, 8.2], 8);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'&copy; OpenStreetMap' }).addTo(map);
             mapLayer = L.layerGroup().addTo(map);
         }
