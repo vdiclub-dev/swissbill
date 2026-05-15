@@ -109,6 +109,9 @@
         if(!p.pickup_date || !p.time_window_end) return null;
         return new Date(p.pickup_date+'T'+cleanTime(p.time_window_end)+':00');
     }
+    function pickupOpenForRoute(p){
+        return ['picked_up','failed','cancelled'].indexOf(String(p.status || 'pending')) < 0;
+    }
     function pickupAlertCount(){
         var now = new Date();
         return (state.pickups || []).filter(function(p){
@@ -132,14 +135,6 @@
             var q = db.from(table).select('*');
             if(query) q = query(q);
             var res = await q;
-            if(res.error && routeStopOrderFkError(res.error)){
-                var detached = stops.map(function(s){
-                    var copy = Object.assign({}, s);
-                    copy.order_id = null;
-                    return copy;
-                });
-                res = await db.from('route_stops').insert(detached);
-            }
             if(res.error) throw res.error;
             return res.data || fallback || [];
         }catch(e){
@@ -405,7 +400,7 @@
 
     async function createLocalRouteFromZone(zoneCode){
         var orders = state.orders.filter(function(o){ return o.destination_zone_code === zoneCode; });
-        var pickups = state.pickups.filter(function(p){ return pickupZoneCode(p) === zoneCode && !p.assigned_route_id; });
+        var pickups = state.pickups.filter(function(p){ return pickupZoneCode(p) === zoneCode && pickupOpenForRoute(p); });
         if(!orders.length && !pickups.length) throw new Error('Aucun colis ou ramasse pour la zone '+zoneCode);
         var zone = state.zones.find(function(z){ return z.code === zoneCode; }) || {};
         var firstTask = orders[0] || pickups[0] || {};
@@ -546,9 +541,10 @@
         var stops = calculateLoadOrder(deliveryStops.concat(pickupStops));
         await db.from('route_stops').delete().eq('route_id', routeId);
         if(stops.length){
-            var res = await db.from('route_stops').insert(stops);
+            var insertStops = stops;
+            var res = await db.from('route_stops').insert(insertStops);
             if(res.error && missingColumn(res.error, ['zone_code','logistics_zone','color_hex','stop_type','pickup_id','time_window_start','time_window_end'])){
-                var compatible = stops.map(function(s){
+                insertStops = stops.map(function(s){
                     var copy = Object.assign({}, s);
                     delete copy.zone_code;
                     delete copy.logistics_zone;
@@ -559,7 +555,15 @@
                     delete copy.time_window_end;
                     return copy;
                 });
-                res = await db.from('route_stops').insert(compatible);
+                res = await db.from('route_stops').insert(insertStops);
+            }
+            if(res.error && routeStopOrderFkError(res.error)){
+                insertStops = insertStops.map(function(s){
+                    var copy = Object.assign({}, s);
+                    copy.order_id = null;
+                    return copy;
+                });
+                res = await db.from('route_stops').insert(insertStops);
             }
             if(res.error) throw res.error;
             if(pickups.length){
@@ -760,7 +764,7 @@
         var pickupRows = state.pickups.map(function(p){
             var end = pickupEndAt(p);
             var risk = end && end.getTime() < Date.now()+45*60000 && ['picked_up','failed','cancelled'].indexOf(String(p.status || '')) < 0;
-            return '<tr class="pickup-row"><td><strong>'+esc(pickupRef(p))+'</strong><br><span class="pill p-pickup">RAMASSE RÉCURRENTE</span></td><td><span class="pill p-pickup">'+esc(p.priority || 'pickup')+'</span></td><td>'+esc(pickupRegionCode(p) || '—')+'<br><span class="muted">'+esc(p.pickup_postcode || '')+'</span></td><td>Ramasse<br><span class="muted">'+esc(cleanTime(p.time_window_start))+'-'+esc(cleanTime(p.time_window_end))+'</span></td><td>'+zoneBadge(pickupZoneCode(p))+'</td><td class="'+(risk?'risk':'')+'">'+esc(cleanTime(p.time_window_end) || '—')+'</td><td><span class="pill p-pickup">Ramasse du jour</span><br><span class="muted">'+esc(pickupClientName(p.client_id))+' · '+esc(pickupQty(p))+' colis estimés</span></td><td><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(pickupZoneCode(p))+'&quot;)">Créer tournée</button></td></tr>';
+            return '<tr class="pickup-row"><td><strong>'+esc(pickupRef(p))+'</strong><br><span class="pill p-pickup">RAMASSE RÉCURRENTE</span></td><td><span class="pill p-pickup">'+esc(p.priority || 'pickup')+'</span></td><td>'+esc(pickupRegionCode(p) || '—')+'<br><span class="muted">'+esc(p.pickup_postcode || '')+'</span></td><td>Ramasse<br><span class="muted">'+esc(cleanTime(p.time_window_start))+'-'+esc(cleanTime(p.time_window_end))+'</span></td><td>'+zoneBadge(pickupZoneCode(p))+'</td><td class="'+(risk?'risk':'')+'">'+esc(cleanTime(p.time_window_end) || '—')+'</td><td><span class="pill p-pickup">Ramasse du jour</span><br><span class="muted">'+esc(pickupClientName(p.client_id))+' · '+esc(pickupQty(p))+' colis estimés</span></td><td><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(pickupZoneCode(p))+'&quot;)">Créer / réparer tournée</button></td></tr>';
         }).join('');
         return '<table><thead><tr><th>Commande</th><th>Service</th><th>Origine</th><th>Destination</th><th>Zone</th><th>Délai</th><th>Décision suggérée</th><th>Actions</th></tr></thead><tbody>'
             + pickupRows
@@ -775,9 +779,9 @@
     function renderRecommendations(){
         var grouped = suggestNationalRoutes();
         var parts = [];
-        var pickupsByZone = groupBy(state.pickups.filter(function(p){ return !p.assigned_route_id && ['pending','planned','assigned'].indexOf(String(p.status || 'pending')) >= 0; }), function(p){ return pickupZoneCode(p); });
+        var pickupsByZone = groupBy(state.pickups.filter(pickupOpenForRoute), function(p){ return pickupZoneCode(p); });
         Object.keys(pickupsByZone).forEach(function(zone){
-            parts.push('<div class="rec-card colored-card" style="--zone-color:#f97316"><div class="rec-head"><div><div class="rec-title">Ramasses récurrentes '+zoneBadge(zone)+'</div><div class="rec-meta">'+pickupsByZone[zone].length+' ramasse(s) · fenêtres horaires à respecter</div></div><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(zone)+'&quot;)">Créer tournée</button></div></div>');
+            parts.push('<div class="rec-card colored-card" style="--zone-color:#f97316"><div class="rec-head"><div><div class="rec-title">Ramasses récurrentes '+zoneBadge(zone)+'</div><div class="rec-meta">'+pickupsByZone[zone].length+' ramasse(s) · fenêtres horaires à respecter</div></div><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(zone)+'&quot;)">Créer / réparer tournée</button></div></div>');
         });
         Object.keys(grouped.local).forEach(function(zone){
             parts.push('<div class="rec-card colored-card" style="--zone-color:'+esc(zoneColor(zone))+'"><div class="rec-head"><div><div class="rec-title">Tournée locale '+zoneBadge(zone)+'</div><div class="rec-meta">'+grouped.local[zone].length+' colis · validation admin</div></div><button class="btn btn-green btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(zone)+'&quot;)">Créer tournée</button></div></div>');
@@ -814,7 +818,7 @@
                 var late = !done && end && end.getTime() < Date.now();
                 var close = !done && end && end.getTime() >= Date.now() && end.getTime() < Date.now()+45*60000;
                 var alert = late ? '<span class="pill p-express">Dépassée</span>' : close ? '<span class="pill p-24h">Proche limite</span>' : !p.assigned_driver_id ? '<span class="pill p-pickup">Non affectée</span>' : '<span class="pill p-local">OK</span>';
-                return '<tr class="pickup-row"><td><strong>'+esc(pickupRef(p))+'</strong><br><span class="pill p-pickup">RAMASSE RÉCURRENTE</span></td><td>'+esc(pickupClientName(p.client_id))+'<br><span class="muted">'+esc(p.contact_name || '')+' '+esc(p.contact_phone || '')+'</span></td><td>'+esc(cleanTime(p.time_window_start))+' - '+esc(cleanTime(p.time_window_end))+'</td><td>'+esc(p.pickup_address || '')+'</td><td>'+zoneBadge(pickupZoneCode(p))+'</td><td>'+esc(pickupQty(p))+' colis<br><span class="muted">'+esc(p.estimated_weight_kg || 0)+' kg</span></td><td>'+alert+'</td><td><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(pickupZoneCode(p))+'&quot;)">Créer tournée</button></td></tr>';
+                return '<tr class="pickup-row"><td><strong>'+esc(pickupRef(p))+'</strong><br><span class="pill p-pickup">RAMASSE RÉCURRENTE</span></td><td>'+esc(pickupClientName(p.client_id))+'<br><span class="muted">'+esc(p.contact_name || '')+' '+esc(p.contact_phone || '')+'</span></td><td>'+esc(cleanTime(p.time_window_start))+' - '+esc(cleanTime(p.time_window_end))+'</td><td>'+esc(p.pickup_address || '')+'</td><td>'+zoneBadge(pickupZoneCode(p))+'</td><td>'+esc(pickupQty(p))+' colis<br><span class="muted">'+esc(p.estimated_weight_kg || 0)+' kg</span></td><td>'+alert+'</td><td><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(pickupZoneCode(p))+'&quot;)">Créer / réparer tournée</button></td></tr>';
             }).join('')+'</tbody></table>';
     }
 
@@ -913,7 +917,13 @@
     window.findAvailablePartner = findAvailablePartner;
     window.suggestDispatchDecision = suggestDispatchDecision;
     window.suggestNationalRoutes = suggestNationalRoutes;
-    window.createLocalRouteFromZone = function(zoneCode){ createLocalRouteFromZone(zoneCode).catch(function(e){ toast(e.message || e, false); }); };
+    window.createLocalRouteFromZone = function(zoneCode){
+        toast('Création de la tournée '+zoneCode+'…', true);
+        createLocalRouteFromZone(zoneCode).catch(function(e){
+            console.error(e);
+            toast(e.message || e, false);
+        });
+    };
     window.createLinehaulBatch = function(originRegion, destinationRegion){ createLinehaulBatch(originRegion, destinationRegion).catch(function(e){ toast(e.message || e, false); }); };
     window.assignOrdersToPartner = assignOrdersToPartner;
     window.assignVehicleToRoute = assignVehicleToRoute;
