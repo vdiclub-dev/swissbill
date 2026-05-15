@@ -112,13 +112,18 @@
     function pickupOpenForRoute(p){
         return ['picked_up','failed','cancelled'].indexOf(String(p.status || 'pending')) < 0;
     }
+    function pickupAssignmentBadge(p){
+        if(p.assigned_driver_id) return '<span class="pill p-local">Chauffeur affecté</span>';
+        if(p.assigned_route_id) return '<span class="pill p-national">Tournée créée</span>';
+        return '<span class="pill p-pickup">Non affectée</span>';
+    }
     function pickupAlertCount(){
         var now = new Date();
         return (state.pickups || []).filter(function(p){
             var done = ['picked_up','failed','cancelled'].indexOf(String(p.status || '')) >= 0;
             if(done) return false;
             var end = pickupEndAt(p);
-            return !p.assigned_driver_id || (end && end.getTime() < now.getTime()+45*60000);
+            return (!p.assigned_route_id && !p.assigned_driver_id) || (end && end.getTime() < now.getTime()+45*60000);
         }).length;
     }
     function toast(msg, ok){
@@ -817,7 +822,7 @@
                 var done = ['picked_up','failed','cancelled'].indexOf(String(p.status || '')) >= 0;
                 var late = !done && end && end.getTime() < Date.now();
                 var close = !done && end && end.getTime() >= Date.now() && end.getTime() < Date.now()+45*60000;
-                var alert = late ? '<span class="pill p-express">Dépassée</span>' : close ? '<span class="pill p-24h">Proche limite</span>' : !p.assigned_driver_id ? '<span class="pill p-pickup">Non affectée</span>' : '<span class="pill p-local">OK</span>';
+                var alert = late ? '<span class="pill p-express">Dépassée</span>' : close ? '<span class="pill p-24h">Proche limite</span>' : pickupAssignmentBadge(p);
                 return '<tr class="pickup-row"><td><strong>'+esc(pickupRef(p))+'</strong><br><span class="pill p-pickup">RAMASSE RÉCURRENTE</span></td><td>'+esc(pickupClientName(p.client_id))+'<br><span class="muted">'+esc(p.contact_name || '')+' '+esc(p.contact_phone || '')+'</span></td><td>'+esc(cleanTime(p.time_window_start))+' - '+esc(cleanTime(p.time_window_end))+'</td><td>'+esc(p.pickup_address || '')+'</td><td>'+zoneBadge(pickupZoneCode(p))+'</td><td>'+esc(pickupQty(p))+' colis<br><span class="muted">'+esc(p.estimated_weight_kg || 0)+' kg</span></td><td>'+alert+'</td><td><button class="btn btn-orange btn-sm" onclick="createLocalRouteFromZone(&quot;'+esc(pickupZoneCode(p))+'&quot;)">Créer / réparer tournée</button></td></tr>';
             }).join('')+'</tbody></table>';
     }
