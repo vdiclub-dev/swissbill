@@ -78,6 +78,10 @@
         var msg = String(error && error.message || error || '');
         return names.some(function(name){ return msg.indexOf("'"+name+"'") >= 0 || msg.indexOf('"'+name+'"') >= 0 || msg.indexOf(name+' column') >= 0; });
     }
+    function routeStopOrderFkError(error){
+        var msg = String(error && error.message || error || '').toLowerCase();
+        return (error && error.code === '23503') || msg.indexOf('route_stops_order_id_fkey') >= 0 || msg.indexOf('foreign key constraint') >= 0;
+    }
     function ref(o){ return o.order_number || o.external_reference || String(o.id || '').slice(0,8).toUpperCase(); }
     function todayIso(){ return new Date().toISOString().slice(0,10); }
     function parseDate(v){ return v ? new Date(v) : new Date(); }
@@ -126,6 +130,14 @@
             var q = db.from(table).select('*');
             if(query) q = query(q);
             var res = await q;
+            if(res.error && routeStopOrderFkError(res.error)){
+                var detached = stops.map(function(s){
+                    var copy = Object.assign({}, s);
+                    copy.order_id = null;
+                    return copy;
+                });
+                res = await db.from('route_stops').insert(detached);
+            }
             if(res.error) throw res.error;
             return res.data || fallback || [];
         }catch(e){
@@ -567,7 +579,7 @@
             return Object.assign({}, s, {
                 stop_number:i+1,
                 loading_order:total-i,
-                qr_token:(s.order_id || '')+'-'+(i+1)+'-'+Date.now().toString(36)
+                qr_token:(s.pickup_id || s.order_id || '')+'-'+(i+1)+'-'+Date.now().toString(36)
             });
         });
     }
