@@ -408,14 +408,22 @@
             base_lat:zone.center_lat || null,
             base_lng:zone.center_lng || null
         };
+        var fullRoutePayload = Object.assign({}, routePayload);
         var insert = await db.from('routes').insert([routePayload]).select('*').single();
-        if(insert.error && missingColumn(insert.error, ['color_hex','base_lat','base_lng'])){
-            delete routePayload.color_hex;
-            delete routePayload.base_lat;
-            delete routePayload.base_lng;
+        if(insert.error && missingColumn(insert.error, ['origin_region_code','destination_region_code','zone_code','color_hex','dispatch_status','optimization_mode','base_lat','base_lng'])){
+            routePayload = {
+                name:fullRoutePayload.name,
+                route_type:fullRoutePayload.route_type,
+                route_date:fullRoutePayload.route_date
+            };
+            insert = await db.from('routes').insert([routePayload]).select('*').single();
+        }
+        if(insert.error && missingColumn(insert.error, ['route_type','route_date'])){
+            routePayload = { name:fullRoutePayload.name };
             insert = await db.from('routes').insert([routePayload]).select('*').single();
         }
         if(insert.error) throw insert.error;
+        insert.data = Object.assign({}, fullRoutePayload, insert.data || {});
         if(orders.length){
             await db.from('transport_orders_simple').update({
                 assigned_route_id:insert.data.id,
