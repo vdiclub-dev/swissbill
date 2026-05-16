@@ -890,6 +890,53 @@
         }
     }
 
+    async function createManualRoute(){
+        var nom = (document.getElementById('orNom').value || '').trim();
+        if(!nom){ toast('Nom obligatoire', false); return; }
+        var dateVal = document.getElementById('orDate').value;
+        if(!dateVal){ toast('Date obligatoire', false); return; }
+        var routeType = document.getElementById('orType').value || 'local';
+        var zoneCode = document.getElementById('orZone').value || null;
+        var colorHex = document.getElementById('orCouleur').value || '#e8311a';
+        var notes = (document.getElementById('orNotes').value || '').trim() || null;
+        var zone = zoneCode ? (state.zones.find(function(z){ return z.code === zoneCode; }) || ZONE_FALLBACK.find(function(z){ return z.code === zoneCode; }) || {}) : {};
+        var btn = document.getElementById('btnSaveRoute');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            var payload = {
+                name: nom,
+                route_type: routeType,
+                route_date: dateVal,
+                zone_code: zoneCode,
+                origin_region_code: zone.region_code || null,
+                destination_region_code: zone.region_code || null,
+                color_hex: colorHex,
+                dispatch_status: 'draft',
+                optimization_mode: routeType === 'local' ? 'regional' : 'national',
+                base_lat: zone.center_lat || null,
+                base_lng: zone.center_lng || null
+            };
+            var insert = await db.from('routes').insert([payload]).select('*').single();
+            if(insert.error && missingColumn(insert.error, ['zone_code','origin_region_code','destination_region_code','color_hex','dispatch_status','optimization_mode','base_lat','base_lng'])){
+                insert = await db.from('routes').insert([{ name:nom, route_type:routeType, route_date:dateVal }]).select('*').single();
+            }
+            if(insert.error) throw insert.error;
+            if(notes){
+                await db.from('routes').update({ notes:notes }).eq('id', insert.data.id).catch(function(){});
+            }
+            document.getElementById('modalOpenRoute').classList.remove('open');
+            toast('Tournée «'+nom+'» ouverte — assignez des colis depuis l\'onglet Routes', true);
+            await refreshAll();
+            window.setDispatchTab('routes');
+        } catch(e){
+            toast(e.message || e, false);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-route"></i> Ouvrir la tournée';
+        }
+    }
+
     window.dispatchNationalManualDecision = function(orderId){
         var order = state.orders.find(function(o){ return o.id === orderId; });
         if(!order) return;
@@ -908,6 +955,23 @@
         if(!auth) return;
         await refreshAll();
         document.getElementById('btnRefresh').addEventListener('click', refreshAll);
+
+        var btnOpen = document.getElementById('btnOpenRoute');
+        if(btnOpen){
+            btnOpen.addEventListener('click', function(){
+                document.getElementById('orNom').value = '';
+                document.getElementById('orDate').value = todayIso();
+                document.getElementById('orType').value = 'local';
+                document.getElementById('orZone').value = '';
+                document.getElementById('orCouleur').value = '#e8311a';
+                document.getElementById('orNotes').value = '';
+                document.getElementById('modalOpenRoute').classList.add('open');
+            });
+        }
+        var btnSave = document.getElementById('btnSaveRoute');
+        if(btnSave) btnSave.addEventListener('click', function(){ createManualRoute().catch(function(e){ toast(e.message || e, false); }); });
+        var overlay = document.getElementById('modalOpenRoute');
+        if(overlay) overlay.addEventListener('click', function(e){ if(e.target === overlay) overlay.classList.remove('open'); });
     }
 
     window.loadPendingOrders = loadPendingOrders;
