@@ -1111,6 +1111,34 @@
         <div class="field"><label>Adresse employeur</label><textarea id="salEmployeurAdr" rows="2" placeholder="Rue, NPA, localité…" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);resize:vertical;"></textarea></div>
         <div class="field"><label>Adresse employé (sur la fiche)</label><textarea id="salEmployeAdr" rows="2" placeholder="Rue, NPA, localité… (prérempli depuis « Taux par employé » si renseigné)" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--white);resize:vertical;"></textarea></div>
         <div class="field"><label>Date du bulletin / paiement</label><input type="date" id="salDateBulletin"></div>
+
+        <!-- ── MODE HORAIRE ── -->
+        <div style="border:1px solid var(--border2);border-radius:10px;padding:12px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:12px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px;">Calcul horaire (optionnel)</span>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="calcBrutHoraire()"><i class="fas fa-calculator"></i> Calculer le brut</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <div class="field" style="margin:0;">
+                    <label style="font-size:11px;">Taux horaire CHF/h</label>
+                    <input type="number" id="salTauxH" min="0" step="0.05" placeholder="Ex: 25.00" style="padding:7px 10px;font-size:13px;">
+                </div>
+                <div class="field" style="margin:0;">
+                    <label style="font-size:11px;">Supp. heures (%)</label>
+                    <input type="number" id="salPctSuppH" min="0" max="100" step="1" value="25" style="padding:7px 10px;font-size:13px;">
+                </div>
+                <div class="field" style="margin:0;">
+                    <label style="font-size:11px;">Nuit (%)</label>
+                    <input type="number" id="salPctNuitH" min="0" max="100" step="1" value="10" style="padding:7px 10px;font-size:13px;">
+                </div>
+                <div class="field" style="margin:0;">
+                    <label style="font-size:11px;">Dim. / Fériés (%)</label>
+                    <input type="number" id="salPctDimH" min="0" max="100" step="1" value="50" style="padding:7px 10px;font-size:13px;">
+                </div>
+            </div>
+            <div id="salHoraireBreakdown" style="font-size:11px;color:var(--muted2);line-height:1.7;display:none;background:rgba(255,255,255,0.04);border-radius:7px;padding:8px 10px;margin-top:6px;"></div>
+        </div>
+
         <div class="field"><label>Salaire brut CHF</label>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <input type="number" id="salBrut" min="0" step="0.01" placeholder="0.00" style="flex:1;min-width:120px;">
@@ -1582,6 +1610,12 @@
                 if (p && p.employe_adresse) document.getElementById('salEmployeAdr').value = p.employe_adresse;
                 if (p && p.iban) document.getElementById('salIban').value = p.iban;
                 window.applyTauxFromEmployeParams();
+                // Pré-remplir le taux horaire depuis l'employé
+                const emp = chauffeurs.find(e => e.id === eid);
+                if (emp && emp.taux_horaire != null) {
+                    document.getElementById('salTauxH').value = emp.taux_horaire;
+                }
+                document.getElementById('salHoraireBreakdown').style.display = 'none';
             }
             window.computeNetSalaire();
         });
@@ -2851,6 +2885,47 @@
         const s = p.toFixed(3).replace(/\.?0+$/, '');
         return '(' + s + ' % du brut)';
     }
+
+    window.calcBrutHoraire = function () {
+        const eid  = document.getElementById('salEmploye').value;
+        if (!eid) { toast('error', 'Sélectionnez d\'abord un employé'); return; }
+        const taux = parseFloat(document.getElementById('salTauxH').value) || 0;
+        if (!taux) { toast('error', 'Saisissez le taux horaire CHF/h'); return; }
+        const pctSupp = (parseFloat(document.getElementById('salPctSuppH').value) || 0) / 100;
+        const pctNuit = (parseFloat(document.getElementById('salPctNuitH').value) || 0) / 100;
+        const pctDim  = (parseFloat(document.getElementById('salPctDimH').value)  || 0) / 100;
+
+        const pts    = pointages.filter(p => p.driver_id === eid);
+        const totalH = pts.reduce((s,p) => s + (parseFloat(p.heures_travaillees)||0), 0);
+        const suppH  = pts.reduce((s,p) => s + (parseFloat(p.heures_supp)||0), 0);
+        const nuitH  = pts.reduce((s,p) => s + (parseFloat(p.heures_nuit)||0), 0);
+        const dimH   = pts.reduce((s,p) => s + (parseFloat(p.heures_dimanche)||0), 0);
+        const ferH   = pts.reduce((s,p) => s + (parseFloat(p.heures_feries)||0), 0);
+        const baseH  = Math.max(0, totalH - suppH);
+
+        const cBase = baseH * taux;
+        const cSupp = suppH * taux * (1 + pctSupp);
+        const cNuit = nuitH * taux * pctNuit;
+        const cDim  = (dimH + ferH) * taux * pctDim;
+        const brut  = cBase + cSupp + cNuit + cDim;
+
+        document.getElementById('salBrut').value = brut.toFixed(2);
+
+        const bd = document.getElementById('salHoraireBreakdown');
+        bd.style.display = 'block';
+        const fmt2 = v => v.toFixed(2);
+        const fmtH = v => v.toFixed(2) + 'h';
+        bd.innerHTML = [
+            `<strong>Détail heures × taux (${fmtCHF(taux)}/h) :</strong>`,
+            `Heures normales : ${fmtH(baseH)} × ${fmtCHF(taux)} = <strong>${fmtCHF(cBase)}</strong>`,
+            suppH > 0 ? `Heures supp. (+${Math.round(pctSupp*100)}%) : ${fmtH(suppH)} × ${fmtCHF(taux*(1+pctSupp))} = <strong>${fmtCHF(cSupp)}</strong>` : '',
+            nuitH > 0 ? `Nuit (+${Math.round(pctNuit*100)}%) : ${fmtH(nuitH)} × supplément = <strong>+${fmtCHF(cNuit)}</strong>` : '',
+            (dimH+ferH) > 0 ? `Dim./Fériés (+${Math.round(pctDim*100)}%) : ${fmtH(dimH+ferH)} × supplément = <strong>+${fmtCHF(cDim)}</strong>` : '',
+            `<strong style="color:var(--green);">→ Brut calculé : ${fmtCHF(brut)}</strong>`
+        ].filter(Boolean).join('<br>');
+
+        window.computeNetSalaire();
+    };
 
     window.computeNetSalaire = function () {
         const brut = parseFloat(document.getElementById('salBrut').value) || 0;
