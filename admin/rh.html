@@ -673,6 +673,7 @@
                 </select>
                 <input type="date" id="filterDatePt" class="filter-input" onchange="loadPointages()" aria-label="Date">
                 <button type="button" class="btn btn-ghost" onclick="document.getElementById('filterDatePt').value='';loadPointages()"><i class="fas fa-times"></i> Réinitialiser</button>
+                <button type="button" class="btn btn-green" style="margin-left:auto;" onclick="openNewPointageModal()"><i class="fas fa-plus"></i> Saisir un pointage</button>
             </div>
             <div class="card">
                 <div class="card-body table-scroll">
@@ -1400,6 +1401,54 @@
     </div>
 </div>
 
+<div id="modalNewPointage" class="modal">
+    <div class="modal-box" style="max-width:500px;">
+        <div class="modal-head">
+            <span class="modal-title">⏱️ Nouveau pointage</span>
+            <button class="modal-close" onclick="closeModal('modalNewPointage')">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px 24px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div style="grid-column:1/-1;">
+                    <label class="form-label">Employé *</label>
+                    <select id="npChauffeur" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;">
+                        <option value="">— Sélectionner —</option>
+                    </select>
+                </div>
+                <div style="grid-column:1/-1;">
+                    <label class="form-label">Date *</label>
+                    <input type="date" id="npDate" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="npRecalc()"/>
+                </div>
+                <div>
+                    <label class="form-label">Début travail *</label>
+                    <input type="time" id="npDebut" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="npRecalc()"/>
+                </div>
+                <div>
+                    <label class="form-label">Fin travail *</label>
+                    <input type="time" id="npFin" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="npRecalc()"/>
+                </div>
+                <div>
+                    <label class="form-label">Début pause</label>
+                    <input type="time" id="npPauseDebut" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="npRecalcPause()"/>
+                </div>
+                <div>
+                    <label class="form-label">Fin pause</label>
+                    <input type="time" id="npPauseFin" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="npRecalcPause()"/>
+                </div>
+                <div style="grid-column:1/-1;">
+                    <label class="form-label">Pause totale (minutes)</label>
+                    <input type="number" id="npPauseMin" min="0" max="480" value="0" class="toolbar-select" style="width:100%;padding:9px 12px;font-size:13px;" oninput="npRecalc()"/>
+                </div>
+            </div>
+            <div id="npRecap" style="padding:10px 14px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;color:var(--muted2);min-height:36px;"></div>
+        </div>
+        <div class="modal-foot" style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);">
+            <button class="btn btn-ghost" onclick="closeModal('modalNewPointage')">Annuler</button>
+            <button class="btn btn-green" id="btnSaveNewPointage" onclick="saveNewPointage()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     'use strict';
@@ -1925,6 +1974,96 @@
         closeModal('modalEditPointage');
         loadPointages();
         toast('ok','Pointage mis à jour');
+    };
+
+    window.openNewPointageModal = function() {
+        // Peupler le select chauffeurs
+        const sel = document.getElementById('npChauffeur');
+        sel.innerHTML = '<option value="">— Sélectionner —</option>';
+        chauffeurs.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c.id;
+            o.textContent = `${c.prenom||''} ${c.nom||''}`.trim();
+            sel.appendChild(o);
+        });
+        // Reset
+        document.getElementById('npDate').value = new Date().toISOString().slice(0,10);
+        ['npDebut','npFin','npPauseDebut','npPauseFin'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('npPauseMin').value = '0';
+        document.getElementById('npRecap').textContent = '';
+        openModal('modalNewPointage');
+    };
+
+    window.npRecalcPause = function() {
+        const pb = document.getElementById('npPauseDebut').value;
+        const pf = document.getElementById('npPauseFin').value;
+        if(pb && pf) {
+            const [bh,bm] = pb.split(':').map(Number);
+            const [fh,fm] = pf.split(':').map(Number);
+            const mins = (fh*60+fm) - (bh*60+bm);
+            if(mins > 0) document.getElementById('npPauseMin').value = mins;
+        }
+        npRecalc();
+    };
+
+    window.npRecalc = function() {
+        const date  = document.getElementById('npDate').value;
+        const debut = document.getElementById('npDebut').value;
+        const fin   = document.getElementById('npFin').value;
+        const pause = parseInt(document.getElementById('npPauseMin').value) || 0;
+        const recap = document.getElementById('npRecap');
+        if(!date || !debut || !fin) { recap.textContent = ''; return; }
+        const debutISO = buildISO(date, debut);
+        const finISO   = buildISO(date, fin);
+        const r = calculerHeuresDetailees(debutISO, finISO, pause);
+        recap.innerHTML = `Total: <strong>${r.heures_total.toFixed(2)}h</strong> | Supp: <strong>${r.heures_supp.toFixed(2)}h</strong> | Nuit: <strong>${r.heures_nuit.toFixed(2)}h</strong> | Dim: <strong>${r.heures_dimanche.toFixed(2)}h</strong> | Férié: <strong>${r.heures_feries.toFixed(2)}h</strong>`;
+    };
+
+    window.saveNewPointage = async function() {
+        const driverId   = document.getElementById('npChauffeur').value;
+        const date       = document.getElementById('npDate').value;
+        const debut      = document.getElementById('npDebut').value;
+        const fin        = document.getElementById('npFin').value;
+        const pauseMin   = parseInt(document.getElementById('npPauseMin').value) || 0;
+        const pauseDebut = document.getElementById('npPauseDebut').value;
+        const pauseFin   = document.getElementById('npPauseFin').value;
+        if(!driverId) { toast('error','Sélectionnez un employé'); return; }
+        if(!date)     { toast('error','Date obligatoire'); return; }
+        if(!debut || !fin) { toast('error','Début et fin obligatoires'); return; }
+        const btn = document.getElementById('btnSaveNewPointage');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const debutISO = buildISO(date, debut);
+            const finISO   = buildISO(date, fin);
+            const r = calculerHeuresDetailees(debutISO, finISO, pauseMin);
+            const payload = {
+                driver_id:        driverId,
+                date:             date,
+                debut_travail:    debutISO,
+                fin_travail:      finISO,
+                debut_pause:      pauseDebut ? buildISO(date, pauseDebut) : null,
+                fin_pause:        pauseFin   ? buildISO(date, pauseFin)   : null,
+                pause_minutes:    pauseMin,
+                heures_travaillees: r.heures_total,
+                heures_supp:      r.heures_supp,
+                heures_nuit:      r.heures_nuit,
+                heures_dimanche:  r.heures_dimanche,
+                heures_feries:    r.heures_feries,
+                statut:           'termine',
+            };
+            const { error } = await db.from('pointages').insert([payload]);
+            if(error) throw error;
+            closeModal('modalNewPointage');
+            await loadAll();
+            loadPointages();
+            toast('ok', 'Pointage enregistré');
+        } catch(e) {
+            toast('error', 'Erreur : ' + (e.message || e));
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i> Enregistrer';
+        }
     };
 
     window.deletePointage = async function(id) {
