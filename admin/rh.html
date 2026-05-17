@@ -602,7 +602,7 @@
                 <div class="kpi">
                     <div class="kpi-top"><div class="kpi-icon green"><i class="fas fa-users"></i></div></div>
                     <div class="kpi-val" id="kpiChauffeurs">—</div>
-                    <div class="kpi-lbl">Chauffeurs actifs</div>
+                    <div class="kpi-lbl">Employés actifs</div>
                 </div>
                 <div class="kpi">
                     <div class="kpi-top"><div class="kpi-icon blue"><i class="fas fa-clock"></i></div></div>
@@ -629,14 +629,16 @@
             <!-- Tableau récap chauffeurs -->
             <div class="card">
                 <div class="card-head">
-                    <div class="card-title">RÉCAPITULATIF PAR CHAUFFEUR</div>
-                    <input type="search" id="searchDrivers" class="search-input" placeholder="Rechercher un chauffeur…" autocomplete="off" oninput="filterDriverTable(this.value)">
+                    <div class="card-title">RÉCAPITULATIF PAR EMPLOYÉ</div>
+                    <input type="search" id="searchDrivers" class="search-input" placeholder="Rechercher un employé…" autocomplete="off" oninput="filterDriverTable(this.value)">
                 </div>
                 <div class="card-body table-scroll">
                     <table class="tbl">
                         <thead>
                             <tr>
-                                <th>Chauffeur</th>
+                                <th>Employé</th>
+                                <th>Rôle</th>
+                                <th>Taux/h</th>
                                 <th>Jours travaillés</th>
                                 <th>Heures totales</th>
                                 <th>Heures supp.</th>
@@ -1102,7 +1104,7 @@
             <div class="field">
                 <label for="salEmploye">Employé <span style="color:var(--red);">*</span></label>
                 <select id="salEmploye" class="sal-employe-select" name="salEmploye" autocomplete="off" aria-label="Choisir l'employé"></select>
-                <p id="salEmployeHint" style="display:none;">Aucun employé actif (rôles chauffeur ou magasinier). Créez ou activez un utilisateur dans <a href="users.html" style="color:var(--red);">Utilisateurs</a>.</p>
+                <p id="salEmployeHint" style="display:none;">Aucun employé actif (rôles chauffeur, magasinier ou auxiliaire). Créez ou activez un utilisateur dans <a href="users.html" style="color:var(--red);">Utilisateurs</a>.</p>
             </div>
         </div>
         <div class="field"><label>Employeur (libellé sur la fiche)</label><input type="text" id="salEmployeur" value="Colixo" placeholder="Raison sociale"></div>
@@ -1211,7 +1213,8 @@
             <button class="modal-close" onclick="closeModal('modalSolde')">✕</button>
         </div>
         <input type="hidden" id="soldeDriverId">
-        <div class="field"><label>Chauffeur</label><input type="text" id="soldeDriverName" readonly style="opacity:0.6;"></div>
+        <div class="field"><label>Employé</label><input type="text" id="soldeDriverName" readonly style="opacity:0.6;"></div>
+        <div class="field"><label>Taux horaire (CHF/h)</label><input type="number" id="soldeTauxHoraire" min="0" step="0.05" placeholder="Ex: 25.00"></div>
         <div class="field-row">
             <div class="field"><label>Solde vacances (jours)</label><input type="number" id="soldeVac" min="0" step="0.5"></div>
             <div class="field"><label>Jours compensation</label><input type="number" id="soldeComp" min="0" step="0.5"></div>
@@ -1598,7 +1601,7 @@
             { data: slds  },
             fsQ
         ] = await Promise.all([
-            db.from('utilisateurs').select('*').in('role',['chauffeur','magasinier']).eq('actif',true),
+            db.from('utilisateurs').select('*').in('role',['chauffeur','magasinier','auxiliaire']).eq('actif',true),
             db.from('pointages').select('*').gte('date',monthStart).lte('date',monthEnd).order('date',{ascending:false}),
             db.from('conges').select('*').order('created_at',{ascending:false}),
             db.from('soldes_rh').select('*'),
@@ -1606,7 +1609,7 @@
         ]);
 
         const allEm = empl||[];
-        chauffeurs = allEm.filter(u=>u.role==='chauffeur');
+        chauffeurs = allEm;
         employesSalaire = allEm;
         fichesSalaire = (!fsQ.error && fsQ.data) ? fsQ.data : [];
         if(fsQ.error) console.warn('rh_fiches_salaire:', fsQ.error.message||fsQ.error);
@@ -1726,9 +1729,11 @@
         const list = filter ? chauffeurs.filter(c=>(c.nom||'').toLowerCase().includes(filter)||(c.prenom||'').toLowerCase().includes(filter)) : chauffeurs;
         const tbody = document.getElementById('driverSummaryTable');
         if(!list.length) {
-            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-ico">👤</div><div class="empty-txt">Aucun chauffeur</div></div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-ico">👤</div><div class="empty-txt">Aucun employé</div></div></td></tr>`;
             return;
         }
+        const ROLE_LABEL = {chauffeur:'Chauffeur',magasinier:'Magasinier',auxiliaire:'Auxiliaire'};
+        const ROLE_COLOR = {chauffeur:'var(--red)',magasinier:'var(--blue)',auxiliaire:'var(--orange)'};
         tbody.innerHTML = list.map(c => {
             const pts       = pointages.filter(p=>p.driver_id===c.id);
             const joursWork = pts.filter(p=>p.heures_travaillees>0).length;
@@ -1739,12 +1744,17 @@
             const cgsAtt    = conges.filter(g=>g.driver_id===c.id&&g.statut==='en_attente').length;
             const pct       = Math.min(100, (joursWork / 22) * 100);
             const initials  = ((c.prenom?.[0]||'')+(c.nom?.[0]||'')).toUpperCase();
+            const roleLabel = ROLE_LABEL[c.role] || c.role || '—';
+            const roleColor = ROLE_COLOR[c.role] || 'var(--muted)';
+            const tauxH     = c.taux_horaire != null ? fmtCHF(c.taux_horaire)+'/h' : '<span style="color:var(--muted);font-size:11px;">—</span>';
 
             return `<tr>
                 <td><div class="cell-user">
                     <div class="avatar">${initials}</div>
                     <div><div class="cell-main">${c.prenom||''} ${c.nom||''}</div><div class="cell-sub">${c.email||'—'}</div></div>
                 </div></td>
+                <td><span style="background:${roleColor}22;color:${roleColor};border:1px solid ${roleColor}55;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;">${roleLabel}</span></td>
+                <td style="font-size:12px;font-weight:600;">${tauxH}</td>
                 <td>
                     <div style="font-weight:600">${joursWork}j</div>
                     <div class="prog"><div class="prog-fill" style="width:${pct}%;background:var(--green)"></div></div>
@@ -1759,7 +1769,7 @@
                 <td><div style="display:flex;gap:6px;">
                     <button class="btn btn-ghost btn-sm" onclick="showFiche('${c.id}')"><i class="fas fa-id-card"></i></button>
                     <button class="btn btn-ghost btn-sm" onclick="printFicheTemps('${c.id}')" title="Feuille mensuelle A4"><i class="fas fa-print"></i></button>
-                    <button class="btn btn-ghost btn-sm" onclick="openSoldeModal('${c.id}','${c.prenom||''} ${c.nom||''}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-ghost btn-sm" onclick="openSoldeModal('${c.id}','${c.prenom||''} ${c.nom||''}')" title="Modifier solde & taux"><i class="fas fa-edit"></i></button>
                 </div></td>
             </tr>`;
         }).join('');
@@ -2267,26 +2277,34 @@
     /* ── SOLDE MODAL ── */
     window.openSoldeModal = function(driverId, name) {
         const s = soldes.find(x=>x.driver_id===driverId)||{solde_vacances:20,jours_comp:0,heures_supp_total:0};
-        document.getElementById('soldeDriverId').value  = driverId;
-        document.getElementById('soldeDriverName').value= name;
-        document.getElementById('soldeVac').value        = s.solde_vacances||20;
-        document.getElementById('soldeComp').value       = s.jours_comp||0;
-        document.getElementById('soldeHSupp').value      = s.heures_supp_total||0;
+        const emp = chauffeurs.find(x=>x.id===driverId);
+        document.getElementById('soldeDriverId').value   = driverId;
+        document.getElementById('soldeDriverName').value = name;
+        document.getElementById('soldeTauxHoraire').value= emp?.taux_horaire!=null ? emp.taux_horaire : '';
+        document.getElementById('soldeVac').value         = s.solde_vacances||20;
+        document.getElementById('soldeComp').value        = s.jours_comp||0;
+        document.getElementById('soldeHSupp').value       = s.heures_supp_total||0;
         openModal('modalSolde');
     };
 
     window.saveSolde = async function() {
         const driverId = document.getElementById('soldeDriverId').value;
-        const vac  = parseFloat(document.getElementById('soldeVac').value)||0;
-        const comp = parseFloat(document.getElementById('soldeComp').value)||0;
-        const supp = parseFloat(document.getElementById('soldeHSupp').value)||0;
+        const vac      = parseFloat(document.getElementById('soldeVac').value)||0;
+        const comp     = parseFloat(document.getElementById('soldeComp').value)||0;
+        const supp     = parseFloat(document.getElementById('soldeHSupp').value)||0;
+        const tauxRaw  = document.getElementById('soldeTauxHoraire').value.trim();
+        const taux     = tauxRaw !== '' ? parseFloat(tauxRaw) : null;
         showLoad();
         try {
-            const { error } = await db.from('soldes_rh').upsert([{
-                driver_id:driverId, solde_vacances:vac, jours_comp:comp, heures_supp_total:supp
-            }],{onConflict:'driver_id'});
-            if(error) throw error;
-            toast('success','Solde mis à jour ✓');
+            const [r1, r2] = await Promise.all([
+                db.from('soldes_rh').upsert([{
+                    driver_id:driverId, solde_vacances:vac, jours_comp:comp, heures_supp_total:supp
+                }],{onConflict:'driver_id'}),
+                db.from('utilisateurs').update({taux_horaire: taux}).eq('id', driverId)
+            ]);
+            if(r1.error) throw r1.error;
+            if(r2.error) throw r2.error;
+            toast('success','Solde & taux mis à jour ✓');
             closeModal('modalSolde');
             await loadAll();
         } catch(e) { toast('error',e.message); }
@@ -2551,7 +2569,8 @@
         tb.innerHTML = fichesSalaire.map(f => {
             const emp = employesSalaire.find(e => e.id === f.employe_id);
             const name = emp ? `${emp.prenom || ''} ${emp.nom || ''}`.trim() : '—';
-            const role = emp && emp.role === 'magasinier' ? 'Magasinier' : 'Chauffeur';
+            const RLBL = {chauffeur:'Chauffeur',magasinier:'Magasinier',auxiliaire:'Auxiliaire'};
+            const role = emp ? (RLBL[emp.role] || emp.role || '—') : '—';
             const isChauffeur = emp && emp.role === 'chauffeur';
             return `<tr>
                 <td>${escHtml(name)}</td>
