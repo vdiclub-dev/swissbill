@@ -1,6 +1,14 @@
 (function () {
   "use strict";
 
+  function withTimeout(promise, ms, message) {
+    var timer;
+    var timeout = new Promise(function(_, reject) {
+      timer = setTimeout(function() { reject(new Error(message || 'Timeout')); }, ms);
+    });
+    return Promise.race([promise, timeout]).finally(function() { clearTimeout(timer); });
+  }
+
   function getDb() {
     return window.SUPABASE_CLIENT || window.supabaseClient || null;
   }
