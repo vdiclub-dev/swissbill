@@ -71,7 +71,26 @@
     clearLegacyCodeCookie();
   }
 
-  function syncLegacyUser(profile) {
+  function setStoredItem(key, value) {
+    var saved = false;
+    try { localStorage.setItem(key, value); saved = true; } catch (e) {}
+    try { sessionStorage.setItem(key, value); saved = true; } catch (e) {}
+    return saved;
+  }
+
+  function setSessionItem(key, value) {
+    try { sessionStorage.setItem(key, value); return true; } catch (e) {}
+    return false;
+  }
+
+  function writeLoginHandoff(profile, code) {
+    if (!profile) return;
+    try {
+      window.name = 'COLIXO_LOGIN:' + JSON.stringify({ profile: profile, code: code, ts: Date.now() });
+    } catch (e) {}
+  }
+
+  function syncLegacyUser(profile, sessionOnly) {
     if (!profile || !profile.id) return;
     var code = profile.code_usr || profile.code || profile.code_acces || profile.code_connexion || getLegacyCode() || null;
     var data = JSON.stringify({
@@ -79,30 +98,18 @@
       role: profile.role || null,
       nom: profile.nom || null,
       prenom: profile.prenom || null,
+      email: profile.email || null,
+      telephone: profile.telephone || profile.tel || profile.phone || null,
       code: code,
       entreprise_id: profile.entreprise_id || null
     });
-    try { localStorage.setItem("colixo_user", data); } catch (e) {}
-    try { sessionStorage.setItem("colixo_user", data); } catch (e) {}
+    if (sessionOnly) {
+      try { sessionStorage.setItem("colixo_user", data); } catch (e) {}
+    } else {
+      try { localStorage.setItem("colixo_user", data); } catch (e) {}
+      try { sessionStorage.setItem("colixo_user", data); } catch (e) {}
+    }
     if (code) saveLegacyCodeCookie(code);
-  }
-
-  function syncLegacyUser(profile, sessionOnly) {
-    if (!profile || !profile.id) return;
-    var setter = sessionOnly ? setSessionItem : setStoredItem;
-    return setter(
-      "colixo_user",
-      JSON.stringify({
-        id: profile.id,
-        role: profile.role || null,
-        nom: profile.nom || null,
-        prenom: profile.prenom || null,
-        email: profile.email || null,
-        telephone: profile.telephone || profile.tel || profile.phone || null,
-        code: profile.code_usr || profile.code || profile.code_acces || profile.code_connexion || getLegacyCode() || null,
-        entreprise_id: profile.entreprise_id || null
-      })
-    );
   }
 
   function readLegacyUser() {
