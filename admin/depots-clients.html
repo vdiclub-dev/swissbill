@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260519c">
+    <link rel="alternate icon" href="/favicon.ico?v=20260519c">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Depots clients | Colixo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="../css/depots-clients.css?v=20260519c">
+    <script data-cfasync="false" src="/js/supabase.min.js"></script>
+    <script data-cfasync="false" src="../config.js?v=20260519c"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260519c"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script defer src="../js/depots-clients.js?v=20260519c"></script>
+</head>
+<body>
+<aside class="sidebar">
+    <a class="sidebar-logo" href="dashboard.html">
+        <span class="logo-mark"><i class="fas fa-truck-fast"></i></span>
+        <span class="logo-text">COLIXO <em>OPS</em></span>
+    </a>
+    <div class="nav-section">Pilotage</div>
+    <a class="nav-item" href="dashboard.html"><i class="fas fa-gauge-high"></i><span>Dashboard</span></a>
+    <a class="nav-item" href="transports-dispatch.html"><i class="fas fa-truck-ramp-box"></i><span>Dispatch</span></a>
+    <a class="nav-item" href="dispatch-national.html"><i class="fas fa-route"></i><span>Dispatch national</span></a>
+    <a class="nav-item" href="analytics.html"><i class="fas fa-chart-line"></i><span>Analytics</span></a>
+    <a class="nav-item active" href="depots-clients.html"><i class="fas fa-boxes-stacked"></i><span>Depots clients</span></a>
+    <a class="nav-item" href="facturation.html"><i class="fas fa-file-invoice-dollar"></i><span>Facturation</span></a>
+    <div class="sidebar-footer">
+        <div class="status-chip"><span></span> Suivi clients</div>
+    </div>
+</aside>
+
+<main class="main">
+    <header class="topbar">
+        <div>
+            <div class="page-kicker">Colis deposes · Chiffre d'affaires</div>
+            <h1>Depots clients</h1>
+        </div>
+        <div class="topbar-right">
+            <label class="filter-control">
+                <span>Periode</span>
+                <select id="periodSelect">
+                    <option value="7">7 jours</option>
+                    <option value="30" selected>30 jours</option>
+                    <option value="month">Mois en cours</option>
+                    <option value="year">Annee en cours</option>
+                    <option value="all">Tout</option>
+                </select>
+            </label>
+            <label class="filter-control search-control">
+                <span>Client</span>
+                <input id="clientSearch" type="search" placeholder="Rechercher">
+            </label>
+            <button class="btn btn-ghost" id="btnExport" type="button"><i class="fas fa-file-csv"></i> Export CSV</button>
+            <button class="btn btn-red" id="btnRefresh" type="button"><i class="fas fa-sync-alt"></i> Actualiser</button>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div>
+            <div class="hero-label">Reporting operationnel</div>
+            <h2>Volumes journaliers et chiffre d'affaires par client.</h2>
+            <p>Lecture directe Supabase, sans donnees fictives.</p>
+        </div>
+        <div class="hero-meta">
+            <span id="lastSync">Synchronisation en cours...</span>
+            <strong id="dataScope">0 commande</strong>
+        </div>
+    </section>
+
+    <section class="kpi-grid" id="summaryCards">
+        <div class="loading">Chargement des donnees...</div>
+    </section>
+
+    <section class="chart-grid">
+        <article class="panel span-2">
+            <div class="panel-head">
+                <div>
+                    <h3>Colis deposes par jour</h3>
+                    <p id="dailyChartSub">Periode selectionnee</p>
+                </div>
+            </div>
+            <div class="chart-box"><canvas id="chartDailyDeposits"></canvas></div>
+        </article>
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <h3>CA par client</h3>
+                    <p>Top clients</p>
+                </div>
+            </div>
+            <div class="chart-box"><canvas id="chartClientRevenue"></canvas></div>
+        </article>
+    </section>
+
+    <section class="table-grid">
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <h3>Colis par jour</h3>
+                    <p>Nombre de colis deposes et CA journalier</p>
+                </div>
+                <span class="table-count" id="dailyCount">0 jour</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Colis</th>
+                        <th>Commandes</th>
+                        <th>Clients</th>
+                        <th>CA</th>
+                        <th>Top client</th>
+                    </tr>
+                    </thead>
+                    <tbody id="dailyTable"></tbody>
+                </table>
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <h3>CA de chaque client</h3>
+                    <p>Tri par chiffre d'affaires</p>
+                </div>
+                <span class="table-count" id="clientCount">0 client</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Colis</th>
+                        <th>Commandes</th>
+                        <th>CA</th>
+                        <th>Panier moyen</th>
+                        <th>Dernier depot</th>
+                    </tr>
+                    </thead>
+                    <tbody id="clientTable"></tbody>
+                </table>
+            </div>
+        </article>
+    </section>
+
+    <section class="warnings" id="warnings"></section>
+</main>
+
+<div class="toast" id="toast"></div>
+</body>
+</html>
