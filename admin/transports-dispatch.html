@@ -18,6 +18,7 @@
     <script src="workflow.js?v=20260423"></script>
     <script src="realtime.js?v=20260423"></script>
     <script src="driver-pod.js?v=20260423"></script>
+    <script src="parcel-logistics.js?v=20260514b"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -309,6 +310,7 @@ table.tbl{width:100%;min-width:1050px;border-collapse:collapse;}
             <span class="ai-toolbar-label">🤖 IA</span>
             <button type="button" class="btn btn-ghost btn-sm" onclick="window.ColixoAI&&window.ColixoAI.createSmartTours()"><i class="fas fa-project-diagram"></i> Créer tournées IA</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="window.ColixoAI&&window.ColixoAI.optimizeAll()"><i class="fas fa-bolt"></i> Optimiser tout</button>
+            <a class="btn btn-ghost btn-sm" href="dispatch-national.html"><i class="fas fa-boxes"></i> Dispatch national</a>
             <button type="button" class="btn btn-ghost btn-sm" id="btnAutoMode" onclick="window.ColixoAI&&window.ColixoAI.toggleAutoMode()">⚫ AUTO OFF</button>
             <div class="ai-progress-inline" id="aiProgressBar">
                 <span class="ai-spin">⚙</span>
@@ -902,7 +904,7 @@ function renderTourneePanel(){
             +(trItems?'<div class="t-transports">'+trItems+'</div>':'')
             +(window.ColixoProfit?window.ColixoProfit.renderProfitBadge(t.id):'')
             +'<div class="t-drop-zone"><i class="fas fa-hand-point-up" style="margin-right:5px;opacity:0.5;"></i>Glisser un transport ici</div>'
-            +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-ghost btn-xs" onclick="editTourneeDate(\''+t.id+'\',\''+esc(t.date||'')+'\',\''+esc(t.heure_debut||'')+'\',\''+esc(t.heure_fin||'')+'\')"><i class="fas fa-calendar-alt"></i> Date</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-ghost btn-xs" onclick="optimizeTournee(\''+t.id+'\')" title="Optimiser l\'ordre de livraison via OSRM"><i class="fas fa-route"></i> Opt.</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
+            +'<div class="t-card-actions"><button type="button" class="btn btn-ghost btn-xs" onclick="assignChauffeurTournee(\''+t.id+'\')"><i class="fas fa-user-check"></i> Chauffeur</button><button type="button" class="btn btn-ghost btn-xs" onclick="editTourneeDate(\''+t.id+'\',\''+esc(t.date||'')+'\',\''+esc(t.heure_debut||'')+'\',\''+esc(t.heure_fin||'')+'\')"><i class="fas fa-calendar-alt"></i> Date</button><button type="button" class="btn btn-green btn-xs" onclick="pushTournee(\''+t.id+'\')"><i class="fas fa-paper-plane"></i> Pousser</button><button type="button" class="btn btn-ghost btn-xs" onclick="printTourneeLabels(\''+t.id+'\')" title="Imprimer les étiquettes colis"><i class="fas fa-qrcode"></i> Étiq.</button><button type="button" class="btn btn-ghost btn-xs" onclick="printLoadingList(\''+t.id+'\')" title="Liste de chargement"><i class="fas fa-clipboard-list"></i> Charge</button><button type="button" class="btn btn-ghost btn-xs" onclick="checkMissingParcels(\''+t.id+'\')" title="Contrôle colis manquants"><i class="fas fa-search"></i></button><button type="button" class="btn btn-ghost btn-xs" onclick="optimizeTournee(\''+t.id+'\')" title="Optimiser l\'ordre de livraison via OSRM"><i class="fas fa-route"></i> Opt.</button><button type="button" class="btn btn-xs" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;" onclick="deleteTournee(\''+t.id+'\',\''+esc(t.nom)+'\')"><i class="fas fa-trash"></i></button></div>'
         +'</div>';
     }).join('');
 }
@@ -1893,6 +1895,53 @@ window.printBL=function(){
         +'<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;padding:20px;}@media print{body{padding:0;}}</style>'
         +'</head><body>'+content.outerHTML+'<script>window.onload=function(){window.print();window.close();}<\/script></body></html>');
     w.document.close();
+};
+
+// ── ÉTIQUETTES COLIS & CHARGEMENT ───────────────────────────
+window.printTourneeLabels = async function(tid){
+    if(!window.ColixoParcelLogistics){ toast('Module étiquettes non chargé', false); return; }
+    try{
+        await window.ColixoParcelLogistics.generateRouteLabels(tid);
+        toast('Étiquettes de tournée générées', true);
+    }catch(e){
+        console.error(e);
+        toast('Erreur étiquettes : '+(e.message || e), false);
+    }
+};
+
+window.printLoadingList = async function(tid){
+    if(!window.ColixoParcelLogistics){ toast('Module chargement non chargé', false); return; }
+    try{
+        await window.ColixoParcelLogistics.generateDriverLoadingList(tid);
+        toast('Liste de chargement générée', true);
+    }catch(e){
+        console.error(e);
+        toast('Erreur liste chargement : '+(e.message || e), false);
+    }
+};
+
+window.printDeliveryList = async function(tid){
+    if(!window.ColixoParcelLogistics){ toast('Module livraison non chargé', false); return; }
+    try{
+        await window.ColixoParcelLogistics.generateDriverDeliveryList(tid);
+        toast('Liste de livraison générée', true);
+    }catch(e){
+        console.error(e);
+        toast('Erreur liste livraison : '+(e.message || e), false);
+    }
+};
+
+window.checkMissingParcels = async function(tid){
+    if(!window.ColixoParcelLogistics){ toast('Module contrôle non chargé', false); return; }
+    try{
+        var res = await window.ColixoParcelLogistics.validateLoadedParcels(tid);
+        if(res.ok){ toast('Contrôle OK : aucun colis manquant', true); return; }
+        var labels = res.missing.slice(0,8).map(function(o){ return o.order_number || String(o.id).slice(0,8); }).join(', ');
+        toast(res.count+' colis non chargés : '+labels+(res.count>8?'…':''), false);
+    }catch(e){
+        console.error(e);
+        toast('Erreur contrôle colis : '+(e.message || e), false);
+    }
 };
 
 // ── EVENTS ──

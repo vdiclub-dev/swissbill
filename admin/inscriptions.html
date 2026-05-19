@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260512d">
+    <link rel="alternate icon" href="/favicon.ico?v=20260512d">
+<meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inscriptions — Colixo Admin</title>
-    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
-    <link rel="alternate icon" href="../favicon.ico">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -337,24 +338,25 @@
     }
 
     async function listDemandesSecure() {
+        const rpc = await db.rpc('admin_list_demandes_inscription', getAdminRpcPayload());
+        if (!rpc.error) return { data: rpc.data || [], error: null };
         const direct = await db
             .from('demandes_inscription')
             .select('*')
             .order('created_at', { ascending: false });
-        if (!direct.error) return direct;
-        const rpc = await db.rpc('admin_list_demandes_inscription', getAdminRpcPayload());
-        return rpc.error ? { data: null, error: rpc.error } : { data: rpc.data || [], error: null };
+        return direct.error ? { data: null, error: rpc.error || direct.error } : direct;
     }
 
     async function updateDemandeSecure(id, payload) {
-        const direct = await db.from('demandes_inscription').update(payload).eq('id', id);
-        if (!direct.error) return direct;
-        return db.rpc('admin_update_demande_inscription', getAdminRpcPayload({
+        const rpc = await db.rpc('admin_update_demande_inscription', getAdminRpcPayload({
             p_demande_id: id,
             p_statut: payload.statut,
             p_code_attribue: payload.code_attribue || null,
             p_role_attribue: payload.role_attribue || null
         }));
+        if (!rpc.error) return rpc;
+        const direct = await db.from('demandes_inscription').update(payload).eq('id', id);
+        return direct.error ? rpc : direct;
     }
 
     // ── Charger demandes ──
@@ -437,6 +439,7 @@
                 </div>
                 <div class="card-footer">
                     ${statut === 'en_attente' ? `
+                        <button class="btn-email" onclick="renvoyerConfirmationInscription('${d.id}')"><i class="fas fa-paper-plane"></i> Confirmation</button>
                         <button class="btn-valider" onclick="openValidation('${d.id}')"><i class="fas fa-check"></i> Valider & Créer compte</button>
                         <button class="btn-refuser" onclick="refuserDemande('${d.id}')"><i class="fas fa-times"></i></button>
                     ` : statut === 'valide' ? `
@@ -518,66 +521,40 @@
         document.getElementById('btnConfirm').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
 
         try {
-            // 1. Vérifier que le code n'existe pas déjà
             let codeUnique = code;
-            let tentatives = 0;
-            while (tentatives < 10) {
-                const { data: exist } = await db.from('utilisateurs').select('id').eq('code_usr', codeUnique).maybeSingle();
-                if (!exist) break;
-                codeUnique = generateCode(role);
-                tentatives++;
+            if (!currentDemande.email || !String(currentDemande.email).includes('@')) {
+                throw new Error('Email manquant ou invalide sur la demande — indispensable pour créer le compte Auth.');
             }
-
-            // 2. Créer ou mettre à jour l'utilisateur
-            let existingUser = null;
-            if (currentDemande.email) {
-                const { data } = await db.from('utilisateurs').select('id,code_usr').eq('email', currentDemande.email).maybeSingle();
-                existingUser = data;
+            const adminCode = (codeUser.code || codeUser.code_usr || window.colixoGetStoredCode?.() || '').trim().toUpperCase();
+            if (!codeUser.id || !adminCode) {
+                throw new Error('Profil admin incomplet : reconnectez-vous avec votre code sur la page de connexion.');
             }
-
-            if (existingUser) {
-                // Email déjà utilisé → on met à jour le rôle du compte existant
-                const { error: updUserErr } = await db.from('utilisateurs').update({
-                    role: role,
-                    actif: true
-                }).eq('id', existingUser.id);
-                if (updUserErr) throw updUserErr;
-                codeUnique = existingUser.code_usr || codeUnique;
-            } else {
-                // Nouveau compte : Auth + utilisateurs (Edge Function ; admin JWT ou code admin)
-                if (!currentDemande.email || !String(currentDemande.email).includes('@')) {
-                    throw new Error('Email manquant ou invalide sur la demande — indispensable pour créer le compte Auth.');
+            const { data: fnData, error: fnErr } = await db.functions.invoke('create-inscription-user', {
+                body: {
+                    prenom,
+                    nom,
+                    email: String(currentDemande.email).trim(),
+                    telephone: currentDemande.telephone ?? null,
+                    entreprise_nom: currentDemande.entreprise_nom ?? null,
+                    role,
+                    code_usr: codeUnique,
+                    admin_id: codeUser.id,
+                    admin_code: adminCode
                 }
-                const adminCode = (codeUser.code || codeUser.code_usr || '').trim().toUpperCase();
-                if (!codeUser.id || !adminCode) {
-                    throw new Error('Profil admin incomplet : reconnectez-vous avec votre code sur la page de connexion.');
-                }
-                const { data: fnData, error: fnErr } = await db.functions.invoke('create-inscription-user', {
-                    body: {
-                        prenom,
-                        nom,
-                        email: String(currentDemande.email).trim(),
-                        telephone: currentDemande.telephone ?? null,
-                        entreprise_nom: currentDemande.entreprise_nom ?? null,
-                        role,
-                        code_usr: codeUnique,
-                        admin_id: codeUser.id,
-                        admin_code: adminCode
-                    }
-                });
-                if (fnData && typeof fnData === 'object' && fnData.ok === false && fnData.error) {
-                    throw new Error(String(fnData.error));
-                }
-                if (fnErr) {
-                    console.error('create-inscription-user', fnErr);
-                    throw new Error(fnErr.message || 'Appel Edge Function échoué');
-                }
-                if (!fnData || fnData.ok !== true) {
-                    throw new Error(
-                        'Réponse inattendue — déployez la fonction create-inscription-user : supabase functions deploy create-inscription-user --no-verify-jwt'
-                    );
-                }
+            });
+            if (fnData && typeof fnData === 'object' && fnData.ok === false && fnData.error) {
+                throw new Error(String(fnData.error));
             }
+            if (fnErr) {
+                console.error('create-inscription-user', fnErr);
+                throw new Error(fnErr.message || 'Appel Edge Function échoué');
+            }
+            if (!fnData || fnData.ok !== true) {
+                throw new Error(
+                    'Réponse inattendue — déployez la fonction create-inscription-user : supabase functions deploy create-inscription-user --no-verify-jwt'
+                );
+            }
+            codeUnique = fnData.code_usr || codeUnique;
 
             // 3. Mettre à jour la demande : statut = valide + code attribué
             const { error: updErr } = await updateDemandeSecure(currentDemande.id, {
@@ -592,7 +569,10 @@
             // 4. Ouvrir l'email client
             ouvrirEmailNotification(currentDemande.email, prenom, codeUnique, role);
 
-            toast('success', `Compte créé ! Code : ${codeUnique} — Email prêt à envoyer.`);
+            const mailMsg = fnData.mail_sent === false
+                ? `Code : ${codeUnique} — compte validé, mais email non envoyé (${fnData.mail_error || 'erreur mail'}).`
+                : `Compte validé ! Code envoyé au client : ${codeUnique}`;
+            toast(fnData.mail_sent === false ? 'error' : 'success', mailMsg);
             document.getElementById('modalOverlay').classList.remove('open');
             currentDemande = null;
             loadDemandes();
@@ -649,6 +629,37 @@ L'équipe Colixo`
         const d = allDemandes.find(x => x.id == id);
         if (!d || !d.email) { toast('error', 'Email introuvable'); return; }
         ouvrirEmailNotification(d.email, d.prenom, d.code_attribue || '—', d.role_attribue || 'client');
+    };
+
+    window.renvoyerConfirmationInscription = async function(id) {
+        const d = allDemandes.find(x => x.id == id);
+        if (!d || !d.email) { toast('error', 'Email introuvable'); return; }
+
+        const adminCode = (codeUser?.code || codeUser?.code_usr || window.colixoGetStoredCode?.() || '').trim().toUpperCase();
+        if (!codeUser?.id || !adminCode) {
+            toast('error', 'Session admin incomplète. Reconnectez-vous avec votre code admin.');
+            return;
+        }
+
+        try {
+            toast('success', 'Envoi de la confirmation...');
+            const { data, error } = await db.functions.invoke('notify-new-lead', {
+                body: {
+                    type: 'manual_signup_confirmation',
+                    table: 'demandes_inscription',
+                    admin_id: codeUser.id,
+                    admin_code: adminCode,
+                    record: d
+                }
+            });
+            if (error) throw error;
+            if (data && data.ok === false) {
+                throw new Error((data.errors || [data.error || 'Envoi impossible']).join(' · '));
+            }
+            toast('success', 'Confirmation renvoyée au client.');
+        } catch (err) {
+            toast('error', 'Erreur envoi confirmation : ' + (err.message || err));
+        }
     };
 
     // ── Init ──

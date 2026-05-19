@@ -17,7 +17,7 @@
     <style>
         :root{
             --red:#e8311a; --night:#0a0a0f; --night2:#111118; --surface:#ffffff;
-            --text:#111111; --muted:#666666; --line:#d1d5db;
+            --text:#111111; --muted:#666666; --line:#d1d5db; --zone-color:#e8311a;
         }
         *{box-sizing:border-box}
         body{margin:0;font-family:'Outfit',sans-serif;background:#f3f4f6;color:var(--text);padding:24px;}
@@ -30,14 +30,17 @@
         .btn-blue{background:#2563eb;color:#fff}
         .btn-sm{padding:8px 14px;font-size:13px;border-radius:8px;}
         .btn:disabled{opacity:0.5;cursor:not-allowed}
-        .label-sheet{width:148mm;height:105mm;margin:0 auto;background:#fff;border:1px solid #d1d5db;border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.08);}
+        .label-sheet{width:148mm;height:105mm;margin:0 auto;background:#fff;border:1px solid #d1d5db;border-top:8px solid var(--zone-color);border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.08);}
         .label-inner{padding:9mm 9mm 7mm}
-        .label-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #111;}
+        .label-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:8px;padding-bottom:9px;border-bottom:2px solid var(--zone-color);}
         .brand img{max-width:180px;max-height:46px;display:block;object-fit:contain}
         .brand-fallback{font-family:'Bebas Neue',cursive;font-size:28px;letter-spacing:2px;color:var(--red)}
         .head-meta{text-align:right}
-        .doc-num{font-family:'Bebas Neue',cursive;font-size:24px;letter-spacing:1px;color:var(--red)}
+        .doc-num{font-family:'Bebas Neue',cursive;font-size:24px;letter-spacing:1px;color:var(--zone-color)}
         .meta-line{font-size:11px;color:var(--muted);margin-top:4px}
+        .zone-strip{display:flex;align-items:center;justify-content:space-between;background:var(--zone-color);color:#fff;border-radius:10px;padding:7px 11px;margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px}
+        .zone-strip span{font-size:10px;font-weight:800;opacity:.82}
+        .zone-strip strong{font-size:13px}
         .grid{display:grid;grid-template-columns:1.4fr 0.8fr;gap:12px;align-items:start}
         .addr-box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fff;}
         .addr-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
@@ -92,6 +95,7 @@
             body{background:#fff;padding:0}
             .toolbar,.addr-missing-banner,.modal-backdrop{display:none!important}
             .label-sheet{width:100%;height:100%;border:none;border-radius:0;box-shadow:none}
+            .label-sheet{border-top:8px solid var(--zone-color)}
             .label-inner{padding:5mm}
         }
     </style>
@@ -124,6 +128,11 @@
                     <div id="docNum" class="doc-num">—</div>
                     <div id="createdAt" class="meta-line">—</div>
                 </div>
+            </div>
+
+            <div class="zone-strip">
+                <span>Zone / tournée</span>
+                <strong id="zoneVal">Nationale</strong>
             </div>
 
             <div class="grid">
@@ -226,10 +235,37 @@
     }
 
     function fmt(v){ return v != null ? `CHF ${parseFloat(v).toFixed(2)}` : '—'; }
+    const ZONE_COLORS = {
+        ROM_VD_GE:'#2563eb',
+        ROM_NE_JU_FR:'#0891b2',
+        ROM_VS:'#f59e0b',
+        ALE_ZH_AG:'#7c3aed',
+        ALE_BE_BS_BL_SO:'#d97706',
+        ALE_OST:'#0ea5e9',
+        TIC_MAIN:'#db2777',
+        GRI_MAIN:'#64748b',
+        NAT_INDUSTRIAL:'#111827'
+    };
+    function safeColor(v){
+        const c = String(v || '').trim();
+        return /^#[0-9a-f]{6}$/i.test(c) ? c : '#ff8a00';
+    }
+    function zoneOf(o){
+        return o.zone_code || o.destination_zone_code || o.logistics_zone || o.zone_logistique || o.route_zone_code || 'Nationale';
+    }
+    function colorOf(o){
+        const zone = zoneOf(o);
+        return safeColor(o.color_hex || o.zone_color_hex || o.route_color_hex || ZONE_COLORS[zone] || '#ff8a00');
+    }
 
     function renderLabel(o){
         const orderRef = o.order_number || String(o.id).slice(0,8).toUpperCase();
         const qrData = `https://colixo.ch/driver/index.html?id=${o.id}&order=${encodeURIComponent(o.order_number || '')}`;
+        const zone = zoneOf(o);
+        const color = colorOf(o);
+
+        sheet.style.setProperty('--zone-color', color);
+        document.getElementById('zoneVal').textContent = zone;
 
         document.getElementById('docNum').textContent = orderRef;
         document.getElementById('createdAt').textContent = `Créée le ${fmtDate(o.created_at)}`;

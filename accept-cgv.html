@@ -210,6 +210,14 @@
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  function withTimeout(promise, ms, fallbackValue) {
+    let timer;
+    const timeout = new Promise(resolve => {
+      timer = setTimeout(() => resolve(fallbackValue), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
   function stripHtml(html) {
     const d = document.createElement('div');
     d.innerHTML = html;
@@ -218,8 +226,12 @@
 
   async function getClientIp() {
     try {
-      const r = await fetch('https://api.ipify.org?format=json');
-      return (await r.json()).ip || null;
+      const data = await withTimeout(
+        fetch('https://api.ipify.org?format=json').then(r => r.json()),
+        2500,
+        null
+      );
+      return data && data.ip ? data.ip : null;
     } catch (e) { return null; }
   }
 
@@ -433,7 +445,7 @@
 
     // Déjà accepté → portal direct
     if (utilisateur.cgv_version_accepted === cgv.version_code) {
-      window.location.href = 'admin/client/portal.html';
+      window.location.href = 'admin/client/portal.html?_cb=' + Date.now();
       return;
     }
 
@@ -481,7 +493,12 @@
           });
 
           setStatus('<span class="spinner"></span> Archivage du PDF…');
-          const uploaded = await uploadPdf(userId, cgv.version_code, pdfBuffer);
+          const uploaded = await withTimeout(
+            uploadPdf(userId, cgv.version_code, pdfBuffer),
+            8000,
+            null
+          );
+          if (!uploaded) throw new Error('Archivage PDF trop long');
           pdfPath = uploaded.path;
           pdfUrl  = uploaded.publicUrl;
         } catch (pdfErr) {
@@ -537,7 +554,7 @@
 
         setStatus('✓ Acceptation enregistrée. Redirection vers le portail…', 'success');
         setTimeout(function () {
-          window.location.href = 'admin/client/portal.html';
+          window.location.href = 'admin/client/portal.html?_cb=' + Date.now();
         }, 1200);
 
       } catch (err) {

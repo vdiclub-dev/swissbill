@@ -8,7 +8,8 @@
  * Déploiement :
  *   supabase functions deploy create-inscription-user --no-verify-jwt
  *
- * Secrets : SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (hébergeur).
+ * Secrets : SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (hébergeur),
+ *           BREVO_API_KEY, NOTIFY_FROM_EMAIL.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -35,6 +36,91 @@ function randomPassword(): string {
   crypto.getRandomValues(buf);
   const hex = Array.from(buf, (b) => ("0" + b.toString(16)).slice(-2)).join("");
   return "Colixo-" + hex;
+}
+
+function parseSender(value: string): { email: string; name?: string } {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(.*?)<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^["']|["']$/g, "");
+    return { email: match[2].trim(), ...(name ? { name } : {}) };
+  }
+  return { email: trimmed };
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function sendAccessCodeEmail(args: {
+  to: string;
+  prenom: string;
+  nom: string;
+  role: string;
+  code: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  const brevoKey = Deno.env.get("BREVO_API_KEY")?.trim();
+  const from = (Deno.env.get("NOTIFY_FROM_EMAIL") ?? "Colixo <info@colixo.ch>").trim();
+  if (!brevoKey) return { sent: false, error: "BREVO_API_KEY manquant" };
+
+  const displayName = [args.prenom, args.nom].filter(Boolean).join(" ").trim() || "Bonjour";
+  const roleLabel: Record<string, string> = {
+    client: "Client",
+    chauffeur: "Chauffeur",
+    magasinier: "Magasinier",
+    admin: "Administrateur",
+  };
+  const loginUrl = "https://www.colixo.ch/login/";
+  const subject = "Votre accès Colixo est prêt";
+  const text =
+    `Bonjour ${displayName},\n\n` +
+    `Votre demande d'accès à la plateforme Colixo a été validée.\n\n` +
+    `Votre code d'accès personnel : ${args.code}\n\n` +
+    `Rôle attribué : ${roleLabel[args.role] || args.role}\n\n` +
+    `Pour vous connecter, rendez-vous sur :\n${loginUrl}\n\n` +
+    `Conservez ce code en lieu sûr et ne le partagez avec personne.\n\n` +
+    `Bienvenue sur Colixo,\n` +
+    `L'équipe Colixo\n`;
+  const html =
+    `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;max-width:620px;">` +
+    `<div style="font-size:22px;font-weight:800;color:#e8311a;margin-bottom:14px;">Colixo</div>` +
+    `<p>Bonjour ${escapeHtml(displayName)},</p>` +
+    `<p>Votre demande d'accès à la plateforme Colixo a été validée.</p>` +
+    `<div style="background:#111827;color:#fff;border-radius:12px;padding:18px;margin:20px 0;text-align:center;">` +
+    `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#fca5a5;margin-bottom:8px;">Votre code d'accès</div>` +
+    `<div style="font-size:30px;font-weight:800;letter-spacing:2px;font-family:monospace;">${escapeHtml(args.code)}</div>` +
+    `</div>` +
+    `<p><strong>Rôle attribué :</strong> ${escapeHtml(roleLabel[args.role] || args.role)}</p>` +
+    `<p><a href="${loginUrl}" style="display:inline-block;background:#e8311a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">Accéder à Colixo</a></p>` +
+    `<p style="font-size:13px;color:#6b7280;">Conservez ce code en lieu sûr et ne le partagez avec personne.</p>` +
+    `<p style="margin-top:22px;">Bienvenue sur Colixo,<br><strong>L'équipe Colixo</strong></p>` +
+    `</div>`;
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": brevoKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: parseSender(from),
+      to: [{ email: args.to }],
+      subject,
+      textContent: text,
+      htmlContent: html,
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    return { sent: false, error: `Brevo ${res.status}: ${errBody}` };
+  }
+  return { sent: true };
 }
 
 async function findAuthUserIdByEmail(
@@ -163,15 +249,43 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Rôle non autorisé." });
   }
 
-  const { data: existingProf } = await supabaseAdmin
+  const { data: existingProf, error: existingErr } = await supabaseAdmin
     .from("utilisateurs")
-    .select("id")
+    .select("id, code_usr, code")
     .eq("email", email)
     .maybeSingle();
+  if (existingErr) {
+    console.error("existing utilisateurs lookup", existingErr);
+    return json({ ok: false, error: existingErr.message ?? "Lecture du profil impossible." });
+  }
   if (existingProf?.id) {
+    const existingCode = (existingProf.code_usr || existingProf.code || code_usr).trim();
+    const { error: updErr } = await supabaseAdmin.from("utilisateurs").update({
+      role,
+      actif: true,
+      code_usr: existingCode,
+      code: existingCode,
+      prenom: prenom || null,
+      nom: nom || null,
+      telephone,
+      entreprise_nom,
+    }).eq("id", existingProf.id);
+    if (updErr) {
+      console.error("utilisateurs update existing", updErr);
+      return json({
+        ok: false,
+        error: updErr.message ?? "Mise à jour du profil impossible.",
+      });
+    }
+    const mail = await sendAccessCodeEmail({ to: email, prenom, nom, role, code: existingCode });
+    if (!mail.sent) console.error("access code email existing", mail.error);
     return json({
-      ok: false,
-      error: "Un profil existe déjà pour cet email — utilisez la mise à jour depuis la liste.",
+      ok: true,
+      user_id: existingProf.id,
+      code_usr: existingCode,
+      existing_profile: true,
+      mail_sent: mail.sent,
+      mail_error: mail.error ?? null,
     });
   }
 
@@ -235,5 +349,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  return json({ ok: true, user_id: userId });
+  const mail = await sendAccessCodeEmail({ to: email, prenom, nom, role, code: code_usr });
+  if (!mail.sent) console.error("access code email new", mail.error);
+  return json({ ok: true, user_id: userId, code_usr, mail_sent: mail.sent, mail_error: mail.error ?? null });
 });

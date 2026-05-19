@@ -77,6 +77,24 @@
     if (code) saveLegacyCodeCookie(code);
   }
 
+  function syncLegacyUser(profile, sessionOnly) {
+    if (!profile || !profile.id) return;
+    var setter = sessionOnly ? setSessionItem : setStoredItem;
+    return setter(
+      "colixo_user",
+      JSON.stringify({
+        id: profile.id,
+        role: profile.role || null,
+        nom: profile.nom || null,
+        prenom: profile.prenom || null,
+        email: profile.email || null,
+        telephone: profile.telephone || profile.tel || profile.phone || null,
+        code: profile.code_usr || profile.code || profile.code_acces || profile.code_connexion || getLegacyCode() || null,
+        entreprise_id: profile.entreprise_id || null
+      })
+    );
+  }
+
   function readLegacyUser() {
     try {
       var raw = localStorage.getItem("colixo_user");
@@ -129,11 +147,19 @@
     var db = getDb();
     if (!db) return { session: null, authUser: null };
 
-    var sessionRes = await db.auth.getSession();
+    var sessionRes = await withTimeout(
+      db.auth.getSession(),
+      AUTH_TIMEOUT_MS,
+      "Connexion trop longue. Edge bloque probablement une ancienne session: reconnectez-vous."
+    );
     var session = sessionRes && sessionRes.data ? sessionRes.data.session : null;
     if (!session) return { session: null, authUser: null };
 
-    var userRes = await db.auth.getUser();
+    var userRes = await withTimeout(
+      db.auth.getUser(),
+      AUTH_TIMEOUT_MS,
+      "Verification de session trop longue. Reconnectez-vous."
+    );
     var authUser = userRes && userRes.data ? userRes.data.user : null;
 
     if (!authUser) {
@@ -150,11 +176,15 @@
       return { profile: null, lookup: null, mismatch: false };
     }
 
-    var byId = await db
-      .from("utilisateurs")
-      .select("*")
-      .eq("id", authUser.id)
-      .maybeSingle();
+    var byId = await withTimeout(
+      db
+        .from("utilisateurs")
+        .select("*")
+        .eq("id", authUser.id)
+        .maybeSingle(),
+      AUTH_TIMEOUT_MS,
+      "Chargement du profil trop long."
+    );
     if (byId.error) throw byId.error;
     if (byId.data) {
       return { profile: byId.data, lookup: "id", mismatch: false };
@@ -164,11 +194,15 @@
       return { profile: null, lookup: "id", mismatch: false };
     }
 
-    var byEmail = await db
-      .from("utilisateurs")
-      .select("*")
-      .eq("email", authUser.email)
-      .maybeSingle();
+    var byEmail = await withTimeout(
+      db
+        .from("utilisateurs")
+        .select("*")
+        .eq("email", authUser.email)
+        .maybeSingle(),
+      AUTH_TIMEOUT_MS,
+      "Chargement du profil trop long."
+    );
     if (byEmail.error) throw byEmail.error;
 
     return {
@@ -195,10 +229,14 @@
       return null;
     }
 
-    var res = await db.rpc("get_code_user_profile", {
-      p_user_id: legacyUser.id,
-      p_code: legacyCode
-    });
+    var res = await withTimeout(
+      db.rpc("get_code_user_profile", {
+        p_user_id: legacyUser.id,
+        p_code: legacyCode
+      }),
+      AUTH_TIMEOUT_MS,
+      "Connexion trop longue. Rechargez la page puis reessayez."
+    );
     if (res.error) throw res.error;
 
     var profile = firstRow(res.data);
@@ -237,6 +275,10 @@
       } catch (e) {
         clearLegacyUser();
       }
+    }
+
+    if (opts.skipSupabaseSession === true) {
+      return null;
     }
 
     var sessionCtx = await getVerifiedSession();
@@ -389,6 +431,11 @@
 
   window.colixoRoleHome = roleHome;
   window.colixoLogout = colixoLogout;
+  window.colixoStoreLegacyLogin = function (profile, code) {
+    writeLoginHandoff(profile, code);
+    var saved = syncLegacyUser(Object.assign({}, profile || {}, { code: code || getLegacyCode() }), true);
+    if (code) saved = setSessionItem("colixo_access_code", String(code).trim().toUpperCase()) || saved;
+  };
   window.colixoGetAuthContext = colixoGetAuthContext;
   window.colixoRequireRoute = colixoRequireRoute;
   window.colixoGetStoredCode = getLegacyCode;

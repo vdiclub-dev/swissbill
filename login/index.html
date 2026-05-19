@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <!-- colixo-build:20260508b -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260512d">
+    <link rel="alternate icon" href="/favicon.ico?v=20260512d">
+<meta charset="UTF-8">
+    <!-- colixo-build:20260512d -->
     <script>
     (function(){try{
       // Skip cache-busting redirect in native app (Capacitor WebView)
       if(navigator.userAgent.indexOf('ColixoApp')!==-1)return;
-      var BUILD='20260508b';
+      var BUILD='20260512d';
       try{
         if(localStorage.getItem('colixo_deploy')!==BUILD){
           localStorage.setItem('colixo_deploy',BUILD);
@@ -15,16 +17,6 @@
           sessionStorage.removeItem('colixo_login_bust');
         }
       }catch(e){}
-      var u=new URL(location.href);
-      if(u.searchParams.has('cx')){
-        u.searchParams.delete('cx');
-        history.replaceState(null,'',u.pathname+u.search+u.hash);
-        return;
-      }
-      if(sessionStorage.getItem('colixo_login_bust')==='1')return;
-      sessionStorage.setItem('colixo_login_bust','1');
-      u.searchParams.set('cx',Date.now());
-      location.replace(u.toString());
     }catch(e){}})();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -32,8 +24,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Connexion — Colixo</title>
-    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
@@ -286,6 +277,7 @@
             try { sessionStorage.removeItem('colixo_user'); sessionStorage.removeItem('colixo_access_code'); } catch (e) {}
             try { document.cookie = "colixo_code=; max-age=0; path=/; SameSite=Strict"; } catch (e) {}
         })();
+        return;
     }
 
     if (new URLSearchParams(location.search).get('logout') === '1') {
@@ -311,7 +303,9 @@
                 if (auth && auth.profile && auth.role) {
                     redirectByRole(auth.role);
                 }
-            } catch (e) {}
+            } catch (e) {
+                if (typeof window.colixoClearAuthStorage === 'function') window.colixoClearAuthStorage();
+            }
         })();
     }
 
@@ -512,7 +506,18 @@
     renderCodeInput();
 
     /* ── Redirection selon rôle ── */
-    function redirectByRole(role) {
+    function bustHtml(path) {
+        const u = new URL((typeof window.colixoHref === 'function') ? window.colixoHref(path) : path, window.location.origin);
+        u.searchParams.set('_cb', Date.now());
+        return u.pathname + u.search + u.hash;
+    }
+
+    function redirectByRole(role, user) {
+        if (['client', 'gestionnaire', 'comptable', 'sous_utilisateur'].includes(role) &&
+            user && !user.cgv_version_accepted) {
+            window.location.href = bustHtml('/accept-cgv.html');
+            return;
+        }
         const routes = {
             super_admin: '/admin/dashboard.html',
             admin:       '/admin/dashboard.html',
@@ -524,7 +529,7 @@
             sous_utilisateur: '/admin/client/portal.html'
         };
         const path = routes[role] || '/admin/client/portal.html';
-        window.location.href = (typeof window.colixoHref === 'function') ? window.colixoHref(path) : path;
+        window.location.href = bustHtml(path);
     }
 
     /* Ne pas auto-rediriger depuis localStorage :
@@ -585,6 +590,7 @@
 
         showLoad();
         try {
+            if (typeof window.colixoClearAuthStorage === 'function') window.colixoClearAuthStorage();
             let user = null;
             try {
                 user = await loginWithCodeDirect(code);
@@ -616,6 +622,8 @@
                 role:         user.role,
                 nom:          user.nom,
                 prenom:       user.prenom,
+                email:        user.email,
+                telephone:    user.telephone || user.tel || user.phone,
                 code:         user.code_usr || user.code || user.code_acces || user.code_connexion || code,
                 entreprise_id: user.entreprise_id
             });
@@ -627,7 +635,7 @@
 
             toast('success', 'Bienvenue ! Redirection en cours…');
             hideLoad();
-            redirectByRole(user.role);
+            redirectByRole(user.role, user);
 
         } catch (err) {
             hideLoad();

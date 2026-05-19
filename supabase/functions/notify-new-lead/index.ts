@@ -1,5 +1,6 @@
 /**
  * Alerte e-mail quand une nouvelle demande arrive dans public.demandes_inscription.
+ * Pour les demandes d'inscription, envoie aussi un accusé de réception au client.
  *
  * Déploiement :
  *   supabase functions deploy notify-new-lead --no-verify-jwt
@@ -21,6 +22,8 @@
  *     x-webhook-secret  = <WEBHOOK_SECRET>
  */
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
@@ -31,7 +34,88 @@ type WebhookPayload = {
   table?: string;
   schema?: string;
   record?: Record<string, unknown>;
+  admin_id?: string;
+  admin_code?: string;
 };
+
+function parseSender(value: string): { email: string; name?: string } {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(.*?)<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^["']|["']$/g, "");
+    return { email: match[2].trim(), ...(name ? { name } : {}) };
+  }
+  return { email: trimmed };
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function sendBrevoEmail(args: {
+  apiKey: string;
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  replyTo?: string;
+}) {
+  const body: Record<string, unknown> = {
+    sender: parseSender(args.from),
+    to: [{ email: args.to }],
+    subject: args.subject,
+    textContent: args.text,
+  };
+  if (args.html) body.htmlContent = args.html;
+  if (args.replyTo && isValidEmail(args.replyTo)) body.replyTo = { email: args.replyTo };
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": args.apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Brevo ${res.status}: ${errBody}`);
+  }
+}
+
+function normCode(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+async function isManualAdminAuthorized(payload: WebhookPayload): Promise<boolean> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const adminId = String(payload.admin_id ?? "").trim();
+  const adminCode = normCode(payload.admin_code);
+  if (!supabaseUrl || !anonKey || !adminId || !adminCode) return false;
+
+  const supabase = createClient(supabaseUrl, anonKey);
+  const { data, error } = await supabase.rpc("admin_verify_code", {
+    p_admin_id: adminId,
+    p_code: adminCode,
+  });
+  if (error) {
+    console.error("admin_verify_code", error.message);
+    return false;
+  }
+  return data === true;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -42,19 +126,28 @@ Deno.serve(async (req) => {
     return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
   }
 
-  const secret = Deno.env.get("WEBHOOK_SECRET")?.trim();
-  if (secret) {
-    const headerSecret = (req.headers.get("x-webhook-secret") ?? "").trim();
-    if (headerSecret !== secret) {
-      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-    }
-  }
-
   let payload: WebhookPayload;
   try {
     payload = (await req.json()) as WebhookPayload;
   } catch {
     return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+  }
+
+  const isManualSignupConfirmation =
+    payload.type === "manual_signup_confirmation" &&
+    (!payload.table || payload.table === "demandes_inscription");
+
+  const secret = Deno.env.get("WEBHOOK_SECRET")?.trim();
+  if (secret) {
+    const headerSecret = (req.headers.get("x-webhook-secret") ?? "").trim();
+    if (headerSecret !== secret && !isManualSignupConfirmation) {
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    }
+    if (headerSecret !== secret && isManualSignupConfirmation && !(await isManualAdminAuthorized(payload))) {
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    }
+  } else if (isManualSignupConfirmation && !(await isManualAdminAuthorized(payload))) {
+    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
   }
 
   const record = payload.record;
@@ -77,6 +170,8 @@ Deno.serve(async (req) => {
 
   let subject: string;
   let text: string;
+  let html: string | undefined;
+  let clientConfirmation: { to: string; subject: string; text: string; html: string } | null = null;
 
   if (payload.table === "quota_alert") {
     const r = record;
@@ -139,6 +234,7 @@ Deno.serve(async (req) => {
     const statut = String(record.statut ?? "en_attente").trim();
     const createdAt = String(record.created_at ?? "—").trim();
     const id = String(record.id ?? "—").trim();
+    const validationUrl = "https://www.colixo.ch/admin/inscriptions.html";
 
     subject = entreprise && entreprise !== "—"
       ? `[Colixo] Nouvelle demande : ${entreprise}`
@@ -154,7 +250,55 @@ Deno.serve(async (req) => {
       `Statut : ${statut || "—"}\n` +
       `Créée le : ${createdAt || "—"}\n` +
       `ID : ${id || "—"}\n\n` +
-      `Message :\n${message || "—"}\n`;
+      `Message :\n${message || "—"}\n\n` +
+      `Valider la demande :\n${validationUrl}\n`;
+    html =
+      `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;max-width:680px;">` +
+      `<div style="font-size:22px;font-weight:800;color:#e8311a;margin-bottom:14px;">Nouvelle demande Colixo</div>` +
+      `<p>Une nouvelle demande d'inscription est en attente de validation.</p>` +
+      `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin:18px 0;">` +
+      `<div><strong>Prénom :</strong> ${escapeHtml(prenom || "—")}</div>` +
+      `<div><strong>Nom :</strong> ${escapeHtml(nom || "—")}</div>` +
+      `<div><strong>Email :</strong> ${escapeHtml(email || "—")}</div>` +
+      `<div><strong>Téléphone :</strong> ${escapeHtml(telephone || "—")}</div>` +
+      `<div><strong>Entreprise :</strong> ${escapeHtml(entreprise || "—")}</div>` +
+      `<div><strong>Statut :</strong> ${escapeHtml(statut || "—")}</div>` +
+      `<div><strong>ID :</strong> ${escapeHtml(id || "—")}</div>` +
+      `</div>` +
+      `<p><a href="${validationUrl}" style="display:inline-block;background:#e8311a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">Ouvrir la validation</a></p>` +
+      `${message && message !== "—" ? `<p><strong>Message :</strong><br>${escapeHtml(message)}</p>` : ""}` +
+      `</div>`;
+
+    if (isValidEmail(email)) {
+      const displayName = [prenom, nom].filter(Boolean).join(" ").trim() || "Bonjour";
+      const companyLine = entreprise && entreprise !== "—" ? `Entreprise : ${entreprise}\n` : "";
+      clientConfirmation = {
+        to: email,
+        subject: "Votre demande d'inscription Colixo a bien été reçue",
+        text:
+          `Bonjour ${displayName},\n\n` +
+          `Nous confirmons la réception de votre demande d'inscription Colixo.\n\n` +
+          `${companyLine}` +
+          `Notre équipe va la vérifier puis vous transmettre votre code d'accès dès validation.\n\n` +
+          `Vous n'avez rien d'autre à faire pour le moment.\n\n` +
+          `Cordialement,\n` +
+          `L'équipe Colixo\n` +
+          `info@colixo.ch\n`,
+        html:
+          `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;max-width:620px;">` +
+          `<div style="font-size:22px;font-weight:800;color:#e8311a;margin-bottom:14px;">Colixo</div>` +
+          `<p>Bonjour ${escapeHtml(displayName)},</p>` +
+          `<p>Nous confirmons la réception de votre demande d'inscription Colixo.</p>` +
+          `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin:18px 0;">` +
+          `${companyLine ? `<div><strong>Entreprise :</strong> ${escapeHtml(entreprise)}</div>` : ""}` +
+          `<div><strong>Statut :</strong> en attente de validation</div>` +
+          `</div>` +
+          `<p>Notre équipe va la vérifier puis vous transmettre votre code d'accès dès validation.</p>` +
+          `<p>Vous n'avez rien d'autre à faire pour le moment.</p>` +
+          `<p style="margin-top:22px;">Cordialement,<br><strong>L'équipe Colixo</strong><br><a href="mailto:info@colixo.ch" style="color:#e8311a;">info@colixo.ch</a></p>` +
+          `</div>`,
+      };
+    }
   } else {
     return new Response(JSON.stringify({ ok: true, skipped: "wrong table" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -162,29 +306,65 @@ Deno.serve(async (req) => {
   }
 
   const replyTo = String(record.email ?? "").trim() || undefined;
+  const errors: string[] = [];
+  let adminSent = isManualSignupConfirmation;
 
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key": brevoKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      sender: { email: from },
-      to: [{ email: to }],
-      subject,
-      textContent: text,
-      ...(replyTo ? { replyTo: { email: replyTo } } : {}),
-    }),
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    console.error("Brevo error", res.status, errBody);
-    return new Response(errBody, { status: 502, headers: corsHeaders });
+  if (!isManualSignupConfirmation) {
+    try {
+      await sendBrevoEmail({
+        apiKey: brevoKey,
+        from,
+        to,
+        subject,
+        text,
+        html,
+        replyTo,
+      });
+      adminSent = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Brevo admin notification error", message);
+      errors.push(`admin: ${message}`);
+    }
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
+  if (clientConfirmation) {
+    try {
+      await sendBrevoEmail({
+        apiKey: brevoKey,
+        from,
+        to: clientConfirmation.to,
+        subject: clientConfirmation.subject,
+        text: clientConfirmation.text,
+        html: clientConfirmation.html,
+        replyTo: to,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Brevo client confirmation error", message);
+      errors.push(`client: ${message}`);
+    }
+  }
+
+  if (!adminSent) {
+    return new Response(JSON.stringify({ ok: false, errors }), {
+      status: 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (isManualSignupConfirmation && errors.some((e) => e.startsWith("client:"))) {
+    return new Response(JSON.stringify({ ok: false, errors }), {
+      status: 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  return new Response(JSON.stringify({
+    ok: true,
+    client_confirmation: !!clientConfirmation && !errors.some((e) => e.startsWith("client:")),
+    warnings: errors,
+  }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
