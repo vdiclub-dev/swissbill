@@ -10,8 +10,9 @@
     return path;
   }
 
-  function loginUrl() {
-    return href("/login/index.html");
+  function loginUrl(fresh) {
+    var base = href("/login/index.html");
+    return fresh ? base + (base.indexOf('?') >= 0 ? '&' : '?') + 'fresh=1' : base;
   }
 
   function normalizeRoles(roles) {
@@ -32,54 +33,96 @@
     return href(routes[role] || "/admin/client/portal.html");
   }
 
+  /* ── Cookie helpers (survives localStorage clear by Edge privacy settings) ── */
+  function saveLegacyCodeCookie(code) {
+    if (!code) return;
+    try {
+      document.cookie = "colixo_code=" + encodeURIComponent(code) + "; max-age=2592000; path=/; SameSite=Strict";
+    } catch (e) {}
+  }
+
+  function getLegacyCodeCookie() {
+    try {
+      var m = document.cookie.match(/(?:^|;\s*)colixo_code=([^;]+)/);
+      return m ? decodeURIComponent(m[1]).trim().toUpperCase() : null;
+    } catch (e) { return null; }
+  }
+
+  function clearLegacyCodeCookie() {
+    try { document.cookie = "colixo_code=; max-age=0; path=/; SameSite=Strict"; } catch (e) {}
+  }
+
+  /* ── Storage helpers (localStorage + sessionStorage with mutual fallback) ── */
   function clearLegacyUser() {
-    try {
-      localStorage.removeItem("colixo_user");
-    } catch (e) {}
-    try {
-      localStorage.removeItem("colixo_access_code");
-    } catch (e) {}
+    try { localStorage.removeItem("colixo_user"); } catch (e) {}
+    try { localStorage.removeItem("colixo_access_code"); } catch (e) {}
+    try { sessionStorage.removeItem("colixo_user"); } catch (e) {}
+    try { sessionStorage.removeItem("colixo_access_code"); } catch (e) {}
+    clearLegacyCodeCookie();
   }
 
   function syncLegacyUser(profile) {
     if (!profile || !profile.id) return;
-    try {
-      localStorage.setItem(
-        "colixo_user",
-        JSON.stringify({
-          id: profile.id,
-          role: profile.role || null,
-          nom: profile.nom || null,
-          prenom: profile.prenom || null,
-          code: profile.code_usr || profile.code || profile.code_acces || profile.code_connexion || getLegacyCode() || null,
-          entreprise_id: profile.entreprise_id || null
-        })
-      );
-    } catch (e) {}
+    var code = profile.code_usr || profile.code || profile.code_acces || profile.code_connexion || getLegacyCode() || null;
+    var data = JSON.stringify({
+      id: profile.id,
+      role: profile.role || null,
+      nom: profile.nom || null,
+      prenom: profile.prenom || null,
+      code: code,
+      entreprise_id: profile.entreprise_id || null
+    });
+    try { localStorage.setItem("colixo_user", data); } catch (e) {}
+    try { sessionStorage.setItem("colixo_user", data); } catch (e) {}
+    if (code) saveLegacyCodeCookie(code);
   }
 
   function readLegacyUser() {
     try {
       var raw = localStorage.getItem("colixo_user");
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) {
-      return null;
-    }
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    try {
+      var raw2 = sessionStorage.getItem("colixo_user");
+      if (raw2) return JSON.parse(raw2);
+    } catch (e) {}
+    return null;
   }
 
   function getLegacyCode() {
     var legacyUser = readLegacyUser();
     var code = legacyUser && (legacyUser.code || legacyUser.code_usr || legacyUser.code_acces || legacyUser.code_connexion);
-    if (!code) {
-      try {
-        code = localStorage.getItem("colixo_access_code");
-      } catch (e) {}
-    }
+    if (!code) { try { code = localStorage.getItem("colixo_access_code"); } catch (e) {} }
+    if (!code) { try { code = sessionStorage.getItem("colixo_access_code"); } catch (e) {} }
+    if (!code) { code = getLegacyCodeCookie(); }
     return code ? String(code).trim().toUpperCase() : null;
   }
 
   function firstRow(data) {
     return Array.isArray(data) ? data[0] || null : data || null;
+  }
+
+  /* ── Cookie-based auto re-login (Edge clears localStorage between sessions) ── */
+  async function autoReloginFromCookie(allowedRoles) {
+    var code = getLegacyCodeCookie();
+    if (!code) return null;
+    var db = getDb();
+    if (!db) return null;
+    try {
+      var res = await db.rpc("login_with_code", { p_code: code });
+      if (res.error || !res.data) { clearLegacyCodeCookie(); return null; }
+      var profile = firstRow(res.data);
+      if (!profile || profile.actif === false) { clearLegacyCodeCookie(); return null; }
+      var allowed = normalizeRoles(allowedRoles);
+      if (allowed.length && allowed.indexOf(profile.role) === -1) return null;
+      syncLegacyUser(profile);
+      return {
+        session: null, authUser: null,
+        profile: profile, userId: profile.id,
+        role: profile.role, isLegacy: true,
+        mismatch: false, profileLookup: "cookie"
+      };
+    } catch (e) { return null; }
   }
 
   async function getVerifiedSession() {
@@ -94,9 +137,7 @@
     var authUser = userRes && userRes.data ? userRes.data.user : null;
 
     if (!authUser) {
-      try {
-        await db.auth.signOut();
-      } catch (e) {}
+      try { await db.auth.signOut(); } catch (e) {}
       return { session: null, authUser: null };
     }
 
@@ -204,16 +245,12 @@
       var profile = profileCtx.profile;
 
       if (profile && profile.actif === false) {
-        try {
-          await getDb().auth.signOut();
-        } catch (e) {}
+        try { await getDb().auth.signOut(); } catch (e) {}
         clearLegacyUser();
         return null;
       }
 
-      if (profile) {
-        syncLegacyUser(profile);
-      }
+      if (profile) { syncLegacyUser(profile); }
 
       if (!profile) {
         return {
@@ -254,7 +291,17 @@
       };
     }
 
-    return loadLegacyProfile(legacyRoles);
+    // Try legacy profile from storage (user ID + code)
+    var legacyResult = await loadLegacyProfile(legacyRoles);
+    if (legacyResult) return legacyResult;
+
+    // Cookie fallback: Edge privacy settings can wipe localStorage between sessions.
+    // If a cookie code exists, silently re-authenticate without asking the user.
+    var allRoles = legacyRoles.concat(routeRoles.filter(function(r) { return legacyRoles.indexOf(r) === -1; }));
+    var cookieCtx = await autoReloginFromCookie(allRoles);
+    if (cookieCtx) return cookieCtx;
+
+    return null;
   }
 
   async function colixoRequireRoute(options) {
@@ -266,28 +313,33 @@
 
     if (ctx && ctx.roleMismatch && opts.signOutOnRoleMismatch) {
       var db = getDb();
-      if (db) {
-        try {
-          await db.auth.signOut();
-        } catch (e) {}
-      }
+      if (db) { try { await db.auth.signOut(); } catch (e) {} }
       clearLegacyUser();
-      window.location.replace(opts.redirectTo || loginUrl());
+      window.location.replace(opts.redirectTo ? opts.redirectTo + (opts.redirectTo.indexOf('?') >= 0 ? '&' : '?') + 'fresh=1' : loginUrl(true));
       return null;
     }
 
-    var target = ctx && ctx.roleMismatch && ctx.role ? roleHome(ctx.role) : (opts.redirectTo || loginUrl());
-    window.location.replace(target);
+    // Role mismatch known from session → send to correct home
+    if (ctx && ctx.roleMismatch && ctx.role) {
+      window.location.replace(roleHome(ctx.role));
+      return null;
+    }
+
+    // No session context — check localStorage for a stored user (e.g. super_admin visiting client portal)
+    var storedUser = readLegacyUser();
+    if (storedUser && storedUser.role) {
+      window.location.replace(roleHome(storedUser.role));
+      return null;
+    }
+
+    // Truly unauthenticated → login with fresh=1 to prevent auto-redirect loop
+    window.location.replace(opts.redirectTo ? opts.redirectTo + (opts.redirectTo.indexOf('?') >= 0 ? '&' : '?') + 'fresh=1' : loginUrl(true));
     return null;
   }
 
   async function colixoLogout(options) {
     var db = getDb();
-    if (db) {
-      try {
-        await db.auth.signOut();
-      } catch (e) {}
-    }
+    if (db) { try { await db.auth.signOut(); } catch (e) {} }
     clearLegacyUser();
 
     var opts = options || {};
@@ -330,13 +382,10 @@
     );
   }
 
-  if (getDb() && getDb().auth && typeof getDb().auth.onAuthStateChange === "function") {
-    getDb().auth.onAuthStateChange(function (event) {
-      if (event === "SIGNED_OUT") {
-        clearLegacyUser();
-      }
-    });
-  }
+  // Note: on ne lie PAS SIGNED_OUT de Supabase au clearLegacyUser.
+  // L'auth par code est indépendante de la session Supabase.
+  // La déconnexion explicite passe par colixoLogout() qui appelle clearLegacyUser().
+  // Lier SIGNED_OUT causait une déconnexion intempestive lors de l'expiration du token.
 
   window.colixoRoleHome = roleHome;
   window.colixoLogout = colixoLogout;

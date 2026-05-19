@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <!-- colixo-build:20260509a -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -13,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
     <script data-cfasync="false" src="../../config.js?v=20260509a"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260509a-fast-code-session"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260510h"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -63,7 +64,7 @@
         .portal-title{font-family:'Bebas Neue',cursive;font-size:28px;}
         .portal-sub{font-size:14px;color:var(--muted);}
 
-        .ptabs{display:none;}
+        .ptabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:24px;}
         .ptab{padding:12px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;}
         a.ptab{text-decoration:none;}
         .ptab.active{color:var(--white);border-bottom-color:var(--red);}
@@ -460,6 +461,19 @@
                             <div class="home-tariff-price">—<span>Prix estimé</span></div>
                         </div>
                     </div>
+                    <div id="rabaisSection" style="display:none;margin-top:14px;border:1px solid rgba(34,197,94,.28);border-radius:18px;background:linear-gradient(135deg,rgba(34,197,94,.1),rgba(255,255,255,.04));overflow:hidden;">
+                        <div style="padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.08);">
+                            <div style="color:#86efac;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Programme fidélité</div>
+                            <div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#fff;">Rabais progressif sur votre CA mensuel</div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;">
+                            <div style="padding:10px 14px;border-right:1px solid rgba(255,255,255,.07);text-align:center;font-size:12px;color:var(--muted2);">≥ CHF 500<br><strong style="color:#4ade80;font-size:16px;">2 %</strong></div>
+                            <div style="padding:10px 14px;border-right:1px solid rgba(255,255,255,.07);text-align:center;font-size:12px;color:var(--muted2);">≥ CHF 1'000<br><strong style="color:#4ade80;font-size:16px;">4 %</strong></div>
+                            <div style="padding:10px 14px;border-right:1px solid rgba(255,255,255,.07);text-align:center;font-size:12px;color:var(--muted2);">≥ CHF 1'500<br><strong style="color:#4ade80;font-size:16px;">6 %</strong></div>
+                            <div style="padding:10px 14px;text-align:center;font-size:12px;color:var(--muted2);">≥ CHF 2'000<br><strong style="color:#4ade80;font-size:16px;">8 %</strong></div>
+                        </div>
+                        <div style="padding:8px 18px;font-size:11px;color:var(--muted);border-top:1px solid rgba(255,255,255,.06);">Rabais calculé automatiquement sur votre facture mensuelle selon le CA HT.</div>
+                    </div>
                     <div class="home-contact" aria-label="Contact Colixo">
                         <a href="tel:+41798700488"><i class="fas fa-phone"></i> +41 79 870 04 88</a>
                         <a href="mailto:info@colixo.ch"><i class="fas fa-envelope"></i> info@colixo.ch</a>
@@ -664,7 +678,10 @@
                         <div style="font-family:'Bebas Neue',cursive;font-size:20px;">MA GRILLE TARIFAIRE</div>
                         <div class="tariff-note">Utilisez la colonne <strong>Code tarif</strong> dans vos fichiers Excel/CSV pour appliquer le bon prix pendant l’import.</div>
                     </div>
-                    <button class="btn btn-orange" onclick="downloadTariffPdf()"><i class="fas fa-file-pdf"></i> PDF grille tarifaire</button>
+                    <div style="display:flex;gap:10px;">
+                        <button class="btn" onclick="openPortalPane('dashboard')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);color:#fff;"><i class="fas fa-arrow-left"></i> Accueil</button>
+                        <button class="btn btn-orange" onclick="downloadTariffPdf()"><i class="fas fa-file-pdf"></i> PDF grille tarifaire</button>
+                    </div>
                 </div>
                 <div id="clientTariffList"><div class="empty">⏳ Chargement des tarifs...</div></div>
             </div>
@@ -912,6 +929,8 @@
     let distanceKm = null;
     let _distTimer = null;
     let colisExpediesMonth = 0;
+    let clientRabaisVisible = false;
+    let clientKmByCode = {}; // tariff_code.toUpperCase() → { includedKm, extraKmRate }
 
     function getClientScopeId() {
         return client?.entreprise_id || client?.id || null;
@@ -1047,9 +1066,21 @@
         clientProduits = produitsData||[];
         clientTariffRules = filterVisibleTariffRules(rulesData || [], clientProduits);
         clientPrixMap = Object.fromEntries((prixData||[]).map(r=>[String(r.produit_id), r]));
+        const rabaisRule = (rulesData || []).find(r => String(r.tariff_code || '').toUpperCase() === 'RABAIS_CA');
+        clientRabaisVisible = rabaisRule?.show_in_portal === true;
+
+        // Build km settings map from raw rules (before filtering)
+        clientKmByCode = {};
+        (rulesData || []).forEach(r => {
+            const code = String(r.tariff_code || '').trim().toUpperCase();
+            const inc  = Number(r.included_km || 0);
+            const rate = Number(r.extra_km_price_chf || 0);
+            if(code && (inc > 0 || rate > 0)) clientKmByCode[code] = { includedKm: inc, extraKmRate: rate };
+        });
         updateServicePrices();
         renderColis();
         updateTotalPrice();
+        renderRabaisSection();
     }
 
     function updateWelcomeBanner(displayName){
@@ -1372,6 +1403,7 @@
                 <div class="home-tariff-price">${fmt(current.price)} CHF<span>Prix estimé</span></div>
             </div>
             <div class="home-tariff-list">${rows}</div>
+            ${Number(clientTarif?.rabais_volume_pct||0) > 0 ? `<div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-top:1px solid rgba(255,255,255,.08);background:rgba(34,197,94,.07);font-size:13px;color:#4ade80;font-weight:700;"><i class="fas fa-tag"></i> Rabais négocié : ${Number(clientTarif.rabais_volume_pct).toFixed(1)} % sur chaque commande</div>` : ''}
             <div class="home-tariff-actions">
                 <button type="button" onclick="openPortalPane('new')"><i class="fas fa-plus"></i> Saisir avec cette prestation</button>
                 <button type="button" class="secondary" onclick="openPortalPane('tariffs')"><i class="fas fa-tags"></i> Grille complète</button>
@@ -1433,7 +1465,10 @@
             <div class="note"><strong>Import Excel/CSV :</strong> utilisez la colonne “Code tarif” avec les codes ci-dessus. Si le code est présent, il est prioritaire pour choisir le prix, même si deux colis ont le même poids.</div>
             <div class="foot">Colixo SA · N° TVA : ${vatNumber} · Grille tarifaire générée depuis le portail client</div>
         </div>
-        <div class="no-print" style="text-align:center;margin-top:18px;"><button onclick="window.print()" style="background:#f97316;border:0;border-radius:10px;padding:12px 22px;font-weight:800;cursor:pointer;">Imprimer / Enregistrer PDF</button></div>
+        <div class="no-print" style="text-align:center;margin-top:18px;display:flex;gap:12px;justify-content:center;">
+            <button onclick="window.close()" style="background:#374151;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:800;cursor:pointer;">← Retour au portail</button>
+            <button onclick="window.print()" style="background:#f97316;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:800;cursor:pointer;">Imprimer / Enregistrer PDF</button>
+        </div>
         </body></html>`);
         win.document.close();
         setTimeout(()=>win.print(), 350);
@@ -1629,6 +1664,11 @@
         renderHomeTariffSummary();
     }
 
+    function renderRabaisSection(){
+        const el = document.getElementById('rabaisSection');
+        if(el) el.style.display = clientRabaisVisible ? 'block' : 'none';
+    }
+
     function updateServicePrices(){
         renderServiceButtons();
         updateTarifDisplay();
@@ -1762,6 +1802,20 @@
             ['Livraison', deliveryAddr],
         ];
         if(distanceKm != null) rows.push(['Distance', `${distanceKm} km`]);
+
+        // km inclus + surcoût km
+        const { includedKm: _includedKm, extraKmRate: _extraKmRate } = getActiveServiceKmSettings();
+        if (_includedKm > 0 && distanceKm != null) {
+            rows.push(['Km inclus', `${_includedKm} km`]);
+            if (distanceKm > _includedKm) {
+                const extraKm = Math.round((distanceKm - _includedKm) * 10) / 10;
+                const kmCost = Math.round(extraKm * _extraKmRate * 100) / 100;
+                rows.push(['Km supplémentaires', `${extraKm} km × ${fmt(_extraKmRate)} CHF = <strong style="color:var(--orange)">${fmt(kmCost)} CHF</strong>`]);
+            } else {
+                rows.push(['Km supplémentaires', '<span style="color:var(--green)">Aucun (dans le forfait)</span>']);
+            }
+        }
+
         rows.push(['Expéditeur', expNom + (expTel ? '<br>' + expTel : '')]);
         rows.push(['Destinataire', destNom + (destTelVal ? '<br>' + destTelVal : '')]);
 
@@ -1987,9 +2041,7 @@
             distanceKm = await getRouteDistanceKm(from, to);
             resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
 
-            const _abn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-            const included = Number(_abn?.km_inclus ?? clientTarif?.included_km ?? 0);
-            const rate = Number(_abn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
+            const { includedKm: included, extraKmRate: rate } = getActiveServiceKmSettings();
             if (included > 0 && rate > 0 && distanceKm > included) {
                 const extra = Math.round((distanceKm - included) * 10) / 10;
                 const cost = Math.round(extra * rate * 100) / 100;
@@ -2050,6 +2102,22 @@
     }
     // ────────────────────────────────────────────────────────────────
 
+    function getActiveServiceKmSettings(){
+        const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
+        const globalIncluded = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
+        const globalRate     = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
+
+        // Current service code from colisList (set when user clicks a tier card)
+        const svcCode = colisList.length ? (colisList[0].service || '') : (selectedService || '');
+        const code = String(svcCode).trim().toUpperCase();
+        const fromRule = clientKmByCode[code];
+
+        return {
+            includedKm:  fromRule?.includedKm  > 0 ? fromRule.includedKm  : globalIncluded,
+            extraKmRate: fromRule?.extraKmRate  > 0 ? fromRule.extraKmRate : globalRate
+        };
+    }
+
     function updateTotalPrice(){
         const qtyTotal = colisList.reduce((s,c)=>s+c.qty, 0);
 
@@ -2079,11 +2147,10 @@
         const hasNuitOpt=getAssignedProduits().some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
         let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
 
-        // Overage km cost — active abonnement overrides tarif base settings
+        // Overage km cost — read from active service rule (rule-level km settings)
         let kmCost = 0;
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-        const includedKm = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
-        const extraKmRate = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
+        const { includedKm, extraKmRate } = getActiveServiceKmSettings();
         if (distanceKm != null && includedKm > 0 && extraKmRate > 0 && distanceKm > includedKm) {
             const extraKm = Math.round((distanceKm - includedKm) * 10) / 10;
             kmCost = Math.round(extraKm * extraKmRate * 100) / 100;
@@ -3541,7 +3608,7 @@
             roles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'],
             legacyRoles: ['client', 'gestionnaire', 'comptable', 'sous_utilisateur'],
             redirectTo: CLIENT_LOGIN_URL,
-            signOutOnRoleMismatch: true
+            signOutOnRoleMismatch: false
         });
         const wantRegister = new URLSearchParams(window.location.search).get('register') === '1';
         if (!auth) {

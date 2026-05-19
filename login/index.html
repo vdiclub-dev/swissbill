@@ -39,7 +39,7 @@
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260508b"></script>
-    <script data-cfasync="false" src="../js/auth.js?v=20260508b-fast-code-session"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260510h"></script>
     
     <style>
         :root {
@@ -263,6 +263,8 @@
     if (!window.SUPABASE_CONFIG || !window.SUPABASE_CLIENT) {
         if (new URLSearchParams(location.search).get('logout') === '1') {
             try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
+            try { sessionStorage.removeItem('colixo_user'); sessionStorage.removeItem('colixo_access_code'); } catch (e) {}
+            try { document.cookie = "colixo_code=; max-age=0; path=/; SameSite=Strict"; } catch (e) {}
             var h0 = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
             window.location.replace(h0);
         }
@@ -281,6 +283,8 @@
         (async function () {
             try { await db.auth.signOut(); } catch (e) {}
             try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
+            try { sessionStorage.removeItem('colixo_user'); sessionStorage.removeItem('colixo_access_code'); } catch (e) {}
+            try { document.cookie = "colixo_code=; max-age=0; path=/; SameSite=Strict"; } catch (e) {}
         })();
     }
 
@@ -288,14 +292,16 @@
         (async function () {
             try { await db.auth.signOut(); } catch (e) {}
             try { localStorage.removeItem('colixo_user'); localStorage.removeItem('colixo_access_code'); } catch (e) {}
+            try { sessionStorage.removeItem('colixo_user'); sessionStorage.removeItem('colixo_access_code'); } catch (e) {}
+            try { document.cookie = "colixo_code=; max-age=0; path=/; SameSite=Strict"; } catch (e) {}
             var hOut = (typeof window.colixoHref === 'function') ? window.colixoHref('/index.html') : '../index.html';
             window.location.replace(hOut);
         })();
         return;
     }
 
-    if (new URLSearchParams(location.search).get('switch') !== '1' &&
-        new URLSearchParams(location.search).get('register') !== '1') {
+    var _lsp = new URLSearchParams(location.search);
+    if (_lsp.get('switch') !== '1' && _lsp.get('register') !== '1' && _lsp.get('fresh') !== '1') {
         (async function () {
             try {
                 var auth = await window.colixoGetAuthContext({
@@ -604,16 +610,20 @@
                 return;
             }
 
-            /* Stocker le profil en sessionStorage pour les pages suivantes */
-            localStorage.setItem('colixo_user', JSON.stringify({
+            /* Stocker le profil : localStorage + sessionStorage + cookie (30j, Edge efface localStorage entre sessions) */
+            var _profileData = JSON.stringify({
                 id:           user.id,
                 role:         user.role,
                 nom:          user.nom,
                 prenom:       user.prenom,
                 code:         user.code_usr || user.code || user.code_acces || user.code_connexion || code,
                 entreprise_id: user.entreprise_id
-            }));
-            localStorage.setItem('colixo_access_code', code);
+            });
+            try { localStorage.setItem('colixo_user', _profileData); } catch (e) {}
+            try { sessionStorage.setItem('colixo_user', _profileData); } catch (e) {}
+            try { localStorage.setItem('colixo_access_code', code); } catch (e) {}
+            try { sessionStorage.setItem('colixo_access_code', code); } catch (e) {}
+            try { document.cookie = "colixo_code=" + encodeURIComponent(code) + "; max-age=2592000; path=/; SameSite=Strict"; } catch (e) {}
 
             toast('success', 'Bienvenue ! Redirection en cours…');
             hideLoad();

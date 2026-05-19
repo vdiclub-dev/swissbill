@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -12,7 +13,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
     <script data-cfasync="false" src="../config.js?v=20260462"></script>
-    <script data-cfasync="false" src="../js/auth.js?v=20260503"></script>
+    <script data-cfasync="false" src="../js/auth.js?v=20260510h"></script>
     <script src="js/colixo-facture-document.js?v=20260423"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -222,7 +223,10 @@
         <!-- CONDITIONS CLIENTS -->
         <div class="tab-pane" id="pane-clients">
             <div class="card">
-                <div class="card-head"><div class="card-title">CONDITIONS DE PAIEMENT PAR CLIENT</div></div>
+                <div class="card-head">
+                    <div class="card-title">CONDITIONS DE PAIEMENT PAR CLIENT</div>
+                    <button class="btn btn-red" onclick="openModalNouveauClient()"><i class="fas fa-plus"></i> Nouveau client</button>
+                </div>
                 <div class="card-body" style="padding:0;">
                     <table class="tbl">
                         <thead><tr><th>Entreprise</th><th>Délai paiement</th><th>Conditions</th><th>Fréquence facturation</th><th>Actions</th></tr></thead>
@@ -332,6 +336,60 @@
         <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button class="btn btn-ghost" onclick="closeModal('modalConditions')">Annuler</button>
             <button class="btn btn-red" onclick="saveConditions()"><i class="fas fa-save"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal nouveau client -->
+<div class="modal" id="modalNouveauClient">
+    <div class="modal-box" style="max-width:520px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <div class="modal-title">NOUVEAU CLIENT</div>
+            <button class="btn btn-ghost btn-sm" onclick="closeModal('modalNouveauClient')"><i class="fas fa-times"></i></button>
+        </div>
+        <div style="display:grid;gap:14px;margin-bottom:20px;">
+            <div class="field">
+                <label>Nom entreprise *</label>
+                <input type="text" id="ncNom" placeholder="Ex: Transport SA">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="field">
+                    <label>Email</label>
+                    <input type="email" id="ncEmail" placeholder="contact@entreprise.ch">
+                </div>
+                <div class="field">
+                    <label>Téléphone</label>
+                    <input type="tel" id="ncTel" placeholder="+41 xx xxx xx xx">
+                </div>
+            </div>
+            <div class="field">
+                <label>Adresse</label>
+                <input type="text" id="ncAdresse" placeholder="Rue, NPA Ville">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="field">
+                    <label>Délai paiement (jours)</label>
+                    <select id="ncEcheance">
+                        <option value="7">7 jours</option>
+                        <option value="14">14 jours</option>
+                        <option value="30" selected>30 jours</option>
+                        <option value="45">45 jours</option>
+                        <option value="60">60 jours</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>TVA</label>
+                    <input type="text" id="ncTva" placeholder="Ex: CHE-123.456.789">
+                </div>
+            </div>
+            <div class="field">
+                <label>Conditions de paiement</label>
+                <input type="text" id="ncConditions" value="Net 30 jours, virement bancaire">
+            </div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button class="btn btn-ghost" onclick="closeModal('modalNouveauClient')">Annuler</button>
+            <button class="btn btn-red" onclick="saveNouveauClient()"><i class="fas fa-save"></i> Créer le client</button>
         </div>
     </div>
 </div>
@@ -1137,6 +1195,46 @@
         const{data}=await db.from('entreprises').select('*').order('nom');
         entreprises=data||[];
         loadConditionsClients();
+    };
+
+    // ── Nouveau client ──
+    window.openModalNouveauClient=function(){
+        document.getElementById('ncNom').value='';
+        document.getElementById('ncEmail').value='';
+        document.getElementById('ncTel').value='';
+        document.getElementById('ncAdresse').value='';
+        document.getElementById('ncEcheance').value='30';
+        document.getElementById('ncTva').value='';
+        document.getElementById('ncConditions').value='Net 30 jours, virement bancaire';
+        const m=document.getElementById('modalNouveauClient');
+        m.style.display='flex';m.classList.add('open');
+        setTimeout(()=>document.getElementById('ncNom').focus(),100);
+    };
+
+    window.saveNouveauClient=async function(){
+        const nom=(document.getElementById('ncNom').value||'').trim();
+        if(!nom){toast('error','Le nom de l\'entreprise est requis');return;}
+        showLoad('Création du client…');
+        try{
+            const payload={
+                nom,
+                email:document.getElementById('ncEmail').value.trim()||null,
+                telephone:document.getElementById('ncTel').value.trim()||null,
+                adresse:document.getElementById('ncAdresse').value.trim()||null,
+                echeance_jours:parseInt(document.getElementById('ncEcheance').value)||30,
+                tva_numero:document.getElementById('ncTva').value.trim()||null,
+                conditions_paiement:document.getElementById('ncConditions').value.trim()||'Net 30 jours'
+            };
+            const{data,error}=await db.from('entreprises').insert([payload]).select().single();
+            if(error)throw error;
+            toast('success',`Client "${nom}" créé ✓`);
+            window.closeModal('modalNouveauClient');
+            const{data:e}=await db.from('entreprises').select('*').order('nom');
+            entreprises=e||[];
+            populateSelects();
+            loadConditionsClients();
+        }catch(e){toast('error',e.message);}
+        finally{hideLoad();}
     };
 
     // ── Auth ──

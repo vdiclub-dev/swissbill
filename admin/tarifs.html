@@ -2,11 +2,12 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script data-cfasync="false" src="/js/supabase.min.js"></script>
   <script data-cfasync="false" src="../config.js?v=20260508b"></script>
-  <script data-cfasync="false" src="../js/auth.js?v=20260508b-fast-code-session"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260510h"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -453,12 +454,12 @@
   async function loadRabaisCA(clientId) {
     try {
       const { data } = await db.from('client_tariff_rules')
-        .select('id,is_active')
+        .select('id,is_active,show_in_portal')
         .eq('client_id', clientId)
         .eq('tariff_code', 'RABAIS_CA')
         .maybeSingle();
-      return data?.is_active === true;
-    } catch(_) { return false; }
+      return { active: data?.is_active === true, visible: data?.show_in_portal === true };
+    } catch(_) { return { active: false, visible: false }; }
   }
 
   window.toggleRabaisCA = async function(clientId, enabled, checkbox) {
@@ -481,6 +482,33 @@
         });
       }
       toast(enabled ? 'Programme Rabais CA activé pour ce client.' : 'Programme Rabais CA désactivé.', 'info');
+    } catch(e) {
+      toast('Erreur: ' + e.message, 'err');
+    } finally {
+      if (checkbox) checkbox.disabled = false;
+    }
+  };
+
+  window.toggleRabaisVisible = async function(clientId, visible, checkbox) {
+    if (checkbox) checkbox.disabled = true;
+    try {
+      const { data: existing } = await db.from('client_tariff_rules')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('tariff_code', 'RABAIS_CA')
+        .maybeSingle();
+      if (existing?.id) {
+        await db.from('client_tariff_rules').update({ show_in_portal: visible }).eq('id', existing.id);
+      } else if (visible) {
+        await db.from('client_tariff_rules').insert({
+          client_id: clientId, name: 'Programme Rabais CA', tariff_code: 'RABAIS_CA',
+          base_price_chf: 0, is_active: false, show_in_portal: true, priority: 999,
+          price_per_parcel_chf: 0, price_per_kg_chf: 0, price_per_km_chf: 0,
+          included_km: 0, extra_km_price_chf: 0, fuel_surcharge_percent: 0,
+          discount_percent: 0, min_weight_kg: 0, min_parcel_count: 1
+        });
+      }
+      toast(visible ? 'Programme visible dans le portail client.' : 'Programme masqué dans le portail client.', 'info');
     } catch(e) {
       toast('Erreur: ' + e.message, 'err');
     } finally {
@@ -528,10 +556,11 @@
     const body = document.getElementById('clientBody');
     if (!clientId) { body.className = 'client-body'; body.innerHTML = 'Selectionnez un client pour voir et modifier ses tarifs personnalises.'; return; }
     body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;">Chargement...</p>';
-    const [overrides, rules, hasRabaisCA] = await Promise.all([
-      fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId)
+    const [overrides, rules, hasRabaisCA, tarifRes] = await Promise.all([
+      fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId),
+      db.from('tarifs_clients').select('id,rabais_volume_pct').eq('entreprise_id', clientId).maybeSingle()
     ]);
-    renderClientTable(clientId, overrides, rules, hasRabaisCA);
+    renderClientTable(clientId, overrides, rules, hasRabaisCA, tarifRes.data);
   }
 
   async function fetchOverrides(clientId) {
@@ -645,7 +674,7 @@
 
   async function applyStandardGridToClient() {
     const clientId = selectedClientId || document.getElementById('clientSelect').value;
-    if (!clientId) { toast('Sélectionnez d’abord un client.', 'err'); return; }
+    if (!clientId) { toast("Sélectionnez d'abord un client.", "err"); return; }
     const activeProducts = produits.filter(p => p.actif !== false && !isDefaultOptionProduct(p));
     if (!activeProducts.length) { toast('Aucun produit actif dans la grille standard.', 'err'); return; }
     if (!confirm('Appliquer la grille standard Colixo au client sélectionné ? Les codes existants seront mis à jour, les options/prix spéciaux restent séparés.')) return;
@@ -677,11 +706,11 @@
         return;
       }
     }
-    const [overrides, rules] = await Promise.all([fetchOverrides(clientId), fetchClientTariffRules(clientId)]);
-    renderClientTable(clientId, overrides, rules);
+    const [overrides, rules, hasRabaisCA] = await Promise.all([fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId)]);
+    renderClientTable(clientId, overrides, rules, hasRabaisCA);
   }
 
-  function renderClientTable(clientId, overrides, rules, hasRabaisCA) {
+  function renderClientTable(clientId, overrides, rules, hasRabaisCA = { active: false, visible: false }, clientTarifData = null) {
     const body = document.getElementById('clientBody');
     if (!produits.length) { body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;font-style:italic;">Aucun produit defini.</p>'; return; }
     const ovMap = Object.fromEntries(overrides.map(o => [o.produit_id, o]));
@@ -773,10 +802,16 @@
       + '<div class="client-list-head" style="cursor:default">'
       + '<div><div class="client-list-title"><i class="fas fa-percent"></i> Programme de rabais progressif (CA mensuel)</div>'
       + '<div class="client-list-sub">Si activé, un rabais est automatiquement calculé sur la facture selon le CA mensuel HT du client.</div></div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">'
       + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted2);">'
-      + '<input type="checkbox" ' + (hasRabaisCA ? 'checked' : '') + ' onchange="toggleRabaisCA(\'' + clientId + '\', this.checked, this)" style="width:16px;height:16px;accent-color:#22c55e;cursor:pointer;">'
-      + (hasRabaisCA ? '<span style="color:var(--green);font-weight:700;">Activé</span>' : '<span>Désactivé</span>')
+      + '<input type="checkbox" ' + (hasRabaisCA.active ? 'checked' : '') + ' onchange="toggleRabaisCA(\'' + clientId + '\', this.checked, this)" style="width:16px;height:16px;accent-color:#22c55e;cursor:pointer;">'
+      + (hasRabaisCA.active ? '<span style="color:var(--green);font-weight:700;">Activé (facturation)</span>' : '<span>Désactivé</span>')
       + '</label>'
+      + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted2);" title="Le client peut voir les paliers de rabais dans son portail">'
+      + '<input type="checkbox" ' + (hasRabaisCA.visible ? 'checked' : '') + ' onchange="toggleRabaisVisible(\'' + clientId + '\', this.checked, this)" style="width:16px;height:16px;accent-color:#3b82f6;cursor:pointer;">'
+      + (hasRabaisCA.visible ? '<span style="color:#3b82f6;font-weight:700;">Visible dans le portail</span>' : '<span>Masqué au client</span>')
+      + '</label>'
+      + '</div>'
       + '</div>'
       + '<div style="padding:10px 16px;font-size:12px;color:var(--muted);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">'
       + '<div style="padding:8px 10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border);">≥ CHF 500 → <strong style="color:var(--green);">2 %</strong></div>'
@@ -786,8 +821,24 @@
       + '</div>'
       + '</div>';
 
-    let html = '<div class="client-tariff-layout">' +
-      '<div class="client-help"><strong>Mode d’emploi :</strong> cochez un tarif de livraison pour l’appliquer au client. Cochez une option uniquement si elle doit apparaître comme supplément sélectionnable dans le portail client.</div>'
+    const currentPct = Number(clientTarifData?.rabais_volume_pct || 0);
+    const rabaisPctHtml = `<div class="client-list-card" style="margin-top:0">
+      <div class="client-list-head" style="cursor:default">
+        <div>
+          <div class="client-list-title"><i class="fas fa-tag"></i> Rabais n&eacute;goci&eacute; (% sur chaque commande)</div>
+          <div class="client-list-sub">Appliqu&eacute; automatiquement sur le total de chaque exp&eacute;dition dans le portail client.</div>
+        </div>
+        <span id="rabaisPctBadge" style="font-size:13px;font-weight:700;color:${currentPct > 0 ? 'var(--green)' : 'var(--muted)'}">${currentPct > 0 ? currentPct + ' % actif' : 'Aucun'}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;">
+        <input id="rabaisPctInput" type="number" min="0" max="100" step="0.5" value="${currentPct}" placeholder="0" style="width:100px;padding:8px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--white);font-size:14px;font-weight:700;">
+        <span style="color:var(--muted);font-size:13px;">%</span>
+        <button class="btn btn-save" onclick="saveRabaisPct('${clientId}')"><i class="fas fa-check"></i> Enregistrer</button>
+      </div>
+    </div>`;
+
+    let html = `<div class="client-tariff-layout"><div class="client-help"><strong>Mode d&#39;emploi :</strong> cochez un tarif de livraison pour l&#39;appliquer au client. Cochez une option uniquement si elle doit appara&icirc;tre comme suppl&eacute;ment s&eacute;lectionnable dans le portail client.</div>`
+      + rabaisPctHtml
       + rabaisCAHtml +
       '<div class="client-list-card">' +
         '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-truck"></i> Tarifs de livraison du client</div><div class="client-list-sub">Prix de base visibles dans le portail client.</div></div><span class="client-list-badge">' + appliedCount + ' actif(s)</span></div>' +
@@ -807,11 +858,31 @@
   }
 
   async function refreshClientTable(clientId) {
-    const [overrides, rules, hasRabaisCA] = await Promise.all([
-      fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId)
+    const [overrides, rules, hasRabaisCA, tarifRes] = await Promise.all([
+      fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId),
+      db.from('tarifs_clients').select('id,rabais_volume_pct').eq('entreprise_id', clientId).maybeSingle()
     ]);
-    renderClientTable(clientId, overrides, rules, hasRabaisCA);
+    renderClientTable(clientId, overrides, rules, hasRabaisCA, tarifRes.data);
   }
+
+  window.saveRabaisPct = async function(clientId) {
+    const input = document.getElementById('rabaisPctInput');
+    const val = Math.min(100, Math.max(0, parseFloat(input?.value || '0') || 0));
+    try {
+      const { data: existing } = await db.from('tarifs_clients').select('id').eq('entreprise_id', clientId).maybeSingle();
+      if (existing?.id) {
+        await db.from('tarifs_clients').update({ rabais_volume_pct: val }).eq('id', existing.id);
+      } else {
+        await db.from('tarifs_clients').insert({ entreprise_id: clientId, rabais_volume_pct: val, nom_client: clientId });
+      }
+      toast(val > 0 ? `Rabais de ${val} % enregistré.` : 'Rabais supprimé.', 'info');
+      const badge = document.getElementById('rabaisPctBadge');
+      if (badge) badge.textContent = val > 0 ? `${val} % actif` : 'Aucun';
+      if (badge) badge.style.color = val > 0 ? 'var(--green)' : 'var(--muted)';
+    } catch(e) {
+      toast('Erreur: ' + e.message, 'err');
+    }
+  };
 
   function explainTariffToggleError(error, fallbackError) {
     const msg = String((fallbackError || error)?.message || error || '');
@@ -982,8 +1053,7 @@
   // ── Init ──
   (async function() {
     if (!db) { setStatus(false, 'Supabase non initialise — verifiez config.js'); return; }
-    setStatus(false, 'Chargement des tarifs...');
-    await loadProduits();
+    setStatus(false, 'Chargement...');
     try {
       const auth = await window.colixoRequireRoute({
         roles: ['admin','super_admin'],
@@ -992,11 +1062,11 @@
       });
       if (!auth) return;
       adminAuthContext = auth;
-      await loadClients();
+      await Promise.all([loadProduits(), loadClients()]);
       setStatus(true, produits.length + ' produit(s) charge(s)');
     } catch (error) {
       console.error('[Colixo] tarifs init', error);
-      setStatus(false, 'Tarifs chargés, section client indisponible: ' + (error.message || error));
+      setStatus(false, 'Erreur initialisation: ' + (error.message || error));
     }
   })();
 </script>
