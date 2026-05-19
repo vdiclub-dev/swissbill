@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  var AUTH_TIMEOUT_MS = (typeof window !== 'undefined' && window.AUTH_TIMEOUT_MS) || 8000;
+
   function withTimeout(promise, ms, message) {
     var timer;
     var timeout = new Promise(function(_, reject) {
