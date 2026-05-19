@@ -133,7 +133,7 @@ table.tbl{width:100%;min-width:900px;border-collapse:collapse;}
 
 <div class="info-banner">
     <i class="fas fa-info-circle"></i>
-    Affiche uniquement les commandes de type <strong>National</strong>. Ces commandes sont également visibles dans le dispatch régional pour sécurité.
+    Vue nationale — tous les transports. Assignez-les à des <strong>tournées nationales</strong> via le panneau de droite ou le bouton "Nouveau transport national".
 </div>
 
 <div class="workspace">
@@ -165,15 +165,15 @@ table.tbl{width:100%;min-width:900px;border-collapse:collapse;}
                     <th>N°</th><th>Statut</th>
                     <th>Enlèvement</th><th>Livraison</th>
                     <th>Destinataire</th><th>Chauffeur</th>
-                    <th>Poids / Qté</th><th>Km</th>
+                    <th>Type</th><th>Poids / Qté</th><th>Km</th>
                     <th>Tournée</th><th>Créé</th><th>Actions</th>
                 </tr></thead>
                 <tbody id="tbody"></tbody>
             </table>
             <div class="empty" id="empty" style="display:none;">
                 <i class="fas fa-globe-europe"></i>
-                Aucune commande nationale.<br><br>
-                <span style="font-size:13px;color:var(--muted);">Les commandes avec service_type = "national" apparaissent ici.</span>
+                Aucun transport.<br><br>
+                <span style="font-size:13px;color:var(--muted);">Utilisez "Nouveau transport national" pour en créer un.</span>
             </div>
         </div>
     </div>
@@ -340,6 +340,7 @@ function toast(msg,ok){
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){var el=document.getElementById(id);if(!el)return;el.classList.remove('open');}
 window.closeModal=closeModal;
+window.openModal=openModal;
 document.querySelectorAll('.overlay').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)closeModal(m.id);});});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')document.querySelectorAll('.overlay.open').forEach(function(m){closeModal(m.id);});});
 
@@ -550,6 +551,7 @@ function renderTable(list){
             +'<td><div class="addr-lbl">ARRIVÉE</div><div class="addr-full">'+esc(o.delivery_address||'—')+'</div>'+(c2?'<span class="canton-tag">'+esc(c2)+'</span>':'')+'</td>'
             +'<td style="font-size:13px;">'+(o.destinataire_nom?'<strong>'+esc(o.destinataire_nom)+'</strong>'+(o.destinataire_tel?'<br><span style="font-size:11px;color:var(--muted)">'+esc(o.destinataire_tel)+'</span>':''):'<span style="color:var(--muted)">—</span>')+'</td>'
             +'<td>'+(o.external_carrier_name?'<span style="font-size:11px;font-weight:700;color:var(--yellow);"><i class="fas fa-truck" style="font-size:9px;margin-right:3px;"></i>'+esc(o.external_carrier_name)+'</span>':drv?'<span style="font-size:12px;color:var(--national);"><i class="fas fa-user" style="font-size:10px;margin-right:3px;"></i>'+esc(drv)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
+            +'<td><span style="font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:rgba(99,102,241,0.12);color:var(--national);">'+esc(o.service_type||'—')+'</span></td>'
             +'<td style="font-size:12px;color:var(--muted2);">'+(o.weight?o.weight+' kg':'—')+'<br><span style="font-size:11px;color:var(--muted)">'+(o.quantity||1)+' u</span></td>'
             +'<td style="font-size:12px;color:var(--muted2);">'+(o.distance_km?Math.round(o.distance_km)+' km':'<span style="color:var(--muted)">—</span>')+'</td>'
             +'<td>'+(t?'<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--national);"><span style="width:8px;height:8px;border-radius:50%;background:'+(t.couleur||'#6366f1')+'"></span>'+esc(t.nom)+'</span>':'<span style="font-size:11px;color:var(--muted)">—</span>')+'</td>'
@@ -569,7 +571,6 @@ async function load(opts){
     try{
         var r=await db.from('transport_orders_simple')
             .select('*')
-            .eq('service_type','national')
             .order('created_at',{ascending:false})
             .limit(500);
         if(r.error)throw r.error;
