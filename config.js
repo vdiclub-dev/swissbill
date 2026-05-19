@@ -35,6 +35,9 @@
 // de vieux HTML et de nouveaux assets.
 window.COLIXO_ASSET_VERSION = '20260510e';
 
+// Délai max (ms) pour les requêtes d'authentification Supabase
+window.AUTH_TIMEOUT_MS = 8000;
+
 /**
  * Résout le préfixe d'URL sous lequel le site est servi.
  *
