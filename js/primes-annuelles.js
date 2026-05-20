@@ -32,9 +32,31 @@
     function employeeName(e){ return [e && e.prenom, e && e.nom].filter(Boolean).join(' ').trim() || (e && e.email) || 'Employé'; }
     function roleLabel(role){ return { chauffeur:'Chauffeur', magasinier:'Magasinier', auxiliaire:'Auxiliaire' }[role] || role || '—'; }
     function adminId(){ return auth && auth.profile && auth.profile.id; }
+    function readStoredAdminCode(){
+        var stores = [];
+        try { stores.push(localStorage); } catch(e) {}
+        try { stores.push(sessionStorage); } catch(e) {}
+        for(var i=0;i<stores.length;i++){
+            try {
+                var rawUser = stores[i].getItem('colixo_user');
+                if(rawUser){
+                    var user = JSON.parse(rawUser);
+                    var userCode = user && (user.code || user.code_usr || user.code_acces || user.code_connexion);
+                    if(userCode) return String(userCode).trim().toUpperCase();
+                }
+                var rawCode = stores[i].getItem('colixo_access_code');
+                if(rawCode) return String(rawCode).trim().toUpperCase();
+            } catch(e) {}
+        }
+        try {
+            var match = document.cookie.match(/(?:^|;\s*)colixo_code=([^;]+)/);
+            if(match) return decodeURIComponent(match[1]).trim().toUpperCase();
+        } catch(e) {}
+        return null;
+    }
     function adminCode(){
         var p = auth && auth.profile || {};
-        return p.code_usr || p.code || p.code_acces || p.code_connexion || null;
+        return p.code_usr || p.code || p.code_acces || p.code_connexion || readStoredAdminCode();
     }
     function toast(type, msg){
         var el = $('toast');
