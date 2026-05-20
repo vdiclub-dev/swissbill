@@ -16,6 +16,7 @@
             annual_balances: [],
             deductions: [],
             validations: [],
+            rh_alerts: [],
             audit_logs: []
         },
         voidingId: null
@@ -110,6 +111,24 @@
     }
     function validationLabel(v){
         return { draft:'Brouillon', pending_direction:'À valider', validated:'Validée', rejected:'Refusée', paid:'Payée' }[v] || 'Non validée';
+    }
+    function alertLevelLabel(v){
+        return { red:'Rouge', orange:'Orange', follow_up:'Suivi RH' }[v] || v || '—';
+    }
+    function alertStatusLabel(v){
+        return {
+            open:'Ouverte',
+            reviewed:'Revue',
+            interview_scheduled:'Entretien prévu',
+            warning_draft:'Brouillon lettre',
+            warning_sent:'Lettre remise',
+            closed_no_action:'Clôturée sans suite'
+        }[v] || v || '—';
+    }
+    function alertsForMonth(){
+        return (state.data.rh_alerts || []).filter(function(a){
+            return Number(a.period_year) === Number(state.year) && Number(a.period_month) === Number(state.month);
+        });
     }
 
     function filteredEmployees(){
@@ -286,12 +305,57 @@
         }).join('');
     }
 
+    function renderAlerts(){
+        var rows = alertsForMonth();
+        if(!rows.length){
+            $('rhAlertRows').innerHTML = '<tr><td colspan="8" class="empty">Aucune alerte RH pour ce mois. Lancez l’analyse après les retraits de points.</td></tr>';
+            return;
+        }
+        rows.sort(function(a,b){
+            var weight = { red:1, orange:2, follow_up:3 };
+            return (weight[a.severity_level] || 9) - (weight[b.severity_level] || 9)
+                || String(b.created_at || '').localeCompare(String(a.created_at || ''));
+        });
+        $('rhAlertRows').innerHTML = rows.map(function(a){
+            var canPrepare = a.severity_level === 'red' || a.alert_type === 'serious_count_3' || a.alert_type === 'manual_red';
+            return '<tr>'
+                +'<td><div class="cell-main">'+esc(a.employee_name || '—')+'</div><div class="cell-sub">'+esc(a.employee_email || '')+'</div></td>'
+                +'<td>'+esc(monthName(a.period_month))+' '+esc(a.period_year)+'</td>'
+                +'<td><span class="alert-level '+esc(a.severity_level || '')+'">'+esc(alertLevelLabel(a.severity_level))+'</span></td>'
+                +'<td><div class="cell-main">'+esc(a.trigger_reason || '—')+'</div>'+(a.decision_note?'<div class="cell-sub">'+esc(a.decision_note)+'</div>':'')+'</td>'
+                +'<td><span class="score">'+esc(a.serious_deductions_count || 0)+'</span><div class="cell-sub">Points serious '+esc(a.serious_points_total || 0)+'</div></td>'
+                +'<td><span class="score">'+esc(a.total_points_deducted || 0)+'</span></td>'
+                +'<td><span class="badge '+(a.status === 'closed_no_action' ? 'b-blue' : a.status === 'warning_draft' ? 'b-red' : a.status === 'interview_scheduled' ? 'b-orange' : 'b-green')+'">'+esc(alertStatusLabel(a.status))+'</span></td>'
+                +'<td><div class="actions alert-actions">'
+                +'<button class="btn btn-ghost btn-xs" data-alert-status="'+esc(a.id)+'" data-status="interview_scheduled"><i class="fas fa-calendar-check"></i> Entretien prévu</button>'
+                +(canPrepare ? '<button class="btn btn-red btn-xs" data-warning-id="'+esc(a.id)+'"><i class="fas fa-file-signature"></i> Préparer une lettre</button>' : '')
+                +'<button class="btn btn-ghost btn-xs" data-alert-status="'+esc(a.id)+'" data-status="closed_no_action"><i class="fas fa-check"></i> Clôturer sans suite</button>'
+                +(a.warning_letter_text ? '<button class="btn btn-ghost btn-xs" data-show-warning="'+esc(a.id)+'"><i class="fas fa-eye"></i> Voir brouillon</button>' : '')
+                +'</div></td>'
+                +'</tr>';
+        }).join('');
+
+        document.querySelectorAll('[data-warning-id]').forEach(function(btn){
+            btn.addEventListener('click', function(){ prepareWarningLetter(btn.getAttribute('data-warning-id')); });
+        });
+        document.querySelectorAll('[data-alert-status]').forEach(function(btn){
+            btn.addEventListener('click', function(){ updateAlertStatus(btn.getAttribute('data-alert-status'), btn.getAttribute('data-status')); });
+        });
+        document.querySelectorAll('[data-show-warning]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+                var alert = (state.data.rh_alerts || []).find(function(a){ return a.id === btn.getAttribute('data-show-warning'); });
+                showWarningLetter(alert && alert.warning_letter_text || '');
+            });
+        });
+    }
+
     function renderAll(){
         fillSelectors();
         renderKPIs();
         renderEmployees();
         renderDetail();
         renderCategories();
+        renderAlerts();
         renderHistory();
         renderAudit();
     }
@@ -312,6 +376,7 @@
                 annual_balances: [],
                 deductions: [],
                 validations: [],
+                rh_alerts: [],
                 audit_logs: []
             }, payload(data));
             renderAll();
@@ -348,10 +413,82 @@
                 p_incident_date: $('incidentDate').value || nowIsoDate(),
                 p_points_deducted: Number($('pointsInput').value || 0),
                 p_severity: $('severitySelect').value,
-                p_comment: comment
+                p_comment: comment,
+                p_immediate_red_alert: $('immediateRedAlert').checked
             });
             $('commentInput').value = '';
+            $('immediateRedAlert').checked = false;
+            await generateAlerts(true);
             toast('success', 'Retrait enregistré.');
+            await loadDashboard();
+        }catch(err){
+            toast('error', err.message || String(err));
+        }finally{
+            loading(false);
+        }
+    }
+
+    async function generateAlerts(silent){
+        loading(true);
+        try{
+            await callRpc('admin_prime_generate_alerts', {
+                p_admin_id: adminId(),
+                p_code: adminCode(),
+                p_year: Number(state.year),
+                p_month: Number(state.month)
+            });
+            if(!silent) toast('success', 'Alertes RH analysées pour le mois.');
+            if(!silent) await loadDashboard();
+        }catch(err){
+            toast('error', err.message || String(err));
+        }finally{
+            loading(false);
+        }
+    }
+
+    function showWarningLetter(text){
+        $('warningLetterText').value = text || '';
+        $('warningModal').classList.add('open');
+    }
+    function closeWarningModal(){ $('warningModal').classList.remove('open'); }
+
+    async function prepareWarningLetter(alertId){
+        loading(true);
+        try{
+            var row = await callRpc('admin_prime_prepare_warning_letter', {
+                p_admin_id: adminId(),
+                p_code: adminCode(),
+                p_alert_id: alertId
+            });
+            var data = payload(row);
+            showWarningLetter(data.warning_letter_text || '');
+            toast('success', 'Brouillon préparé. Validation direction requise avant remise.');
+            await loadDashboard();
+        }catch(err){
+            toast('error', err.message || String(err));
+        }finally{
+            loading(false);
+        }
+    }
+
+    async function updateAlertStatus(alertId, status){
+        var defaults = {
+            interview_scheduled:'Entretien RH prévu.',
+            closed_no_action:'Clôturé sans suite par décision RH.',
+            reviewed:'Alerte revue.'
+        };
+        var note = window.prompt('Note de décision RH', defaults[status] || '');
+        if(note === null) return;
+        loading(true);
+        try{
+            await callRpc('admin_prime_update_alert_status', {
+                p_admin_id: adminId(),
+                p_code: adminCode(),
+                p_alert_id: alertId,
+                p_status: status,
+                p_decision_note: note
+            });
+            toast('success', 'Statut RH mis à jour.');
             await loadDashboard();
         }catch(err){
             toast('error', err.message || String(err));
@@ -428,12 +565,24 @@
         $('searchInput').addEventListener('input', function(e){ state.search = e.target.value || ''; renderAll(); });
         $('categorySelect').addEventListener('change', updatePointsMax);
         $('btnRefresh').addEventListener('click', function(){ loadDashboard().then(function(){ toast('success', 'Primes actualisées.'); }).catch(function(err){ toast('error', err.message || String(err)); }); });
+        $('btnGenerateAlerts').addEventListener('click', function(){ generateAlerts(false); });
         $('deductionForm').addEventListener('submit', saveDeduction);
         $('validationForm').addEventListener('submit', saveValidation);
         $('btnCloseVoid').addEventListener('click', closeVoidModal);
         $('btnCancelVoid').addEventListener('click', closeVoidModal);
         $('btnConfirmVoid').addEventListener('click', confirmVoid);
         $('voidModal').addEventListener('click', function(e){ if(e.target === $('voidModal')) closeVoidModal(); });
+        $('btnCloseWarning').addEventListener('click', closeWarningModal);
+        $('btnCloseWarningFooter').addEventListener('click', closeWarningModal);
+        $('warningModal').addEventListener('click', function(e){ if(e.target === $('warningModal')) closeWarningModal(); });
+        $('btnCopyWarning').addEventListener('click', async function(){
+            try {
+                await navigator.clipboard.writeText($('warningLetterText').value || '');
+                toast('success', 'Brouillon copié.');
+            } catch(e) {
+                toast('error', 'Copie impossible. Sélectionnez le texte manuellement.');
+            }
+        });
         $('btnLogout').addEventListener('click', function(){ window.colixoLogout(); });
         await loadDashboard();
     }
