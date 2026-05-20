@@ -33,7 +33,7 @@
 // Quand une mise en production importante a lieu, cette valeur doit évoluer
 // en même temps que les autres marqueurs de version pour éviter les mélanges
 // de vieux HTML et de nouveaux assets.
-window.COLIXO_ASSET_VERSION = '20260519d';
+window.COLIXO_ASSET_VERSION = '20260520a';
 
 // Délai max (ms) pour les requêtes d'authentification Supabase
 window.AUTH_TIMEOUT_MS = 8000;
