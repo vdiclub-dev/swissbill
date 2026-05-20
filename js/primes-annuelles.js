@@ -280,7 +280,7 @@
                 +'<td><span class="badge '+(d.severity === 'serious' ? 'b-red' : d.severity === 'medium' ? 'b-orange' : 'b-blue')+'">'+esc(severityLabel(d.severity))+'</span></td>'
                 +'<td>'+esc(d.comment || '')+'</td>'
                 +'<td><div class="cell-sub">Créé par '+esc(d.created_by_name || '—')+' · '+esc(timeFmt(d.created_at))+'</div>'+(voided?'<div class="cell-sub">Annulé par '+esc(d.voided_by_name || '—')+' · '+esc(timeFmt(d.voided_at))+'<br>'+esc(d.void_reason || '')+'</div>':'')+'</td>'
-                +'<td><div class="actions">'+(voided?'<span class="badge b-blue">Annulé</span>':'<button class="btn btn-ghost btn-xs" data-void-id="'+esc(d.id)+'"><i class="fas fa-ban"></i> Annuler</button>')+'</div></td>'
+                +'<td><div class="actions">'+(voided?'<span class="badge b-blue">Incident annulé</span>':'<button class="btn btn-ghost btn-xs" data-void-id="'+esc(d.id)+'"><i class="fas fa-ban"></i> Annuler l’incident</button>')+'</div></td>'
                 +'</tr>';
         }).join('');
         document.querySelectorAll('[data-void-id]').forEach(function(btn){
@@ -512,8 +512,9 @@
                 p_deduction_id: state.voidingId,
                 p_void_reason: reason
             });
+            await generateAlerts(true);
             closeVoidModal();
-            toast('success', 'Retrait annulé.');
+            toast('success', 'Incident annulé. Points et alertes RH recalculés.');
             await loadDashboard();
         }catch(err){
             toast('error', err.message || String(err));
