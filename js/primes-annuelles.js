@@ -117,6 +117,12 @@
         mSel.value = String(state.month);
 
         var cSel = $('categorySelect');
+        if(!state.data.categories.length){
+            cSel.innerHTML = '<option value="">Aucun critère chargé</option>';
+            $('pointsInput').max = '100';
+            $('pointsInput').value = '';
+            return;
+        }
         cSel.innerHTML = state.data.categories.map(function(c){
             return '<option value="'+esc(c.code)+'" data-max="'+esc(c.monthly_max_points)+'">'+esc(c.label)+' · max '+esc(c.monthly_max_points)+'</option>';
         }).join('');
@@ -287,6 +293,8 @@
                 audit_logs: []
             }, payload(data));
             renderAll();
+            if(!state.data.categories.length) toast('error', 'Aucun critère prime chargé. Vérifiez la migration SQL 043.');
+            if(!state.data.employees.length) toast('info', 'Aucun employé actif trouvé dans utilisateurs pour les rôles chauffeur, magasinier ou auxiliaire.');
         }finally{
             loading(false);
         }
@@ -303,6 +311,7 @@
         e.preventDefault();
         var employee = selectedEmployee();
         if(!employee){ toast('error', 'Sélectionnez un employé.'); return; }
+        if(!$('categorySelect').value){ toast('error', 'Aucun critère disponible.'); return; }
         var comment = $('commentInput').value.trim();
         if(comment.length < 3){ toast('error', 'Commentaire obligatoire.'); return; }
         loading(true);
