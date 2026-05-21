@@ -7,8 +7,8 @@
   <title>Colixo — Acceptation des CGV</title>
   <script data-cfasync="false" src="/js/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script data-cfasync="false" src="config.js?v=20260519b"></script>
-  <script data-cfasync="false" src="js/auth.js?v=20260519b"></script>
+  <script data-cfasync="false" src="config.js?v=20260521a"></script>
+  <script data-cfasync="false" src="js/auth.js?v=20260521a"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -262,9 +262,48 @@
 
   // ── Génération PDF ───────────────────────────────────────────────────────
 
-  function buildAcceptancePdf(utilisateur, cgv, meta) {
+  const colixoAcceptanceLogoCache = { promise: null };
+
+  function colixoAssetUrl(path) {
+    const p = typeof window.colixoHref === 'function' ? window.colixoHref(path) : path;
+    try { return new URL(p, window.location.href).href; }
+    catch (e) { return p; }
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function loadColixoPdfLogo() {
+    if (colixoAcceptanceLogoCache.promise) return colixoAcceptanceLogoCache.promise;
+    colixoAcceptanceLogoCache.promise = (async function () {
+      const candidates = [
+        colixoAssetUrl('/images/colixo-logo-print.png'),
+        colixoAssetUrl('/images/colixo-logo.png'),
+        'images/colixo-logo-print.png'
+      ];
+      for (const url of candidates) {
+        try {
+          const response = await fetch(url);
+          if (response.ok) return await blobToDataUrl(await response.blob());
+        } catch (e) {
+          console.warn('Logo PDF Colixo indisponible', url, e);
+        }
+      }
+      return null;
+    })();
+    return colixoAcceptanceLogoCache.promise;
+  }
+
+  async function buildAcceptancePdf(utilisateur, cgv, meta) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const logoDataUrl = await loadColixoPdfLogo();
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
     const M = 20;
@@ -283,12 +322,20 @@
     // En-tête
     doc.setFillColor(11, 11, 15);
     doc.rect(0, 0, W, 38, 'F');
-    doc.setFillColor(255, 122, 0);
-    doc.rect(M, 10, 32, 10, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.text('COLIXO', M + 4, 17.5);
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, 'PNG', M, 5, 28, 28);
+      } catch (e) {
+        console.warn('Logo PDF Colixo non inséré', e);
+      }
+    } else {
+      doc.setFillColor(255, 122, 0);
+      doc.rect(M, 10, 32, 10, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text('COLIXO', M + 4, 17.5);
+    }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(200, 200, 210);
@@ -487,7 +534,7 @@
         let pdfUrl  = null;
 
         try {
-          const pdfBuffer = buildAcceptancePdf(utilisateur, cgv, {
+          const pdfBuffer = await buildAcceptancePdf(utilisateur, cgv, {
             acceptedAt: new Date(acceptedAt).toLocaleString('fr-CH'),
             ip, userAgent, hash: contentHash
           });

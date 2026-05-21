@@ -54,6 +54,13 @@
         var code = zoneCode(o, route);
         return safeColor(o.color_hex || o.zone_color_hex || o.route_color_hex || route.color_hex || route.zone_color_hex || ZONE_COLORS[code] || '#ff8a00');
     }
+    function documentLogoUrl(){
+        var path = (typeof window.colixoHref === 'function')
+            ? window.colixoHref('/images/colixo-logo-print.png')
+            : '../images/colixo-logo-print.png';
+        try { return new URL(path, window.location.href).href; }
+        catch(e){ return path; }
+    }
     function quantity(o){
         var q = parseInt(o.parcel_count || o.quantity || o.nb_colis || 1, 10);
         return isFinite(q) && q > 0 ? q : 1;
@@ -187,8 +194,9 @@
     function generateParcelLabel(order, parcel){
         parcel = parcel || { index:1, total:quantity(order), parcel_id:ref(order)+'-01', scan_token:tokenFor(order,1), stop_number:order.stop_number, loading_order:order.loading_order };
         var m = labelMeta(order, parcel);
+        var logo = documentLogoUrl();
         return '<section class="parcel-label" style="--label-color:'+esc(m.color)+'">'
-            +'<div class="pl-head"><div><div class="pl-brand">COL<span>I</span>XO</div><div class="pl-small">Étiquette colis intelligente</div></div><div class="pl-ref">'+esc(ref(order))+'</div></div>'
+            +'<div class="pl-head"><div><img src="'+esc(logo)+'" alt="Colixo" style="width:92px;max-height:52px;object-fit:contain;display:block;margin-bottom:2mm;" onerror="this.style.display=&quot;none&quot;;this.nextElementSibling.style.display=&quot;block&quot;;"><div class="pl-brand" style="display:none;">COL<span>I</span>XO</div><div class="pl-small">Étiquette colis intelligente</div></div><div class="pl-ref">'+esc(ref(order))+'</div></div>'
             +'<div class="pl-zone-band"><span>Zone</span><strong>'+esc(m.zone)+'</strong></div>'
             +'<div class="pl-main">'
                 +'<div class="pl-left">'
@@ -248,12 +256,13 @@
         return labels.length;
     }
     function listHtml(title, route, stops, sortKey){
+        var logo = documentLogoUrl();
         var sorted = stops.slice().sort(function(a,b){ return (a[sortKey] || 0) - (b[sortKey] || 0); });
         var rows = sorted.map(function(o){
             var color = colorFor(o, route);
             return '<tr style="--route-color:'+esc(color)+'"><td><span class="pill">'+esc(o[sortKey] || '—')+'</span></td><td>'+esc(ref(o))+'</td><td>'+esc(o.stop_number || '—')+'</td><td>'+esc(o.loading_order || '—')+'</td><td>'+esc(o.service_level || serviceLevel(o))+'</td><td><span class="color-dot"></span>'+esc(o.destinataire_nom || o.client_name || '—')+'<br><small>'+esc(zoneCode(o, route))+' · '+esc(o.delivery_address || '—')+'</small></td><td>'+esc(quantity(o))+'</td><td>'+esc(o.status || 'planned')+'</td></tr>';
         }).join('');
-        return '<section class="list"><h1>'+esc(title)+'</h1><div>Tournée : <strong>'+esc(route.nom || route.id)+'</strong></div><table><thead><tr><th>Tri</th><th>Commande</th><th>Stop</th><th>Chargement</th><th>Service</th><th>Livraison</th><th>Colis</th><th>Statut</th></tr></thead><tbody>'+rows+'</tbody></table></section>';
+        return '<section class="list"><div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #e8311a;padding-bottom:12px;margin-bottom:14px;"><div><img src="'+esc(logo)+'" alt="Colixo" style="width:118px;max-height:64px;object-fit:contain;display:block;" onerror="this.style.display=&quot;none&quot;;this.nextElementSibling.style.display=&quot;block&quot;;"><div style="display:none;font-size:28px;font-weight:900;color:#e8311a;letter-spacing:1px;">COLIXO</div></div><div style="text-align:right;"><h1 style="margin:0 0 4px;">'+esc(title)+'</h1><div>Tournée : <strong>'+esc(route.nom || route.id)+'</strong></div></div></div><table><thead><tr><th>Tri</th><th>Commande</th><th>Stop</th><th>Chargement</th><th>Service</th><th>Livraison</th><th>Colis</th><th>Statut</th></tr></thead><tbody>'+rows+'</tbody></table></section>';
     }
     async function generateDriverLoadingList(routeId, options){
         var data = await getPreparedRoute(routeId, options);
