@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <!-- colixo-build:20260521d -->
+    <!-- colixo-build:20260521e -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -13,8 +13,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260521d"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260521d"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260521e"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260521e"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -2216,6 +2216,7 @@
         if (serviceProfileKey && config.profiles[serviceProfileKey]) {
             return { key: serviceProfileKey, profile: config.profiles[serviceProfileKey] };
         }
+        if (config.service_match_required === true) return null;
         const pickupType = document.querySelector('input[name="pickupType"]:checked')?.value;
         const defaultKey = config.default_profile || 'pickup';
         const pickupProfile = config.profiles[defaultKey] || config.profiles.pickup || null;
@@ -2237,22 +2238,52 @@
         return fallbackProfile ? { key: defaultKey, profile: fallbackProfile } : null;
     }
 
-    function calculateTieredKmCost(distance, tiers) {
+    function calculateTieredKmCost(distance, tiers, mode = 'progressive') {
         if (distance == null || !Number.isFinite(Number(distance)) || !Array.isArray(tiers)) return { cost: 0, segments: [] };
+        const normalizedTiers = tiers
+            .map(tier => ({
+                from: tier.from != null && tier.from !== '' ? Number(tier.from) : null,
+                up_to: tier.up_to != null && tier.up_to !== '' ? Number(tier.up_to) : Infinity,
+                rate: Number(tier.rate || 0)
+            }))
+            .filter(tier => Number.isFinite(tier.up_to) || tier.up_to === Infinity)
+            .sort((a, b) => a.up_to - b.up_to);
+        if (mode === 'bracket') {
+            const dist = Number(distance);
+            const selected = normalizedTiers.find(tier => dist <= tier.up_to) || normalizedTiers[normalizedTiers.length - 1];
+            const rate = Number(selected?.rate || 0);
+            const amount = rate > 0 ? Math.round(dist * rate * 100) / 100 : 0;
+            return {
+                cost: amount,
+                segments: selected ? [{
+                    from: selected.from,
+                    up_to: selected.up_to === Infinity ? null : selected.up_to,
+                    km: Math.round(dist * 10) / 10,
+                    rate,
+                    amount
+                }] : []
+            };
+        }
         let remaining = Number(distance);
         let previousLimit = 0;
         let cost = 0;
         const segments = [];
-        tiers.forEach(tier => {
+        normalizedTiers.forEach(tier => {
             if (remaining <= 0) return;
-            const hasLimit = tier.up_to != null && tier.up_to !== '';
-            const limit = hasLimit ? Number(tier.up_to) : Infinity;
+            const hasLimit = tier.up_to !== Infinity;
+            const limit = hasLimit ? tier.up_to : Infinity;
             const width = Math.max(0, Math.min(remaining, limit - previousLimit));
-            const rate = Number(tier.rate || 0);
+            const rate = tier.rate;
             if (width > 0 && rate > 0) {
                 const amount = Math.round(width * rate * 100) / 100;
                 cost += amount;
-                segments.push({ km: Math.round(width * 10) / 10, rate, amount });
+                segments.push({
+                    from: previousLimit,
+                    up_to: hasLimit ? limit : null,
+                    km: Math.round(width * 10) / 10,
+                    rate,
+                    amount
+                });
             }
             remaining -= width;
             previousLimit = hasLimit ? limit : previousLimit;
@@ -2297,9 +2328,11 @@
         const tierConfig = getActiveKmTierConfig();
         const tierProfile = tierConfig ? getKmTierProfile(tierConfig) : null;
         if (tierProfile?.profile) {
-            const calc = calculateTieredKmCost(distanceKm, tierProfile.profile.tiers || []);
+            const pricingMode = tierProfile.profile.mode || tierConfig.mode || 'progressive';
+            const calc = calculateTieredKmCost(distanceKm, tierProfile.profile.tiers || [], pricingMode);
             return {
                 mode: 'tiered',
+                pricingMode,
                 label: tierProfile.profile.label || 'Tarification km',
                 kmOnly: tierConfig.km_only !== false && tierProfile.profile.km_only !== false,
                 includedKm: 0,

@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script data-cfasync="false" src="/js/supabase.min.js"></script>
-  <script data-cfasync="false" src="../config.js?v=20260521d"></script>
-  <script data-cfasync="false" src="../js/auth.js?v=20260521d"></script>
+  <script data-cfasync="false" src="../config.js?v=20260521e"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260521e"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -257,6 +257,80 @@
     const adminCode = (profile?.code || profile?.code_usr || window.colixoGetStoredCode?.() || '').trim().toUpperCase();
     if (!profile?.id || !adminCode) throw new Error('Session admin incomplète. Reconnectez-vous avec votre code admin.');
     return Object.assign({ p_admin_id: profile.id, p_code: adminCode }, extra || {});
+  }
+
+  const DEFAULT_KM_GRID = [
+    { from: 0, up_to: 50, rate: 1 },
+    { from: 50, up_to: 80, rate: 0.8 },
+    { from: 80, up_to: 100, rate: 0.7 },
+    { from: 100, up_to: 150, rate: 0.6 },
+    { from: 150, up_to: 200, rate: 0.5 },
+    { from: 200, up_to: 250, rate: 0.45 },
+    { from: 250, up_to: 300, rate: 0.4 },
+    { from: 300, up_to: 350, rate: 0.38 },
+    { from: 350, up_to: 400, rate: 0.37 }
+  ];
+
+  function kmGridRowsFromConfig(kmPricing) {
+    const profile = kmPricing?.profiles?.delivery || kmPricing?.profiles?.pickup || Object.values(kmPricing?.profiles || {})[0];
+    const tiers = Array.isArray(profile?.tiers) && profile.tiers.length ? profile.tiers : DEFAULT_KM_GRID;
+    return tiers.map((row, index) => ({
+      from: row.from != null && row.from !== '' ? Number(row.from) : (index ? Number(tiers[index - 1]?.up_to || 0) : 0),
+      up_to: row.up_to != null && row.up_to !== '' ? Number(row.up_to) : '',
+      rate: Number(row.rate || 0)
+    }));
+  }
+
+  function readKmGridFromInputs() {
+    const rows = [];
+    for (let i = 0; i < 12; i++) {
+      const fromEl = document.getElementById('kmgrid-from-' + i);
+      const toEl = document.getElementById('kmgrid-to-' + i);
+      const rateEl = document.getElementById('kmgrid-rate-' + i);
+      if (!fromEl || !toEl || !rateEl) continue;
+      const from = parseFloat(String(fromEl.value || '0').replace(',', '.'));
+      const upTo = parseFloat(String(toEl.value || '').replace(',', '.'));
+      const rate = parseFloat(String(rateEl.value || '').replace(',', '.'));
+      if (!Number.isFinite(upTo) || !Number.isFinite(rate) || rate <= 0) continue;
+      rows.push({
+        from: Number.isFinite(from) ? from : (rows.length ? rows[rows.length - 1].up_to : 0),
+        up_to: upTo,
+        rate
+      });
+    }
+    return rows.sort((a, b) => Number(a.up_to) - Number(b.up_to));
+  }
+
+  function buildKmPricingPayload(rows) {
+    return {
+      mode: 'bracket',
+      km_only: true,
+      service_match_required: true,
+      default_profile: 'delivery',
+      delivery_profile: 'delivery',
+      pickup_profile: 'delivery',
+      profiles: {
+        delivery: {
+          label: 'Grille km Colixo',
+          mode: 'bracket',
+          km_only: true,
+          tiers: rows
+        }
+      }
+    };
+  }
+
+  function renderKmGridInputs(rows) {
+    const padded = rows.slice();
+    while (padded.length < 9) padded.push({ from: '', up_to: '', rate: '' });
+    while (padded.length < 12) padded.push({ from: '', up_to: '', rate: '' });
+    return padded.map((row, index) => `
+      <tr>
+        <td><input id="kmgrid-from-${index}" type="number" min="0" step="1" value="${row.from ?? ''}" placeholder="0"></td>
+        <td><input id="kmgrid-to-${index}" type="number" min="0" step="1" value="${row.up_to ?? ''}" placeholder="50"></td>
+        <td><input id="kmgrid-rate-${index}" type="number" min="0" step="0.01" value="${row.rate ?? ''}" placeholder="0.00"></td>
+      </tr>
+    `).join('');
   }
 
   // ── Produits ──
@@ -562,7 +636,7 @@
     body.innerHTML = '<p style="padding:16px;color:var(--muted);font-size:13px;">Chargement...</p>';
     const [overrides, rules, hasRabaisCA, tarifRes] = await Promise.all([
       fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId),
-      db.from('tarifs_clients').select('id,rabais_volume_pct').eq('entreprise_id', clientId).maybeSingle()
+      db.from('tarifs_clients').select('id,rabais_volume_pct,km_pricing').eq('entreprise_id', clientId).maybeSingle()
     ]);
     renderClientTable(clientId, overrides, rules, hasRabaisCA, tarifRes.data);
   }
@@ -844,8 +918,33 @@
       </div>
     </div>`;
 
+    const kmGridRows = kmGridRowsFromConfig(clientTarifData?.km_pricing);
+    const hasKmPricing = !!clientTarifData?.km_pricing;
+    const kmGridHtml = `<div class="client-list-card" style="margin-top:0">
+      <div class="client-list-head" style="cursor:default">
+        <div>
+          <div class="client-list-title"><i class="fas fa-route"></i> Grille tarif km par distance</div>
+          <div class="client-list-sub">Calcul par tranche pour les services livraison / prise en charge : une course de 88 km utilise la tranche 80-100, donc 88 × le tarif de cette ligne. Le client voit seulement le résultat.</div>
+        </div>
+        <span id="kmGridBadge" class="client-list-badge">${hasKmPricing ? 'Active portail' : 'Non enregistrée'}</span>
+      </div>
+      <div style="padding:12px 16px;display:grid;gap:10px;">
+        <div style="overflow-x:auto">
+          <table class="xls"><thead><tr>
+            <th>Depuis km</th><th>Jusqu’à km</th><th>CHF/km</th>
+          </tr></thead><tbody>${renderKmGridInputs(kmGridRows)}</tbody></table>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-edit" onclick="fillDefaultKmGrid()"><i class="fas fa-table"></i> Remettre la grille Colixo</button>
+          <button class="btn btn-save" onclick="saveClientKmGrid('${clientId}')"><i class="fas fa-check"></i> Enregistrer la grille km</button>
+          <span style="color:var(--muted);font-size:12px;">La grille remplace le prix de base pour les services km. Les autres services restent au tarif fixe.</span>
+        </div>
+      </div>
+    </div>`;
+
     let html = `<div class="client-tariff-layout"><div class="client-help"><strong>Mode d&#39;emploi :</strong> cochez un tarif de livraison pour l&#39;appliquer au client. Cochez une option uniquement si elle doit appara&icirc;tre comme suppl&eacute;ment s&eacute;lectionnable dans le portail client.</div>`
       + rabaisPctHtml
+      + kmGridHtml
       + rabaisCAHtml +
       '<div class="client-list-card">' +
         '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-truck"></i> Tarifs de livraison du client</div><div class="client-list-sub">Le tarif km est calculé après saisie des adresses. Mettez la base à 0 si vous voulez un prix uniquement au km.</div></div><span class="client-list-badge">' + appliedCount + ' actif(s)</span></div>' +
@@ -867,7 +966,7 @@
   async function refreshClientTable(clientId) {
     const [overrides, rules, hasRabaisCA, tarifRes] = await Promise.all([
       fetchOverrides(clientId), fetchClientTariffRules(clientId), loadRabaisCA(clientId),
-      db.from('tarifs_clients').select('id,rabais_volume_pct').eq('entreprise_id', clientId).maybeSingle()
+      db.from('tarifs_clients').select('id,rabais_volume_pct,km_pricing').eq('entreprise_id', clientId).maybeSingle()
     ]);
     renderClientTable(clientId, overrides, rules, hasRabaisCA, tarifRes.data);
   }
@@ -888,6 +987,54 @@
       if (badge) badge.style.color = val > 0 ? 'var(--green)' : 'var(--muted)';
     } catch(e) {
       toast('Erreur: ' + e.message, 'err');
+    }
+  };
+
+  window.fillDefaultKmGrid = function() {
+    DEFAULT_KM_GRID.forEach((row, index) => {
+      const fromEl = document.getElementById('kmgrid-from-' + index);
+      const toEl = document.getElementById('kmgrid-to-' + index);
+      const rateEl = document.getElementById('kmgrid-rate-' + index);
+      if (fromEl) fromEl.value = row.from;
+      if (toEl) toEl.value = row.up_to;
+      if (rateEl) rateEl.value = row.rate;
+    });
+    for (let index = DEFAULT_KM_GRID.length; index < 12; index++) {
+      const fromEl = document.getElementById('kmgrid-from-' + index);
+      const toEl = document.getElementById('kmgrid-to-' + index);
+      const rateEl = document.getElementById('kmgrid-rate-' + index);
+      if (fromEl) fromEl.value = '';
+      if (toEl) toEl.value = '';
+      if (rateEl) rateEl.value = '';
+    }
+  };
+
+  window.saveClientKmGrid = async function(clientId) {
+    const rows = readKmGridFromInputs();
+    if (!rows.length) { toast('Ajoutez au moins une ligne km avec un tarif.', 'err'); return; }
+    const invalid = rows.find((row, index) => row.up_to <= row.from || (index > 0 && row.from < rows[index - 1].up_to));
+    if (invalid) { toast('Vérifiez les tranches km : chaque fin doit être supérieure au début, sans retour en arrière.', 'err'); return; }
+    const payload = buildKmPricingPayload(rows);
+    try {
+      const rpc = await db.rpc('admin_set_client_km_pricing', getAdminRpcPayload({
+        p_client_id: clientId,
+        p_km_pricing: payload
+      }));
+      if (rpc.error) throw rpc.error;
+      toast('Grille km enregistrée pour le portail client.', 'info');
+      await refreshClientTable(clientId);
+    } catch(error) {
+      try {
+        const { data: existing } = await db.from('tarifs_clients').select('id').eq('entreprise_id', clientId).maybeSingle();
+        const res = existing?.id
+          ? await db.from('tarifs_clients').update({ km_pricing: payload, updated_at: new Date().toISOString() }).eq('id', existing.id)
+          : await db.from('tarifs_clients').insert({ entreprise_id: clientId, nom_client: clientId, km_pricing: payload });
+        if (res.error) throw res.error;
+        toast('Grille km enregistrée pour le portail client.', 'info');
+        await refreshClientTable(clientId);
+      } catch(fallbackError) {
+        toast('Erreur: fonction SQL admin_set_client_km_pricing absente ou droits insuffisants. Appliquez le SQL 047_client_km_pricing_grid.sql.', 'err');
+      }
     }
   };
 
