@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <!-- colixo-build:20260521a -->
+    <!-- colixo-build:20260521b -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -13,8 +13,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260521a"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260521a"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260521b"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260521b"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -2246,13 +2246,25 @@
             distanceKm = await getRouteDistanceKm(from, to);
             if (resultEl) resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
 
-            const { includedKm: included, extraKmRate: rate } = getActiveServiceKmSettings();
-            if (included > 0 && rate > 0 && distanceKm > included) {
-                const extra = Math.round((distanceKm - included) * 10) / 10;
-                const cost = Math.round(extra * rate * 100) / 100;
-                document.getElementById('distanceOverage').style.display = 'block';
-                document.getElementById('distanceOverage').innerHTML =
-                    `⚠️ Dépassement : ${extra} km au-delà des ${included} km inclus × ${rate.toFixed(2)} CHF/km = <strong>+${cost.toFixed(2)} CHF</strong>`;
+            const pricingInfo = getDistancePricingInfo();
+            if (pricingInfo.mode === 'tiered' && overageEl) {
+                overageEl.style.display = 'block';
+                overageEl.style.background = 'rgba(59,130,246,0.10)';
+                overageEl.style.borderColor = 'rgba(59,130,246,0.30)';
+                overageEl.style.color = '#bfdbfe';
+                overageEl.innerHTML =
+                    `Transport calculé : <strong>${fmt(pricingInfo.kmCost)} CHF</strong>`;
+            } else {
+                const { includedKm: included, extraKmRate: rate } = getActiveServiceKmSettings();
+                if (included > 0 && rate > 0 && distanceKm > included) {
+                    const extra = Math.round((distanceKm - included) * 10) / 10;
+                    const cost = Math.round(extra * rate * 100) / 100;
+                    if (overageEl) {
+                        overageEl.style.display = 'block';
+                        overageEl.innerHTML =
+                            `⚠️ Dépassement : ${extra} km au-delà des ${included} km inclus × ${rate.toFixed(2)} CHF/km = <strong>+${cost.toFixed(2)} CHF</strong>`;
+                    }
+                }
             }
         } catch(e) {
             if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)"><i class="fas fa-exclamation-triangle"></i> ${e.message}</span>`;
@@ -2361,13 +2373,23 @@
         const hasNuitOpt=getAssignedProduits().some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
         let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
 
-        // Overage km cost — read from active service rule (rule-level km settings)
-        let kmCost = 0;
+        // Overage km cost — read from active service rule, or tiered km profile if configured.
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-        const { includedKm, extraKmRate } = getActiveServiceKmSettings();
-        if (distanceKm != null && includedKm > 0 && extraKmRate > 0 && distanceKm > includedKm) {
-            const extraKm = Math.round((distanceKm - includedKm) * 10) / 10;
-            kmCost = Math.round(extraKm * extraKmRate * 100) / 100;
+        const distancePricing = getDistancePricingInfo();
+        let includedKm = Number(distancePricing.includedKm || 0);
+        let extraKmRate = Number(distancePricing.extraKmRate || 0);
+        let extraKm = Number(distancePricing.extraKm || 0);
+        let kmCost = Number(distancePricing.kmCost || 0);
+        if (distancePricing.mode !== 'tiered') {
+            const serviceKm = getActiveServiceKmSettings();
+            includedKm = Number(serviceKm.includedKm || 0);
+            extraKmRate = Number(serviceKm.extraKmRate || 0);
+            extraKm = 0;
+            kmCost = 0;
+            if (distanceKm != null && includedKm > 0 && extraKmRate > 0 && distanceKm > includedKm) {
+                extraKm = Math.round((distanceKm - includedKm) * 10) / 10;
+                kmCost = Math.round(extraKm * extraKmRate * 100) / 100;
+            }
         }
 
         // Supplément colis hors quota mensuel
