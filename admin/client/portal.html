@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <!-- colixo-build:20260521c -->
+    <!-- colixo-build:20260521d -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -13,8 +13,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260521c"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260521c"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260521d"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260521d"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -957,7 +957,7 @@
     let _distTimer = null;
     let colisExpediesMonth = 0;
     let clientRabaisVisible = false;
-    let clientKmByCode = {}; // tariff_code.toUpperCase() → { includedKm, extraKmRate }
+    let clientKmByCode = {}; // tariff_code.toUpperCase() -> { includedKm, extraKmRate, pricePerKm }
 
     function getClientScopeId() {
         return client?.entreprise_id || clientEntreprise?.id || client?.id || null;
@@ -1152,7 +1152,12 @@
             const code = String(r.tariff_code || '').trim().toUpperCase();
             const inc  = Number(r.included_km || 0);
             const rate = Number(r.extra_km_price_chf || 0);
-            if(code && (inc > 0 || rate > 0)) clientKmByCode[code] = { includedKm: inc, extraKmRate: rate };
+            const pricePerKm = Number(r.price_per_km_chf || 0);
+            if(code && (inc > 0 || rate > 0 || pricePerKm > 0)) {
+                clientKmByCode[code] = { includedKm: inc, extraKmRate: rate, pricePerKm };
+                const familyCode = tariffServiceRef(code);
+                if(familyCode && !clientKmByCode[familyCode]) clientKmByCode[familyCode] = clientKmByCode[code];
+            }
         });
         updateServicePrices();
         renderColis();
@@ -1245,6 +1250,7 @@
             const unitPrice=getProduitPrice(best);
             const incr=Number(best.increment_par_kg||0);
             const calcPrice= incr>0 ? unitPrice+poids*incr : best.prix_par_kg ? unitPrice*poids : unitPrice;
+            const kmRate = Number(best.price_per_km_chf || 0);
             const negocie=clientPrixMap[String(best.id)]!=null && Number(getProduitPrice(best))!==Number(best.prix);
             /** Pas d’affichage « tarif base + augmentation / kg » : le montant ligne = prix déjà calculé pour ce poids. */
             const suffix='';
@@ -1253,7 +1259,8 @@
                 ref,
                 label:serviceLabelForGroup(group),
                 prix:calcPrice,
-                priceLine: Number.isFinite(nTot) ? nTot.toFixed(2) : '—',
+                priceLine: kmRate > 0 ? 'Après distance' : (Number.isFinite(nTot) ? nTot.toFixed(2) : '—'),
+                hideCurrency: kmRate > 0,
                 negocie,
                 active:tariffServiceRef(selectedService)===ref,
                 suffix,
@@ -1263,7 +1270,7 @@
         grid.style.gridTemplateColumns=`repeat(${Math.min(items.length,4)},1fr)`;
         grid.innerHTML=items.map(it=>`<div class="tarif-box ${it.speedClass}${it.negocie?' special':''}${it.active?' active-tarif':''}" onclick="selectService(${jsStringArg(it.ref)})">
             <div class="tarif-label">${escHtml(it.label)}</div>
-            <div class="tarif-price">${it.priceLine} CHF${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
+            <div class="tarif-price">${it.priceLine}${it.hideCurrency ? '' : ' CHF'}${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
             <div class="tarif-tiers">Selon votre poids (${Number(poids).toFixed(1)} kg)</div>
         </div>`).join('');
         renderHomeTariffSummary();
@@ -1384,7 +1391,10 @@
             const price = getProduitPrice(p);
             const code = tariffCodeForProduit(p);
             const type = isOptionProduct(p) ? 'Option' : 'Service';
-            const details = p.prix_par_kg
+            const kmRate = Number(p.price_per_km_chf || 0);
+            const details = kmRate > 0
+                ? 'Calculé après adresse'
+                : p.prix_par_kg
                 ? `${Number(price).toFixed(2)} CHF/kg`
                 : `${Number(price).toFixed(2)} CHF`;
             return {
@@ -1446,8 +1456,11 @@
             const best = group.best;
             const unitPrice = getProduitPrice(best);
             const incr = Number(best.increment_par_kg || 0);
+            const kmRate = Number(best.price_per_km_chf || 0);
             const calcPrice = incr > 0 ? unitPrice + poids * incr : best.prix_par_kg ? unitPrice * poids : unitPrice;
-            const variable = best.prix_par_kg
+            const variable = kmRate > 0
+                ? 'Prix final calculé après saisie des adresses'
+                : best.prix_par_kg
                 ? `Tarif au kilo (${Number(unitPrice).toFixed(2)} CHF/kg pour ${Number(poids).toFixed(1)} kg)`
                 : `Prix pour votre poids (${Number(poids).toFixed(1)} kg)`;
             return {
@@ -1455,7 +1468,8 @@
                 label: serviceLabelForGroup(group),
                 price: Math.round(calcPrice * 100) / 100,
                 speedClass: group.speedClass,
-                variable
+                variable,
+                kmRate
             };
         });
         if(!selectedService || !services.some(s=>s.ref===tariffServiceRef(selectedService))) selectedService = services[0].ref;
@@ -1469,7 +1483,7 @@
                     <div class="home-tariff-label">${escHtml(s.label)}</div>
                     <div class="home-tariff-sub">${escHtml(s.variable)}</div>
                 </div>
-                <div class="home-tariff-row-price">${hideKmPrices && isKmPricedService(s.ref, s.label) ? 'Après distance' : fmt(s.price) + ' CHF'}</div>
+                <div class="home-tariff-row-price">${(s.kmRate > 0 || (hideKmPrices && isKmPricedService(s.ref, s.label))) ? 'Après distance' : fmt(s.price) + ' CHF'}</div>
             </div>
         `).join('');
         el.innerHTML = `
@@ -1479,7 +1493,7 @@
                     <div class="home-tariff-name">${escHtml(current.label)}</div>
                     <div class="home-tariff-meta">Tranche calculée selon ${Number(poids).toFixed(1)} kg · ${optionCount} option(s) disponible(s)</div>
                 </div>
-                <div class="home-tariff-price">${hideKmPrices && isKmPricedService(current.ref, current.label) ? '—' : fmt(current.price) + ' CHF'}<span>Prix estimé</span></div>
+                <div class="home-tariff-price">${(current.kmRate > 0 || (hideKmPrices && isKmPricedService(current.ref, current.label))) ? '—' : fmt(current.price) + ' CHF'}<span>Prix estimé</span></div>
             </div>
             <div class="home-tariff-list">${rows}</div>
             ${Number(clientTarif?.rabais_volume_pct||0) > 0 ? `<div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-top:1px solid rgba(255,255,255,.08);background:rgba(34,197,94,.07);font-size:13px;color:#4ade80;font-weight:700;"><i class="fas fa-tag"></i> Rabais négocié : ${Number(clientTarif.rabais_volume_pct).toFixed(1)} % sur chaque commande</div>` : ''}
@@ -1667,6 +1681,9 @@
                 poids_max: linkedProd ? Number(linkedProd.poids_max || 0) : Number(r.max_weight_kg || 0),
                 prix: Number(r.base_price_chf || 0),
                 increment_par_kg: Number(r.price_per_kg_chf || 0),
+                price_per_km_chf: Number(r.price_per_km_chf || 0),
+                included_km: Number(r.included_km || 0),
+                extra_km_price_chf: Number(r.extra_km_price_chf || 0),
                 prix_par_kg: false,
                 ordre: Number(r.priority || 100),
                 _tariffRule: true
@@ -1729,12 +1746,13 @@
         grid.innerHTML=tiers.map(tier=>{
             const ref=tier.ref||'';
             const price=getProduitPrice(tier);
+            const kmRate=Number(tier.price_per_km_chf || 0);
             const speedClass=tariffSpeedClass(svcRef(tier),tier.nom);
             const minKg=Number(tier.poids_min||0);
             const maxKg=Number(tier.poids_max||0);
             const weightLabel=maxKg>0?`${minKg} – ${maxKg} kg`:`${minKg} kg+`;
             const label=tierFamilyLabel(tier);
-            const hidePrice = hideKmPrices && isKmPricedService(ref, label);
+            const hidePrice = kmRate > 0 || (hideKmPrices && isKmPricedService(ref, label));
             return `<div class="formula-card ${speedClass}" data-svc="${escHtml(ref)}" onclick="addWizardColisFromTier(${jsStringArg(ref)})">
                 <div class="formula-icon">${getSvcIcon(ref)}</div>
                 <div class="formula-name">${escHtml(label)}</div>
@@ -1885,8 +1903,11 @@
         if(distanceKm != null) rows.push(['Distance', `${distanceKm} km`]);
 
         // km inclus + surcoût km
-        const { includedKm: _includedKm, extraKmRate: _extraKmRate } = getActiveServiceKmSettings();
-        if (_includedKm > 0 && distanceKm != null) {
+        const pricingInfo = getDistancePricingInfo();
+        const { includedKm: _includedKm, extraKmRate: _extraKmRate, pricePerKm: _pricePerKm } = pricingInfo;
+        if (distanceKm != null && (pricingInfo.mode === 'tiered' || _pricePerKm > 0) && pricingInfo.kmCost > 0) {
+            rows.push(['Transport km', `<strong style="color:var(--orange)">${fmt(pricingInfo.kmCost)} CHF</strong>`]);
+        } else if (_includedKm > 0 && distanceKm != null) {
             rows.push(['Km inclus', `${_includedKm} km`]);
             if (distanceKm > _includedKm) {
                 const extraKm = Math.round((distanceKm - _includedKm) * 10) / 10;
@@ -2239,6 +2260,35 @@
         return { cost: Math.round(cost * 100) / 100, segments };
     }
 
+    function calculateRuleKmCost(settings, distance) {
+        const includedKm = Number(settings?.includedKm || 0);
+        const extraKmRate = Number(settings?.extraKmRate || 0);
+        const pricePerKm = Number(settings?.pricePerKm || 0);
+        if (distance == null || !Number.isFinite(Number(distance))) {
+            return { includedKm, extraKmRate, pricePerKm, extraKm: 0, kmCost: 0, priceMode: pricePerKm > 0 ? 'per_km' : 'extra_km' };
+        }
+        const billableKm = includedKm > 0 ? Math.max(0, Math.round((Number(distance) - includedKm) * 10) / 10) : Number(distance);
+        if (pricePerKm > 0) {
+            return {
+                includedKm,
+                extraKmRate,
+                pricePerKm,
+                extraKm: Math.round(billableKm * 10) / 10,
+                kmCost: Math.round(billableKm * pricePerKm * 100) / 100,
+                priceMode: 'per_km'
+            };
+        }
+        const extraKm = includedKm > 0 ? billableKm : 0;
+        return {
+            includedKm,
+            extraKmRate,
+            pricePerKm,
+            extraKm,
+            kmCost: extraKm > 0 && extraKmRate > 0 ? Math.round(extraKm * extraKmRate * 100) / 100 : 0,
+            priceMode: 'extra_km'
+        };
+    }
+
     function renderClientKmNotice() {
         return;
     }
@@ -2254,17 +2304,14 @@
                 kmOnly: tierConfig.km_only !== false && tierProfile.profile.km_only !== false,
                 includedKm: 0,
                 extraKmRate: 0,
+                pricePerKm: 0,
                 extraKm: distanceKm || 0,
                 kmCost: calc.cost,
                 tierSegments: calc.segments
             };
         }
-        const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-        const includedKm = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
-        const extraKmRate = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
-        const extraKm = distanceKm != null && includedKm > 0 ? Math.max(0, Math.round((distanceKm - includedKm) * 10) / 10) : 0;
-        const kmCost = extraKm > 0 && extraKmRate > 0 ? Math.round(extraKm * extraKmRate * 100) / 100 : 0;
-        return { mode: 'simple', includedKm, extraKmRate, extraKm, kmCost, tierSegments: [] };
+        const calc = calculateRuleKmCost(getActiveServiceKmSettings(), distanceKm);
+        return { mode: 'simple', ...calc, tierSegments: [] };
     }
 
     window.calcDistance = async function() {
@@ -2302,8 +2349,17 @@
                 overageEl.innerHTML =
                     `Transport calculé : <strong>${fmt(pricingInfo.kmCost)} CHF</strong>`;
             } else {
-                const { includedKm: included, extraKmRate: rate } = getActiveServiceKmSettings();
-                if (included > 0 && rate > 0 && distanceKm > included) {
+                const { includedKm: included, extraKmRate: rate, pricePerKm } = getActiveServiceKmSettings();
+                if (pricePerKm > 0) {
+                    const pricing = calculateRuleKmCost({ includedKm: included, extraKmRate: rate, pricePerKm }, distanceKm);
+                    if (overageEl) {
+                        overageEl.style.display = 'block';
+                        overageEl.style.background = 'rgba(59,130,246,0.10)';
+                        overageEl.style.borderColor = 'rgba(59,130,246,0.30)';
+                        overageEl.style.color = '#bfdbfe';
+                        overageEl.innerHTML = `Transport calculé : <strong>${fmt(pricing.kmCost)} CHF</strong>`;
+                    }
+                } else if (included > 0 && rate > 0 && distanceKm > included) {
                     const extra = Math.round((distanceKm - included) * 10) / 10;
                     const cost = Math.round(extra * rate * 100) / 100;
                     if (overageEl) {
@@ -2379,15 +2435,19 @@
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
         const globalIncluded = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
         const globalRate     = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
+        const globalPricePerKm = Number(activeAbn?.prix_km ?? clientTarif?.price_per_km_chf ?? 0);
 
         // Current service code from colisList (set when user clicks a tier card)
         const svcCode = colisList.length ? (colisList[0].service || '') : (selectedService || '');
         const code = String(svcCode).trim().toUpperCase();
-        const fromRule = clientKmByCode[code];
+        const familyCode = tariffServiceRef(code);
+        const fromRule = clientKmByCode[code] || clientKmByCode[familyCode] || Object.entries(clientKmByCode)
+            .find(([ruleCode]) => tariffServiceRef(ruleCode) === familyCode)?.[1];
 
         return {
             includedKm:  fromRule?.includedKm  > 0 ? fromRule.includedKm  : globalIncluded,
-            extraKmRate: fromRule?.extraKmRate  > 0 ? fromRule.extraKmRate : globalRate
+            extraKmRate: fromRule?.extraKmRate  > 0 ? fromRule.extraKmRate : globalRate,
+            pricePerKm:  fromRule?.pricePerKm   > 0 ? fromRule.pricePerKm  : globalPricePerKm
         };
     }
 
@@ -2425,17 +2485,20 @@
         const distancePricing = getDistancePricingInfo();
         let includedKm = Number(distancePricing.includedKm || 0);
         let extraKmRate = Number(distancePricing.extraKmRate || 0);
+        let pricePerKm = Number(distancePricing.pricePerKm || 0);
         let extraKm = Number(distancePricing.extraKm || 0);
         let kmCost = Number(distancePricing.kmCost || 0);
         if (distancePricing.mode !== 'tiered') {
             const serviceKm = getActiveServiceKmSettings();
             includedKm = Number(serviceKm.includedKm || 0);
             extraKmRate = Number(serviceKm.extraKmRate || 0);
+            pricePerKm = Number(serviceKm.pricePerKm || 0);
             extraKm = 0;
             kmCost = 0;
-            if (distanceKm != null && includedKm > 0 && extraKmRate > 0 && distanceKm > includedKm) {
-                extraKm = Math.round((distanceKm - includedKm) * 10) / 10;
-                kmCost = Math.round(extraKm * extraKmRate * 100) / 100;
+            if (distanceKm != null) {
+                const calc = calculateRuleKmCost(serviceKm, distanceKm);
+                extraKm = calc.extraKm;
+                kmCost = calc.kmCost;
             }
         }
 
@@ -2473,9 +2536,13 @@
             return cleanServiceLabel(p?.nom, ref);
         })));
         const detailParts = [];
-        if(distanceKm != null && distancePricing.mode === 'tiered') {
+        if(distanceKm != null && (distancePricing.mode === 'tiered' || pricePerKm > 0)) {
+            if(!kmOnlyPricing && billableBaseTotal > 0) detailParts.push(`${serviceNames.join(' + ')}: ${fmt(billableBaseTotal)} CHF`);
             detailParts.push(`${distanceKm} km`);
             detailParts.push(`Transport ${fmt(kmCost)} CHF`);
+        } else if(distanceKm == null && pricePerKm > 0) {
+            if(!kmOnlyPricing && billableBaseTotal > 0) detailParts.push(`${serviceNames.join(' + ')}: ${fmt(billableBaseTotal)} CHF`);
+            detailParts.push('Tarif km calculé après saisie des adresses');
         } else if(distanceKm != null && includedKm > 0 && extraKmRate > 0) {
             detailParts.push(`${serviceNames.join(' + ')}: ${fmt(baseTotal)} CHF`);
             detailParts.push(`${distanceKm} km`);

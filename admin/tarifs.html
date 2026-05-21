@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Colixo — Tarifs</title>
   <script data-cfasync="false" src="/js/supabase.min.js"></script>
-  <script data-cfasync="false" src="../config.js?v=20260519b"></script>
-  <script data-cfasync="false" src="../js/auth.js?v=20260519b"></script>
+  <script data-cfasync="false" src="../config.js?v=20260521d"></script>
+  <script data-cfasync="false" src="../js/auth.js?v=20260521d"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -134,6 +134,10 @@
     .override-inline select,
     .override-inline input { background: var(--night3); border: 1.5px solid var(--border2); color: var(--white);
       border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: 'Outfit', sans-serif; outline: none; width: 100%; }
+    .client-rate-input { width: 88px !important; padding: 7px 8px !important; text-align: right; font-weight: 700; }
+    .client-rate-input:disabled { opacity: .45; cursor: not-allowed; }
+    .client-rate-stack { display: flex; align-items: center; gap: 6px; padding: 6px 8px; min-width: 142px; }
+    .client-rate-unit { color: var(--muted); font-size: 11px; white-space: nowrap; }
 
     /* Toast */
     .toast { position: fixed; bottom: 20px; right: 20px; max-width: min(520px, calc(100vw - 32px)); padding: 13px 16px; border-radius: 10px;
@@ -729,19 +733,22 @@
     }).length;
 
     function renderServiceRows(items) {
-      if (!items.length) return '<tr><td colspan="6" class="empty-cell">Aucun tarif de livraison dans la grille standard.</td></tr>';
+      if (!items.length) return '<tr><td colspan="7" class="empty-cell">Aucun tarif de livraison dans la grille standard.</td></tr>';
       return items.map(p => {
         const rule = ruleByProduct.get(String(p.id)) || legacyRuleMap.get(tariffKey(p.ref || p.nom));
         const hasRule = !!rule;
         const price = rule ? Number(rule.base_price_chf || 0) : Number(p.prix || 0);
         const increment = rule ? Number(rule.price_per_kg_chf || 0) : Number(p.increment_par_kg || 0);
+        const kmRate = rule ? Number(rule.price_per_km_chf || 0) : 0;
+        const disabledAttr = hasRule ? '' : ' disabled';
         return '<tr id="cr-' + p.id + '">' +
           '<td style="text-align:center;padding:8px;"><input type="checkbox" ' + (hasRule ? 'checked' : '') + ' onchange="toggleClientTariff(\'' + clientId + '\',\'' + p.id + '\',this.checked,this)"></td>' +
           '<td><span class="cell cell-nom">' + esc(p.nom) + '</span></td>' +
           '<td><span class="cell cell-ref">' + esc(p.ref || '—') + '</span></td>' +
-          '<td><span class="cell cell-prix">CHF ' + price.toFixed(2) + '</span></td>' +
+          '<td><div class="client-rate-stack"><input id="base-rate-' + p.id + '" class="client-rate-input" type="number" min="0" step="0.05" value="' + price.toFixed(2) + '"' + disabledAttr + '><span class="client-rate-unit">CHF</span></div></td>' +
           '<td><span class="cell cell-poids">' + (increment ? '+ CHF ' + increment.toFixed(2) + ' / kg' : '—') + '</span></td>' +
-          '<td><span class="cell">' + (hasRule ? '<span class="remise-fixe">Actif portail</span>' : '<span style="color:var(--muted);font-size:12px">Non appliqué</span>') + '</span></td>' +
+          '<td><div class="client-rate-stack"><input id="km-rate-' + p.id + '" class="client-rate-input" type="number" min="0" step="0.01" value="' + kmRate.toFixed(2) + '"' + disabledAttr + '><span class="client-rate-unit">CHF/km</span></div></td>' +
+          '<td><span class="cell">' + (hasRule ? '<button class="btn btn-save" onclick="saveClientKmTariff(\'' + clientId + '\',\'' + p.id + '\')"><i class="fas fa-check"></i> Sauver</button>' : '<span style="color:var(--muted);font-size:12px">Non appliqué</span>') + '</span></td>' +
         '</tr>';
       }).join('');
     }
@@ -841,9 +848,9 @@
       + rabaisPctHtml
       + rabaisCAHtml +
       '<div class="client-list-card">' +
-        '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-truck"></i> Tarifs de livraison du client</div><div class="client-list-sub">Prix de base visibles dans le portail client.</div></div><span class="client-list-badge">' + appliedCount + ' actif(s)</span></div>' +
+        '<div class="client-list-head"><div><div class="client-list-title"><i class="fas fa-truck"></i> Tarifs de livraison du client</div><div class="client-list-sub">Le tarif km est calculé après saisie des adresses. Mettez la base à 0 si vous voulez un prix uniquement au km.</div></div><span class="client-list-badge">' + appliedCount + ' actif(s)</span></div>' +
         '<div style="overflow-x:auto"><table class="xls"><thead><tr>' +
-          '<th style="width:8%">Appliquer</th><th style="width:28%">Tarif</th><th style="width:12%">Code</th><th style="width:15%">Prix portail</th><th style="width:15%">Variable</th><th>Statut</th>' +
+          '<th style="width:8%">Appliquer</th><th style="width:24%">Tarif</th><th style="width:11%">Code</th><th style="width:14%">Base</th><th style="width:13%">Variable</th><th style="width:16%">Tarif km</th><th>Statut</th>' +
         '</tr></thead><tbody>' + renderServiceRows(serviceProducts) + '</tbody></table></div>' +
       '</div>' +
       '<div class="client-list-card">' +
@@ -881,6 +888,49 @@
       if (badge) badge.style.color = val > 0 ? 'var(--green)' : 'var(--muted)';
     } catch(e) {
       toast('Erreur: ' + e.message, 'err');
+    }
+  };
+
+  window.saveClientKmTariff = async function(clientId, prodId) {
+    const product = produits.find(p => String(p.id) === String(prodId));
+    if (!product) return;
+    const baseInput = document.getElementById('base-rate-' + prodId);
+    const kmInput = document.getElementById('km-rate-' + prodId);
+    const parseChf = input => Math.max(0, parseFloat(String(input?.value || '0').replace(',', '.')) || 0);
+    const basePrice = parseChf(baseInput);
+    const kmRate = parseChf(kmInput);
+    if (baseInput) baseInput.disabled = true;
+    if (kmInput) kmInput.disabled = true;
+
+    try {
+      const rpc = await db.rpc('admin_set_client_tariff_km_rate', getAdminRpcPayload({
+        p_client_id: clientId,
+        p_product_id: prodId,
+        p_base_price_chf: basePrice,
+        p_price_per_km_chf: kmRate
+      }));
+      if (rpc.error) throw rpc.error;
+      toast(kmRate > 0 ? 'Tarif km enregistré pour le portail client.' : 'Tarif km désactivé pour ce service.', 'info');
+      await refreshClientTable(clientId);
+    } catch(error) {
+      try {
+        const rules = await fetchClientTariffRules(clientId, true);
+        const code = tariffKey(product.ref || product.nom);
+        const rule = rules.find(r => String(r.produit_id || '') === String(prodId))
+          || rules.find(r => tariffKey(r.tariff_code || r.name) === code);
+        if (!rule?.id) throw error;
+        const res = await db.from('client_tariff_rules')
+          .update({ base_price_chf: basePrice, price_per_km_chf: kmRate, updated_at: new Date().toISOString() })
+          .eq('id', rule.id);
+        if (res.error) throw res.error;
+        toast(kmRate > 0 ? 'Tarif km enregistré pour le portail client.' : 'Tarif km désactivé pour ce service.', 'info');
+        await refreshClientTable(clientId);
+      } catch(fallbackError) {
+        toast('Erreur: fonction SQL admin_set_client_tariff_km_rate absente ou droits insuffisants. Appliquez le SQL 046_client_tariff_km_rate_rpc.sql.', 'err');
+      }
+    } finally {
+      if (baseInput) baseInput.disabled = false;
+      if (kmInput) kmInput.disabled = false;
     }
   };
 
