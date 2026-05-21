@@ -1,17 +1,64 @@
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+const colixoPdfLogoCache = { promise: null };
+
+function colixoAssetUrl(path) {
+  const p = typeof window.colixoHref === "function" ? window.colixoHref(path) : path;
+  try { return new URL(p, window.location.href).href; }
+  catch (e) { return p; }
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function loadColixoPdfLogo() {
+  if (colixoPdfLogoCache.promise) return colixoPdfLogoCache.promise;
+  colixoPdfLogoCache.promise = (async () => {
+    const candidates = [
+      colixoAssetUrl("/images/colixo-logo-print.png"),
+      colixoAssetUrl("/images/colixo-logo.png"),
+      "images/colixo-logo-print.png"
+    ];
+    for (const url of candidates) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) return await blobToDataUrl(await response.blob());
+      } catch (e) {
+        console.warn("Logo PDF Colixo indisponible", url, e);
+      }
+    }
+    return null;
+  })();
+  return colixoPdfLogoCache.promise;
+}
+
 async function generateSignedOrderPdf(order, cgv) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const logoDataUrl = await loadColixoPdfLogo();
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text("COLIXO", 15, 18);
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, "PNG", 15, 10, 24, 24);
+    } catch (e) {
+      console.warn("Logo PDF Colixo non inséré", e);
+    }
+  } else {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("COLIXO", 15, 18);
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("Transport & Logistique Suisse", 15, 24);
-  doc.text(window.COLIXO_APP.companyWebsite, 15, 29);
-  doc.text(window.COLIXO_APP.companyEmail, 15, 34);
+  const headX = logoDataUrl ? 44 : 15;
+  doc.text("Transport & Logistique Suisse", headX, 20);
+  doc.text(window.COLIXO_APP.companyWebsite, headX, 25);
+  doc.text(window.COLIXO_APP.companyEmail, headX, 30);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);

@@ -85,9 +85,17 @@
 
     function buildFactureHtmlDocument(f, lignes, ent, qrBillBase64, forEmail) {
         const qrRef = buildQRRef(f.numero || f.id || `FAC-${new Date().getFullYear()}-0001`);
-        const basePath = (typeof window !== 'undefined' && window.COLIXO_BASE_PATH) ? String(window.COLIXO_BASE_PATH) : '';
-        const origin = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
-        const logoUrl = `${origin}${basePath}/images/colixo-logo.png`;
+        const logoPath = (typeof window !== 'undefined' && typeof window.colixoHref === 'function')
+            ? window.colixoHref('/images/colixo-logo-print.png')
+            : (((typeof window !== 'undefined' && window.COLIXO_BASE_PATH) ? String(window.COLIXO_BASE_PATH) : '') + '/images/colixo-logo-print.png');
+        const logoUrl = (function(){
+            try {
+                return (typeof window !== 'undefined' && window.location)
+                    ? new URL(logoPath, window.location.href).href
+                    : logoPath;
+            }
+            catch(e){ return logoPath; }
+        })();
         const totalColis = Array.isArray(lignes) && lignes.length
             ? lignes.reduce((sum, l) => sum + (parseInt(l?.quantite, 10) || 1), 0)
             : (parseInt(f?.nb_colis, 10) || 0);

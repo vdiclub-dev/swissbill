@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <!-- colixo-build:20260509a -->
+    <!-- colixo-build:20260521e -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -13,8 +13,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260519b"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260519b"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260521e"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260521e"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -722,7 +722,8 @@
             <!-- EN-TÊTE -->
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:3px solid #e8311a;padding-bottom:14px;">
                 <div>
-                    <div style="font-family:'Bebas Neue',cursive;font-size:30px;color:#e8311a;letter-spacing:2px;line-height:1;">COLIXO</div>
+                    <img src="../../images/colixo-logo-print.png" alt="Colixo" style="width:104px;max-height:58px;object-fit:contain;display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                    <div style="display:none;font-family:'Bebas Neue',cursive;font-size:30px;color:#e8311a;letter-spacing:2px;line-height:1;">COLIXO</div>
                     <div style="font-size:10px;color:#888;margin-top:2px;">BON DE TRANSPORT</div>
                 </div>
                 <div style="text-align:right;">
@@ -912,6 +913,11 @@
     const db = window.SUPABASE_CLIENT;
     const h = window.colixoHref || function (p) { return p; };
     const CLIENT_LOGIN_URL = h('/login/index.html');
+    const DOC_LOGO_URL = (function(){
+        try { return new URL(h('/images/colixo-logo-print.png'), window.location.origin).href; }
+        catch(e) { return h('/images/colixo-logo-print.png'); }
+    })();
+    const DELIVERY_MEDIA_SELECT = 'order_id, photo_data, photo_url, signature_data, signature_url, note_livraison, delivered_at, created_at';
 
     let client=null, clientEntreprise=null, clientTarif=null;
     let clientPrixMap={}, clientProduits=[], clientTariffRules=[];
@@ -951,7 +957,7 @@
     let _distTimer = null;
     let colisExpediesMonth = 0;
     let clientRabaisVisible = false;
-    let clientKmByCode = {}; // tariff_code.toUpperCase() → { includedKm, extraKmRate }
+    let clientKmByCode = {}; // tariff_code.toUpperCase() -> { includedKm, extraKmRate, pricePerKm }
 
     function getClientScopeId() {
         return client?.entreprise_id || clientEntreprise?.id || client?.id || null;
@@ -991,6 +997,52 @@
     }
     function jsStringArg(value){
         return escHtml(JSON.stringify(String(value ?? '')));
+    }
+    function proofPhotoSource(delivery, preuve, order){
+        return delivery?.photo_data || delivery?.photo_url || preuve?.photo_data || preuve?.photo_url || order?.photo_data || order?.photo_url || null;
+    }
+    function proofSignatureSource(delivery, preuve, order){
+        return delivery?.signature_data || delivery?.signature_url || preuve?.signature_data || preuve?.signature_url || order?.signature_data || order?.signature_url || null;
+    }
+    function hasDeliveryProof(delivery, preuve, order){
+        return !!(proofPhotoSource(delivery, preuve, order) || proofSignatureSource(delivery, preuve, order));
+    }
+    function storagePathFromDeliveryUrl(value){
+        const raw = String(value || '').trim();
+        if(!raw || /^data:|^blob:/i.test(raw)) return '';
+        if(/^missions\//i.test(raw)) return raw;
+        const markers = [
+            '/storage/v1/object/public/deliveries/',
+            '/storage/v1/object/sign/deliveries/',
+            '/object/public/deliveries/',
+            '/object/sign/deliveries/'
+        ];
+        for(const marker of markers) {
+            const idx = raw.indexOf(marker);
+            if(idx >= 0) return decodeURIComponent(raw.slice(idx + marker.length).split('?')[0]);
+        }
+        return '';
+    }
+    async function resolveDeliveryMediaSrc(value){
+        const raw = String(value || '').trim();
+        if(!raw || /^data:|^blob:/i.test(raw)) return raw || null;
+        const path = storagePathFromDeliveryUrl(raw);
+        if(path && db?.storage?.from) {
+            try {
+                const { data, error } = await db.storage.from('deliveries').createSignedUrl(path, 3600);
+                if(!error && data?.signedUrl) return data.signedUrl;
+            } catch(e) {
+                console.warn('[Colixo] signed POD media indisponible', e);
+            }
+        }
+        return raw;
+    }
+    async function resolveProofSources(delivery, preuve, order){
+        const [photoSrc, sigSrc] = await Promise.all([
+            resolveDeliveryMediaSrc(proofPhotoSource(delivery, preuve, order)),
+            resolveDeliveryMediaSrc(proofSignatureSource(delivery, preuve, order))
+        ]);
+        return { photoSrc, sigSrc };
     }
 
     function openModal(id){const m=document.getElementById(id);if(m){m.style.display='flex';m.classList.add('open');}}
@@ -1100,7 +1152,12 @@
             const code = String(r.tariff_code || '').trim().toUpperCase();
             const inc  = Number(r.included_km || 0);
             const rate = Number(r.extra_km_price_chf || 0);
-            if(code && (inc > 0 || rate > 0)) clientKmByCode[code] = { includedKm: inc, extraKmRate: rate };
+            const pricePerKm = Number(r.price_per_km_chf || 0);
+            if(code && (inc > 0 || rate > 0 || pricePerKm > 0)) {
+                clientKmByCode[code] = { includedKm: inc, extraKmRate: rate, pricePerKm };
+                const familyCode = tariffServiceRef(code);
+                if(familyCode && !clientKmByCode[familyCode]) clientKmByCode[familyCode] = clientKmByCode[code];
+            }
         });
         updateServicePrices();
         renderColis();
@@ -1193,6 +1250,7 @@
             const unitPrice=getProduitPrice(best);
             const incr=Number(best.increment_par_kg||0);
             const calcPrice= incr>0 ? unitPrice+poids*incr : best.prix_par_kg ? unitPrice*poids : unitPrice;
+            const kmRate = Number(best.price_per_km_chf || 0);
             const negocie=clientPrixMap[String(best.id)]!=null && Number(getProduitPrice(best))!==Number(best.prix);
             /** Pas d’affichage « tarif base + augmentation / kg » : le montant ligne = prix déjà calculé pour ce poids. */
             const suffix='';
@@ -1201,7 +1259,8 @@
                 ref,
                 label:serviceLabelForGroup(group),
                 prix:calcPrice,
-                priceLine: Number.isFinite(nTot) ? nTot.toFixed(2) : '—',
+                priceLine: kmRate > 0 ? 'Après distance' : (Number.isFinite(nTot) ? nTot.toFixed(2) : '—'),
+                hideCurrency: kmRate > 0,
                 negocie,
                 active:tariffServiceRef(selectedService)===ref,
                 suffix,
@@ -1211,7 +1270,7 @@
         grid.style.gridTemplateColumns=`repeat(${Math.min(items.length,4)},1fr)`;
         grid.innerHTML=items.map(it=>`<div class="tarif-box ${it.speedClass}${it.negocie?' special':''}${it.active?' active-tarif':''}" onclick="selectService(${jsStringArg(it.ref)})">
             <div class="tarif-label">${escHtml(it.label)}</div>
-            <div class="tarif-price">${it.priceLine} CHF${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
+            <div class="tarif-price">${it.priceLine}${it.hideCurrency ? '' : ' CHF'}${it.suffix}${it.negocie&&!it.suffix?'<span style="font-size:9px;color:var(--green);display:block;">négocié</span>':''}</div>
             <div class="tarif-tiers">Selon votre poids (${Number(poids).toFixed(1)} kg)</div>
         </div>`).join('');
         renderHomeTariffSummary();
@@ -1332,7 +1391,10 @@
             const price = getProduitPrice(p);
             const code = tariffCodeForProduit(p);
             const type = isOptionProduct(p) ? 'Option' : 'Service';
-            const details = p.prix_par_kg
+            const kmRate = Number(p.price_per_km_chf || 0);
+            const details = kmRate > 0
+                ? 'Calculé après adresse'
+                : p.prix_par_kg
                 ? `${Number(price).toFixed(2)} CHF/kg`
                 : `${Number(price).toFixed(2)} CHF`;
             return {
@@ -1394,8 +1456,11 @@
             const best = group.best;
             const unitPrice = getProduitPrice(best);
             const incr = Number(best.increment_par_kg || 0);
+            const kmRate = Number(best.price_per_km_chf || 0);
             const calcPrice = incr > 0 ? unitPrice + poids * incr : best.prix_par_kg ? unitPrice * poids : unitPrice;
-            const variable = best.prix_par_kg
+            const variable = kmRate > 0
+                ? 'Prix final calculé après saisie des adresses'
+                : best.prix_par_kg
                 ? `Tarif au kilo (${Number(unitPrice).toFixed(2)} CHF/kg pour ${Number(poids).toFixed(1)} kg)`
                 : `Prix pour votre poids (${Number(poids).toFixed(1)} kg)`;
             return {
@@ -1403,7 +1468,8 @@
                 label: serviceLabelForGroup(group),
                 price: Math.round(calcPrice * 100) / 100,
                 speedClass: group.speedClass,
-                variable
+                variable,
+                kmRate
             };
         });
         if(!selectedService || !services.some(s=>s.ref===tariffServiceRef(selectedService))) selectedService = services[0].ref;
@@ -1417,7 +1483,7 @@
                     <div class="home-tariff-label">${escHtml(s.label)}</div>
                     <div class="home-tariff-sub">${escHtml(s.variable)}</div>
                 </div>
-                <div class="home-tariff-row-price">${hideKmPrices && isKmPricedService(s.ref, s.label) ? 'Après distance' : fmt(s.price) + ' CHF'}</div>
+                <div class="home-tariff-row-price">${(s.kmRate > 0 || (hideKmPrices && isKmPricedService(s.ref, s.label))) ? 'Après distance' : fmt(s.price) + ' CHF'}</div>
             </div>
         `).join('');
         el.innerHTML = `
@@ -1427,7 +1493,7 @@
                     <div class="home-tariff-name">${escHtml(current.label)}</div>
                     <div class="home-tariff-meta">Tranche calculée selon ${Number(poids).toFixed(1)} kg · ${optionCount} option(s) disponible(s)</div>
                 </div>
-                <div class="home-tariff-price">${hideKmPrices && isKmPricedService(current.ref, current.label) ? '—' : fmt(current.price) + ' CHF'}<span>Prix estimé</span></div>
+                <div class="home-tariff-price">${(current.kmRate > 0 || (hideKmPrices && isKmPricedService(current.ref, current.label))) ? '—' : fmt(current.price) + ' CHF'}<span>Prix estimé</span></div>
             </div>
             <div class="home-tariff-list">${rows}</div>
             ${Number(clientTarif?.rabais_volume_pct||0) > 0 ? `<div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-top:1px solid rgba(255,255,255,.08);background:rgba(34,197,94,.07);font-size:13px;color:#4ade80;font-weight:700;"><i class="fas fa-tag"></i> Rabais négocié : ${Number(clientTarif.rabais_volume_pct).toFixed(1)} % sur chaque commande</div>` : ''}
@@ -1443,7 +1509,7 @@
         if(!rows.length){ toast('Aucune grille tarifaire à exporter'); return; }
         const name = clientEntreprise?.nom || [client?.prenom, client?.nom].filter(Boolean).join(' ') || 'Client';
         const date = new Date().toLocaleDateString('fr-CH');
-        const logoUrl = h('/images/colixo-logo-print.png');
+        const logoUrl = DOC_LOGO_URL;
         const vatNumber = 'CHE-499.684.981';
         const htmlRows = rows.map(r=>`<tr>
             <td><strong>${r.code}</strong></td>
@@ -1615,6 +1681,9 @@
                 poids_max: linkedProd ? Number(linkedProd.poids_max || 0) : Number(r.max_weight_kg || 0),
                 prix: Number(r.base_price_chf || 0),
                 increment_par_kg: Number(r.price_per_kg_chf || 0),
+                price_per_km_chf: Number(r.price_per_km_chf || 0),
+                included_km: Number(r.included_km || 0),
+                extra_km_price_chf: Number(r.extra_km_price_chf || 0),
                 prix_par_kg: false,
                 ordre: Number(r.priority || 100),
                 _tariffRule: true
@@ -1677,12 +1746,13 @@
         grid.innerHTML=tiers.map(tier=>{
             const ref=tier.ref||'';
             const price=getProduitPrice(tier);
+            const kmRate=Number(tier.price_per_km_chf || 0);
             const speedClass=tariffSpeedClass(svcRef(tier),tier.nom);
             const minKg=Number(tier.poids_min||0);
             const maxKg=Number(tier.poids_max||0);
             const weightLabel=maxKg>0?`${minKg} – ${maxKg} kg`:`${minKg} kg+`;
             const label=tierFamilyLabel(tier);
-            const hidePrice = hideKmPrices && isKmPricedService(ref, label);
+            const hidePrice = kmRate > 0 || (hideKmPrices && isKmPricedService(ref, label));
             return `<div class="formula-card ${speedClass}" data-svc="${escHtml(ref)}" onclick="addWizardColisFromTier(${jsStringArg(ref)})">
                 <div class="formula-icon">${getSvcIcon(ref)}</div>
                 <div class="formula-name">${escHtml(label)}</div>
@@ -1833,8 +1903,11 @@
         if(distanceKm != null) rows.push(['Distance', `${distanceKm} km`]);
 
         // km inclus + surcoût km
-        const { includedKm: _includedKm, extraKmRate: _extraKmRate } = getActiveServiceKmSettings();
-        if (_includedKm > 0 && distanceKm != null) {
+        const pricingInfo = getDistancePricingInfo();
+        const { includedKm: _includedKm, extraKmRate: _extraKmRate, pricePerKm: _pricePerKm } = pricingInfo;
+        if (distanceKm != null && (pricingInfo.mode === 'tiered' || _pricePerKm > 0) && pricingInfo.kmCost > 0) {
+            rows.push(['Transport km', `<strong style="color:var(--orange)">${fmt(pricingInfo.kmCost)} CHF</strong>`]);
+        } else if (_includedKm > 0 && distanceKm != null) {
             rows.push(['Km inclus', `${_includedKm} km`]);
             if (distanceKm > _includedKm) {
                 const extraKm = Math.round((distanceKm - _includedKm) * 10) / 10;
@@ -2143,6 +2216,7 @@
         if (serviceProfileKey && config.profiles[serviceProfileKey]) {
             return { key: serviceProfileKey, profile: config.profiles[serviceProfileKey] };
         }
+        if (config.service_match_required === true) return null;
         const pickupType = document.querySelector('input[name="pickupType"]:checked')?.value;
         const defaultKey = config.default_profile || 'pickup';
         const pickupProfile = config.profiles[defaultKey] || config.profiles.pickup || null;
@@ -2164,27 +2238,86 @@
         return fallbackProfile ? { key: defaultKey, profile: fallbackProfile } : null;
     }
 
-    function calculateTieredKmCost(distance, tiers) {
+    function calculateTieredKmCost(distance, tiers, mode = 'progressive') {
         if (distance == null || !Number.isFinite(Number(distance)) || !Array.isArray(tiers)) return { cost: 0, segments: [] };
+        const normalizedTiers = tiers
+            .map(tier => ({
+                from: tier.from != null && tier.from !== '' ? Number(tier.from) : null,
+                up_to: tier.up_to != null && tier.up_to !== '' ? Number(tier.up_to) : Infinity,
+                rate: Number(tier.rate || 0)
+            }))
+            .filter(tier => Number.isFinite(tier.up_to) || tier.up_to === Infinity)
+            .sort((a, b) => a.up_to - b.up_to);
+        if (mode === 'bracket') {
+            const dist = Number(distance);
+            const selected = normalizedTiers.find(tier => dist <= tier.up_to) || normalizedTiers[normalizedTiers.length - 1];
+            const rate = Number(selected?.rate || 0);
+            const amount = rate > 0 ? Math.round(dist * rate * 100) / 100 : 0;
+            return {
+                cost: amount,
+                segments: selected ? [{
+                    from: selected.from,
+                    up_to: selected.up_to === Infinity ? null : selected.up_to,
+                    km: Math.round(dist * 10) / 10,
+                    rate,
+                    amount
+                }] : []
+            };
+        }
         let remaining = Number(distance);
         let previousLimit = 0;
         let cost = 0;
         const segments = [];
-        tiers.forEach(tier => {
+        normalizedTiers.forEach(tier => {
             if (remaining <= 0) return;
-            const hasLimit = tier.up_to != null && tier.up_to !== '';
-            const limit = hasLimit ? Number(tier.up_to) : Infinity;
+            const hasLimit = tier.up_to !== Infinity;
+            const limit = hasLimit ? tier.up_to : Infinity;
             const width = Math.max(0, Math.min(remaining, limit - previousLimit));
-            const rate = Number(tier.rate || 0);
+            const rate = tier.rate;
             if (width > 0 && rate > 0) {
                 const amount = Math.round(width * rate * 100) / 100;
                 cost += amount;
-                segments.push({ km: Math.round(width * 10) / 10, rate, amount });
+                segments.push({
+                    from: previousLimit,
+                    up_to: hasLimit ? limit : null,
+                    km: Math.round(width * 10) / 10,
+                    rate,
+                    amount
+                });
             }
             remaining -= width;
             previousLimit = hasLimit ? limit : previousLimit;
         });
         return { cost: Math.round(cost * 100) / 100, segments };
+    }
+
+    function calculateRuleKmCost(settings, distance) {
+        const includedKm = Number(settings?.includedKm || 0);
+        const extraKmRate = Number(settings?.extraKmRate || 0);
+        const pricePerKm = Number(settings?.pricePerKm || 0);
+        if (distance == null || !Number.isFinite(Number(distance))) {
+            return { includedKm, extraKmRate, pricePerKm, extraKm: 0, kmCost: 0, priceMode: pricePerKm > 0 ? 'per_km' : 'extra_km' };
+        }
+        const billableKm = includedKm > 0 ? Math.max(0, Math.round((Number(distance) - includedKm) * 10) / 10) : Number(distance);
+        if (pricePerKm > 0) {
+            return {
+                includedKm,
+                extraKmRate,
+                pricePerKm,
+                extraKm: Math.round(billableKm * 10) / 10,
+                kmCost: Math.round(billableKm * pricePerKm * 100) / 100,
+                priceMode: 'per_km'
+            };
+        }
+        const extraKm = includedKm > 0 ? billableKm : 0;
+        return {
+            includedKm,
+            extraKmRate,
+            pricePerKm,
+            extraKm,
+            kmCost: extraKm > 0 && extraKmRate > 0 ? Math.round(extraKm * extraKmRate * 100) / 100 : 0,
+            priceMode: 'extra_km'
+        };
     }
 
     function renderClientKmNotice() {
@@ -2195,24 +2328,23 @@
         const tierConfig = getActiveKmTierConfig();
         const tierProfile = tierConfig ? getKmTierProfile(tierConfig) : null;
         if (tierProfile?.profile) {
-            const calc = calculateTieredKmCost(distanceKm, tierProfile.profile.tiers || []);
+            const pricingMode = tierProfile.profile.mode || tierConfig.mode || 'progressive';
+            const calc = calculateTieredKmCost(distanceKm, tierProfile.profile.tiers || [], pricingMode);
             return {
                 mode: 'tiered',
+                pricingMode,
                 label: tierProfile.profile.label || 'Tarification km',
                 kmOnly: tierConfig.km_only !== false && tierProfile.profile.km_only !== false,
                 includedKm: 0,
                 extraKmRate: 0,
+                pricePerKm: 0,
                 extraKm: distanceKm || 0,
                 kmCost: calc.cost,
                 tierSegments: calc.segments
             };
         }
-        const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-        const includedKm = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
-        const extraKmRate = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
-        const extraKm = distanceKm != null && includedKm > 0 ? Math.max(0, Math.round((distanceKm - includedKm) * 10) / 10) : 0;
-        const kmCost = extraKm > 0 && extraKmRate > 0 ? Math.round(extraKm * extraKmRate * 100) / 100 : 0;
-        return { mode: 'simple', includedKm, extraKmRate, extraKm, kmCost, tierSegments: [] };
+        const calc = calculateRuleKmCost(getActiveServiceKmSettings(), distanceKm);
+        return { mode: 'simple', ...calc, tierSegments: [] };
     }
 
     window.calcDistance = async function() {
@@ -2241,13 +2373,34 @@
             distanceKm = await getRouteDistanceKm(from, to);
             if (resultEl) resultEl.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:15px;"><i class="fas fa-check-circle"></i> ${distanceKm} km</span>`;
 
-            const { includedKm: included, extraKmRate: rate } = getActiveServiceKmSettings();
-            if (included > 0 && rate > 0 && distanceKm > included) {
-                const extra = Math.round((distanceKm - included) * 10) / 10;
-                const cost = Math.round(extra * rate * 100) / 100;
-                document.getElementById('distanceOverage').style.display = 'block';
-                document.getElementById('distanceOverage').innerHTML =
-                    `⚠️ Dépassement : ${extra} km au-delà des ${included} km inclus × ${rate.toFixed(2)} CHF/km = <strong>+${cost.toFixed(2)} CHF</strong>`;
+            const pricingInfo = getDistancePricingInfo();
+            if (pricingInfo.mode === 'tiered' && overageEl) {
+                overageEl.style.display = 'block';
+                overageEl.style.background = 'rgba(59,130,246,0.10)';
+                overageEl.style.borderColor = 'rgba(59,130,246,0.30)';
+                overageEl.style.color = '#bfdbfe';
+                overageEl.innerHTML =
+                    `Transport calculé : <strong>${fmt(pricingInfo.kmCost)} CHF</strong>`;
+            } else {
+                const { includedKm: included, extraKmRate: rate, pricePerKm } = getActiveServiceKmSettings();
+                if (pricePerKm > 0) {
+                    const pricing = calculateRuleKmCost({ includedKm: included, extraKmRate: rate, pricePerKm }, distanceKm);
+                    if (overageEl) {
+                        overageEl.style.display = 'block';
+                        overageEl.style.background = 'rgba(59,130,246,0.10)';
+                        overageEl.style.borderColor = 'rgba(59,130,246,0.30)';
+                        overageEl.style.color = '#bfdbfe';
+                        overageEl.innerHTML = `Transport calculé : <strong>${fmt(pricing.kmCost)} CHF</strong>`;
+                    }
+                } else if (included > 0 && rate > 0 && distanceKm > included) {
+                    const extra = Math.round((distanceKm - included) * 10) / 10;
+                    const cost = Math.round(extra * rate * 100) / 100;
+                    if (overageEl) {
+                        overageEl.style.display = 'block';
+                        overageEl.innerHTML =
+                            `⚠️ Dépassement : ${extra} km au-delà des ${included} km inclus × ${rate.toFixed(2)} CHF/km = <strong>+${cost.toFixed(2)} CHF</strong>`;
+                    }
+                }
             }
         } catch(e) {
             if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)"><i class="fas fa-exclamation-triangle"></i> ${e.message}</span>`;
@@ -2315,15 +2468,19 @@
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
         const globalIncluded = Number(activeAbn?.km_inclus ?? clientTarif?.included_km ?? 0);
         const globalRate     = Number(activeAbn?.prix_km_sup ?? clientTarif?.extra_km_rate ?? 0);
+        const globalPricePerKm = Number(activeAbn?.prix_km ?? clientTarif?.price_per_km_chf ?? 0);
 
         // Current service code from colisList (set when user clicks a tier card)
         const svcCode = colisList.length ? (colisList[0].service || '') : (selectedService || '');
         const code = String(svcCode).trim().toUpperCase();
-        const fromRule = clientKmByCode[code];
+        const familyCode = tariffServiceRef(code);
+        const fromRule = clientKmByCode[code] || clientKmByCode[familyCode] || Object.entries(clientKmByCode)
+            .find(([ruleCode]) => tariffServiceRef(ruleCode) === familyCode)?.[1];
 
         return {
             includedKm:  fromRule?.includedKm  > 0 ? fromRule.includedKm  : globalIncluded,
-            extraKmRate: fromRule?.extraKmRate  > 0 ? fromRule.extraKmRate : globalRate
+            extraKmRate: fromRule?.extraKmRate  > 0 ? fromRule.extraKmRate : globalRate,
+            pricePerKm:  fromRule?.pricePerKm   > 0 ? fromRule.pricePerKm  : globalPricePerKm
         };
     }
 
@@ -2357,13 +2514,26 @@
         const hasNuitOpt=getAssignedProduits().some(p=>isOptionProduct(p)&&(p.ref||'').toUpperCase().includes('NUIT'));
         let nuitSuppl = (!hasNuitOpt && nightDelivery) ? (clientTarif?.suppl_nuit_chf||25) : 0;
 
-        // Overage km cost — read from active service rule (rule-level km settings)
-        let kmCost = 0;
+        // Overage km cost — read from active service rule, or tiered km profile if configured.
         const activeAbn = Array.isArray(clientTarif?.abonnements) ? clientTarif.abonnements.find(a=>a.actif) : null;
-        const { includedKm, extraKmRate } = getActiveServiceKmSettings();
-        if (distanceKm != null && includedKm > 0 && extraKmRate > 0 && distanceKm > includedKm) {
-            const extraKm = Math.round((distanceKm - includedKm) * 10) / 10;
-            kmCost = Math.round(extraKm * extraKmRate * 100) / 100;
+        const distancePricing = getDistancePricingInfo();
+        let includedKm = Number(distancePricing.includedKm || 0);
+        let extraKmRate = Number(distancePricing.extraKmRate || 0);
+        let pricePerKm = Number(distancePricing.pricePerKm || 0);
+        let extraKm = Number(distancePricing.extraKm || 0);
+        let kmCost = Number(distancePricing.kmCost || 0);
+        if (distancePricing.mode !== 'tiered') {
+            const serviceKm = getActiveServiceKmSettings();
+            includedKm = Number(serviceKm.includedKm || 0);
+            extraKmRate = Number(serviceKm.extraKmRate || 0);
+            pricePerKm = Number(serviceKm.pricePerKm || 0);
+            extraKm = 0;
+            kmCost = 0;
+            if (distanceKm != null) {
+                const calc = calculateRuleKmCost(serviceKm, distanceKm);
+                extraKm = calc.extraKm;
+                kmCost = calc.kmCost;
+            }
         }
 
         // Supplément colis hors quota mensuel
@@ -2401,7 +2571,8 @@
             return cleanServiceLabel(p?.nom, ref);
         })));
         const detailParts = [];
-        if(distanceKm != null && distancePricing.mode === 'tiered') {
+        if(distanceKm != null && (distancePricing.mode === 'tiered' || pricePerKm > 0)) {
+            if(!kmOnlyPricing && billableBaseTotal > 0) detailParts.push(`${serviceNames.join(' + ')}: ${fmt(billableBaseTotal)} CHF`);
             detailParts.push(`${distanceKm} km`);
             detailParts.push(`Transport ${fmt(distancePricing.kmCost)} CHF`);
         } else if(distanceKm != null && includedKm > 0 && extraKmRate > 0) {
@@ -2954,7 +3125,7 @@
 
         // Charger preuves depuis la table deliveries (utilisée par l'app chauffeur)
         const { data: allDeliveries } = await db.from('deliveries')
-            .select('order_id, photo_data, signature_data, note_livraison, created_at')
+            .select(DELIVERY_MEDIA_SELECT)
             .in('order_id', orderIds);
         const deliveriesByOrder = {};
         (allDeliveries || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
@@ -3058,14 +3229,16 @@
                 </div>
             </div>`).join('');
 
-        // Preuve de livraison inline (depuis table deliveries, champs photo_data / signature_data)
-        const hasProof = preuve && (preuve.photo_data || preuve.signature_data);
+        // Preuve de livraison inline (base64, URL Storage ou fallback transport)
+        const photoSrc = proofPhotoSource(preuve, null, o);
+        const sigSrc = proofSignatureSource(preuve, null, o);
+        const hasProof = !!(photoSrc || sigSrc);
         const preuveHtml = hasProof ? `
             <div style="margin-top:12px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px;">
                 <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px;">✅ PREUVE DE LIVRAISON</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    ${preuve.photo_data ? `<img src="${preuve.photo_data}" style="height:80px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuveModal('${o.id}')">` : ''}
-                    ${preuve.signature_data ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${preuve.signature_data}" style="height:80px;border-radius:6px;object-fit:contain;" title="Signature"></div>` : ''}
+                    ${photoSrc ? `<img src="${escHtml(photoSrc)}" style="height:80px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuveModal('${o.id}')" onerror="this.style.display='none'">` : ''}
+                    ${sigSrc ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${escHtml(sigSrc)}" style="height:80px;border-radius:6px;object-fit:contain;" title="Signature" onerror="this.parentElement.style.display='none'"></div>` : ''}
                     <button class="btn btn-ghost" style="color:var(--green);align-self:flex-end" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> Voir BL</button>
                 </div>
             </div>` : '';
@@ -3121,11 +3294,11 @@
         if(!orders.length) { el.innerHTML = '<div class="empty">📦 Aucune expédition en cours</div>'; return; }
 
         // Charger les preuves pour les récemment livrées
-        const deliveredIds = orders.filter(o => o.status === 'delivered').map(o => o.id);
+        const deliveredIds = orders.filter(o => ['delivered','completed','invoiced'].includes(o.status)).map(o => o.id);
         let deliveriesByOrder = {};
         if(deliveredIds.length) {
             const { data: delivs } = await db.from('deliveries')
-                .select('order_id, photo_data, signature_data, note_livraison, delivered_at')
+                .select(DELIVERY_MEDIA_SELECT)
                 .in('order_id', deliveredIds);
             (delivs || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
         }
@@ -3148,11 +3321,11 @@
         if(!allOrders.length) { el.innerHTML = '<div class="empty">📋 Aucune expédition</div>'; return; }
 
         // Charger les preuves livraison pour toutes les commandes livrées
-        const deliveredIds = allOrders.filter(o => !o.__importOnly && o.status === 'delivered').map(o => o.id);
+        const deliveredIds = allOrders.filter(o => !o.__importOnly && ['delivered','completed','invoiced'].includes(o.status)).map(o => o.id);
         let deliveriesByOrder = {};
         if(deliveredIds.length) {
             const { data: delivs } = await db.from('deliveries')
-                .select('order_id, photo_data, signature_data, note_livraison, delivered_at')
+                .select(DELIVERY_MEDIA_SELECT)
                 .in('order_id', deliveredIds);
             (delivs || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
         }
@@ -3252,12 +3425,12 @@
         };
         const stLabel = stMap[effectiveStatus] || effectiveStatus;
         const stClass = 'st-' + effectiveStatus.replace(/_/g,'');
-        const isDelivered = st === 'delivered';
+        const isDelivered = ['delivered','completed','invoiced'].includes(st);
         const isRefused = adm === 'refused' || st === 'refused';
         const canDelete = (['pending_validation','pending'].includes(adm) || isRefused) && !isDelivered;
 
-        // Preuve : on a déjà chargé les données en amont dans loadHistory
-        const hasProof = isDelivered && delivery && (delivery.photo_data || delivery.signature_data);
+        // Preuve : données deliveries ou URL fallback sur le transport.
+        const hasProof = isDelivered && hasDeliveryProof(delivery, null, o);
         const preuveBtn = isDelivered
             ? `<button class="btn btn-ghost" style="color:${hasProof?'var(--green)':'var(--muted)'}" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> ${hasProof?'Preuve':'Pas de preuve'}</button>`
             : '';
@@ -3325,9 +3498,8 @@
 
             const steps = getTimelineSteps(o);
             const deliveryProof = delivery || null;
-            const hasProof = !!(deliveryProof && (deliveryProof.photo_data || deliveryProof.signature_data)) || !!(preuve && (preuve.photo_url || preuve.signature_url));
-            const photoSrc = deliveryProof?.photo_data || preuve?.photo_url || null;
-            const sigSrc = deliveryProof?.signature_data || preuve?.signature_url || null;
+            const hasProof = hasDeliveryProof(deliveryProof, preuve, o);
+            const { photoSrc, sigSrc } = await resolveProofSources(deliveryProof, preuve, o);
             const noteChauf = deliveryProof?.note_livraison || null;
 
             const timelineHtml = steps.map((s, i) => `
@@ -3361,8 +3533,8 @@
                 ? `<div style="margin-top:14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:12px;padding:12px;">
                     <div style="font-size:11px;font-weight:900;color:var(--green);text-transform:uppercase;margin-bottom:8px;">Preuve de livraison</div>
                     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-                        ${photoSrc ? `<img src="${photoSrc}" style="height:86px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuve('${o.id}')">` : ''}
-                        ${sigSrc ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${sigSrc}" style="height:86px;border-radius:6px;object-fit:contain;" title="Signature"></div>` : ''}
+                        ${photoSrc ? `<img src="${escHtml(photoSrc)}" style="height:86px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuve('${o.id}')" onerror="this.style.display='none'">` : ''}
+                        ${sigSrc ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${escHtml(sigSrc)}" style="height:86px;border-radius:6px;object-fit:contain;" title="Signature" onerror="this.parentElement.style.display='none'"></div>` : ''}
                         ${noteChauf ? `<div style="font-size:12px;color:var(--muted2);min-width:160px;"><strong style="color:#fff;">Note livreur</strong><br>${escHtml(noteChauf)}</div>` : ''}
                         <button class="btn btn-ghost" style="color:var(--green)" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> Voir preuve</button>
                         <button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>
@@ -3672,7 +3844,8 @@
                 <!-- EN-TÊTE -->
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;border-bottom:3px solid #e8311a;padding-bottom:12px;">
                     <div>
-                        <div style="font-family:'Bebas Neue',cursive;font-size:28px;color:#e8311a;letter-spacing:2px;line-height:1;">COLIXO</div>
+                        <img src="${DOC_LOGO_URL}" alt="Colixo" style="width:104px;max-height:58px;object-fit:contain;display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                        <div style="display:none;font-family:'Bebas Neue',cursive;font-size:28px;color:#e8311a;letter-spacing:2px;line-height:1;">COLIXO</div>
                         <div style="font-size:10px;color:#888;margin-top:2px;">BON DE TRANSPORT</div>
                     </div>
                     <div style="text-align:right;">
@@ -3754,6 +3927,8 @@
         // Pour 1 seul colis depuis le modal
         const wrap = document.getElementById('etiquetteWrap');
         const clone = wrap.cloneNode(true);
+        const logo = clone.querySelector('img[alt="Colixo"]');
+        if (logo) logo.src = DOC_LOGO_URL;
         const win = window.open('', '_blank', 'width=680,height=600');
         win.document.write(`<!DOCTYPE html><html><head>
             <meta charset="UTF-8">
@@ -3784,7 +3959,7 @@
                 #etiquetteWrap [style*="margin-bottom:14px"]{margin-bottom:6px !important;}
                 #etiquetteWrap [style*="padding:12px"]{padding:8px !important;}
                 #etiquetteWrap [style*="padding-bottom:14px"]{padding-bottom:8px !important;}
-                img{width:70px !important;height:70px !important;}
+                #qrCodeImg img,#qrCodeImg canvas{width:70px !important;height:70px !important;}
                 @media print{body{padding:0;}}
             </style>
         </head><body>
@@ -3800,23 +3975,25 @@
     window.showPreuve = async function(orderId) {
         showLoad();
         // Lire la commande ET la livraison (photo + signature du chauffeur)
-        const [{ data: o }, { data: delivery }] = await Promise.all([
+        const [{ data: o }, { data: delivery }, { data: preuve }] = await Promise.all([
             db.from('transport_orders_simple').select('*').eq('id', orderId).single(),
-            db.from('deliveries').select('*').eq('order_id', orderId).maybeSingle()
+            db.from('deliveries').select('*').eq('order_id', orderId).maybeSingle(),
+            db.from('preuves_livraison').select('*').eq('stop_id', orderId).maybeSingle()
         ]);
         hideLoad();
         if(!o) return;
+        const { photoSrc, sigSrc } = await resolveProofSources(delivery, preuve, o);
 
         // Stocker pour le bouton PDF
-        _preuveData = { o, delivery };
+        _preuveData = { o, delivery, preuve, photoSrc, sigSrc };
 
         const content = document.getElementById('preuveContent');
         const btnDl   = document.getElementById('btnDlPreuve');
         const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false}) : null;
         const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
 
-        const photoData = delivery?.photo_data || null;
-        const sigData   = delivery?.signature_data || null;
+        const photoData = photoSrc || null;
+        const sigData   = sigSrc || null;
         const noteChauf = delivery?.note_livraison || null;
 
         const hasProof  = !!(photoData || sigData);
@@ -3871,11 +4048,11 @@
 
     window.downloadPreuvePDF = function() {
         if(!_preuveData) return;
-        const { o, delivery } = _preuveData;
+        const { o, delivery, preuve, photoSrc, sigSrc } = _preuveData;
         const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false}) : '—';
         const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
-        const photoData = delivery?.photo_data || null;
-        const sigData   = delivery?.signature_data || null;
+        const photoData = photoSrc || proofPhotoSource(delivery, preuve, o);
+        const sigData   = sigSrc || proofSignatureSource(delivery, preuve, o);
         const noteChauf = delivery?.note_livraison || null;
 
         const win = window.open('', '_blank', 'width=750,height=900');
@@ -3887,7 +4064,9 @@
             body{font-family:'Outfit',sans-serif;background:#f8f8f8;color:#111;padding:30px;}
             .bl{background:#fff;border-radius:12px;padding:32px;max-width:680px;margin:0 auto;box-shadow:0 2px 20px rgba(0,0,0,0.08);}
             .bl-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e8311a;padding-bottom:16px;margin-bottom:20px;}
-            .bl-logo{font-family:'Bebas Neue',cursive;font-size:32px;color:#e8311a;letter-spacing:2px;}
+            .bl-brand{display:flex;align-items:center;gap:12px;}
+            .bl-logo-img{width:92px;max-height:54px;object-fit:contain;display:block;}
+            .bl-logo-fallback{font-family:'Bebas Neue',cursive;font-size:32px;color:#e8311a;letter-spacing:2px;}
             .bl-title{font-size:11px;color:#888;margin-top:2px;}
             .bl-num{font-family:'Bebas Neue',cursive;font-size:22px;text-align:right;}
             .badge-ok{display:inline-block;background:#dcfce7;color:#166534;padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;margin-top:6px;}
@@ -3907,7 +4086,10 @@
         <div class="bl">
             <div class="bl-header">
                 <div>
-                    <div class="bl-logo">COLIXO</div>
+                    <div class="bl-brand">
+                        <img src="${DOC_LOGO_URL}" alt="Colixo" class="bl-logo-img" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                        <div class="bl-logo-fallback" style="display:none;">COLIXO</div>
+                    </div>
                     <div class="bl-title">PREUVE DE LIVRAISON OFFICIELLE</div>
                 </div>
                 <div>
@@ -3977,8 +4159,7 @@
         hideLoad();
         if(!o) return;
         // Fusionner les sources de preuve : table deliveries (app chauffeur) prioritaire
-        const photoSrc = delivery?.photo_data || preuve?.photo_url || null;
-        const sigSrc   = delivery?.signature_data || preuve?.signature_url || null;
+        const { photoSrc, sigSrc } = await resolveProofSources(delivery, preuve, o);
         const noteChauf = delivery?.note_livraison || null;
 
         const fmt = d => d ? new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/Zurich'}) : '—';
@@ -3995,7 +4176,9 @@
             body{font-family:'Outfit',sans-serif;background:#f8f8f8;color:#111;padding:30px;}
             .bl{background:#fff;border-radius:12px;padding:32px;max-width:680px;margin:0 auto;box-shadow:0 2px 20px rgba(0,0,0,0.08);}
             .bl-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e8311a;padding-bottom:16px;margin-bottom:20px;}
-            .bl-logo{font-family:'Bebas Neue',cursive;font-size:32px;color:#e8311a;letter-spacing:2px;}
+            .bl-brand{display:flex;align-items:center;gap:12px;}
+            .bl-logo-img{width:92px;max-height:54px;object-fit:contain;display:block;}
+            .bl-logo-fallback{font-family:'Bebas Neue',cursive;font-size:32px;color:#e8311a;letter-spacing:2px;}
             .bl-title{font-size:11px;color:#888;margin-top:2px;}
             .bl-num{font-family:'Bebas Neue',cursive;font-size:22px;text-align:right;}
             .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#aaa;margin-bottom:8px;margin-top:20px;}
@@ -4021,7 +4204,13 @@
         </style></head><body>
         <div class="bl">
             <div class="bl-header">
-                <div><div class="bl-logo">COLIXO</div><div class="bl-title">BON DE LIVRAISON OFFICIEL</div></div>
+                <div>
+                    <div class="bl-brand">
+                        <img src="${DOC_LOGO_URL}" alt="Colixo" class="bl-logo-img" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                        <div class="bl-logo-fallback" style="display:none;">COLIXO</div>
+                    </div>
+                    <div class="bl-title">BON DE LIVRAISON OFFICIEL</div>
+                </div>
                 <div><div class="bl-num">${o.order_number||o.id.slice(0,8)}</div><div style="font-size:11px;color:#888;text-align:right;">Émis le ${fmt(o.created_at)}</div></div>
             </div>
 
