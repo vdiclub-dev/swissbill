@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <!-- colixo-build:20260521b -->
+    <!-- colixo-build:20260521c -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -13,8 +13,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script data-cfasync="false" src="/js/supabase.min.js"></script>
-    <script data-cfasync="false" src="../../config.js?v=20260521b"></script>
-    <script data-cfasync="false" src="../../js/auth.js?v=20260521b"></script>
+    <script data-cfasync="false" src="../../config.js?v=20260521c"></script>
+    <script data-cfasync="false" src="../../js/auth.js?v=20260521c"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -917,6 +917,7 @@
         try { return new URL(h('/images/colixo-logo-print.png'), window.location.origin).href; }
         catch(e) { return h('/images/colixo-logo-print.png'); }
     })();
+    const DELIVERY_MEDIA_SELECT = 'order_id, photo_data, photo_url, signature_data, signature_url, note_livraison, delivered_at, created_at';
 
     let client=null, clientEntreprise=null, clientTarif=null;
     let clientPrixMap={}, clientProduits=[], clientTariffRules=[];
@@ -996,6 +997,52 @@
     }
     function jsStringArg(value){
         return escHtml(JSON.stringify(String(value ?? '')));
+    }
+    function proofPhotoSource(delivery, preuve, order){
+        return delivery?.photo_data || delivery?.photo_url || preuve?.photo_data || preuve?.photo_url || order?.photo_data || order?.photo_url || null;
+    }
+    function proofSignatureSource(delivery, preuve, order){
+        return delivery?.signature_data || delivery?.signature_url || preuve?.signature_data || preuve?.signature_url || order?.signature_data || order?.signature_url || null;
+    }
+    function hasDeliveryProof(delivery, preuve, order){
+        return !!(proofPhotoSource(delivery, preuve, order) || proofSignatureSource(delivery, preuve, order));
+    }
+    function storagePathFromDeliveryUrl(value){
+        const raw = String(value || '').trim();
+        if(!raw || /^data:|^blob:/i.test(raw)) return '';
+        if(/^missions\//i.test(raw)) return raw;
+        const markers = [
+            '/storage/v1/object/public/deliveries/',
+            '/storage/v1/object/sign/deliveries/',
+            '/object/public/deliveries/',
+            '/object/sign/deliveries/'
+        ];
+        for(const marker of markers) {
+            const idx = raw.indexOf(marker);
+            if(idx >= 0) return decodeURIComponent(raw.slice(idx + marker.length).split('?')[0]);
+        }
+        return '';
+    }
+    async function resolveDeliveryMediaSrc(value){
+        const raw = String(value || '').trim();
+        if(!raw || /^data:|^blob:/i.test(raw)) return raw || null;
+        const path = storagePathFromDeliveryUrl(raw);
+        if(path && db?.storage?.from) {
+            try {
+                const { data, error } = await db.storage.from('deliveries').createSignedUrl(path, 3600);
+                if(!error && data?.signedUrl) return data.signedUrl;
+            } catch(e) {
+                console.warn('[Colixo] signed POD media indisponible', e);
+            }
+        }
+        return raw;
+    }
+    async function resolveProofSources(delivery, preuve, order){
+        const [photoSrc, sigSrc] = await Promise.all([
+            resolveDeliveryMediaSrc(proofPhotoSource(delivery, preuve, order)),
+            resolveDeliveryMediaSrc(proofSignatureSource(delivery, preuve, order))
+        ]);
+        return { photoSrc, sigSrc };
     }
 
     function openModal(id){const m=document.getElementById(id);if(m){m.style.display='flex';m.classList.add('open');}}
@@ -2979,7 +3026,7 @@
 
         // Charger preuves depuis la table deliveries (utilisée par l'app chauffeur)
         const { data: allDeliveries } = await db.from('deliveries')
-            .select('order_id, photo_data, signature_data, note_livraison, created_at')
+            .select(DELIVERY_MEDIA_SELECT)
             .in('order_id', orderIds);
         const deliveriesByOrder = {};
         (allDeliveries || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
@@ -3083,14 +3130,16 @@
                 </div>
             </div>`).join('');
 
-        // Preuve de livraison inline (depuis table deliveries, champs photo_data / signature_data)
-        const hasProof = preuve && (preuve.photo_data || preuve.signature_data);
+        // Preuve de livraison inline (base64, URL Storage ou fallback transport)
+        const photoSrc = proofPhotoSource(preuve, null, o);
+        const sigSrc = proofSignatureSource(preuve, null, o);
+        const hasProof = !!(photoSrc || sigSrc);
         const preuveHtml = hasProof ? `
             <div style="margin-top:12px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px;">
                 <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px;">✅ PREUVE DE LIVRAISON</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    ${preuve.photo_data ? `<img src="${preuve.photo_data}" style="height:80px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuveModal('${o.id}')">` : ''}
-                    ${preuve.signature_data ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${preuve.signature_data}" style="height:80px;border-radius:6px;object-fit:contain;" title="Signature"></div>` : ''}
+                    ${photoSrc ? `<img src="${escHtml(photoSrc)}" style="height:80px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuveModal('${o.id}')" onerror="this.style.display='none'">` : ''}
+                    ${sigSrc ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${escHtml(sigSrc)}" style="height:80px;border-radius:6px;object-fit:contain;" title="Signature" onerror="this.parentElement.style.display='none'"></div>` : ''}
                     <button class="btn btn-ghost" style="color:var(--green);align-self:flex-end" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> Voir BL</button>
                 </div>
             </div>` : '';
@@ -3146,11 +3195,11 @@
         if(!orders.length) { el.innerHTML = '<div class="empty">📦 Aucune expédition en cours</div>'; return; }
 
         // Charger les preuves pour les récemment livrées
-        const deliveredIds = orders.filter(o => o.status === 'delivered').map(o => o.id);
+        const deliveredIds = orders.filter(o => ['delivered','completed','invoiced'].includes(o.status)).map(o => o.id);
         let deliveriesByOrder = {};
         if(deliveredIds.length) {
             const { data: delivs } = await db.from('deliveries')
-                .select('order_id, photo_data, signature_data, note_livraison, delivered_at')
+                .select(DELIVERY_MEDIA_SELECT)
                 .in('order_id', deliveredIds);
             (delivs || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
         }
@@ -3173,11 +3222,11 @@
         if(!allOrders.length) { el.innerHTML = '<div class="empty">📋 Aucune expédition</div>'; return; }
 
         // Charger les preuves livraison pour toutes les commandes livrées
-        const deliveredIds = allOrders.filter(o => !o.__importOnly && o.status === 'delivered').map(o => o.id);
+        const deliveredIds = allOrders.filter(o => !o.__importOnly && ['delivered','completed','invoiced'].includes(o.status)).map(o => o.id);
         let deliveriesByOrder = {};
         if(deliveredIds.length) {
             const { data: delivs } = await db.from('deliveries')
-                .select('order_id, photo_data, signature_data, note_livraison, delivered_at')
+                .select(DELIVERY_MEDIA_SELECT)
                 .in('order_id', deliveredIds);
             (delivs || []).forEach(d => { deliveriesByOrder[d.order_id] = d; });
         }
@@ -3277,12 +3326,12 @@
         };
         const stLabel = stMap[effectiveStatus] || effectiveStatus;
         const stClass = 'st-' + effectiveStatus.replace(/_/g,'');
-        const isDelivered = st === 'delivered';
+        const isDelivered = ['delivered','completed','invoiced'].includes(st);
         const isRefused = adm === 'refused' || st === 'refused';
         const canDelete = (['pending_validation','pending'].includes(adm) || isRefused) && !isDelivered;
 
-        // Preuve : on a déjà chargé les données en amont dans loadHistory
-        const hasProof = isDelivered && delivery && (delivery.photo_data || delivery.signature_data);
+        // Preuve : données deliveries ou URL fallback sur le transport.
+        const hasProof = isDelivered && hasDeliveryProof(delivery, null, o);
         const preuveBtn = isDelivered
             ? `<button class="btn btn-ghost" style="color:${hasProof?'var(--green)':'var(--muted)'}" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> ${hasProof?'Preuve':'Pas de preuve'}</button>`
             : '';
@@ -3350,9 +3399,8 @@
 
             const steps = getTimelineSteps(o);
             const deliveryProof = delivery || null;
-            const hasProof = !!(deliveryProof && (deliveryProof.photo_data || deliveryProof.signature_data)) || !!(preuve && (preuve.photo_url || preuve.signature_url));
-            const photoSrc = deliveryProof?.photo_data || preuve?.photo_url || null;
-            const sigSrc = deliveryProof?.signature_data || preuve?.signature_url || null;
+            const hasProof = hasDeliveryProof(deliveryProof, preuve, o);
+            const { photoSrc, sigSrc } = await resolveProofSources(deliveryProof, preuve, o);
             const noteChauf = deliveryProof?.note_livraison || null;
 
             const timelineHtml = steps.map((s, i) => `
@@ -3386,8 +3434,8 @@
                 ? `<div style="margin-top:14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:12px;padding:12px;">
                     <div style="font-size:11px;font-weight:900;color:var(--green);text-transform:uppercase;margin-bottom:8px;">Preuve de livraison</div>
                     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-                        ${photoSrc ? `<img src="${photoSrc}" style="height:86px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuve('${o.id}')">` : ''}
-                        ${sigSrc ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${sigSrc}" style="height:86px;border-radius:6px;object-fit:contain;" title="Signature"></div>` : ''}
+                        ${photoSrc ? `<img src="${escHtml(photoSrc)}" style="height:86px;border-radius:8px;object-fit:cover;cursor:pointer;" onclick="showPreuve('${o.id}')" onerror="this.style.display='none'">` : ''}
+                        ${sigSrc ? `<div style="background:white;border-radius:8px;padding:4px;"><img src="${escHtml(sigSrc)}" style="height:86px;border-radius:6px;object-fit:contain;" title="Signature" onerror="this.parentElement.style.display='none'"></div>` : ''}
                         ${noteChauf ? `<div style="font-size:12px;color:var(--muted2);min-width:160px;"><strong style="color:#fff;">Note livreur</strong><br>${escHtml(noteChauf)}</div>` : ''}
                         <button class="btn btn-ghost" style="color:var(--green)" onclick="showPreuve('${o.id}')"><i class="fas fa-camera"></i> Voir preuve</button>
                         <button class="btn btn-ghost" style="color:var(--blue)" onclick="showBL('${o.id}')"><i class="fas fa-file-pdf"></i> BL</button>
@@ -3828,23 +3876,25 @@
     window.showPreuve = async function(orderId) {
         showLoad();
         // Lire la commande ET la livraison (photo + signature du chauffeur)
-        const [{ data: o }, { data: delivery }] = await Promise.all([
+        const [{ data: o }, { data: delivery }, { data: preuve }] = await Promise.all([
             db.from('transport_orders_simple').select('*').eq('id', orderId).single(),
-            db.from('deliveries').select('*').eq('order_id', orderId).maybeSingle()
+            db.from('deliveries').select('*').eq('order_id', orderId).maybeSingle(),
+            db.from('preuves_livraison').select('*').eq('stop_id', orderId).maybeSingle()
         ]);
         hideLoad();
         if(!o) return;
+        const { photoSrc, sigSrc } = await resolveProofSources(delivery, preuve, o);
 
         // Stocker pour le bouton PDF
-        _preuveData = { o, delivery };
+        _preuveData = { o, delivery, preuve, photoSrc, sigSrc };
 
         const content = document.getElementById('preuveContent');
         const btnDl   = document.getElementById('btnDlPreuve');
         const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false}) : null;
         const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
 
-        const photoData = delivery?.photo_data || null;
-        const sigData   = delivery?.signature_data || null;
+        const photoData = photoSrc || null;
+        const sigData   = sigSrc || null;
         const noteChauf = delivery?.note_livraison || null;
 
         const hasProof  = !!(photoData || sigData);
@@ -3899,11 +3949,11 @@
 
     window.downloadPreuvePDF = function() {
         if(!_preuveData) return;
-        const { o, delivery } = _preuveData;
+        const { o, delivery, preuve, photoSrc, sigSrc } = _preuveData;
         const fmtDate = d => d ? new Date(d).toLocaleString('fr-CH', {timeZone:'Europe/Zurich', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false}) : '—';
         const deliveredAt = fmtDate(delivery?.delivered_at || o.delivered_at);
-        const photoData = delivery?.photo_data || null;
-        const sigData   = delivery?.signature_data || null;
+        const photoData = photoSrc || proofPhotoSource(delivery, preuve, o);
+        const sigData   = sigSrc || proofSignatureSource(delivery, preuve, o);
         const noteChauf = delivery?.note_livraison || null;
 
         const win = window.open('', '_blank', 'width=750,height=900');
@@ -4010,8 +4060,7 @@
         hideLoad();
         if(!o) return;
         // Fusionner les sources de preuve : table deliveries (app chauffeur) prioritaire
-        const photoSrc = delivery?.photo_data || preuve?.photo_url || null;
-        const sigSrc   = delivery?.signature_data || preuve?.signature_url || null;
+        const { photoSrc, sigSrc } = await resolveProofSources(delivery, preuve, o);
         const noteChauf = delivery?.note_livraison || null;
 
         const fmt = d => d ? new Date(d).toLocaleString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/Zurich'}) : '—';
